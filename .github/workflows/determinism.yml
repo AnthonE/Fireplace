@@ -1,0 +1,246 @@
+name: determinism
+
+# A pull request from a fork runs everything a push does; one from a branch of
+# this repo already ran on its push, so its pull_request run skips each job.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ticks:
+        description: Ticks for the gate run (Node, Deno and Chrome, 4 threads)
+        default: '1000000'
+
+jobs:
+  matrix:
+    # the tests, and every sim's recorded log replayed in every configuration (Fireplace's in its own job)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: unzip, for setup-deno; openssl, for the relay
+        run: apt-get update && apt-get install -y --no-install-recommends unzip openssl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.7
+      - run: npm ci
+      - run: npm i --no-save playwright-core@1.56.1
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - run: npm test
+      - name: Node, Deno and Chrome x both JIT tiers x 1, 2, 4 threads
+        run: node harness/matrix.mjs --ticks 20000 --runtimes node,deno,chromium
+      - name: The same for a match four golf bots play
+        run: |
+          node tools/gengame.mjs --course 8 --bots 4 --ticks 20000 --out logs/game.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/game.qgl --runtimes node,deno,chromium
+      - name: M4's pit, 10,000 balls heaped and a grenade into them
+        run: |
+          node tools/genlog.mjs --pit --out logs/pit.qgl
+          node harness/matrix.mjs --ticks 9000 --log logs/pit.qgl --runtimes node,deno,chromium
+      - name: The arena (build/arena/), a match of eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --out logs/arena.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Infection (every match forced by the seed), eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 1 --out logs/arena-infection.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-infection.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's gun game, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 2 --out logs/arena-gungame.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-gungame.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Juggernaut, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 3 --out logs/arena-juggernaut.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-juggernaut.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Team Slayer (red against blue), eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 4 --out logs/arena-slayer.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-slayer.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Capture the Flag, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 5 --out logs/arena-ctf.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-ctf.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Oddball, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 6 --out logs/arena-oddball.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-oddball.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's King of the Hill, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 7 --out logs/arena-hill.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-hill.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Headhunter, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 8 --out logs/arena-headhunter.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-headhunter.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Territories, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 9 --out logs/arena-territories.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-territories.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's VIP, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 10 --out logs/arena-vip.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-vip.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Assault, eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 11 --out logs/arena-assault.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-assault.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: Bumper balls (build/bumper/), rounds of sixteen AI balls
+        run: |
+          node tools/genbumper.mjs --bots 16 --ticks 20000 --out logs/bumper.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/bumper.qgl --wasm build/bumper/game.wasm --runtimes node,deno,chromium
+      - name: Party (build/party/), sixteen AI balls through the rotation of minigames
+        run: |
+          node tools/genparty.mjs --bots 16 --ticks 20000 --out logs/party.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/party.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces
+          path: traces/
+
+  fireplace:
+    # Fireplace's whole playlist replayed in every configuration (about 18 min of the matrix alone), then Fireplace online
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: unzip, for setup-deno; openssl, for the relay
+        run: apt-get update && apt-get install -y --no-install-recommends unzip openssl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.7
+      - run: npm ci
+      - run: npm i --no-save playwright-core@1.56.1
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - name: Fireplace (build/fireplace/), the playlist round once (bumper balls, party, the arena in a drawn mode, party, golf, bumper again), guests coming and going
+        run: |
+          node tools/genfireplace.mjs --bots 12 --ticks 145000 --out logs/fireplace.qgl
+          node harness/matrix.mjs --ticks 145000 --log logs/fireplace.qgl --wasm build/fireplace/game.wasm --runtimes node,deno,chromium
+      - name: Fireplace online (a relay on Fireplace's sim, 64 guests, the room moved from bumper balls into party, every hash checked)
+        run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 240
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-fireplace
+          path: traces/
+
+  themes:
+    # Fireplace's room in every theme (client/themes/), drawn from the couch: the pictures a theme PR is reviewed by
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm i --no-save playwright-core@1.56.1
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - name: Every theme checked, credited in elo.json, and drawn into traces/themes/
+        run: |
+          node tools/elo.mjs --check
+          node tools/theme-shots.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: themes
+          path: traces/themes/
+
+  online:
+    # the online gates: a relay, a referee, hundreds of bots through its native door, every hash checked
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: unzip, for setup-deno; openssl, for the relay
+        run: apt-get update && apt-get install -y --no-install-recommends unzip openssl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.7
+      - run: npm ci
+      - run: npm i --no-save playwright-core@1.56.1
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - name: The arena online, full (a relay on the arena's sim, 256 AI fighters through its native door, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 256 --seconds 40
+      - name: The arena's Infection online (64 AI fighters, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 1
+      - name: The arena's team modes online (64 AI fighters each, red against blue, every hash checked)
+        run: |
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 4
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 5
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 6
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 7
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 8
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 9
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 10
+          node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 11
+      - name: Bumper balls online, full (a relay on bumper balls' sim, 256 AI balls through its native door, a round won, every hash checked)
+        run: node net/run-bumper.mjs --chrome 0 --bots 256 --seconds 100
+      - name: Party online, full (a relay on Party's sim, 256 AI balls through its native door, the rotation, a round placed, every hash checked)
+        run: node net/run-party.mjs --chrome 0 --bots 256 --seconds 100
+      - name: 256 players in one room (the bot host's golfers, impaired, the 257th refused)
+        run: node net/run-n1.mjs --chrome 0 --seconds 60
+      - name: Spectators through a tree of relays (two edges on the root, a third two deep, 100 verifying spectators each, a player turned away at an edge)
+        run: node net/run-n3.mjs --chrome 0 --seconds 40 --golfers 64 --watchers 100
+      - name: Failover and replays (the root killed mid-match, a standby takes the room over, everyone keeps their slot, the replay checks out)
+        run: node net/run-n4.mjs --chrome 0 --seconds 40 --kill 15 --golfers 32 --watchers 32
+      - name: Hosting (someone else's wasm refused or stopped, the room pool opening, capping, listing and closing rooms)
+        run: node net/run-rooms.mjs
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-online
+          path: traces/
+
+  gate:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: unzip, for setup-deno
+        run: apt-get update && apt-get install -y --no-install-recommends unzip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.7
+      - run: npm ci
+      - run: npm i --no-save playwright-core@1.56.1
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - run: node harness/matrix.mjs --ticks ${{ inputs.ticks }} --flags default --threads 4
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-traces
+          path: traces/*.qgh
