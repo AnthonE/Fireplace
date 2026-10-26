@@ -40,6 +40,10 @@
 #include "mg/bullseye.wat"
 #include "mg/cannon.wat"
 #include "mg/rope.wat"
+#include "mg/glass.wat"
+#include "mg/gates.wat"
+#include "mg/stomp.wat"
+#include "mg/seesaw.wat"
 
 ;; ---- the room and the round
 
