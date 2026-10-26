@@ -159,4 +159,26 @@ reaches is already decided, and the client draws the coming slope as the
 warning. A tick of 256 balls costs 0.13 to 0.27 ms in each; Party's wasm is
 134 KB, 57 KB gzipped.
 
+**Kart Grab.** The first minigame that isn't rolled (30): its setup turns
+the roll's push, drag and hop off (`PG_ACC` 0, `PG_DRAG` and `PG_IDLE` 1,
+`PG_HOP` 0) and its push drives the ball as a kart. A kart's state is its
+record's `PG_M`: the heading in 1/16384 turns, the drift's way and charge,
+the spin-out's ticks; its boost is bumper's `B_DASH`, so it glows as a dash
+does, and bumper's DASH is stretched to a 1.2 s mushroom. The push turns the
+heading toward the word's yaw in whole steps, then works the velocity along
+the new heading (gas, brake, reverse and coast on the nose, grip on the
+side; drifting, the slide turned into the nose's way at the same speed), and
+holds it off the walls and the blocks. All of that is fixed at setup, so the
+prediction drives your kart bit for bit through drifts, turbos, panels, a
+mushroom, blocks and a SPRING onto one. The coins, the boxes and the hits
+are the confirmed world's; a hit is read off bumper's own bookkeeping, a
+fresh `B_HITT` whose hitter isn't touching the kart (a rocket, a POW, a
+stomp) or is a MEGA kart. The AI kart goes for coins worth the drive (one
+inside its turning circle costs a loop), round the corner of a block in the
+way, drifts the wide turns at speed, backs out when it's stuck and fires a
+rocket at a rival with coins ahead. 12 tests; its recorded log of 16 AI
+karts equal in all 27 configurations; forced online with Chrome and 15 AI
+karts and with 127 (12,448 hashes), every hash equal. Party's wasm is
+140 KB, 59 KB gzipped.
+
 Not done yet: teams, and power-ups in more of the minigames.
