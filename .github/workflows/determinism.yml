@@ -100,11 +100,35 @@ jobs:
         run: |
           node tools/genparty.mjs --bots 16 --ticks 20000 --out logs/party.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/party.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: SUMO RING (the minigame written in Rust), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 30 --bots 16 --ticks 20000 --out logs/sumo.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/sumo.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: traces
           path: traces/
+
+  rust:
+    # the Party minigames written in Rust (rust/mg/): each checked-in src/mg/<key>.wat is what its crate builds to
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rust 1.97.0 (the rustc the checked-in WAT names) and its wasm32 target
+        run: rustup toolchain install 1.97.0 --profile minimal --target wasm32-unknown-unknown
+      - run: npm ci
+      - name: Each src/mg/<key>.wat is what rust/mg/<key> builds to
+        run: node tools/rust.mjs --check
+      - run: npm run build
+      - run: node --test test/rust.test.mjs test/mg-sumo.test.mjs test/new-mg.test.mjs
 
   fireplace:
     # Fireplace's whole playlist replayed in every configuration (about 18 min of the matrix alone), then Fireplace online
@@ -204,6 +228,8 @@ jobs:
         run: node net/run-bumper.mjs --chrome 0 --bots 256 --seconds 100
       - name: Party online, full (a relay on Party's sim, 256 AI balls through its native door, the rotation, a round placed, every hash checked)
         run: node net/run-party.mjs --chrome 0 --bots 256 --seconds 100
+      - name: SUMO RING online (the minigame written in Rust forced, 64 AI balls, every hash checked)
+        run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 30
       - name: 256 players in one room (the bot host's golfers, impaired, the 257th refused)
         run: node net/run-n1.mjs --chrome 0 --seconds 60
       - name: Spectators through a tree of relays (two edges on the root, a third two deep, 100 verifying spectators each, a player turned away at an edge)

@@ -44,6 +44,7 @@
 #include "mg/gates.wat"
 #include "mg/stomp.wat"
 #include "mg/seesaw.wat"
+#include "mg/sumo.wat"
 
 ;; ---- the room and the round
 
