@@ -26,6 +26,7 @@ node net/run-arena.mjs / run-bumper.mjs / run-party.mjs / run-fireplace.mjs / ru
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
+node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the kit's copies, each on its own wasm; node net/run-kit-rooms.mjs is its gate
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 ```
 
@@ -125,9 +126,10 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
-- The room is a relay's (`client/net.mjs`), or with none to join
-  (`client/kit.mjs`: `?local=1`, or no relay in `client/kit.json`, as on a
-  copy's GitHub Pages site) a local one: `client/local.mjs` in the net
+- The room is a relay's (`client/net.mjs`): one named, or on a copy's
+  GitHub Pages site one the kit's room pool starts on that copy's wasm
+  (`net/kit-rooms.mjs`, `relay.pool`). With none to join (`client/kit.mjs`:
+  `?local=1`, or no relay and no pool room) it is a local one: `client/local.mjs` in the net
   worker's place closes every tick itself, the page's player in slot 0 and AI
   players after. Both sample the input slots through `client/input.mjs`.
   `coi.js` makes a page cross-origin isolated where the host can't send the
