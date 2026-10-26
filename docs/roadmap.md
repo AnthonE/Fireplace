@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-40 games, each gated online: golf, bumper balls, the arena's twelve modes
+44 games, each gated online: golf, bumper balls, the arena's twelve modes
 (Grab Bag, Zombies, gun game, Juggernaut, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 26 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 30 minigames. Fireplace plays them in turn.
 
 What a page downloads, gzipped, everything it imports included:
 
@@ -56,7 +56,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 26 | 60 | Mini Golf, Sumo Ring, Gate Crash, Stompin' Ground, Seesaws, Glass Bridge; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
+| Party (the ball) | 30 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
 | Arena (the fighter) | 12 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
@@ -92,7 +92,8 @@ only of your own body), physics sandboxes, open worlds.
    switch into Party held the page's GPU about 40 s while its shaders
    compiled (every hash still equal). Then a frame rate on a real laptop GPU.
 6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
-   less than 125 ticks ahead (the host predicts up to 201); bumper's and the
+   less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
+   than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); bumper's and the
    arena's pages load Party's constants through `layout.mjs`'s `MG_CONSTS`
    (26 KB gzipped).
 7. People playing it. Everything so far is played by bots.
