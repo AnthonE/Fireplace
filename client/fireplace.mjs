@@ -12,6 +12,7 @@
 //   ?bot=1 sits a guest (client/fireplace-bot.mjs) at the controls, and sits down at once
 //   ?look=<word> wears that look (client/looks.mjs packLook) for this visit, earned or not, and keeps nothing
 //   ?watch=1 spectates; ?url=, ?hash=, ?impair=, ?sens=, ?res=, ?music=0 as the games'
+//   ?room=<id> joins the kit pool's room <id> (client/kit.mjs), the link the room's line copies
 //   ?replay=<url> plays a replay file (net/replay.mjs) as a spectator
 //   ?film=<seconds> with ?replay=: no clock of its own; tools/film.mjs steps it a frame at a time (window.__film)
 import * as L from '../src/layout.mjs';
@@ -27,7 +28,7 @@ import { readClock } from './clock.mjs';
 import { BALLS, HATS, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
 import { filmClock, filmSound, compose } from './film.mjs';
-import { kit } from './kit.mjs';
+import { kit, room as pool } from './kit.mjs';
 
 const q = new URLSearchParams(location.search);
 const stage = document.getElementById('stage');
@@ -297,6 +298,22 @@ async function main() {
   const gameName = (g, seed) => (g === L.G_ARENA && modeName(seed) !== null ? `ARENA ${modeName(seed)}` : L.GAMES[g]);
   const GAMES_LINE = L.PLAYLIST.map((g) => L.GAMES[g]).join(' . ');
 
+  // ---- one quiet line under the room: the pool's room and a link to it to
+  // send friends, or why the room is local; nothing for a page with its own relay
+  const line = document.getElementById('line');
+  const copy = line.querySelector('button');
+  let lineText = null;
+  copy.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const done = (ok) => { copy.textContent = ok ? 'copied' : pool.invite; setTimeout(() => { copy.textContent = 'copy invite link'; }, ok ? 2000 : 15000); };
+    navigator.clipboard?.writeText(pool.invite).then(() => done(true), () => done(false)) ?? done(false);
+  });
+  const showLine = (roomInView) => {
+    const text = pool.id ? `online room ${pool.id}${pool.why ? ` (${pool.why})` : ''}` : pool.why ? `playing here with AI players: ${pool.why}` : '';
+    if (text !== lineText) { lineText = text; line.firstElementChild.textContent = text; copy.hidden = !pool.id; }
+    line.hidden = !text || !roomInView;
+  };
+
   // ---- the frame
   let crackleAt = 0;
   let flick = 1;
@@ -308,6 +325,7 @@ async function main() {
     if (held) tallyUp();
     if (st >= 1 && g !== game && !mounting) mountGame(g);
     drive();
+    showLine(!(scene === 'in' && zoom >= 0.999));
     // where the scene goes next
     if (scene === 'tuning' && st === 2 && frontend && game === g) { scene = 'in'; zoomBy(1, now); cardTo = 0; }
     if (scene === 'in' && held) { scene = 'out'; zoomBy(0, now); }
@@ -354,6 +372,7 @@ async function main() {
         mallows: slot >= 0 ? view.dv.getUint16(L.FP_MALLOWS + 2 * slot, true) : 0, card, me: frontend?.state?.().me ?? null,
         look, achievements: Object.keys(tally.got), opened,
         // the room's looks as the relay last sent them (this slot's own included, once it has gone round)
+        pool: { ...pool, local: !!host.local },
         relayLooks: [...Array(L.NPLAYER).keys()].filter((p) => host.u32[(L.CL_LOOKS >> 2) + p]).map((p) => [p, host.u32[(L.CL_LOOKS >> 2) + p]]) };
     },
     // a PNG of what's on the screen: the room, or the game

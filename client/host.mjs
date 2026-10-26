@@ -7,16 +7,18 @@
 // Fireplace mounts each game as the room moves into it.
 //   q: the page's query (?url=, ?hash=, ?impair=, ?threads=, ?music=0, ?replay=<url>: a
 //      replay file (net/replay.mjs) in the net worker's place, as a spectator)
-// With no relay to join (client/kit.mjs relayFor: ?local=1, or none set, as on
-// a fresh copy's GitHub Pages site) the room is local (client/local.mjs): this
-// page's player and ?bots= AI players (7 by default), on ?seed=, or ?mg=k (a
-// party room playing only minigame k) or ?mode=k (an arena room in mode k).
+// With no relay to join (client/kit.mjs relayFor: ?local=1, or none set and no
+// room from the kit's pool, ?room= an invite's) the room is local
+// (client/local.mjs): this page's player and ?bots= AI players (7 by default),
+// on ?seed=, or ?mg=k (a party room playing only minigame k) or ?mode=k (an
+// arena room in mode k). A pool's room that won't let the page in before its
+// welcome gives way to the local room too, kit.mjs's room.why saying why.
 import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
 import { wasmPrefix } from '../net/wire.mjs';
 import { createSound } from './sound.mjs';
 import { parseImpair } from '../net/impair.js';
-import { relayFor } from './kit.mjs';
+import { relayFor, room } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
@@ -70,28 +72,44 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     h.connected = true;
     const replay = q.get('replay');
     let relay = null;
-    try { relay = replay ? null : await relayFor(q); } catch (e) { h.error = e.message; throw e; }
-    h.local = !replay && !relay;
+    try { relay = replay ? null : await relayFor(q, { wasm, bytes }); } catch (e) { h.error = e.message; throw e; }
     const cores = navigator.hardwareConcurrency || 4;
     const threads = Number(q.get('threads') || (cores >= 8 ? 2 : 1));
-    const ch = new MessageChannel();
-    h.net = new Worker(new URL(replay ? './replay.mjs' : relay ? './net.mjs' : './local.mjs', import.meta.url), { type: 'module' });
-    h.sim = new Worker(new URL('./sim.mjs', import.meta.url), { type: 'module' });
-    h.net.onmessage = (e) => { if (e.data.error) h.error = e.data.error.split('\n')[0]; if (e.data.welcome) h.welcome = e.data.welcome; if (e.data.replay) h.replay = e.data.replay; };
-    h.sim.onmessage = (e) => {
-      const m = e.data;
-      if (m.error) h.error = m.error.split('\n')[0];
-      if (m.hashes) h.hashes.push(...m.hashes);
-      if (m.key) h.keys.push({ ...m.key, at: performance.now() });
-      if (m.desync) h.desyncs.push(m.desync);
+    const open = (relay) => {
+      h.local = !replay && !relay;
+      const ch = new MessageChannel();
+      h.net = new Worker(new URL(replay ? './replay.mjs' : relay ? './net.mjs' : './local.mjs', import.meta.url), { type: 'module' });
+      h.sim = new Worker(new URL('./sim.mjs', import.meta.url), { type: 'module' });
+      h.net.onmessage = (e) => {
+        // a pool's room that turns this page away, or can't be reached (UDP blocked, say), before it is in: the local room instead
+        if (e.data.error && relay?.pool && !h.welcome) { local(e.data.error.split('\n')[0]); return; }
+        if (e.data.error) h.error = e.data.error.split('\n')[0];
+        if (e.data.welcome) h.welcome = e.data.welcome;
+        if (e.data.replay) h.replay = e.data.replay;
+      };
+      h.sim.onmessage = (e) => {
+        const m = e.data;
+        if (m.error) h.error = m.error.split('\n')[0];
+        if (m.hashes) h.hashes.push(...m.hashes);
+        if (m.key) h.keys.push({ ...m.key, at: performance.now() });
+        if (m.desync) h.desyncs.push(m.desync);
+      };
+      for (const w of [h.net, h.sim]) w.onerror = (e) => { h.error = String(e.message || e); e.preventDefault?.(); };
+      if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
+      else if (relay) {
+        const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
+        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true }, [ch.port1]);
+      } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
+      h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     };
-    for (const w of [h.net, h.sim]) w.onerror = (e) => { h.error = String(e.message || e); e.preventDefault?.(); };
-    if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
-    else if (relay) {
-      const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
-      h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true }, [ch.port1]);
-    } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
-    h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
+    const local = (why) => {
+      h.net.terminate();
+      h.sim.terminate();
+      Object.assign(room, { id: '', invite: '', why: `the online room didn't let this page in (${why})` });
+      h.set(L.CL_STATE, 0);
+      open(null);
+    };
+    open(relay);
     addEventListener('pagehide', () => h.net.postMessage({ leave: true }));
   };
   if (connect) await h.connect();
