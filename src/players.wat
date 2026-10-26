@@ -128,8 +128,8 @@
       (local.set $wx (f32.div (local.get $wx) (local.get $len)))
       (local.set $wz (f32.div (local.get $wz) (local.get $len)))
 #if ARENA
-      ;; a zombie's legs, or the juggernaut's
-      (local.set $wish (select (f32.const @ZRUN) (f32.const @RUN) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG)))))))
+      ;; a zombie's legs, or the juggernaut's, or a lucky block's
+      (local.set $wish (select (f32.const @ZRUN) (f32.const @RUN) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST)))))))
 #else
       (local.set $wish (f32.const @RUN))))
 #endif
@@ -153,7 +153,7 @@
       (if (i32.and (local.get $in) (i32.const 0x10000000))
         (then
 #if ARENA
-          (local.set $vy (select (f32.const @ZJUMP) (f32.const @JUMP) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG)))))
+          (local.set $vy (select (f32.const @ZJUMP) (f32.const @JUMP) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST)))))
 #else
           (local.set $vy (f32.const @JUMP))
 #endif

@@ -381,7 +381,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   return o;
 }
 
-// solid splats: 0 a ball, 1 a fighter, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown
+// solid splats: 0 a ball, 1 a fighter, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block
 @fragment fn fs_splat(s: SOut) -> @location(0) vec4f {
   let r2 = dot(s.uv, s.uv);
   var c = s.color.rgb;
@@ -454,6 +454,19 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
       c *= 0.7 + 0.4 * (1.0 - ax);
       if (knob || (band && (y < 0.42 || y > 0.8))) { c = vec3f(1.0, 0.82, 0.3) * (0.8 + 0.3 * (1.0 - ax)); }
       if (length(vec2f(x, (y - 0.61) * 0.8)) < 0.16) { c = vec3f(1.0, 0.97, 0.85); }
+    }
+    case 11u: { // a lucky block: a face of the sprite's colour, lit from the top left, a bevelled rim and a ? on it
+      let x = s.uv.x;
+      let y = s.uv.y;
+      let rim = max(abs(x), abs(y)) > 0.8;
+      c *= 0.85 - 0.2 * y;
+      if (rim) { c *= select(0.6, 1.25, x - y < 0.0); }
+      // the ?: a hook (a ring open at its lower left), a stem from its foot, a dot
+      let h = vec2f(x, y + 0.3);
+      let hook = abs(length(h) - 0.3) < 0.11 && !(h.x < 0.0 && h.y > 0.0);
+      let stem = abs(x) < 0.11 && y > -0.02 && y < 0.3;
+      let spot = length(vec2f(x, y - 0.55)) < 0.13;
+      if (hook || stem || spot) { c = vec3f(0.98, 0.96, 0.86); }
     }
     default: {}
   }

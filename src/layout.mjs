@@ -551,6 +551,11 @@ export const M_JUGGERNAUT = 3;
 // In a team mode everyone spawns on their own half with an assault rifle and
 // a magnum, the map's pads are laid, and a flag's or the skull's carrier has
 // no guns or frags, only a swing that kills (PF_CARRY).
+// A mode on the kit may have no sides (MODES' team 0: everyone for itself,
+// as in a Fiesta), its hooks called all the same:
+//   M_LUCKY (LUCKY BLOCKS): everyone spawns with a magnum alone; blocks on the
+//   map's spots pay out at random when shot, struck or blown up (a gun, an
+//   overshield, legs, frags, or a blast on whoever broke it); LK_TARGET kills win.
 export const M_SLAYER = 4;
 export const M_CTF = 5;
 export const M_ODDBALL = 6;
@@ -559,6 +564,7 @@ export const M_HEADHUNT = 8;
 export const M_TERRITORY = 9;
 export const M_VIP = 10;
 export const M_ASSAULT = 11;
+export const M_LUCKY = 12;
 // name is what a player sees (the M_* and FIESTA names are only the code's)
 export const MODES = [
   { name: FIESTA ? 'GRAB BAG' : 'FREE FOR ALL', rules: FIESTA ? 'RANDOM GUNS  MOST KILLS IN 10 MIN' : `${FRAG_LIMIT} KILLS WIN`, ticks: MATCH_TICKS },
@@ -573,10 +579,11 @@ export const MODES = [
   { name: 'TERRITORIES', rules: 'TAKE THE TERRITORIES  HOLD THEM TO SCORE', ticks: 45000, team: 1, pads: 1 },
   { name: 'VIP', rules: 'GUARD YOUR VIP  KILL THEIRS  10 TO WIN', ticks: 45000, team: 1, pads: 1 },
   { name: 'ASSAULT', rules: 'PLANT THE BOMB AT THEIR BASE  3 TO WIN', ticks: 60000, team: 1, pads: 1 },
+  { name: 'LUCKY BLOCKS', rules: 'BREAK THE BLOCKS FOR LOOT  15 KILLS WIN', ticks: 37500, team: 0 },
 ];
 export const MODE_TICKS = MODES.map((m) => m.ticks);
-// a room opens on a Fiesta, then two team matches to every free-for-all
-export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT];
+// a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks before it comes round
+export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT, M_LUCKY];
 export const FORCE_MODE = 0xa8;
 export const TEAMED = MODES.reduce((b, m, k) => (m.team ? b | (1 << k) : b), 0); // red against blue
 export const PAD_MODES = MODES.reduce((b, m, k) => (m.pads ? b | (1 << k) : b), 0); // the FIESTA build lays the map's pads for these
@@ -589,8 +596,8 @@ export const OVERSHIELD = 200; // the juggernaut's shields; they recharge only t
 export const AH_MODE = REGION + 0x48; // u32 M_*: this match's
 export const AH_HUMANS = REGION + 0x4c; // u32 Infection: live humans, counted every tick of play
 export const AH_ZOMBIES = REGION + 0x50; // u32 Infection: live zombies
-export const AH_LEADER = REGION + 0x54; // u32 gun game: the leader + 1; Juggernaut: the juggernaut + 1 (0 none)
-export const AH_WINNER = REGION + 0x58; // u32 gun game: the sword's killer + 1; Juggernaut: who reached JUGG_POINTS + 1
+export const AH_LEADER = REGION + 0x54; // u32 gun game, Lucky Blocks: the leader + 1; Juggernaut: the juggernaut + 1 (0 none)
+export const AH_WINNER = REGION + 0x58; // u32 gun game: the sword's killer + 1; Juggernaut: who reached JUGG_POINTS + 1; Lucky Blocks: LK_TARGET kills
 // The team modes' (TEAMED), red's then blue's where there are two:
 export const AH_SCORE = REGION + 0x5c; // u32 x 2: each side's score (kills, captures, seconds held)
 export const AH_TARGET = REGION + 0x64; // u32 the score that wins, set as play starts (0: none)
@@ -602,6 +609,7 @@ export const PF_ZOMBIE = 16; // Infection: a zombie
 export const PF_JUGG = 32; // Juggernaut: the juggernaut
 export const PF_BLUE = 64; // a team mode: on blue (red without it)
 export const PF_CARRY = 128; // a team mode: carrying the flag or the skull (no guns, no frags, a swing that kills)
+export const PF_FAST = 4; // Lucky Blocks: a zombie's legs for a while (golf's PF_DONE, which the arena never sets)
 // Per fighter, past the spawn points (hashed, in every keyframe, not in the
 // prediction's copy: only the confirmed world reads it), cleared as a mode is picked:
 export const MODE_REC = ARENA + 0x300; // 256 x 8 B
@@ -632,7 +640,10 @@ export const MX_TEAMWIN = 8; // a team mode's match is over: shot AH_TEAMWIN (1 
 export const MX_AM = 16;
 
 // The arena's kit of team modes: mode AM[k].mode is src/am/<key>.wat, its
-// hooks $<prefix>_start, _tick, _kill and _bar called through (!am) while it is on.
+// hooks $<prefix>_start, _tick, _kill and _bar called through (!am) while it
+// is on, and any of the optional ones named in its hooks: _strike (a shot's
+// line, a swing's reach or a blast, on the confirmed world in play) and
+// _spawn (a fighter armed as it comes into the fight).
 export const AM = [
   { mode: M_SLAYER, key: 'slayer', prefix: 'ts' },
   { mode: M_CTF, key: 'ctf', prefix: 'cf' },
@@ -642,7 +653,10 @@ export const AM = [
   { mode: M_TERRITORY, key: 'territories', prefix: 'tr' },
   { mode: M_VIP, key: 'vip', prefix: 'vp' },
   { mode: M_ASSAULT, key: 'assault', prefix: 'as' },
+  { mode: M_LUCKY, key: 'lucky', prefix: 'lk', hooks: ['strike', 'spawn'] },
 ];
+export const AM_HOOKS = ['start', 'tick', 'kill', 'bar']; // every mode on the kit has these
+export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on the kit, sides or none
 // Each team mode's own constants (src/am/<key>.mjs), gathered as one object
 // the assembler spreads into its scope, as MG_CONSTS is, and not names of this
 // module (V8's dictionary line, below); JS reads them from src/am/consts.mjs.

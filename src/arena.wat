@@ -366,6 +366,8 @@
   (!put u16 @(PLAYERS + A_RESPAWN) (local.get $pb) (i32.const 0))
   (!put u8 @(PLAYERS + A_NEEDLES) (local.get $pb) (i32.const 0))
   (!put u8 @(PLAYERS + A_NEEDT) (local.get $pb) (i32.const 0))
+  ;; a mode on the kit that arms its own (Lucky Blocks)
+  (!am none spawn (local.get $p))
   (call $fx (i32.const 0) (i32.const @FX_SPAWN) (local.get $p) (i32.const 0) (local.get $sx) (local.get $h) (local.get $sz) (f32.const 1)))
 
 ;; Slot p's two guns, g0 and g1 (the same gun twice is one gun in either
@@ -719,6 +721,9 @@
   (call $fx (local.get $d) (i32.const @FX_TRACER) (local.get $p) (local.get $shots)
             (!madd (local.get $dx) (local.get $t) (local.get $ex)) (!madd (local.get $dy) (local.get $t) (local.get $ey)) (!madd (local.get $dz) (local.get $t) (local.get $ez))
             (f32.convert_i32_u (local.get $w)))
+  ;; on the confirmed world, what its line went through for the kit's mode on now (Lucky Blocks' blocks)
+  (if (i32.eqz (local.get $d))
+    (then (!am none strike (local.get $p) (local.get $ex) (local.get $ey) (local.get $ez) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $t) (f32.const 0))))
   (if (i32.and (i32.eqz (local.get $d)) (i32.ge_s (local.get $q) (i32.const 0)))
     (then
       (local.set $dmg (f32.convert_i32_u (!arm dmg (local.get $w))))
@@ -846,6 +851,11 @@
   (local.set $z (!madd (local.get $s) (f32.const 1.2) (!at f32 @(PLAYERS + P_PZ) (local.get $pb))))
   (call $fx (local.get $d) (i32.const @FX_MELEE) (local.get $p) (!at u16 @(PLAYERS + P_SHOTS) (local.get $pb)) (local.get $x) (local.get $y) (local.get $z)
             (f32.convert_i32_u (local.get $sword)))
+  ;; on the confirmed world, what its reach takes in for the kit's mode on now: a line at chest height along the facing
+  (if (i32.eqz (local.get $d))
+    (then (!am none strike (local.get $p) (!at f32 @(PLAYERS + P_PX) (local.get $pb)) (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.const 1.2))
+                           (!at f32 @(PLAYERS + P_PZ) (local.get $pb)) (local.get $c) (f32.const 0) (local.get $s)
+                           (select (f32.const 5) (f32.const 2.4) (local.get $blade)) (f32.const @LK_SWING_R))))
   (if (i32.lt_s (local.get $q) (i32.const 0)) (then (return)))
   (local.set $lunge (select (f32.const 14) (f32.const 5) (local.get $blade)))
   (!put f32 @(PLAYERS + P_VX) (local.get $pb) (!madd (local.get $c) (local.get $lunge) (!at f32 @(PLAYERS + P_VX) (local.get $pb))))
@@ -931,6 +941,8 @@
 ;; its owner).
 (func $a_splash (param $x f32) (param $y f32) (param $z f32) (param $dmg f32) (param $r f32) (param $owner i32) (param $cause i32)
   (local $q i32) (local $qb i32) (local $dx f32) (local $dy f32) (local $dz f32) (local $dist f32) (local $f f32)
+  ;; what half its reach takes in, for the kit's mode on now
+  (!am none strike (local.get $owner) (local.get $x) (local.get $y) (local.get $z) (f32.const 0) (f32.const 0) (f32.const 0) (f32.const 0) (f32.mul (local.get $r) (f32.const 0.5)))
   (!for $q (i32.const 0) (i32.const @NPLAYER)
     (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
     (if (i32.eq (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
@@ -998,6 +1010,9 @@
                 (i32.or (i32.or (f32.lt (local.get $pz) (f32.const 0)) (f32.gt (local.get $pz) (f32.const @WORLD)))
                         (f32.gt (local.get $py) (f32.const @CEIL))))
       (then (memory.fill (i32.add (i32.const @PROJ) (local.get $jb)) (i32.const 0) (i32.const @JSIZE)) (return)))
+    ;; on the confirmed world, where it is now for the kit's mode on now (it goes on through)
+    (if (i32.eqz (local.get $d))
+      (then (!am none strike (local.get $owner) (local.get $px) (local.get $py) (local.get $pz) (f32.const 0) (f32.const 0) (f32.const 0) (f32.const 0) (f32.const @LK_BOLT_R))))
     (call $ground (local.get $px) (local.get $pz))
     (drop) (drop) (drop) (drop)
     (local.set $h)
@@ -1388,9 +1403,10 @@
                    (i32.const 16))
           (!at u16 @(PLAYERS + A_KILLS) (i32.shl (local.get $p) (i32.const 6)))))
 
-;; A tick of play under the match's mode, after everyone's own. A team mode
-;; runs its objective (its tick hook), and is over when that says so or a
-;; side's score reaches the target (AH_TARGET 0: none). Gun game finds its
+;; A tick of play under the match's mode, after everyone's own. A mode on
+;; the kit runs its objective (its tick hook), and is over when that says so
+;; or a side's score reaches the target (AH_TARGET 0: none; a mode without
+;; sides leaves it so). Gun game finds its
 ;; leader; Juggernaut draws a juggernaut if there is none (it died by its
 ;; own hand, or left); Infection draws a zombie if they all left, and counts
 ;; its sides. 1 if that ends the match: a winner, or no human left.
@@ -1398,7 +1414,7 @@
   (local $m i32) (local $p i32) (local $h i32) (local $z i32) (local $last i32) (local $key i32) (local $best i32) (local $lead i32)
   (local $done i32) (local $target i32)
   (local.set $m (i32.load (i32.const @AH_MODE)))
-  (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @TEAMED))
+  (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @KIT))
     (then
       (local.set $done (!am i32 tick))
       (local.set $target (i32.load (i32.const @AH_TARGET)))
@@ -1460,7 +1476,7 @@
                     (select (local.get $rank) (i32.const 255) (i32.lt_u (local.get $rank) (i32.const 255))))))))
 
 ;; A kill under the match's mode (from $a_kill: the confirmed world, in play).
-;; A team mode: its kill hook (which puts down what q carried), then q
+;; A mode on the kit: its kill hook (which puts down what q carried), then q
 ;; carries nothing. Infection: a human who dies is a zombie, an infection for
 ;; the zombie that did it, and a zombie comes back sooner. Gun game: an
 ;; assassination moves its victim down a rung; any kill of another moves the
@@ -1471,7 +1487,7 @@
   (local $m i32) (local $qb i32) (local $ab i32) (local $r i32) (local $by i32) (local $w i32)
   (local.set $m (i32.load (i32.const @AH_MODE)))
   (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
-  (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @TEAMED))
+  (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @KIT))
     (then
       (!am none kill (local.get $q) (local.get $a) (local.get $cause))
       (!put u8 @(PLAYERS + P_FL) (local.get $qb) (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (i32.const @(255 ^ PF_CARRY))))
@@ -1553,6 +1569,13 @@
 ;;   $<prefix>_bar (x y z f32, result i32): 1 if a fighter mustn't spawn at
 ;;     the spawn point (x, y, z) now (asked as one respawns, the countdown's
 ;;     too; most modes bar nothing).
+;; and the optional ones a mode names in its AM entry's hooks:
+;;   $<prefix>_strike (p, o xyz, d xyz, t, r f32): slot p's hitscan round,
+;;     swing, blast or bolt took in the line o + s d, s in [0, t], grown by r.
+;;   $<prefix>_spawn (p): p has just been armed as it spawns: arm it the mode's way.
+;; A mode on the kit may have no sides (MODES' team 0: Lucky Blocks): then
+;; everything red against blue here (TEAMED) leaves it alone, and the
+;; free-for-all's places ($a_key's last line) are its.
 ;; The helpers below are theirs. A flag's or the skull's carrier (PF_CARRY,
 ;; set and cleared on the confirmed world only, by $a_carry) has no guns or
 ;; frags and swings what it carries ($a_shoot, $a_melee).
@@ -1647,3 +1670,4 @@
 #include "am/territories.wat"
 #include "am/vip.wat"
 #include "am/assault.wat"
+#include "am/lucky.wat"

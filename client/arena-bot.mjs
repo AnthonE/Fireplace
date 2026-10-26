@@ -11,7 +11,9 @@
 // (client/am/<key>.mjs goal(): a flag, the skull, a hill, a hunt), as an
 // attacker or, every third of its side by slot, a defender, routed round the
 // map's buildings through their doors; carrying the flag or the skull it has
-// no gun, so it runs its goal and swings at whoever gets close in front.
+// no gun, so it runs its goal and swings at whoever gets close in front. A
+// goal with something to break (Lucky Blocks' blocks) it shoots or swings at
+// once it sees it, when nobody else is in sight.
 // Deterministic from its seed and what it sees, so a match of bots is an
 // ordinary event log. Walls it can't see through; one in its way it goes
 // round, sidling and jumping until it moves again.
@@ -22,6 +24,7 @@ import { AMC } from './am/index.mjs';
 
 const EYE = 1.6;
 const TURN = 16384;
+const STRIKE = 25; // m: an objective's strike (client/am/index.mjs) is fired at from this near
 
 // Sight (can an eye at a see b?) is arena-view.mjs's, shared with the kit's modules.
 export { sees };
@@ -460,6 +463,25 @@ export class Fighter {
       // an objective that won't wait: sidle on to it (or side to side on it), still shooting
       if (going && hurry >= 0.5) move = there ? this.aside(view, me, obj, toward) : toward(this.waypoint(view, me, obj, t));
       if (this.rand() < 0.01) jump = 1;
+    } else if (obj?.strike && !me.carry && Math.hypot(obj.strike[0] - me.pos[0], obj.strike[2] - me.pos[2]) < STRIKE && sees(view, eye, obj.strike)) {
+      // something of the objective's to break (Lucky Blocks' blocks), nobody in
+      // sight: faced and fired at, or swung at within 2 m (a rocket or the sword
+      // closes in to swing); on toward it by the route while it's further than 3 m
+      const at = obj.strike, d = Math.hypot(at[0] - me.pos[0], at[2] - me.pos[2]);
+      const aim = aimAt(eye, at);
+      this.turnTo(aim.yaw, aim.pitch, 0.3);
+      const off = Math.abs(((aim.yaw - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2);
+      const arm = L.ARMS[me.weapon] || L.ARMS[L.W_AR];
+      const close = me.weapon === L.W_ROCKET || me.weapon === L.W_SWORD;
+      if (off < 150) {
+        if (d < 2 && me.cool === 0) this.melee ^= 1;
+        else if (!close && d < (arm.type === 1 ? STRIKE : arm.range * 0.9)) {
+          if (arm.auto) this.shot = (this.shot + 1) & 3;
+          else if (t - this.lastFire > arm.refire + 2) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
+        }
+      }
+      move = d > (close ? 1.5 : 3) ? toward(this.waypoint(view, me, obj, t)) : 0;
+      if (me.mag[this.slotOut] === 0 && me.res[this.slotOut] > 0 && !me.reload) this.wantReload = true;
     } else if (going) {
       // the objective: by the route, facing the way, a hop where it climbs
       if (there) {

@@ -9,3 +9,4 @@ export * from './headhunter.mjs';
 export * from './territories.mjs';
 export * from './vip.mjs';
 export * from './assault.mjs';
+export * from './lucky.mjs';

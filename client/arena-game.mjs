@@ -33,7 +33,8 @@ const SHORT = { [L.W_AR]: 'AR', [L.W_BR]: 'BR', [L.W_MAGNUM]: 'MAGNUM', [L.W_SNI
 const CROSS = { [L.W_AR]: 0, [L.W_BR]: 1, [L.W_MAGNUM]: 1, [L.W_SNIPER]: 1, [L.W_SHOTGUN]: 2, [L.W_ROCKET]: 3, [L.W_PLASMA]: 4, [L.W_NEEDLER]: 4, [L.W_SWORD]: 5 };
 const RUNGS = L.LADDER.length;
 // How a fighter stands under the match's mode, higher is better: the sim's $a_key, for the board while play goes on.
-// A team mode's: the winning side first (once it's over), then objective points, then kills.
+// A team mode's: the winning side first (once it's over), then objective points, then kills. A kit mode without
+// sides (Lucky Blocks) keeps no points: kills, as the sim's key, then deaths, as a Fiesta's board.
 function standing(m, o, teamWin = 0) {
   if (m < 32 && (1 << m) & L.TEAMED) return (teamWin && teamWin === o.team + 1 ? 2 ** 31 : 0) + Math.min(o.points, 0x7fff) * 65536 + Math.min(o.kills, 0xffff);
   if (m === L.M_INFECTION) return o.zombie ? Math.min(o.human, 0x7fff) * 65536 + o.points : 2 ** 31;
@@ -765,6 +766,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       put(t, COLS, 1, 0, `${who} ${f.kills}`, C.YELLOW);
       if (leader && leader.slot !== f.slot) put(t, COLS, 1, 1, `P${leader.slot + 1} ${leader.kills}`, C.GREY);
       else if (list[1]) put(t, COLS, 1, 1, `P${list[1].slot + 1} ${list[1].kills}`, C.GREY);
+      // a kit mode without sides: its own lines under them (rows 2 to 4)
+      const s = W / 320;
+      kit?.hud(view, { put: (x, y, str, c) => put(t, COLS, x, y, str, c), centre, right, rect: (x0, y0, x1, y1, r, g, b, a = 1) => kitRects.push([x0 * s, y0 * s, x1 * s, y1 * s, r, g, b, a]),
+        rows, C, slot, me: f, team: -1, now, t: playT });
     }
     if (f?.live) {
       if (f.dead) centre(Math.floor(rows / 2) + 2, `RESPAWN IN ${Math.ceil(f.respawn / 125)}`, C.YELLOW);
@@ -795,7 +800,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (medal.until > now) centre(Math.floor(rows / 2) - 8, medal.text, C.ORANGE);
     if (st === 2 && !BOT && !WATCH && !locked) centre(Math.floor(rows / 2) + 7, 'CLICK TO PLAY', C.WHITE);
     // (a team mode's own lines have rows 2 to 4; in its countdown the watched one's side line says it)
-    if (WATCH && st === 2 && !(h.state === L.H_COUNT && team >= 0)) put(t, COLS, 1, md.teamed ? 5 : 3, f?.live ? `WATCHING P${slot + 1}  < >` : 'NOBODY TO WATCH', C.CYAN);
+    if (WATCH && st === 2 && !(h.state === L.H_COUNT && team >= 0)) put(t, COLS, 1, md.teamed || kit ? 5 : 3, f?.live ? `WATCHING P${slot + 1}  < >` : 'NOBODY TO WATCH', C.CYAN);
     if (showGraph) put(t, COLS, 1, rows - 1, `${fps} FPS  LEAD ${f32[L.CL_LEAD >> 2].toFixed(1)}  DELAY ${f32[L.CL_DELAY >> 2].toFixed(1)}  LAG ${f?.lag ?? 0}  REPAIRS ${get(L.CL_REPAIRS)}`, C.GREY);
     if (board && md.teamed) teamBoard(t, { list, slot, md, kit, over: h.state === L.H_OVER, rows, centre });
     else if (board) {
@@ -809,11 +814,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         title = m === L.M_INFECTION ? `GAME OVER  ${alive ? `${alive} HUMAN${alive === 1 ? '' : 'S'} SURVIVED` : 'THE ZOMBIES WIN'}` : `GAME OVER  ${won}`;
       }
       centre(y0, title, C.YELLOW);
-      // a mode's columns: what places it
-      const cols = m === L.M_INFECTION ? ['HUMAN FOR', 'INFECTED', 'SIDE'] : m === L.M_GUNGAME ? ['RUNG', 'GUN', 'KILLS'] : m === L.M_JUGGERNAUT ? ['POINTS', 'KILLS', 'DEATHS'] : ['KILLS', 'DEATHS'];
+      // a mode's columns: what places it (a kit mode's own, without sides, before the kills)
+      const kc = kit?.cols ?? [];
+      const cols = m === L.M_INFECTION ? ['HUMAN FOR', 'INFECTED', 'SIDE'] : m === L.M_GUNGAME ? ['RUNG', 'GUN', 'KILLS'] : m === L.M_JUGGERNAUT ? ['POINTS', 'KILLS', 'DEATHS']
+        : [...kc.map((c) => c.head), 'KILLS', 'DEATHS'];
       const cells = (o) => m === L.M_INFECTION ? [o.zombie || over ? clock(o.human) : 'ALIVE', o.points, o.zombie ? 'ZOMBIE' : 'HUMAN']
         : m === L.M_GUNGAME ? [Math.min(o.rung + 1, RUNGS), o.rung >= RUNGS ? 'WON' : SHORT[L.LADDER[o.rung]], o.kills]
-        : m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths] : [o.kills, o.deaths];
+        : m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths] : [...kc.map((c) => c.get(o)), o.kills, o.deaths];
       const row = (rank, name, xs) => `${String(rank).padStart(4)}  ${String(name).padEnd(8)}${xs.map((x, k) => '  ' + String(x).padStart(Math.max(6, cols[k].length))).join('')}`;
       centre(y0 + 2, row('RANK', 'PLAYER', cols), C.GREY);
       const fit = rows - y0 - 6;

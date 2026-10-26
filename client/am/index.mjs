@@ -1,8 +1,10 @@
-// Every team mode's client module, by mode number (AMC[L.M_CTF]): how its
+// Every kit mode's client module, by mode number (AMC[L.M_CTF]): how its
 // objective draws, its HUD lines and news, its board columns, and what the AI
 // fighter goes for (client/arena-bot.mjs). The frontend (client/arena-game.mjs)
 // takes AMC[view.mode().mode]; a mode without one (a Fiesta, Infection, gun
-// game, Juggernaut) has none. Each module default-exports:
+// game, Juggernaut) has none. A kit mode without sides (Lucky Blocks) has the
+// free-for-all's HUD and board, its own lines and columns added to them, and
+// its team is -1 throughout. Each module default-exports:
 //
 //   mode, key: its M_* and its AM key.
 //   carry: 'flag' | 'skull' | 'bomb' | undefined: what a carrier (PF_CARRY) holds, for
@@ -38,8 +40,8 @@
 //     out { solid: [] (sprites, upright, one depth at the middle: { pos (the
 //     middle), size (half its width, m), aspect (height / width), color:
 //     [r, g, b, a], kind, minpx (px at least) }; kind 7 a flag on its pole
-//     waving (size 0.6, aspect 2: 2.4 m tall), 8 a skull, 10 a crown, 0 a
-//     ball, 4 a weapon), glow: [] (kind 3, 5, 6, as
+//     waving (size 0.6, aspect 2: 2.4 m tall), 8 a skull, 10 a crown, 11 a
+//     lucky block, 0 a ball, 4 a weapon), glow: [] (kind 3, 5, 6, as
 //     news's), beams: [] ({ a, b, width, color: [r, g, b, a] }), markers: []
 //     (HUD waypoints drawn over everything, through walls, with the distance:
 //     { pos: [x, y, z], label, color: C.*, kind: 'flag' | 'skull' | 'hill' |
@@ -57,7 +59,9 @@
 //     arrival also wants feet within 2 m up or down), hurry (0..1: under 0.5 it
 //     fights whoever it sees first; from 0.5 it keeps going while it shoots;
 //     from 0.9 it doesn't stop to shoot at all), hold (stay within r once
-//     there, looking round) }. me is fighter() of the confirmed world. Called
+//     there, looking round), strike (optional [x, y, z]: something to break
+//     there; with nobody in sight and it in sight within 25 m, the bot faces
+//     it and fires, or swings within 2 m) }. me is fighter() of the confirmed world. Called
 //     every 8 ticks, staggered by slot.
 //   state(view) (optional): what the gates (net/run-arena.mjs) should see, JSON.
 import * as L from '../../src/layout.mjs';
@@ -69,9 +73,10 @@ import headhunter from './headhunter.mjs';
 import territories from './territories.mjs';
 import vip from './vip.mjs';
 import assault from './assault.mjs';
+import lucky from './lucky.mjs';
 
 export const AMC = [];
-for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault]) AMC[m.mode] = m;
+for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault, lucky]) AMC[m.mode] = m;
 // the module whose MX codes a news item's size falls in (MX_AM + 8k for AM[k]), or undefined
 export const newsOf = (size) => (size >= L.MX_AM ? AMC[L.AM[(size - L.MX_AM) >> 3]?.mode] : undefined);
 export { SIDE, SIDE_C, SIDE_RGB, sideOf } from './sides.mjs';
