@@ -44,6 +44,12 @@
 #include "mg/gates.wat"
 #include "mg/stomp.wat"
 #include "mg/seesaw.wat"
+#include "mg/disaster.wat"
+#include "mg/slap.wat"
+#include "mg/trap.wat"
+#include "mg/parry.wat"
+#include "mg/mingle.wat"
+#include "mg/honey.wat"
 
 ;; ---- the room and the round
 

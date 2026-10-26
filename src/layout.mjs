@@ -789,6 +789,12 @@ export const MINIGAMES = [
   { key: 'gates', prefix: 'gc', name: 'GATE CRASH' },
   { key: 'stomp', prefix: 'sg', name: 'STOMPIN GROUND' },
   { key: 'seesaw', prefix: 'ss', name: 'SEESAWS' },
+  { key: 'disaster', prefix: 'nd', name: 'DISASTER ISLAND' },
+  { key: 'slap', prefix: 'sl', name: 'SLAP HAPPY' },
+  { key: 'trap', prefix: 'tr', name: 'TRAP RUN' },
+  { key: 'parry', prefix: 'py', name: 'PARRY BALL' },
+  { key: 'mingle', prefix: 'mi', name: 'MINGLE' },
+  { key: 'honey', prefix: 'hc', name: 'HONEYCOMB' },
 ]; // index = MG_*
 export const MG_THINICE = 0;
 export const MG_COLOR = 1;
@@ -820,7 +826,13 @@ export const MG_GLASS = 26;
 export const MG_GATES = 27;
 export const MG_STOMP = 28;
 export const MG_SEESAW = 29;
-export const NMG = 30;
+export const MG_DISASTER = 30;
+export const MG_SLAP = 31;
+export const MG_TRAP = 32;
+export const MG_PARRY = 33;
+export const MG_MINGLE = 34;
+export const MG_HONEY = 35;
+export const NMG = 36;
 
 export const PK_OUT = 0; // out is out: the last ball in wins
 export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE at the end
@@ -895,7 +907,13 @@ import * as mg_glass from './mg/glass.mjs';
 import * as mg_gates from './mg/gates.mjs';
 import * as mg_stomp from './mg/stomp.mjs';
 import * as mg_seesaw from './mg/seesaw.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw));
+import * as mg_disaster from './mg/disaster.mjs';
+import * as mg_slap from './mg/slap.mjs';
+import * as mg_trap from './mg/trap.mjs';
+import * as mg_parry from './mg/parry.mjs';
+import * as mg_mingle from './mg/mingle.mjs';
+import * as mg_honey from './mg/honey.mjs';
+export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey));
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come
