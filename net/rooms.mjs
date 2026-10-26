@@ -34,8 +34,33 @@ const DEFAULTS = {
 };
 
 const readJson = (path) => { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; } };
-const certAge = () => { try { return statSync('certs/cert.pem').mtimeMs; } catch { return 0; } };
+export const certAge = () => { try { return statSync('certs/cert.pem').mtimeMs; } catch { return 0; } };
 const writeWhole = (path, text) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
+
+// One room: a relay (net/relay.ts) on port for c.wasm, its status in
+// c.status_dir/<port>.json, its native door at port + c.native_offset (none
+// at 0). onEnd(code, why) once it has ended and its status is gone: why is
+// what made it a failure (a refusal, exit 2; a referee behind, exit 3; a room
+// that died within 10 s of starting, a port in use say), else null. Returns
+// { p, port, cert, started, emptySince, stopping, exited }.
+export function startRoom(c, port, onEnd) {
+  const args = ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts',
+    '--port', String(port), '--host', c.bind, '--native-port', String(c.native_offset ? port + c.native_offset : 0),
+    '--wasm', c.wasm, '--game', c.game, '--max-players', String(c.max_players),
+    '--status', `${c.status_dir}/${port}.json`, '--quiet', ...c.relay_args];
+  const p = spawn(DENO, args, { stdio: ['ignore', 'ignore', 'inherit'] });
+  const r = { p, port, cert: certAge(), started: Date.now(), emptySince: Date.now(), stopping: false, exited: false };
+  p.on('exit', (code) => {
+    r.exited = true;
+    // a relay that crashed never removed its status: a stale file must not read as a room
+    rmSync(`${c.status_dir}/${port}.json`, { force: true });
+    const early = Date.now() - r.started < 10000;
+    const why = code === 2 ? `the relay refused ${c.wasm} (exit 2)` : code === 3 ? 'a room\'s referee fell behind (exit 3)'
+      : early && !r.stopping ? `room ${port} ended within 10 s of starting (exit ${code})` : null;
+    onEnd(code, why);
+  });
+  return r;
+}
 
 export function startPool(config, { log = (m) => console.error(`[rooms] ${m}`) } = {}) {
   const c = { ...DEFAULTS, ...config };
@@ -52,24 +77,12 @@ export function startPool(config, { log = (m) => console.error(`[rooms] ${m}`) }
   };
 
   function start(port) {
-    const args = ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts',
-      '--port', String(port), '--host', c.bind, '--native-port', String(c.native_offset ? port + c.native_offset : 0),
-      '--wasm', c.wasm, '--game', c.game, '--max-players', String(c.max_players),
-      '--status', `${c.status_dir}/${port}.json`, '--quiet', ...c.relay_args];
-    const p = spawn(DENO, args, { stdio: ['ignore', 'ignore', 'inherit'] });
-    const r = { p, port, cert: certAge(), started: Date.now(), emptySince: Date.now(), stopping: false, exited: false };
-    p.on('exit', (code) => {
-      r.exited = true;
+    const r = startRoom(c, port, (code, why) => {
       rooms.delete(port);
-      // a relay that crashed never removed its status: a stale file must not read as a room
-      rmSync(`${c.status_dir}/${port}.json`, { force: true });
       if (r.stopping) return;
-      // a refusal, a referee behind, or a room that died starting (a port in use, say)
-      const early = Date.now() - r.started < 10000;
-      if (code === 2 || code === 3 || early) {
+      if (why) {
         failures++;
-        lastWhy = code === 2 ? `the relay refused ${c.wasm} (exit 2)` : code === 3 ? 'a room\'s referee fell behind (exit 3)'
-          : `room ${port} ended within 10 s of starting (exit ${code})`;
+        lastWhy = why;
         log(`room ${port} ended: ${lastWhy}`);
       } else log(`room ${port} ended (exit ${code})`);
     });

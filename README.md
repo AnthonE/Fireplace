@@ -36,9 +36,12 @@ its own web page, a plan for your game, and Claude to help build it.
 4. **See it live.** **Settings > Pages > Source: GitHub Actions**, then
    **Actions > pages > Run workflow**. When it finishes, your game is at
    `https://<you>.github.io/<repo>/`: you and AI players, no server needed.
-   Every push updates it. Playing online with friends needs a relay
-   running your game; its address goes in `client/kit.json`
-   ([docs/hosting.md](docs/hosting.md)).
+   Every push updates it. To play with friends, press **play online with
+   friends** at the foot of the room: Elo Pros' room pool starts a room
+   running your game, the page moves into it, and its address is the
+   invite to send (**copy invite link**). An online room has no AI players;
+   if the pool can't give one, the page says why and you stay with the AI
+   players ([docs/hosting.md](docs/hosting.md)).
 5. **Put it on Elo Pros.** On the [dev console](https://elopros.com/dev-console.html),
    list your game straight from your repo; no wallet needed. Later, a
    `wallet` line in `elo.json` lets you sell copies, 100% of the price to you.
@@ -92,8 +95,9 @@ node net/play.mjs                        # golf, client/index.html
 
 With no relay, a page plays a local room: you and AI players (`?bots=`, 7 by
 default), nothing on the network. That is what a copy's GitHub Pages site
-does until `client/kit.json` names a relay; `node tools/serve.mjs` and
-`client/fireplace.html?local=1` show it here.
+plays until someone presses **play online with friends** or opens an invite
+(`?room=`), which take it to a room from the kit's room pool;
+`node tools/serve.mjs` and `client/fireplace.html?local=1` show it here.
 
 Every room is saved as a replay when it ends (`replays/`), a few kilobytes a
 minute, and plays back in the page with `?replay=../replays/<file>`.
