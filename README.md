@@ -13,6 +13,36 @@ like.
 Fireplace is on the [Elo Pros](https://elopros.com) store. This repository is
 all of it, released into the public domain (CC0).
 
+## Make your own game from this
+
+Fireplace is also a starter kit: start your own multiplayer browser game from
+it, with a GitHub account and nothing installed. You get your own copy with
+its own web page, a plan for your game, and Claude to help build it.
+
+1. **Copy it.** Press **Use this template** at the top of this page, then
+   **Create a new repository**, named after your game.
+2. **Add Claude (optional).** In your new repo, **Settings > Secrets and
+   variables > Actions > New repository secret**: `ANTHROPIC_API_KEY` (a key
+   from [console.anthropic.com](https://console.anthropic.com)) or
+   `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, if you have a Claude
+   plan). Then **Settings > Actions > General**, tick "Allow GitHub Actions
+   to create and approve pull requests". It runs on your own Claude usage.
+3. **Plan your game.** **Issues > New issue > Plan my game**, and answer the
+   questions. Claude names your copy after your game, writes its design and a
+   step-by-step plan as a pull request, and opens your first steps as issues.
+   Comment `@claude` on one and Claude builds it as a pull request. Without
+   Claude: `node tools/kit.mjs init "My Game"` renames it, and
+   `node tools/new-mg.mjs` starts a minigame ([CONTRIBUTING.md](CONTRIBUTING.md)).
+4. **See it live.** **Settings > Pages > Source: GitHub Actions**, then
+   **Actions > pages > Run workflow**. When it finishes, your game is at
+   `https://<you>.github.io/<repo>/`: you and AI players, no server needed.
+   Every push updates it. Playing online with friends needs a relay
+   running your game; its address goes in `client/kit.json`
+   ([docs/hosting.md](docs/hosting.md)).
+5. **Put it on Elo Pros.** On the [dev console](https://elopros.com/dev-console.html),
+   list your game straight from your repo; no wallet needed. Later, a
+   `wallet` line in `elo.json` lets you sell copies, 100% of the price to you.
+
 ## The games
 
 The room plays a playlist, round and round: bumper balls (two rounds), Party
@@ -60,6 +90,11 @@ node net/play.mjs --arena [--mode k]     # client/arena.html, the modes in turn 
 node net/play.mjs                        # golf, client/index.html
 ```
 
+With no relay, a page plays a local room: you and AI players (`?bots=`, 7 by
+default), nothing on the network. That is what a copy's GitHub Pages site
+does until `client/kit.json` names a relay; `node tools/serve.mjs` and
+`client/fireplace.html?local=1` show it here.
+
 Every room is saved as a replay when it ends (`replays/`), a few kilobytes a
 minute, and plays back in the page with `?replay=../replays/<file>`.
 
@@ -97,7 +132,7 @@ protocol, for writing a client in any language, and
 | `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements |
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
-| `tools/` | the assembler, the map compiler, match recorders (`gen*.mjs`), a minigame generator, the trailer renderer |
+| `tools/` | the assembler, the map compiler, match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
 | `maps/canyon/` | Box Canyon: two images and a JSON file |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, the roadmap |

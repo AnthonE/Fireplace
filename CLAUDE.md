@@ -25,6 +25,8 @@ node net/play.mjs [--arena [--mode k] | --bumper | --party [--mg k] | --fireplac
 node net/run-arena.mjs / run-bumper.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
+node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
+node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -123,6 +125,13 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
+- The room is a relay's (`client/net.mjs`), or with none to join
+  (`client/kit.mjs`: `?local=1`, or no relay in `client/kit.json`, as on a
+  copy's GitHub Pages site) a local one: `client/local.mjs` in the net
+  worker's place closes every tick itself, the page's player in slot 0 and AI
+  players after. Both sample the input slots through `client/input.mjs`.
+  `coi.js` makes a page cross-origin isolated where the host can't send the
+  headers.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
 - The room's look is a theme (`client/themes/<id>.json`, `client/themes.mjs`):

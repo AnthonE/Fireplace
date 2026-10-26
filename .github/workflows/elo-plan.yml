@@ -32,8 +32,10 @@ permissions:
   actions: read
 jobs:
   plan:
+    # not in Fireplace's own repo: the plan renames the repo it runs in
     if: >-
       github.event_name == 'issues' &&
+      github.repository != 'AnthonE/Fireplace' &&
       startsWith(github.event.issue.title, '[plan]') &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: ubuntu-latest
