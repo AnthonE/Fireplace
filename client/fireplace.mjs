@@ -27,6 +27,7 @@ import { readClock } from './clock.mjs';
 import { BALLS, HATS, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
 import { filmClock, filmSound, compose } from './film.mjs';
+import { kit } from './kit.mjs';
 
 const q = new URLSearchParams(location.search);
 const stage = document.getElementById('stage');
@@ -45,6 +46,9 @@ const PER_PAGE = 6; // achievements a page, in type the TV can show from the cou
 // arena's grey, the cheese, party's sky
 const TV_LIGHT = [[0.45, 0.7, 0.45], [0.6, 0.65, 0.6], [1, 0.85, 0.5], [0.55, 0.75, 1]];
 const FRONTENDS = { [L.G_GOLF]: './golf-game.mjs', [L.G_ARENA]: './arena-game.mjs', [L.G_BUMPER]: './bumper-game.mjs', [L.G_PARTY]: './party-game.mjs' };
+// the title card's name and line, client/kit.json's (node tools/kit.mjs init writes them)
+const TITLE = String(kit.name || 'Fireplace').toUpperCase();
+const TAGLINE = String(kit.tagline ?? 'A roomful of games, come and go as you like').toUpperCase();
 const ease = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
 
@@ -199,8 +203,8 @@ async function main() {
     if (kind === 'list') return listCard();
     if (kind === 'title' || kind === 'tuning') {
       pixelFire(320, 150, 9, t);
-      text('FIREPLACE', 320, 178, 11, '#ffcf6a', 'center');
-      text('A ROOMFUL OF GAMES, COME AND GO AS YOU LIKE', 320, 250, 3, '#c9b89a', 'center');
+      text(TITLE, 320, 178, Math.min(11, Math.floor(620 / (4 * TITLE.length - 1))), '#ffcf6a', 'center');
+      text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
       text(GAMES_LINE, 320, 275, 3, '#8ea0b8', 'center');
       if (KEEP) {
         drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t);

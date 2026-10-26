@@ -7,11 +7,17 @@
 // Fireplace mounts each game as the room moves into it.
 //   q: the page's query (?url=, ?hash=, ?impair=, ?threads=, ?music=0, ?replay=<url>: a
 //      replay file (net/replay.mjs) in the net worker's place, as a spectator)
+// With no relay to join (client/kit.mjs relayFor: ?local=1, or none set, as on
+// a fresh copy's GitHub Pages site) the room is local (client/local.mjs): this
+// page's player and ?bots= AI players (7 by default), on ?seed=, or ?mg=k (a
+// party room playing only minigame k) or ?mode=k (an arena room in mode k).
 import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
 import { wasmPrefix } from '../net/wire.mjs';
 import { createSound } from './sound.mjs';
 import { parseImpair } from '../net/impair.js';
+import { relayFor } from './kit.mjs';
+import { forcedSeed } from '../src/arena-view.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
 
@@ -26,6 +32,8 @@ export function fitSize(q, max = [1600, 1000]) {
 
 // wasm: the sim's URL; watch: a spectator; arena: the arena's input words; fireplace: whichever the game on now reads
 export async function createHost({ wasm, q = new URLSearchParams(location.search), watch = false, arena = false, fireplace = false, connect = true }) {
+  // ../coi.js reloads the page once its service worker isolates it: wait for that, unless it gives up
+  while (!crossOriginIsolated && globalThis.coi?.reloading) await new Promise((ok) => setTimeout(ok, 100));
   if (!crossOriginIsolated) throw new Error('the page must be served cross-origin isolated (node tools/serve.mjs)');
   const bytes = await (await fetch(wasm)).arrayBuffer();
   const module = await WebAssembly.compile(bytes);
@@ -61,13 +69,13 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     if (h.connected) return;
     h.connected = true;
     const replay = q.get('replay');
-    const url = q.get('url') || `https://${location.hostname}:4433/`;
-    const hash = replay ? '' : q.get('hash') || (await (await fetch(new URL('../certs/hash.txt', import.meta.url))).text()).trim();
-    const certHash = Uint8Array.from(atob(hash), (c) => c.charCodeAt(0));
+    let relay = null;
+    try { relay = replay ? null : await relayFor(q); } catch (e) { h.error = e.message; throw e; }
+    h.local = !replay && !relay;
     const cores = navigator.hardwareConcurrency || 4;
     const threads = Number(q.get('threads') || (cores >= 8 ? 2 : 1));
     const ch = new MessageChannel();
-    h.net = new Worker(new URL(replay ? './replay.mjs' : './net.mjs', import.meta.url), { type: 'module' });
+    h.net = new Worker(new URL(replay ? './replay.mjs' : relay ? './net.mjs' : './local.mjs', import.meta.url), { type: 'module' });
     h.sim = new Worker(new URL('./sim.mjs', import.meta.url), { type: 'module' });
     h.net.onmessage = (e) => { if (e.data.error) h.error = e.data.error.split('\n')[0]; if (e.data.welcome) h.welcome = e.data.welcome; if (e.data.replay) h.replay = e.data.replay; };
     h.sim.onmessage = (e) => {
@@ -79,12 +87,25 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     };
     for (const w of [h.net, h.sim]) w.onerror = (e) => { h.error = String(e.message || e); e.preventDefault?.(); };
     if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
-    else h.net.postMessage({ url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true }, [ch.port1]);
+    else if (relay) {
+      const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
+      h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true }, [ch.port1]);
+    } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
     h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     addEventListener('pagehide', () => h.net.postMessage({ leave: true }));
   };
   if (connect) await h.connect();
   return h;
+}
+
+// A local room's AI players (their brain by the page's game) and its seed.
+function localRoom(q, wasm, { arena, fireplace }) {
+  const kind = fireplace ? 'fireplace' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '';
+  const rand = crypto.getRandomValues(new Uint32Array(1))[0];
+  const seed = q.has('seed') ? Number(q.get('seed')) >>> 0
+    : q.has('mg') && kind === 'party' ? ((0xa7 << 24) | ((Number(q.get('mg')) & 0xff) << 16) | (rand & 0xffff)) >>> 0
+      : q.has('mode') && kind === 'arena' ? forcedSeed(Number(q.get('mode')), rand) : undefined;
+  return { kind, bots: q.has('bots') ? Number(q.get('bots')) : 7, seed };
 }
 
 // The prediction for slot: the newest confirmed tick plus every input sampled
