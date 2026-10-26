@@ -26,6 +26,12 @@ golf. The top three of each game get 3, 2 and 1 marshmallows.
 | [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and twelve modes: Grab Bag, Zombies, Gun Game, Juggernaut, and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault. |
 | [**Golf**](docs/golf.md) | One course for everyone, rockets and grenades for clubs: a blast just behind your ball drives it 200 m, and every ball ever hit stays in play. |
 
+Not on the playlist yet, and played on its own page: [**Dogfight**](docs/flight.md),
+the arena with wings. Every fighter a ship over Skyways, a valley with a river
+canyon, spires, arches and ring gates: lasers, a homing charge shot, bombs,
+boost, brake and barrel rolls, in a free-for-all, red against blue or the
+juggernaut.
+
 <p>
 <img src="docs/b1-bumper-256.png" width="49%" alt="Bumper balls with 256 players">
 <img src="docs/p1-chute-128.png" width="49%" alt="Party's Fruit Chute with 128 balls">
@@ -57,6 +63,7 @@ fullscreen. Each game also runs alone, with its own page:
 node net/play.mjs --bumper               # client/bumper.html, 15 AI balls
 node net/play.mjs --party [--mg k]       # client/party.html, the rotation or minigame k
 node net/play.mjs --arena [--mode k]     # client/arena.html, the modes in turn or mode k
+node net/play.mjs --flight [--mode k]    # client/flight.html, Dogfight
 node net/play.mjs                        # golf, client/index.html
 ```
 

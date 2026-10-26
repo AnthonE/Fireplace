@@ -1,7 +1,9 @@
-// Flight's constants (src/flight.wat): literal numbers, no imports, gathered
+// Flight's constants (src/flight.wat): literals, no imports, gathered
 // into the assembler's scope through layout.mjs's FLIGHT_CONSTS as a
 // minigame's are; JS imports this file itself. Times are ticks (125 a
 // second), angles 1/16384 turn, the f32 literals strings.
+
+export const FLIGHT_MAP = 'skyways'; // flight's map, maps/skyways/ (tools/skyways.mjs drew it); the arena's stays Box Canyon
 
 // A ship's fields in the player record, over the arena's guns (a ship
 // carries none): A_GUN, A_MAG and A_RES's eight bytes.

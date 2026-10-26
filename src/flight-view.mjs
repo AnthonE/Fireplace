@@ -7,6 +7,14 @@ import { View, arenaWord } from './arena-view.mjs';
 export { View };
 export { arenaFrame, frameDue, forcedSeed } from './arena-view.mjs';
 
+// What flight calls the arena's modes it flies (layout.mjs FLIGHT_MODES).
+export const MODE_NAMES = {
+  [L.M_FIESTA]: { name: 'DOGFIGHT', rules: 'EVERY SHIP FOR ITSELF  MOST KILLS IN 10 MIN' },
+  [L.M_SLAYER]: { name: 'TEAM DOGFIGHT', rules: 'RED V BLUE  EVERY KILL SCORES FOR YOUR SIDE' },
+  [L.M_JUGGERNAUT]: { name: 'JUGGERNAUT', rules: 'SHOOT DOWN THE JUGGERNAUT TO BECOME IT  10 POINTS' },
+};
+export const modeName = (m) => MODE_NAMES[m] ?? MODE_NAMES[L.M_FIESTA];
+
 // A pilot's word: the arena's, its fields given flight's meanings (layout.mjs,
 // src/flight.wat). yaw and pitch are where the pilot aims, as the arena's.
 export function flightWord({ yaw = 0, pitch = 512, boost = 0, brake = 0, left = 0, right = 0, charge = 0, shot = 0, roll = 0, bomb = 0, serial = 0 }) {

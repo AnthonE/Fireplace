@@ -224,7 +224,8 @@ export function forbid(wat, where = 'source') {
 }
 
 export function expand(file, { DEBUG = false, ARENA = false, FLIGHT = false, BUMPER = false, PARTY = false, layout: lay = layout, macros = makeMacros, map = null } = {}) {
-  if (ARENA && !map) map = compileMap();
+  // flight flies its own map (src/flight.mjs FLIGHT_MAP), the arena Box Canyon unless told otherwise
+  if (ARENA && !map) map = compileMap(FLIGHT ? mapDir(lay.FLIGHT_CONSTS?.FLIGHT_MAP) : mapDir());
   const scope = { ...lay, ...lay.PHYS, ...(lay.BPHYS || {}), ...(lay.MG_CONSTS || {}), ...(lay.AM_CONSTS || {}), ...(lay.FLIGHT_CONSTS || {}), DEBUG: DEBUG ? 1 : 0, ...(map ? map.consts : {}) };
   let src = include(file);
   // the arena's mode is a layout constant, so #if FIESTA picks its rules at build time
@@ -318,15 +319,16 @@ export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = mak
 export const SIMS = [
   { name: 'game', src: join(ROOT, 'src'), out: join(ROOT, 'build') },
   { name: 'arena', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'arena'), flags: { ARENA: true } },
-  { name: 'flight', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'flight'), flags: { ARENA: true, FLIGHT: true } },
+  { name: 'flight', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'flight'), flags: { ARENA: true, FLIGHT: true }, map: layout.FLIGHT_CONSTS.FLIGHT_MAP },
   { name: 'bumper', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'bumper'), flags: { BUMPER: true } },
   { name: 'party', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'party'), flags: { BUMPER: true, PARTY: true } },
   { name: 'fireplace', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'fireplace'), fireplace: true },
 ];
 
-async function buildSim({ name, src, out, flags = {}, fireplace = false }) {
+async function buildSim({ name, src, out, flags = {}, fireplace = false, map: own = null }) {
   mkdirSync(out, { recursive: true });
-  const map = flags.ARENA || fireplace ? compileMap(mapDir(MAP_ARG)) : null;
+  // a sim with a map of its own (flight's) always flies it; --map picks the arena's
+  const map = flags.ARENA || fireplace ? compileMap(mapDir(own || MAP_ARG)) : null;
   const lay = await import(pathToFileURL(join(src, 'layout.mjs')).href);
   const { makeMacros: macros } = await import(pathToFileURL(join(src, 'macros.mjs')).href);
   const entry = join(src, 'game.wat');

@@ -10,6 +10,8 @@
 // instead: no slot, no words, but the same acks, repairs and hash reports.
 // With --arena the room is the arena's (build/arena/game.wasm) and every bot
 // an AI fighter (client/arena-bot.mjs), saying how old its view is in its frames;
+// with --flight it is flight's (build/flight/game.wasm, the arena's words and
+// frames) and every bot an AI pilot (client/flight-bot.mjs);
 // the summary has each match's mode, how it ended (a team mode's scores and
 // winner), and each fighter's side.
 // With --bumper it is bumper balls' (build/bumper/game.wasm) and every bot an
@@ -21,7 +23,7 @@
 // Given several relays, a session whose relay goes away tries the next, a few
 // times a second for up to 10 s, asking for its slot back (a resume): a
 // standby relay that has taken the room over holds it (net/relay.ts --standby).
-//   node net/bot-host.mjs [--relay 127.0.0.1:4434[,host:port...]] [--bots 250] [--seconds 0] [--rate 50] [--genome qg2:...] [--arena | --bumper | --party | --fireplace [--skill 0.6]]
+//   node net/bot-host.mjs [--relay 127.0.0.1:4434[,host:port...]] [--bots 250] [--seconds 0] [--rate 50] [--genome qg2:...] [--arena | --flight | --bumper | --party | --fireplace [--skill 0.6]]
 //                         [--impair delay=60,jitter=10,loss=0.02] [--out traces/bot-host.json] [--watch]
 // --seconds 0 plays until Ctrl-C; --rate: sessions opened a second. The summary
 // (--out, else stdout) holds every session's delivery and inputs, and the
@@ -39,6 +41,8 @@ import { newMemory, instantiate, Sim } from '../harness/core.mjs';
 import { View, modeName } from '../src/arena-view.mjs';
 import { BrainBot, GOLFER } from '../client/brain.mjs';
 import { Fighter } from '../client/arena-bot.mjs';
+import { Pilot } from '../client/flight-bot.mjs';
+import '../src/flight-view.mjs';
 import { Roller } from '../client/bumper-bot.mjs';
 import { Partier } from '../client/party-bot.mjs';
 import '../src/bumper-view.mjs';
@@ -57,7 +61,8 @@ const rate = Number(opt('rate', 50));
 const impair = parseImpair(opt('impair', ''));
 const outPath = opt('out', '');
 const watch = argv.includes('--watch');
-const arena = argv.includes('--arena');
+const flight = argv.includes('--flight');
+const arena = argv.includes('--arena') || flight; // flight is the arena's sim with ships: its words, frames and matches
 const bumper = argv.includes('--bumper');
 const fireplace = argv.includes('--fireplace');
 const party = argv.includes('--party');
@@ -66,10 +71,10 @@ const genome = opt('genome', GOLFER);
 const HOLE_TICKS = 56; // client/sim.mjs: a repair can come until a hole is 64 ticks old
 const TARGET_SLACK = (W.SEND_EVERY + 1) * W.TICK_MS; // net/bot.mjs: a lost input's repeat must still land
 
-const bytes = readFileSync(join(ROOT, arena ? 'build/arena/game.wasm' : bumper ? 'build/bumper/game.wasm' : party ? 'build/party/game.wasm' : fireplace ? 'build/fireplace/game.wasm' : 'build/game.wasm'));
+const bytes = readFileSync(join(ROOT, flight ? 'build/flight/game.wasm' : arena ? 'build/arena/game.wasm' : bumper ? 'build/bumper/game.wasm' : party ? 'build/party/game.wasm' : fireplace ? 'build/fireplace/game.wasm' : 'build/game.wasm'));
 // a golfer, or in the arena a fighter (in bumper balls and party a ball) of a skill about --skill
 const skilled = () => Math.max(0.1, Math.min(1, skill + (Math.random() - 0.5) * 0.4));
-const makeBot = (slot) => (arena ? new Fighter(slot, (Math.random() * 1e9) | 0, skilled()) : bumper ? new Roller(slot, (Math.random() * 1e9) | 0, skilled())
+const makeBot = (slot) => (flight ? new Pilot(slot, (Math.random() * 1e9) | 0, skilled()) : arena ? new Fighter(slot, (Math.random() * 1e9) | 0, skilled()) : bumper ? new Roller(slot, (Math.random() * 1e9) | 0, skilled())
   : party ? new Partier(slot, (Math.random() * 1e9) | 0, skilled())
   : fireplace ? new Guest(slot, (Math.random() * 1e9) | 0, skilled(), genome) : new BrainBot(slot, genome, { lag: 8 }));
 const prefix = await W.wasmPrefix(bytes);
@@ -453,7 +458,7 @@ const per = sessions.map((s) => {
   };
 });
 const summary = {
-  bots: nBots, seconds, impair, genome: arena || bumper || party ? null : genome, arena, bumper, party, fireplace,
+  bots: nBots, seconds, impair, genome: arena || bumper || party ? null : genome, arena, flight, bumper, party, fireplace,
   games: fireplace || party || arena ? world.games : undefined,
   // the arena's match as the run ended: its mode, and a team mode's scores, target, winner and sides' counts
   mode: arena ? world.view.mode() : undefined,

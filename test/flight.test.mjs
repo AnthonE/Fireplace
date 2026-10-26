@@ -7,8 +7,11 @@ import { replay, parseLog, decodeTrace } from '../harness/core.mjs';
 import { startWorkers } from '../harness/run-node.mjs';
 import * as L from '../src/layout.mjs';
 import * as F from '../src/flight.mjs';
+import { compileMap, mapDir } from '../tools/map.mjs';
 
-const MID = 512; // the middle of Box Canyon's field, x and z
+const MID = 512; // the middle of Skyways (maps/skyways), x and z
+const SKY = 100; // m: over every hill, spire, arch, ring and tower there, under its ceiling
+const FLAT = [330, MID]; // open valley floor west of the middle, between the red pad and the mesa
 
 // A room on flight's sim with n ships in play, a free-for-all unless the seed forces another mode.
 async function flight(seed = 7, n = 2) {
@@ -40,13 +43,18 @@ function put(g, p, x, y, z, yaw = 0, pitch = 0, speed = 0) {
 const fxs = (v, kind) => { const out = []; for (let k = 0; k < v.fxCount(); k++) { const f = v.fx(k); if (f.kind === kind) out.push(f); } return out; };
 const level = { yaw: 0, pitch: 512 };
 
-test('flight is its own sim, the arena\'s with ships: the same exports, the ceiling in the map\'s head', async () => {
+test('flight is its own sim, the arena\'s with ships, on its own map: the same exports, the ceiling in the map\'s head', async () => {
   const s = await newFlight();
   for (const name of ['init', 'step', 'step_mt', 'worker_run', 'predict', 'snapshot', 'restore', 'regrid', 'hash_region']) assert.equal(typeof s.x[name], 'function', name);
   s.init(7);
   const v = new View(s.memory.buffer);
   const ceil = v.dv.getFloat32(L.MAP_CEILING, true);
-  assert.ok(ceil > 60 && ceil < 400, `ceiling ${ceil}`);
+  // its own map, Skyways, not the arena's
+  const want = compileMap(mapDir(F.FLIGHT_MAP));
+  assert.equal(want.name, 'Skyways');
+  assert.deepEqual(v.map().bounds, want.bounds);
+  assert.equal(v.map().boxes.length, want.boxes.length);
+  assert.equal(ceil, want.ceiling);
 });
 
 test('a ship comes in flying: SPAWN_ALT up, its nose level toward the middle, the meter full, three bombs; it waits out the countdown', async () => {
@@ -77,8 +85,8 @@ test('a ship comes in flying: SPAWN_ALT up, its nose level toward the middle, th
 
 test('the nose turns toward the aim at TURN a tick, slower boosting, faster braking; the speed settles at the cruise', async () => {
   const g = await flight(7, 1);
-  put(g, 0, 420, 60, MID, 0, 0, 34);
-  const turned = (word, n) => { put(g, 0, 420, 60, MID, 0, 0, 34); for (let k = 0; k < n; k++) g.step([[L.EV_INPUT, 0, word]]); return g.dv.getUint16(L.PLAYERS + F.F_YAW, true); };
+  put(g, 0, 420, SKY, MID, 0, 0, 34);
+  const turned = (word, n) => { put(g, 0, 420, SKY, MID, 0, 0, 34); for (let k = 0; k < n; k++) g.step([[L.EV_INPUT, 0, word]]); return g.dv.getUint16(L.PLAYERS + F.F_YAW, true); };
   assert.equal(turned(flightWord({ yaw: 4096, pitch: 512 }), 10), 10 * F.TURN);
   assert.equal(turned(flightWord({ yaw: 4096, pitch: 512, boost: 1 }), 10), 10 * F.TURN_BOOST);
   assert.equal(turned(flightWord({ yaw: 4096, pitch: 512, brake: 1 }), 10), 10 * F.TURN_BRAKE);
@@ -86,11 +94,11 @@ test('the nose turns toward the aim at TURN a tick, slower boosting, faster brak
   assert.equal(turned(flightWord({ yaw: 16384 - 4096, pitch: 512 }), 5), 16384 - 5 * F.TURN);
   assert.equal(turned(flightWord({ yaw: 400, pitch: 512 }), 30), 400);
   // pitch: up to PITCH_MAX and no further
-  put(g, 0, 420, 40, MID, 0, 0, 34);
+  put(g, 0, 420, SKY, MID, 0, 0, 34);
   for (let k = 0; k < 120; k++) g.step([[L.EV_INPUT, 0, flightWord({ yaw: 0, pitch: 1023 })]]);
   assert.equal(g.dv.getInt16(L.PLAYERS + F.F_PITCH, true), F.PITCH_MAX);
   // level again, from rest: the speed comes up to the cruise along the nose
-  put(g, 0, 380, 50, MID, 0, 0, 0);
+  put(g, 0, 380, SKY, MID, 0, 0, 0);
   for (let k = 0; k < 250; k++) g.step([[L.EV_INPUT, 0, flightWord(level)]]);
   const s = g.v.ship(0);
   assert.ok(Math.abs(Math.hypot(...s.vel) - Number(F.FL_CRUISE)) < 0.1, `${Math.hypot(...s.vel)} m/s`);
@@ -99,21 +107,21 @@ test('the nose turns toward the aim at TURN a tick, slower boosting, faster brak
 
 test('boost and brake run the meter down; run dry, neither works until it is full again', async () => {
   const g = await flight(7, 1);
-  put(g, 0, 370, 60, MID, 0, 0, 34);
+  put(g, 0, 370, SKY, MID, 0, 0, 34);
   const boost = flightWord({ ...level, boost: 1 });
   for (let k = 0; k < 100; k++) g.step([[L.EV_INPUT, 0, boost]]);
   assert.equal(g.v.ship(0).boost, F.BOOST_MAX - 100);
   assert.ok(Math.hypot(...g.v.ship(0).vel) > 55, 'boosting');
-  put(g, 0, 370, 60, MID, 0, 0, 60);
+  put(g, 0, 370, SKY, MID, 0, 0, 60);
   for (let k = 0; k < 100; k++) g.step([[L.EV_INPUT, 0, boost]]);
   assert.equal(g.v.ship(0).boost, 0);
   assert.ok(g.v.ship(0).spent);
   // dry: still asking, but it cruises and the meter fills
-  put(g, 0, 370, 60, MID, 0, 0, 34);
+  put(g, 0, 370, SKY, MID, 0, 0, 34);
   for (let k = 0; k < 50; k++) g.step([[L.EV_INPUT, 0, boost]]);
   assert.equal(g.v.ship(0).boost, 50);
   assert.ok(Math.abs(Math.hypot(...g.v.ship(0).vel) - Number(F.FL_CRUISE)) < 0.5);
-  put(g, 0, 370, 60, MID, 0, 0, 34);
+  put(g, 0, 370, SKY, MID, 0, 0, 34);
   for (let k = 0; k < 150; k++) g.step([[L.EV_INPUT, 0, flightWord({ ...level, brake: 1 })]]);
   assert.equal(g.v.ship(0).boost, F.BOOST_MAX);
   assert.ok(!g.v.ship(0).spent, 'full again');
@@ -124,8 +132,8 @@ test('boost and brake run the meter down; run dry, neither works until it is ful
 
 test('the ground bounces a ship off and a dive into it hurts; the ceiling and the map\'s edge hold it', async () => {
   const g = await flight(7, 1);
-  const h = g.v.height(MID, MID);
-  put(g, 0, MID, h + 6, MID, 0, -3000, 34);
+  const h = g.v.height(...FLAT);
+  put(g, 0, FLAT[0], h + 6, FLAT[1], 0, -3000, 34);
   const down = flightWord({ yaw: 0, pitch: 0 });
   g.step([[L.EV_INPUT, 0, down]]);
   let low = Infinity;
@@ -140,14 +148,14 @@ test('the ground bounces a ship off and a dive into it hurts; the ceiling and th
   assert.ok(g.v.ship(0).pos[1] <= ceil);
   // flat out at the edge
   const [, x1] = g.v.map().bounds;
-  put(g, 0, x1 - 5, 60, MID, 0, 0, 34);
+  put(g, 0, x1 - 5, SKY, MID, 0, 0, 34);
   for (let k = 0; k < 60; k++) g.step([[L.EV_INPUT, 0, flightWord(level)]]);
   assert.ok(g.v.ship(0).pos[0] <= x1);
 });
 
 test('lasers: a ship with its nose on another wears through shields and health to a kill; a roll turns them away', async () => {
   const g = await flight(7, 2);
-  const hold = () => { put(g, 0, 440, 60, MID, 0, 0, 0); put(g, 1, 480, 60, MID, 8192, 0, 0); };
+  const hold = () => { put(g, 0, 440, SKY, MID, 0, 0, 0); put(g, 1, 480, SKY, MID, 8192, 0, 0); };
   hold();
   let shot = g.v.ship(0).fired;
   let hits = 0, k = 0;
@@ -179,18 +187,18 @@ test('lasers are checked where the shooter saw its target, by the lag its frames
   const g = await flight(7, 2);
   // the target holds still at A for a while, then sits at B; a shooter that
   // says it sees the world 12 ticks old and aims at A hits while A is within those 12 ticks
-  const A = [480, 60, MID], B = [480, 60, MID + 20];
-  for (let i = 0; i < 40; i++) { put(g, 0, 440, 60, MID); put(g, 1, ...A, 8192); g.step(); }
+  const A = [480, SKY, MID], B = [480, SKY, MID + 20];
+  for (let i = 0; i < 40; i++) { put(g, 0, 440, SKY, MID); put(g, 1, ...A, 8192); g.step(); }
   const frame = arenaFrame({ lag: 12 });
   // a whole frame of 8 ticks sets the lag
   for (let i = 0; i < 16; i++) {
     const t = g.v.tick;
-    put(g, 0, 440, 60, MID); put(g, 1, ...A, 8192);
+    put(g, 0, 440, SKY, MID); put(g, 1, ...A, 8192);
     g.step([[L.EV_INPUT, 0, flightWord({ ...level, serial: (frame >> (t & 7)) & 1 })]]);
   }
   assert.equal(g.v.ship(0).lag, 12);
-  for (let i = 0; i < 5; i++) { put(g, 0, 440, 60, MID); put(g, 1, ...B, 8192); g.step([[L.EV_INPUT, 0, flightWord(level)]]); }
-  put(g, 0, 440, 60, MID); put(g, 1, ...B, 8192);
+  for (let i = 0; i < 5; i++) { put(g, 0, 440, SKY, MID); put(g, 1, ...B, 8192); g.step([[L.EV_INPUT, 0, flightWord(level)]]); }
+  put(g, 0, 440, SKY, MID); put(g, 1, ...B, 8192);
   g.step([[L.EV_INPUT, 0, flightWord({ ...level, shot: (g.v.ship(0).fired + 1) & 3 })]]);
   assert.equal(g.v.ship(1).sh, 100 - F.LASER_DMG, 'hit where it was seen');
 });
@@ -199,7 +207,7 @@ test('a charge shot built and let go homes on the ship nearest the nose; a bomb 
   const g = await flight(7, 2);
   // the target 12 degrees off the nose, 60 m out, still
   const tx = 440 + 60 * Math.cos(0.21), tz = MID + 60 * Math.sin(0.21);
-  const hold = () => { put(g, 0, 440, 60, MID, 0, 0, 0); put(g, 1, tx, 60, tz, 8192); };
+  const hold = () => { put(g, 0, 440, SKY, MID, 0, 0, 0); put(g, 1, tx, SKY, tz, 8192); };
   for (let k = 0; k < F.CHARGE_TICKS + 5; k++) { hold(); g.step([[L.EV_INPUT, 0, flightWord({ ...level, charge: 1 })]]); }
   assert.equal(g.v.ship(0).charge, F.CHARGE_TICKS);
   hold();
@@ -216,11 +224,11 @@ test('a charge shot built and let go homes on the ship nearest the nose; a bomb 
   assert.ok(!g.v.projectiles().some((j) => j.kind === F.K_CHARGE));
   // a bomb, dead ahead
   for (let k = 0; k < L.SHIELD_DELAY + 300; k++) { hold(); g.step([[L.EV_INPUT, 0, flightWord(level)]]); }
-  put(g, 0, 400, 60, MID, 0, 0, 34); put(g, 1, 440, 60, MID, 8192);
+  put(g, 0, 400, SKY, MID, 0, 0, 34); put(g, 1, 440, SKY, MID, 8192);
   assert.equal(g.v.ship(1).sh, 100);
   g.step([[L.EV_INPUT, 0, flightWord({ ...level, bomb: 1 })]]);
   assert.equal(g.v.ship(0).bombs, F.BOMBS - 1);
-  for (let k = 0; k < 60; k++) { put(g, 1, 440, 60, MID, 8192); g.step([[L.EV_INPUT, 0, flightWord({ ...level, bomb: 1 })]]); }
+  for (let k = 0; k < 60; k++) { put(g, 1, 440, SKY, MID, 8192); g.step([[L.EV_INPUT, 0, flightWord({ ...level, bomb: 1 })]]); }
   const s = g.v.ship(1);
   assert.equal(s.sh + s.hp, 200 - F.BOMB_DMG, `bombed: ${s.sh} + ${s.hp}`);
   assert.ok(fxs(g.v, L.FX_BLAST).some((f) => f.size === Number(F.FL_BOMB_RAD)));
@@ -278,7 +286,7 @@ function predicted(g, inputs) {
 
 test('the prediction matches the confirmed ship bit for bit: turns, boost, brake, a roll, lasers, a charge shot, a bomb', async () => {
   const g = await flight(7, 1);
-  put(g, 0, 380, 70, MID, 0, 0, 34);
+  put(g, 0, 380, SKY, MID, 0, 0, 34);
   const k0 = g.v.tick;
   const inputs = [];
   for (let k = 0; k < 420; k++) {
