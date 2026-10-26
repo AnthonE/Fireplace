@@ -1,0 +1,36 @@
+# Keeps the game's Elo Pros store page in step with elo.json (Elo Pros'
+# sdk/repo/elo-sync.yml). Every push to the default branch that changes
+# elo.json asks elopros.com to read this repo again, so the page follows the
+# commit in a minute or two instead of at the hourly sweep. It needs no
+# secret: the committed file is what acts, and this call only says "look
+# again". Before the game is listed the answer says so, and the job still passes.
+#
+# GitHub's raw host caches a file for up to five minutes, so the job first
+# waits until it serves the bytes just pushed. Fireplace's own repo skips it:
+# its store row is the house's.
+name: elo
+on:
+  push:
+    paths: ["elo.json"]
+  workflow_dispatch:
+jobs:
+  pull:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository != 'AnthonE/Fireplace'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for GitHub to serve the new elo.json
+        run: |
+          want=$(sha256sum elo.json | cut -d' ' -f1)
+          for i in $(seq 1 40); do
+            got=$(curl -fsS "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/HEAD/elo.json" | sha256sum | cut -d' ' -f1)
+            [ "$got" = "$want" ] && exit 0
+            sleep 10
+          done
+          echo "GitHub is still serving an older elo.json; the hourly sweep will pick it up."
+      - name: Ask elopros.com to read the repo again
+        run: |
+          game=$(jq -r .game elo.json)
+          curl -sS -X POST https://elopros.com/api/store/repo/pull \
+            -H 'content-type: application/json' -d "{\"game\": \"$game\"}"
+          echo

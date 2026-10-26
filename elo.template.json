@@ -1,0 +1,14 @@
+{
+  "kit": "party",
+  "from": "Fireplace",
+  "engine": { "name": "Fireplace", "license": "CC0-1.0" },
+  "init": "node tools/kit.mjs init \"<Game Name>\"",
+  "first_run": "npm ci && node tools/kit.mjs check",
+  "check": "npm test",
+  "new_minigame": "node tools/new-mg.mjs <key> <prefix> \"<NAME>\"",
+  "new_theme": "node tools/themes.mjs new <id>",
+  "page": "GitHub Pages, .github/workflows/pages.yml: Settings > Pages > Source: GitHub Actions. With no relay in client/kit.json the page plays a local room (you and AI players).",
+  "server": "a relay running this repo's build/fireplace/game.wasm (net/rooms.mjs, docs/hosting.md); its address and certificate hash go in client/kit.json's relay",
+  "plan": ".github/ISSUE_TEMPLATE/plan.yml, .github/workflows/elo-plan.yml, .github/elo/plan-prompt.md",
+  "keep": ["src/", "client/", "net/", "harness/", "tools/", "maps/", "test/", "docs/", "film/", ".github/"]
+}
