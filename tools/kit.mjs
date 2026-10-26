@@ -30,7 +30,7 @@ export const HOME = /^(anthone)\/(fireplace|quake-golf)$/i; // Fireplace's own r
 export const HOME_SLUG = 'fireplace';
 export const ENGINE = { name: 'Fireplace', license: 'CC0-1.0' };
 // the tests a copy's first run passes in seconds; npm test runs them all (about 10 min)
-export const FAST = ['asm', 'themes', 'looks', 'new-mg', 'wire', 'achievements', 'kit'];
+export const FAST = ['asm', 'themes', 'looks', 'new-mg', 'wire', 'achievements', 'kit', 'plan'];
 
 // a name as a store slug: lower case, a-z 0-9 and -, 3 to 41 long (as the Elo Pros plan generator makes them)
 export function slugOf(name) {

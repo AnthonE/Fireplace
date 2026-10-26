@@ -96,7 +96,8 @@ test("elo.json credits every theme as a mod (node tools/elo.mjs writes them), an
   const { withThemes, FILE } = await import('../tools/elo.mjs');
   const now = JSON.parse(readFileSync(FILE, 'utf8'));
   assert.deepEqual(now, withThemes(now), "elo.json's mods are not the themes: run node tools/elo.mjs");
-  assert.equal(now.game, 'fireplace');
+  // Fireplace's slug here; a copy made with tools/kit.mjs init names its own
+  assert.match(now.game, /^[a-z0-9][a-z0-9-]{1,39}[a-z0-9]$/, 'elo.json names its game by its store slug');
   const guide = readFileSync('CONTRIBUTING.md', 'utf8');
   for (const [key] of COLORS) assert.ok(guide.includes(`\`${key}\``), `CONTRIBUTING.md doesn't name the colour ${key}`);
   for (const w of [...WINDOWS, ...MANTELS]) assert.ok(guide.includes(`\`${w}\``), `CONTRIBUTING.md doesn't name ${w}`);

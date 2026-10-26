@@ -15,9 +15,19 @@ import { readThemes } from '../tools/themes.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FILES = ['elo.json', 'package.json', 'README.md', 'CONTRIBUTING.md', 'client/kit.json', 'client/fireplace.html', 'client/room.html', 'client/themes'];
 
+// the files init touches, as a fresh copy of Fireplace has them (whatever
+// this repo is called by now: in a copy, init has already run here)
 function copy() {
   const dir = mkdtempSync(join(tmpdir(), 'kit-'));
   for (const f of FILES) cpSync(join(ROOT, f), join(dir, f), { recursive: true });
+  const put = (f, text) => writeFileSync(join(dir, f), text);
+  const json = (f, edit) => put(f, JSON.stringify(edit(JSON.parse(readFileSync(join(dir, f), 'utf8'))), null, 2) + '\n');
+  json('elo.json', () => ({ elo: 1, game: 'fireplace', jobs: [{ id: 'fireplace-theme', deliverable: 'PR: accepted into AnthonE/Fireplace' }], mods: [] }));
+  json('package.json', (p) => ({ ...p, name: 'fireplace' }));
+  json('client/kit.json', (k) => ({ ...k, name: 'Fireplace' }));
+  for (const f of ['client/fireplace.html', 'client/room.html']) put(f, readFileSync(join(dir, f), 'utf8').replace(/<title>[^<]*<\/title>/, '<title>Fireplace</title>'));
+  put('README.md', '# Fireplace\n\nA party game for up to 256 people in one room.\n');
+  put('CONTRIBUTING.md', '# Contributing to Fireplace\n\nAnyone can change it.\n');
   return dir;
 }
 
