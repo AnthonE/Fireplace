@@ -3,16 +3,18 @@
 // on, the last ball on it wins (sumo, the smallest game the framework plays),
 // in the four files every minigame has, and wired into the five lists that name
 // them all. It builds and passes as written; from there the minigame is yours.
-//   node tools/new-mg.mjs <key> <prefix> "<NAME>" [--dry-run]
+//   node tools/new-mg.mjs <key> <prefix> "<NAME>" [--rust] [--dry-run]
 //     key     its file name and id: lowercase letters, e.g. sumo
 //     prefix  two lowercase letters no other minigame uses: its hooks are $<prefix>_<hook>,
 //             its constants <PREFIX>_*
 //     NAME    what the title card says: capitals, digits, spaces (the 3x5 font), 20 at most
 // Writes src/mg/<key>.wat and .mjs, client/mg/<key>.mjs, test/mg-<key>.test.mjs;
 // edits src/layout.mjs, src/party.wat, client/mg/index.mjs, test/party.test.mjs.
+// --rust writes the rules in Rust instead (rust/mg/<key>/, docs/rust.md), the
+// same sumo ring, and src/mg/<key>.wat from it with tools/rust.mjs (cargo).
 // Appending keeps every other minigame's id, so their logs and seeds still mean
 // what they meant; the party and Fireplace builds change, as they must.
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './main.mjs';
@@ -21,7 +23,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // The edits to the files that list every minigame, each found by its anchor;
 // one that moved stops the tool before it writes anything.
-export function plan(key, prefix, name, { root = ROOT, layout } = {}) {
+export function plan(key, prefix, name, { root = ROOT, layout, rust = false } = {}) {
   const P = prefix.toUpperCase();
   const K = key.toUpperCase();
   const read = (f) => readFileSync(join(root, f), 'utf8');
@@ -34,7 +36,7 @@ export function plan(key, prefix, name, { root = ROOT, layout } = {}) {
   if (L.MINIGAMES.some((m) => m.name === name)) throw new Error(`a minigame is already called ${name}`);
   if (Object.keys(L).some((k) => k.startsWith(`${P}_`)) || Object.keys(L.MG_CONSTS).some((k) => k.startsWith(`${P}_`))) throw new Error(`names starting ${P}_ are taken: pick another prefix`);
   if (`MG_${K}` in L) throw new Error(`MG_${K} is taken`);
-  for (const f of [`src/mg/${key}.wat`, `src/mg/${key}.mjs`, `client/mg/${key}.mjs`, `test/mg-${key}.test.mjs`]) if (existsSync(join(root, f))) throw new Error(`${f} is there already`);
+  for (const f of [`src/mg/${key}.wat`, `src/mg/${key}.mjs`, `client/mg/${key}.mjs`, `test/mg-${key}.test.mjs`, `rust/mg/${key}`]) if (existsSync(join(root, f))) throw new Error(`${f} is there already`);
   const id = L.NMG;
   const edits = [];
   const edit = (file, find, replace) => {
@@ -73,7 +75,7 @@ export function plan(key, prefix, name, { root = ROOT, layout } = {}) {
   edit('test/party.test.mjs', pre, pre.replace(/\]\);$/, `, '${prefix}']);`));
   const files = {
     [`src/mg/${key}.mjs`]: constantsFile(key, P, name, id, L.FX_MG),
-    [`src/mg/${key}.wat`]: watFile(prefix, P, name),
+    ...(rust ? { [`rust/mg/${key}/Cargo.toml`]: cargoFile(key), [`rust/mg/${key}/src/lib.rs`]: rustFile(key, prefix, P, name) } : { [`src/mg/${key}.wat`]: watFile(prefix, P, name) }),
     [`client/mg/${key}.mjs`]: clientFile(key, P, name),
     [`test/mg-${key}.test.mjs`]: testFile(key, P, name),
   };
@@ -145,6 +147,80 @@ const watFile = (p, P, name) => `;; ${name}: a round platform over the sea, size
 (func $${p}_tick)
 (func $${p}_over (result i32) (i32.const 0))
 (func $${p}_out (param $p i32))
+`;
+
+const cargoFile = (key) => `[package]
+name = "${key}"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+fp = { path = "../../fp" }
+`;
+
+const rustFile = (key, p, P, name) => `//! ${name}: a round platform over the sea, sized for the crowd. Bump the
+//! others off; the last ball on it wins. (node tools/new-mg.mjs --rust wrote
+//! this: the hooks it needs are here; node tools/rust.mjs turns it into
+//! src/mg/${key}.wat, and docs/rust.md says what the sim lets Rust do.)
+//!
+//! src/party.wat calls these through (!mg) on PG_GAME, ${p}_<hook>:
+//!   setup(n)             the round's knobs (PG_KIND, PG_LEN, PG_SIZE, ...) and the stage, for n balls
+//!   spawn(i, n, out)     where ball i of n starts: x, y, z into out
+//!   start()              play starts (the confirmed world)
+//!   begin(p, d)          ball p's own start on bank d: writes only its record
+//!   ground(d, x, y, z)   the floor's top under (x, z) no higher than y on bank d, or -1000 for none
+//!   push(p, d)           ball p after its roll on bank d: its record and bank d's FX ring only
+//!   tick()               once a tick in play: serial, in slot order, the confirmed world
+//!   over() -> i32        1 ends the round now
+//!   out(p)               ball p is out
+//! Leave one out and tools/rust.mjs writes it empty (over: 0). State lives only
+//! in PG_H (${P}_RAD...), PG_S, PG_BIG, and PG_M and PG_SCORE in each ball's
+//! record; every layout.mjs number and this minigame's own (src/mg/${key}.mjs)
+//! is a const here.
+#![no_std]
+
+use fp::*;
+include!("../gen/consts.rs");
+
+/// The platform for the crowd.
+#[no_mangle]
+pub extern "C" fn ${p}_setup(n: i32) {
+    let rad = fmin(sqrt(n as f32) * ${P}_RK + ${P}_R0 as f32, ${P}_RMAX as f32);
+    st_i32(PG_KIND, PK_OUT);
+    st_i32(PG_LEN, ${P}_LEN);
+    st_f32(PG_SIZE, rad);
+    st_f32(PG_H + ${P}_RAD, rad);
+}
+
+/// A sunflower spiral over most of the platform.
+#[no_mangle]
+pub extern "C" fn ${p}_spawn(i: i32, n: i32, out: &mut [f32; 3]) {
+    let (x, z) = p_disc(i, n, ld_f32(PG_H + ${P}_RAD) * 0.8);
+    out[0] = x;
+    out[1] = PLAT_Y;
+    out[2] = z;
+}
+
+/// The platform's top under (x, z) if (x, z) is on it, on bank d.
+#[no_mangle]
+pub extern "C" fn ${p}_ground(d: i32, x: f32, y: f32, z: f32) -> f32 {
+    if y < PLAT_Y {
+        return -1000.0;
+    }
+    let r = ld_f32(PG_H + ${P}_RAD + d);
+    let dx = x - centre(d);
+    let dz = z - centre(d);
+    if dx * dx + dz * dz <= r * r {
+        PLAT_Y
+    } else {
+        -1000.0
+    }
+}
 `;
 
 const clientFile = (key, P, name) => `// ${name}, as drawn and as the AI ball sees it: the platform, a disc of rubber.
@@ -250,18 +326,27 @@ test('a ball put off the rim falls and is out, and the one left on wins', async 
 `;
 
 if (isMain(import.meta.url)) {
-  const args = process.argv.slice(2).filter((a) => a !== '--dry-run');
+  const args = process.argv.slice(2).filter((a) => a !== '--dry-run' && a !== '--rust');
   const dry = process.argv.includes('--dry-run');
+  const rust = process.argv.includes('--rust');
   const [key, prefix, name] = args;
   try {
-    if (!key || !prefix || !name) throw new Error('node tools/new-mg.mjs <key> <prefix> "<NAME>" [--dry-run]');
+    if (!key || !prefix || !name) throw new Error('node tools/new-mg.mjs <key> <prefix> "<NAME>" [--rust] [--dry-run]');
     const layout = await import('../src/layout.mjs');
-    const { id, edits, files } = plan(key, prefix, name, { layout });
-    for (const [f, text] of Object.entries(files)) { if (!dry) writeFileSync(join(ROOT, f), text); console.log(`${dry ? 'would write' : 'wrote'} ${f}`); }
+    const { id, edits, files } = plan(key, prefix, name, { layout, rust });
+    for (const [f, text] of Object.entries(files)) { if (!dry) { mkdirSync(dirname(join(ROOT, f)), { recursive: true }); writeFileSync(join(ROOT, f), text); } console.log(`${dry ? 'would write' : 'wrote'} ${f}`); }
     for (const e of edits) { if (!dry) writeFileSync(join(ROOT, e.file), e.after); console.log(`${dry ? 'would edit' : 'edited'} ${e.file}`); }
+    if (rust && !dry) {
+      // src/mg/<key>.wat, from the Rust: layout.mjs as just edited
+      const { build } = await import('./rust.mjs');
+      writeFileSync(join(ROOT, 'src', 'mg', `${key}.wat`), await build(key, await import(`../src/layout.mjs?mg=${key}`)));
+      console.log(`wrote src/mg/${key}.wat (node tools/rust.mjs, from rust/mg/${key})`);
+    }
     console.log(`\n${name} is minigame ${id} (MG_${key.toUpperCase()}). Next:`);
     console.log(`  npm run build && node --test test/mg-${key}.test.mjs test/party.test.mjs`);
     console.log(`  node net/play.mjs --party --mg ${id} --bots 7     # play it with bots: open the URL it prints`);
-    console.log('  then make it yours: src/mg/' + key + '.wat (the rules), client/mg/' + key + '.mjs (the look, the bots). CONTRIBUTING.md has the bar.');
+    console.log(rust
+      ? `  then make it yours: rust/mg/${key}/src/lib.rs (the rules; node tools/rust.mjs after each change, docs/rust.md), client/mg/${key}.mjs (the look, the bots). CONTRIBUTING.md has the bar.`
+      : '  then make it yours: src/mg/' + key + '.wat (the rules), client/mg/' + key + '.mjs (the look, the bots). CONTRIBUTING.md has the bar.');
   } catch (e) { console.error(e.message); process.exit(1); }
 }

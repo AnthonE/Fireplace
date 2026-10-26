@@ -29,6 +29,7 @@ export const INBOX = 0x1000; // u32 count, then records
 export const INBOX_REC = 0x1010;
 export const INBOX_MAX = 1024;
 export const FULLDIG = 0x6000; // u64[128] scratch for the full region hash
+export const RS_OUT = 0xf00; // 16 B: a Rust minigame's spawn writes its x, y, z here (serial, per call, never hashed; tools/rust.mjs)
 // FX ring: blasts, shots and sinks for the renderer and the sound. Written by
 // the sim, read by the main thread, never hashed. u32 count, then records:
 // u32 tick | u8 kind | u8 owner | u16 shot | f32 x | f32 y | f32 z | f32 size | 8 B zero
