@@ -82,11 +82,13 @@ test('a plan that breaks the rules is told which ones', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('the prompt, the workflow and the template agree on the first run and the Rust spot', () => {
+test('the prompt, the workflow and the template agree on the first run and on Rust minigames', () => {
   const prompt = readFileSync(join(ROOT, '.github/elo/plan-prompt.md'), 'utf8');
   const flow = readFileSync(join(ROOT, '.github/workflows/elo-plan.yml'), 'utf8');
   const tpl = JSON.parse(readFileSync(join(ROOT, 'elo.template.json'), 'utf8'));
-  assert.match(prompt, /<!-- RUST MINIGAMES\./, 'a marked place for the Rust paragraph');
+  assert.match(prompt, /node tools\/new-mg\.mjs <key> <prefix> "<NAME>" --rust/, 'the Rust minigame paragraph');
+  assert.match(prompt, /node tools\/rust\.mjs/);
+  assert.match(flow, /rustup toolchain install 1\.97\.0/, 'the build job has the rustc the checked-in WAT names');
   assert.match(prompt, /node tools\/new-mg\.mjs/);
   assert.match(prompt, /node \.github\/elo\/plan\.mjs check \. --answers \.elo-plan\/answers\.json/);
   assert.match(flow, /anthropics\/claude-code-action@v\d+\.\d+\.\d+/, 'the action pinned to a release');
