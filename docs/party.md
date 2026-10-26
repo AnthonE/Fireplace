@@ -59,7 +59,7 @@ the rotation, joins, the ball's roll over any stage, outs, places and points.
 bumper.wat's ball, power-ups, bumps and blasts stay; its cheese and its round
 are behind `#if !PARTY`, so bumper balls' own build is bit for bit what it was.
 Each minigame is its own file, `src/mg/<key>.wat` (its constants in
-`src/mg/<key>.mjs`, gathered into `src/layout.mjs`'s `MG_CONSTS` for the
+`src/mg/<key>.mjs`, gathered into `src/mg/consts.mjs`'s `MG_CONSTS` for the
 assembler), and supplies nine hooks under its prefix: `setup` lays the
 stage out for the balls in, `spawn` places them, `start` and `tick` run its
 world, `over` ends it early, `out` hears of a ball going out, and `begin`
@@ -73,8 +73,8 @@ in every keyframe.
 A new one starts from `node tools/new-mg.mjs <key> <prefix> "<NAME>"`: it
 writes the four files a minigame has (a sumo ring: a round platform sized for
 the crowd, bumps on, the last ball on wins) and appends it to the five lists
-that name them all (`MINIGAMES` and its constants in `src/layout.mjs`, the
-`#include` in `src/party.wat`, `client/mg/index.mjs`, the registry check in
+that name them all (`MINIGAMES` in `src/layout.mjs`, its constants in
+`src/mg/consts.mjs`, the `#include` in `src/party.wat`, `client/mg/index.mjs`, the registry check in
 `test/party.test.mjs`). As written it builds, its two tests pass, and so does
 `npm test` with it in; golf, the arena and bumper balls keep their bytes.
 CONTRIBUTING.md takes it from there.

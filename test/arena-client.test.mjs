@@ -11,6 +11,7 @@ import slayer, { lead, nearestEnemy } from '../client/am/slayer.mjs';
 import { C } from '../client/font.mjs';
 import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 
 // The arena's clients against a world whose memory is poked into shape: the
 // teams sim isn't needed to read sides, scores and objectives, to draw them,
@@ -118,7 +119,7 @@ test('AM_CONSTS: every team mode\'s constants, none named twice, after a layout 
   for (const a of L.AM) {
     for (const [k, v] of Object.entries(await import(`../src/am/${a.key}.mjs`))) {
       assert.ok(!seen.has(k), `${k} in ${a.key} and ${seen.get(k)}`);
-      assert.ok(!(k in L) && !(k in L.MG_CONSTS), `${k} in ${a.key} and layout.mjs or a minigame`);
+      assert.ok(!(k in L) && !(k in MG_CONSTS), `${k} in ${a.key} and layout.mjs or a minigame`);
       assert.deepEqual([L.AM_CONSTS[k], AC[k]], [v, v]);
       seen.set(k, a.key);
     }

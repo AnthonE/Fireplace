@@ -5,7 +5,7 @@
 // from the middle and carries every ball in the house out past its edge. The ice barely
 // grips, a bump kicks harder the harder it hits, and a ball off the edge
 // is down BE_RESPAWN and back at the rim. Most points after BE_ENDS ends wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The house: the bull and the three rings out from the middle, m, all times
 // the house's scale, the root of the balls in times BE_HS (at least 1, so up

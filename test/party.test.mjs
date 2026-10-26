@@ -8,6 +8,7 @@ import { expandMacros } from '../tools/asm.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { playParty, partySeed } from '../tools/genparty.mjs';
 import { MG } from '../client/mg/index.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 import * as L from '../src/layout.mjs';
 import * as MC from '../src/mg/thinice.mjs'; // TI_*: the minigame's own constants
 
@@ -70,11 +71,11 @@ test('MG_CONSTS: every minigame\'s constants, none named twice or after a layout
     for (const [k, v] of Object.entries(await import(`../src/mg/${m.key}.mjs`))) {
       assert.ok(!seen.has(k), `${k} in ${m.key} and ${seen.get(k)}`);
       assert.ok(!(k in L), `${k} in ${m.key} and layout.mjs`);
-      assert.deepEqual(L.MG_CONSTS[k], v);
+      assert.deepEqual(MG_CONSTS[k], v);
       seen.set(k, m.key);
     }
   }
-  assert.equal(Object.keys(L.MG_CONSTS).length, seen.size);
+  assert.equal(Object.keys(MG_CONSTS).length, seen.size);
   // past about 1,020 exports V8 keeps a module namespace as a dictionary, and
   // every L.NAME read in the bot host, the relay and a page's frame slows 14 times
   assert.ok(Object.keys(L).length < 800, `layout.mjs exports ${Object.keys(L).length} names`);

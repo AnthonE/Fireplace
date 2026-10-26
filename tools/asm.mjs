@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import wabtInit from 'wabt';
 import * as layout from '../src/layout.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { pathToFileURL } from 'node:url';
 import { isMain } from './main.mjs';
@@ -224,7 +225,7 @@ export function forbid(wat, where = 'source') {
 
 export function expand(file, { DEBUG = false, ARENA = false, BUMPER = false, PARTY = false, layout: lay = layout, macros = makeMacros, map = null } = {}) {
   if (ARENA && !map) map = compileMap();
-  const scope = { ...lay, ...lay.PHYS, ...(lay.BPHYS || {}), ...(lay.MG_CONSTS || {}), ...(lay.AM_CONSTS || {}), DEBUG: DEBUG ? 1 : 0, ...(map ? map.consts : {}) };
+  const scope = { ...lay, ...lay.PHYS, ...(lay.BPHYS || {}), ...(lay.MG_CONSTS || MG_CONSTS), ...(lay.AM_CONSTS || {}), DEBUG: DEBUG ? 1 : 0, ...(map ? map.consts : {}) };
   let src = include(file);
   // the arena's mode is a layout constant, so #if FIESTA picks its rules at build time
   src = conditionals(src, { DEBUG, ARENA, BUMPER, PARTY, FIESTA: ARENA && !!lay.FIESTA });

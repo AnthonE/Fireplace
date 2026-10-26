@@ -5,7 +5,7 @@
 // bottom swing up on the clock, left then right, and bat balls back up; a
 // ball through a drain is down, back in the plunger lane at the top a second
 // later, a fifth of its points gone. The last 15 s score double. Most points
-// wins. Literal numbers only: the sim reads them through layout.mjs's
+// wins. Literal numbers only: the sim reads them through consts.mjs's
 // MG_CONSTS, the client imports this file itself.
 export const PN_LEN = 10000; // 80 s
 export const PN_DOUBLE = 1875; // the last 15 s score double

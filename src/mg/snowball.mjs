@@ -3,7 +3,7 @@
 // snowball: rolling on the snow grows it, standing still melts it; bigger is
 // heavier, as quick flat out but slower to get going, and nearer the edge.
 // One that touches a ball under SB_EATK of its size swallows it. Last one in wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const SB_R0 = 10; // the field: SB_R0 m plus SB_RK times the root of the balls in, at most SB_RMAX
 export const SB_RK = 5;

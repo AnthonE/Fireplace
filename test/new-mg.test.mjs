@@ -11,12 +11,14 @@ import { plan } from '../tools/new-mg.mjs';
 test('the plan for a new minigame finds every list, appends to each, and writes the nine hooks', () => {
   const { id, edits, files } = plan('zzsumo', 'zq', 'ZZ SUMO', { layout: L });
   assert.equal(id, L.NMG);
-  assert.deepEqual(edits.map((e) => e.file).sort(), ['client/mg/index.mjs', 'src/layout.mjs', 'src/party.wat', 'test/party.test.mjs']);
+  assert.deepEqual(edits.map((e) => e.file).sort(), ['client/mg/index.mjs', 'src/layout.mjs', 'src/mg/consts.mjs', 'src/party.wat', 'test/party.test.mjs']);
   const lay = edits.find((e) => e.file === 'src/layout.mjs').after;
   assert.ok(lay.includes("  { key: 'zzsumo', prefix: 'zq', name: 'ZZ SUMO' },\n]; // index = MG_*"));
   assert.ok(lay.includes(`export const MG_ZZSUMO = ${L.NMG};\nexport const NMG = ${L.NMG + 1};`));
-  assert.ok(lay.includes("import * as mg_zzsumo from './mg/zzsumo.mjs';"));
-  assert.match(lay, /, mg_zzsumo\)\);/);
+  const consts = edits.find((e) => e.file === 'src/mg/consts.mjs').after;
+  assert.ok(consts.includes("import * as mg_zzsumo from './zzsumo.mjs';"));
+  assert.match(consts, /, mg_zzsumo\)\);/);
+  assert.doesNotMatch(lay, /mg_zzsumo/, 'layout.mjs imports no minigame');
   assert.ok(edits.find((e) => e.file === 'src/party.wat').after.includes('#include "mg/zzsumo.wat"'));
   assert.match(edits.find((e) => e.file === 'client/mg/index.mjs').after, /export const MG = \[[^\]]*, zzsumo\];/);
   const t = edits.find((e) => e.file === 'test/party.test.mjs').after;

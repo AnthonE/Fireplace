@@ -93,9 +93,7 @@ only of your own body), physics sandboxes, open worlds.
    compiled (every hash still equal). Then a frame rate on a real laptop GPU.
 6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
    less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
-   than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); bumper's and the
-   arena's pages load Party's constants through `layout.mjs`'s `MG_CONSTS`
-   (26 KB gzipped).
+   than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256).
 7. People playing it. Everything so far is played by bots.
 
 ## FFA ARAM (the champion kit's first game)

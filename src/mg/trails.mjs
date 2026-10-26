@@ -6,7 +6,7 @@
 // round goes, so the floor fills with light). A ball whose bottom is more
 // than LT_WALL over the floor passes over. Bumps on, without bumper's kick.
 // The last ball in wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const LT_H0 = 12; // the floor's half-side: LT_H0 m plus LT_HK times the root of the balls in, at most LT_HMAX
 export const LT_HK = 4;

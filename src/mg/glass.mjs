@@ -6,7 +6,7 @@
 // shatters cracks as a ball lands on it and goes GB_HOLD ticks later, for
 // good; a ball on it can't hop off. The first across wins; the rest place by
 // the row they reached, the fallen by the row they fell from.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const GB_LP = 10; // m, a panel along the way on (x): its near third to land on, then room to wait, then a run-up to the edge
 export const GB_WP = 4.5; // m, a panel across (z)

@@ -3,6 +3,7 @@
 // Layout constants stay as @NAME here and are folded after expansion.
 import * as layout from './layout.mjs';
 import { AM, ARMS, FP_MATCHES, GAMES, MINIGAMES } from './layout.mjs';
+import { MG_CONSTS } from './mg/consts.mjs';
 
 const SHIFT = { f32: 2, i32: 2, i64: 3, u16: 1, u8: 0, v128: 2 };
 const LOAD = { f32: 'f32.load', i32: 'i32.load', i64: 'i64.load', u16: 'i32.load16_u', u8: 'i32.load8_u', v128: 'v128.load' };
@@ -88,7 +89,7 @@ export function makeMacros({ DEBUG }) {
     // (i32s) as a chain of selects, so the constants inline; the last element
     // for any i past it.
     tab: (name, i) => {
-      const a = layout[name] ?? layout.MG_CONSTS[name] ?? layout.AM_CONSTS[name];
+      const a = layout[name] ?? MG_CONSTS[name] ?? layout.AM_CONSTS[name];
       if (!Array.isArray(a)) throw new Error(`no layout array ${name}`);
       return a.slice(0, -1).reduceRight((out, v, k) => `(select (i32.const ${v}) ${out} (i32.eq ${i} (i32.const ${k})))`, `(i32.const ${a.at(-1)})`);
     },

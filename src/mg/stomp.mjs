@@ -11,7 +11,7 @@
 // together and run faster, more of them leaping; from SG_CRUMBLE the rim
 // crumbles in. Bumps on; last ball on wins, and the balls one stomper (or one
 // slam) sent off together share it.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const SG_R0 = 14; // the floor: SG_R0 m plus SG_RK times the root of the balls in, at most SG_RMAX
 export const SG_RK = 2.6;
