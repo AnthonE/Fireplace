@@ -13,6 +13,9 @@
   #include "hole.wat"
 #if ARENA
   #include "arena.wat"
+#if FLIGHT
+  #include "flight.wat"
+#endif
 #endif
 #if BUMPER
   #include "bumper.wat"

@@ -46,6 +46,17 @@ export async function hashes(sim, log, from, to, step = (s) => s.x.step()) {
   return out;
 }
 
+// Flight: the arena's build with every fighter a ship (build/flight/).
+export function flightBytes(debug = false) {
+  wasmBytes();
+  return readFileSync(`${ROOT}build/flight/${debug ? 'game.debug' : 'game'}.wasm`);
+}
+
+export async function newFlight(debug = false) {
+  const memory = newMemory();
+  return new Sim(await instantiate(await WebAssembly.compile(flightBytes(debug)), memory), memory);
+}
+
 // Bumper balls' build of the same sources (build/bumper/).
 export function bumperBytes(debug = false) {
   wasmBytes();

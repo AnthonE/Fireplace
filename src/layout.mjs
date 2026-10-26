@@ -429,6 +429,7 @@ export const MAP_NGROUP = MAP + 4;
 export const MAP_NTELE = MAP + 8;
 export const MAP_NSPAWN = MAP + 12;
 export const MAP_NPAD = MAP + 16;
+export const MAP_CEILING = MAP + 20; // f32 flight's ceiling (tools/map.mjs), written by its init; 0 in the arena's
 export const MAP_BOUNDS = MAP + 32; // f32 x0, x1, z0, z1: where fighters can go
 export const MAP_SPAWN = MAP + 0x40; // 32 x 8 B: f32 x, z; a fighter spawns on what is under (x, z) from MAP_SPAWNY up
 export const MAP_SPAWNY = MAP + 0x140; // 32 x f32: the highest feet a spawn may stand at (-1000: the ground)
@@ -648,6 +649,19 @@ export const AM = [
 // module (V8's dictionary line, below); JS reads them from src/am/consts.mjs.
 import * as am_consts from './am/consts.mjs';
 export const AM_CONSTS = Object.freeze({ ...am_consts });
+
+// ---- Flight: src/ built with ARENA and FLIGHT (build/flight/game.wasm). The
+// arena's world, match, sides and netcode, every fighter a ship
+// (src/flight.wat): the word's yaw and pitch are where the pilot aims and the
+// nose turns toward them; forward boosts, back brakes, melee's bit rolls,
+// grenade's drops a bomb, the jump bit holds the charge shot, the trigger
+// fires lasers. Its constants are src/flight.mjs, gathered for the assembler
+// as a minigame's are. A match plays FLIGHT_MODES in turn (a forced mode
+// outside them is a free-for-all).
+import * as flight_consts from './flight.mjs';
+export const FLIGHT_CONSTS = Object.freeze({ ...flight_consts });
+export const FLIGHT_MODES = [M_FIESTA, M_SLAYER, M_JUGGERNAUT];
+export const FLIGHT_OK = FLIGHT_MODES.reduce((b, m) => b | (1 << m), 0);
 
 // ---- Bumper balls: src/ built with BUMPER (build/bumper/game.wasm). The
 // same world, netcode and lockstep; every player is a ball now, and the golf

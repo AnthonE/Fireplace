@@ -2,12 +2,13 @@
 // The macro assembler. Hand-written WAT in, game.wasm out, no compiler.
 //
 //   #include "file.wat"     splice another source file
-//   #if DEBUG / #else / #endif   (and #if ARENA, #if !ARENA, #if FIESTA, #if BUMPER, #if PARTY)
+//   #if DEBUG / #else / #endif   (and #if ARENA, #if !ARENA, #if FIESTA, #if FLIGHT, #if BUMPER, #if PARTY)
 //   @NAME, @(expr)          layout constants from the sim's layout.mjs, folded at build time
 //
 // Every sim builds from src/, with its layout.mjs and macros.mjs. Golf is
 // build/game.wasm; the arena (build/arena/) is src/ with ARENA set: a
-// deathmatch on the same engine; bumper balls (build/bumper/) is src/ with
+// deathmatch on the same engine; flight (build/flight/) is the arena with
+// FLIGHT set too: every fighter a ship; bumper balls (build/bumper/) is src/ with
 // BUMPER set: every player a ball; party (build/party/) is src/ with BUMPER
 // and PARTY set: bumper's ball, a different minigame every round.
 // Fireplace (build/fireplace/) is golf, the arena, bumper balls and party in one
@@ -222,12 +223,12 @@ export function forbid(wat, where = 'source') {
   }
 }
 
-export function expand(file, { DEBUG = false, ARENA = false, BUMPER = false, PARTY = false, layout: lay = layout, macros = makeMacros, map = null } = {}) {
+export function expand(file, { DEBUG = false, ARENA = false, FLIGHT = false, BUMPER = false, PARTY = false, layout: lay = layout, macros = makeMacros, map = null } = {}) {
   if (ARENA && !map) map = compileMap();
-  const scope = { ...lay, ...lay.PHYS, ...(lay.BPHYS || {}), ...(lay.MG_CONSTS || {}), ...(lay.AM_CONSTS || {}), DEBUG: DEBUG ? 1 : 0, ...(map ? map.consts : {}) };
+  const scope = { ...lay, ...lay.PHYS, ...(lay.BPHYS || {}), ...(lay.MG_CONSTS || {}), ...(lay.AM_CONSTS || {}), ...(lay.FLIGHT_CONSTS || {}), DEBUG: DEBUG ? 1 : 0, ...(map ? map.consts : {}) };
   let src = include(file);
   // the arena's mode is a layout constant, so #if FIESTA picks its rules at build time
-  src = conditionals(src, { DEBUG, ARENA, BUMPER, PARTY, FIESTA: ARENA && !!lay.FIESTA });
+  src = conditionals(src, { DEBUG, ARENA, FLIGHT: ARENA && FLIGHT, BUMPER, PARTY, FIESTA: ARENA && !!lay.FIESTA });
   src = stripComments(src);
   const m = macros({ DEBUG });
   if (map) m.mapdata = () => dataSegment(map.bytes);
@@ -317,6 +318,7 @@ export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = mak
 export const SIMS = [
   { name: 'game', src: join(ROOT, 'src'), out: join(ROOT, 'build') },
   { name: 'arena', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'arena'), flags: { ARENA: true } },
+  { name: 'flight', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'flight'), flags: { ARENA: true, FLIGHT: true } },
   { name: 'bumper', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'bumper'), flags: { BUMPER: true } },
   { name: 'party', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'party'), flags: { BUMPER: true, PARTY: true } },
   { name: 'fireplace', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'fireplace'), fireplace: true },

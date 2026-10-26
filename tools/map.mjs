@@ -157,6 +157,18 @@ export function compileMap(dir = mapDir()) {
     const r = Math.max(3, Math.min(10, Math.min(bw, bd) / 10));
     hills = [[...mid, GROUND, r], ...flags.map((f) => [(mid[0] + f[0]) / 2, (mid[1] + f[1]) / 2, GROUND, r])];
   }
+  // how high a ship may fly (src/flight.wat): map.json's "ceiling", or 60 m
+  // over the highest ground inside the bounds
+  let ceiling = spec.ceiling;
+  if (ceiling === undefined) {
+    let top = 0;
+    for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
+      const wx = ox + x * L.SPACING, wz = oz + z * L.SPACING;
+      if (wx >= bounds[0] && wx <= bounds[1] && wz >= bounds[2] && wz <= bounds[3]) top = Math.max(top, heights[z * W + x] / 256);
+    }
+    ceiling = Math.ceil(top) + 60;
+  }
+  if (!(ceiling > 0 && ceiling < 400)) fail(`ceiling ${ceiling}: over 0, under 400 m`);
   const sides = [0, 0];
   for (const s of spawns) { const k = half(s.x, s.z, flags); if (k < 2) sides[k]++; }
   ['red', 'blue'].forEach((team, k) => { if (!sides[k]) fail(`no spawn on ${team}'s half (the spawns nearer its flag at ${flags[k][0]}, ${flags[k][1]} than the other)`); });
@@ -206,8 +218,9 @@ export function compileMap(dir = mapDir()) {
     // folded into the arena's WAT as @MAPSEG_* and @MAPIMG_*
     consts: {
       MAPSEG_GROUPS: offs[1], MAPSEG_NGROUPB: gbytes.byteLength, MAPSEG_BOXES: offs[2], MAPSEG_NBOXB: bbytes.byteLength,
-      MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H,
+      MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling,
     },
+    ceiling,
     bounds, groups, boxes, teleporters, spawns, pads, flags, ball, hills, sides, heights, surf, origin: [ox, oz], size: [W, H],
   };
 }

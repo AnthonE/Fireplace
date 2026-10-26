@@ -72,6 +72,10 @@
 #endif
   (f32.store (i32.const @HDR_TEE) (f32.const 512))
   (f32.store (i32.const @(HDR_TEE + 8)) (f32.const 512))
+#if FLIGHT
+  ;; how high a ship may fly, for the page and the bots (the sim folds it in)
+  (f32.store (i32.const @MAP_CEILING) (f32.const @MAP_CEIL))
+#endif
   (f32.store (i32.const @HDR_DIR) (f32.const 1)))
 
 ;; The map's weapon pads laid out, each with its gun there: at init in slayer
@@ -366,7 +370,12 @@
   (!put u16 @(PLAYERS + A_RESPAWN) (local.get $pb) (i32.const 0))
   (!put u8 @(PLAYERS + A_NEEDLES) (local.get $pb) (i32.const 0))
   (!put u8 @(PLAYERS + A_NEEDT) (local.get $pb) (i32.const 0))
-  (call $fx (i32.const 0) (i32.const @FX_SPAWN) (local.get $p) (i32.const 0) (local.get $sx) (local.get $h) (local.get $sz) (f32.const 1)))
+  (call $fx (i32.const 0) (i32.const @FX_SPAWN) (local.get $p) (i32.const 0) (local.get $sx) (local.get $h) (local.get $sz) (f32.const 1))
+#if FLIGHT
+  ;; a ship comes in flying (src/flight.wat)
+  (call $f_spawn (local.get $p))
+#endif
+  )
 
 ;; Slot p's two guns, g0 and g1 (the same gun twice is one gun in either
 ;; hand), full, with no reload or burst under way.
@@ -1138,8 +1147,11 @@
               (then
                 (!put u8 @(PLAYERS + A_NEEDT) (local.get $pb) (i32.sub (local.get $n) (i32.const 1)))
                 (if (i32.eq (local.get $n) (i32.const 1)) (then (!put u8 @(PLAYERS + A_NEEDLES) (local.get $pb) (i32.const 0))))))
+#if !FLIGHT
             (if (i32.eqz (i32.and (i32.shl (i32.const 1) (i32.load (i32.const @AH_MODE))) (i32.const @((1 << M_INFECTION) | (1 << M_GUNGAME)))))
-              (then (call $a_pickup (local.get $p))))))
+              (then (call $a_pickup (local.get $p))))
+#endif
+            ))
         (!put u8 @(PLAYERS + A_ACT) (local.get $pb) (i32.and (!at u8 @(PLAYERS + A_ACT) (local.get $pb)) (i32.const @(255 ^ AB_USE)))))))
   (!for $k (i32.const 0) (i32.const @NPAD)
     (local.set $a (i32.add (i32.const @PAD) (i32.shl (local.get $k) (i32.const 4))))
@@ -1236,17 +1248,30 @@
 (func $a_mode_pick
   (local $seed i32) (local $k i32) (local $m i32)
   (local.set $seed (i32.load (i32.const @HDR_SEED)))
+#if FLIGHT
+  ;; flight's own rotation; a forced mode it doesn't fly is a free-for-all
+  (local.set $k (i32.rem_u (i32.load (i32.const @HDR_HOLE)) (i32.const @(FLIGHT_MODES.length))))
+  (local.set $m (!tab FLIGHT_MODES (local.get $k)))
+  (if (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FORCE_MODE))
+    (then (local.set $m (i32.and (i32.shr_u (local.get $seed) (i32.const 16)) (i32.const 0xff)))))
+  (if (i32.or (i32.ge_u (local.get $m) (i32.const 32)) (i32.eqz (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @FLIGHT_OK))))
+    (then (local.set $m (i32.const @M_FIESTA))))
+#else
   (local.set $k (i32.rem_u (i32.load (i32.const @HDR_HOLE)) (i32.const @(ARENA_MODES.length))))
   (local.set $m (!tab ARENA_MODES (local.get $k)))
   (if (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FORCE_MODE))
     (then (local.set $m (i32.and (i32.shr_u (local.get $seed) (i32.const 16)) (i32.const 0xff)))))
   (if (i32.ge_u (local.get $m) (i32.const @(MODES.length))) (then (local.set $m (i32.const @M_FIESTA))))
+#endif
   (memory.fill (i32.const @AH_MODE) (i32.const 0) (i32.const @(AH_END - AH_MODE)))
   (i32.store (i32.const @AH_MODE) (local.get $m))
   (memory.fill (i32.const @MODE_REC) (i32.const 0) (i32.const @(NPLAYER * MR_SIZE)))
 #if FIESTA
+#if !FLIGHT
+  ;; (ships have no hands for a gun: no pads)
   (memory.fill (i32.const @PAD) (i32.const 0) (i32.const @(NPAD * PAD_SIZE)))
   (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @PAD_MODES)) (then (call $pads)))
+#endif
 #endif
   (memory.fill (i32.const @AO) (i32.const 0) (i32.const @AO_SIZE)))
 
@@ -1318,7 +1343,9 @@
   (local.set $jugg (i32.eq (i32.load (i32.const @AH_MODE)) (i32.const @M_JUGGERNAUT)))
   (!put u8 @(PLAYERS + P_FL) (local.get $qb)
     (i32.or (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (select (i32.const @PF_JUGG) (i32.const @PF_ZOMBIE) (local.get $jugg))))
+#if !FLIGHT
   (call $a_arm (local.get $q) (i32.const @W_SWORD) (i32.const @W_SWORD))
+#endif
   (!put u8 @(PLAYERS + A_SH) (local.get $qb) (select (i32.const @OVERSHIELD) (i32.const 0) (local.get $jugg)))
   (!put u8 @(PLAYERS + A_HP) (local.get $qb) (i32.const 100))
   (!put u16 @(PLAYERS + A_SHT) (local.get $qb) (i32.const 0))
