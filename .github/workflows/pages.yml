@@ -3,10 +3,10 @@
 # https://<owner>.github.io/<repo>/, which opens Fireplace (or whatever this
 # copy is called). Pages cannot send the cross-origin isolation headers shared
 # memory needs, so coi.js's service worker adds them in the browser. With no
-# relay in client/kit.json the page asks the kit's room pool for an online
-# room running this site's own wasm (net/kit-rooms.mjs), and plays a local
-# room, you and AI players, when it can't get one. net/run-pages.mjs and
-# net/run-kit-rooms.mjs are this site's gates.
+# relay in client/kit.json the page plays a local room, you and AI players,
+# and offers play online with friends: a room from the kit's room pool
+# running this site's own wasm (net/kit-rooms.mjs), its address the invite.
+# net/run-pages.mjs and net/run-kit-rooms.mjs are this site's gates.
 #
 # Turn it on once: Settings > Pages > Build and deployment > Source: GitHub
 # Actions. Until then this workflow says so and skips, rather than failing.

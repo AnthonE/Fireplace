@@ -127,9 +127,10 @@ shell whose own command line contains the name: it kills that shell.
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
 - The room is a relay's (`client/net.mjs`): one named, or on a copy's
-  GitHub Pages site one the kit's room pool starts on that copy's wasm
-  (`net/kit-rooms.mjs`, `relay.pool`). With none to join (`client/kit.mjs`:
-  `?local=1`, or no relay and no pool room) it is a local one: `client/local.mjs` in the net
+  GitHub Pages site, once someone presses play online with friends or opens
+  an invite (`?room=`), one the kit's room pool starts on that copy's wasm
+  (`net/kit-rooms.mjs`, `relay.pool`). Otherwise (`client/kit.mjs`:
+  `?local=1`, or no relay and no invite) it is a local one: `client/local.mjs` in the net
   worker's place closes every tick itself, the page's player in slot 0 and AI
   players after. Both sample the input slots through `client/input.mjs`.
   `coi.js` makes a page cross-origin isolated where the host can't send the

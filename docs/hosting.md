@@ -59,21 +59,24 @@ bots at its doors.
 ## Rooms for the kit's copies
 
 A copy of this repo made from the template ("Use this template") has a page
-on GitHub Pages and no relay. `net/kit-rooms.mjs` gives it rooms: the page
-asks the pool (`relay.pool` in `client/kit.json`, `https://game.elopros.com/kit/`
-by default) for a room for its own site, and the pool fetches that copy's
+on GitHub Pages and no relay, so it plays a local room with AI players.
+`net/kit-rooms.mjs` gives it rooms: **play online with friends**, at the
+foot of the screen while the living room is in view, asks the pool
+(`relay.pool` in `client/kit.json`, `https://game.elopros.com/kit/` by
+default) for a room for its own site, and the pool fetches that copy's
 wasm from the site at the path `tools/site.mjs` publishes
 (`build/fireplace/game.wasm`, or another game's), checks it as the relay does
 (`net/sim-check.mjs`), and starts a relay on it, one room per sha256, as
-`net/rooms.mjs` starts them. The page gets `{room, url, hash, hash_url}` and
-joins. **copy invite link**, at the foot of the screen while the living room
-is in view, copies the site's address with `?room=<id>`, which asks the pool
-for that room. A page whose pool can't be reached, refuses it (every refusal
-has a `why`), or gives a room the page can't reach (UDP blocked, say) plays
-its local room, the reason in that line. A page on the pool's own host never
-asks, so Fireplace's own page keeps its relay; nor does a page off https (a
-dev server), unless its pool is set (`?pool=`, or a `relay.pool` other than
-the default).
+`net/rooms.mjs` starts them. The page then moves to the site's address with
+`?room=<id>`, which is the invite: a page opened with it asks the pool for
+that room, `{room, url, hash, hash_url}`, and joins (**copy invite link**
+copies it). A pool that can't be reached or refuses (every refusal has a
+`why`), or a room the page can't reach (UDP blocked, say), leaves the page in
+its local room, the reason on that line. Nobody lands in an empty online room
+without asking for one. A page on the pool's own host never offers, so
+Fireplace's own page keeps its relay; nor does a page off https (a dev
+server) unless its pool is set (`?pool=`, or a `relay.pool` other than the
+default), and `?pool=0` turns the offer off.
 
 ```sh
 node net/kit-rooms.mjs net/kit-rooms.example.json   # on the game box, from the repo, beside rooms.mjs
@@ -99,8 +102,8 @@ The wasm is someone else's. It is fetched with no redirects, at most
 only from `fetch_from` (`https://*.github.io`), and written only to
 `wasm_dir/<sha256>.wasm` for the relay to read; it runs only in the referee,
 which gives it its shared memory and nothing else. No JavaScript from a copy
-runs on the box, so a pool room has no AI players: a player alone there is
-alone until friends come, where the local room has bots. The caps:
+runs on the box, so a pool room has no AI players; that is why a page
+starts in its local room, with bots, and goes online only when asked. The caps:
 `max_rooms` rooms in all (8), `per_site_rooms` for one copy (2),
 `max_players` a room (8), `per_ip_per_min` asks (30). A copy whose wasm
 matches an open room's joins that room whatever its site. A wasm whose rooms
@@ -113,5 +116,6 @@ What it costs, from the numbers above (Fireplace's wasm on a 4-core box): a
 room 115 MB resident, 5% of a core empty and 16% with 4 in, so the example's
 8 rooms full of 4 come to about 0.9 GB and 1.3 cores. A copy's own wasm may
 step slower; the referee watchdog ends a room whose sim falls 10 s behind.
-`node net/run-kit-rooms.mjs` is the gate: a fake Pages host, the pool, two
-Chrome pages meeting by invite, bots at the door, the refusals and the caps.
+`node net/run-kit-rooms.mjs` is the gate: a fake Pages host, the pool, a
+page going online at the button, a second meeting it by invite, bots at the
+door, the refusals and the caps.
