@@ -2,7 +2,7 @@
 // (client/host.mjs) that owns the memory, the workers and the GPU. Bumper
 // balls' controls and prediction (the same word, the same ball), drawn by
 // client/party-render.mjs; the stage is the minigame's (client/mg/<key>.mjs,
-// MG[view.party().game]): each frame its draw() fills the Scene, its frame()
+// MG[view.party().game], loaded as its round comes up): each frame its draw() fills the Scene, its frame()
 // says where the action is (the shadow map's square, the minimap, the
 // overview), its fx() turns its own FX into flashes and sounds and its hud()
 // adds its lines. The countdown is a title card over a fly-round of the
@@ -37,11 +37,10 @@
 import * as L from '../src/layout.mjs';
 import { partyWord } from '../src/party-view.mjs';
 import { createRenderer, Scene, COLS, SPRITE } from './party-render.mjs';
-import { MG } from './mg/index.mjs';
+import { MG, need } from './mg/load.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Partier } from './party-bot.mjs';
 import { epoch, predict, corrector, follower, capturePng, listeners } from './host.mjs';
 import { riderSprites } from './looks.mjs';
 
@@ -95,7 +94,8 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     if (e.code === 'KeyM' && !e.repeat) banner = { text: sound.toggleMusic() ? 'MUSIC ON' : 'MUSIC OFF', until: performance.now() + 1500, color: C.GREY };
   };
   if (WATCH || BOT) {
-    if (BOT && !external) bot = new Partier(0, (Math.random() * 1e9) | 0, skill);
+    // the AI ball's brain, which needs every minigame's sense of its stage, loads only for ?bot=1
+    if (BOT && !external) bot = new (await import('./party-bot.mjs')).Partier(0, (Math.random() * 1e9) | 0, skill);
     on(canvas, 'click', () => { sound.wake(); watched = nextIn(watched, 1); });
     on(document, 'keydown', (e) => {
       if (e.code === 'ArrowRight') watched = nextIn(watched, 1);
@@ -245,7 +245,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     const st = get(L.CL_STATE);
     const slot = get(L.CL_SLOT);
     const g = view.party();
-    const mod = MG[g.game] || MG[0];
+    const mod = MG[g.game] || (need(g.game), { name: L.MINIGAMES[g.game]?.name });
     const room = get(L.CL_ROOM);
     const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - g.tick)) * TICK;
     me = slot >= 0 ? view.partier(slot) : null;

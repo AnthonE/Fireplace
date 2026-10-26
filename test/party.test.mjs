@@ -8,6 +8,7 @@ import { expandMacros } from '../tools/asm.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { playParty, partySeed } from '../tools/genparty.mjs';
 import { MG } from '../client/mg/index.mjs';
+import * as lazy from '../client/mg/load.mjs';
 import { MG_CONSTS } from '../src/mg/consts.mjs';
 import * as L from '../src/layout.mjs';
 import * as MC from '../src/mg/thinice.mjs'; // TI_*: the minigame's own constants
@@ -417,6 +418,16 @@ test('every minigame has a client module: its id, key and name as the layout has
     for (const f of ['draw', 'frame', 'fx', 'hud']) assert.equal(typeof m[f], 'function', `${m.key}.${f}`);
     for (const f of ['danger', 'goal', 'hop']) assert.equal(typeof m.brain[f], 'function', `${m.key}.brain.${f}`);
   });
+});
+
+test('the page\'s registry loads each minigame\'s module on need, once, the same module the eager one holds', async () => {
+  assert.equal(lazy.MG[L.MG_GLASS], undefined, 'nothing loaded before a round needs it');
+  const p = lazy.need(L.MG_GLASS);
+  assert.equal(lazy.need(L.MG_GLASS), p, 'one import for any number of frames asking');
+  await p;
+  await Promise.all(L.MINIGAMES.map((m, k) => lazy.need(k)));
+  MG.forEach((m, k) => assert.equal(lazy.MG[k], m, L.MINIGAMES[k].key));
+  assert.equal(lazy.need(L.NMG), undefined, 'no module past the list');
 });
 
 test('Partier: AI balls on Thin Ice keep rolling, none out in the first 8 s; the same seed and world, the same words', async () => {

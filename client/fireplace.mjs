@@ -21,8 +21,6 @@ import '../src/party-view.mjs';
 import { createHost, epoch, fitSize } from './host.mjs';
 import { createRoom, SCREEN, COUCH, cardText, cardFire } from './room-render.mjs';
 import { loadTheme, themeList, savedTheme, saveTheme, FALLBACK, DEFAULT } from './themes.mjs';
-import { Guest } from './fireplace-bot.mjs';
-import { GOLFER } from './brain.mjs';
 import { readClock } from './clock.mjs';
 import { BALLS, HATS, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
@@ -66,6 +64,8 @@ async function main() {
   const theme = await loadTheme(q.get('theme') || savedTheme() || DEFAULT).catch((e) => { console.warn(e.message); return FALLBACK; });
   const room = await createRoom(roomCanvas, host.device, { present: q.get('present') !== '0', theme });
   const tvTex = canvases.map((c) => room.tvTexture(c.width, c.height));
+  // the guest's brains, every game's bot and every minigame's sense of its stage, load only for ?bot=1
+  const [{ Guest }, { GOLFER }] = BOT ? await Promise.all([import('./fireplace-bot.mjs'), import('./brain.mjs')]) : [{}, {}];
   const guest = BOT ? new Guest(0, (Math.random() * 1e9) | 0, Number(q.get('skill') || 0.8), GOLFER) : null;
 
   // ---- your look and your achievements, kept in this browser; a guest at the controls or a spectator keeps neither

@@ -12,7 +12,6 @@ import { createRenderer, COLS, SPRITE } from './bumper-render.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Roller } from './bumper-bot.mjs';
 import { epoch, predict, corrector, follower, capturePng, listeners } from './host.mjs';
 import { riderSprites } from './looks.mjs';
 
@@ -58,7 +57,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     if (e.code === 'KeyM' && !e.repeat) banner = { text: sound.toggleMusic() ? 'MUSIC ON' : 'MUSIC OFF', until: performance.now() + 1500, color: C.GREY };
   };
   if (WATCH || BOT) {
-    if (BOT && !external) bot = new Roller(0, (Math.random() * 1e9) | 0, skill);
+    if (BOT && !external) bot = new (await import('./bumper-bot.mjs')).Roller(0, (Math.random() * 1e9) | 0, skill); // loaded only for ?bot=1
     on(canvas, 'click', () => { sound.wake(); watched = nextIn(watched, 1); });
     on(document, 'keydown', (e) => {
       if (e.code === 'ArrowRight') watched = nextIn(watched, 1);

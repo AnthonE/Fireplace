@@ -7,6 +7,7 @@ import { unpackArena } from '../src/arena-view.mjs';
 import { aimAt } from '../client/bot.mjs';
 import { project, lens, PALETTE } from '../client/arena-render.mjs';
 import { AMC, newsOf, SIDE, SIDE_C } from '../client/am/index.mjs';
+import * as lazy from '../client/am/load.mjs';
 import slayer, { lead, nearestEnemy } from '../client/am/slayer.mjs';
 import { C } from '../client/font.mjs';
 import * as L from '../src/layout.mjs';
@@ -112,6 +113,18 @@ test('the kit: a module for every team mode, news routed by its MX codes', () =>
   assert.equal(newsOf(AC.HL_MX_CONTEST), AMC[L.M_HILL]);
   assert.deepEqual([AMC[L.M_CTF].carry, AMC[L.M_ODDBALL].carry], ['flag', 'skull']);
   assert.deepEqual([SIDE, SIDE_C], [['RED', 'BLUE'], [C.RED, C.CYAN]]);
+});
+
+test('the page\'s registry loads a team mode\'s module on need, once, the same module the eager one holds; none for a Fiesta', async () => {
+  assert.equal(lazy.AMC[L.M_CTF], undefined, 'nothing loaded before a match needs it');
+  assert.equal(lazy.newsOf(AC.CF_MX_TAKE), undefined, 'no news line while it loads');
+  const p = lazy.need(L.M_CTF);
+  assert.equal(lazy.need(L.M_CTF), p, 'one import for any number of frames asking');
+  await p;
+  assert.equal(lazy.newsOf(AC.CF_MX_TAKE), AMC[L.M_CTF]);
+  await Promise.all(L.AM.map((a) => lazy.need(a.mode)));
+  for (const a of L.AM) assert.equal(lazy.AMC[a.mode], AMC[a.mode], a.key);
+  for (const m of [L.M_FIESTA, L.M_INFECTION, L.M_GUNGAME, L.M_JUGGERNAUT]) assert.equal(lazy.need(m), undefined, `mode ${m} has no kit`);
 });
 
 test('AM_CONSTS: every team mode\'s constants, none named twice, after a layout name or after a minigame\'s; out of layout.mjs\'s namespace', async () => {

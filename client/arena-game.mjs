@@ -6,18 +6,19 @@
 // the scoreboard, each as the match's mode has them (layout.mjs, M_*). A team
 // mode (TEAMED) is red against blue: the bodies in their side's colour, a
 // score bar, the board by side, and its own objective, HUD lines, news,
-// columns and waypoints from its kit module (client/am/<key>.mjs, AMC).
+// columns and waypoints from its kit module (client/am/<key>.mjs, AMC,
+// loaded as a match of its mode comes up).
 // arena.html mounts it alone; Fireplace mounts it while the room plays the arena.
 //   opts: { canvas, lockTarget, bot, skill, sens, fixed (a spectator's held camera: x, y, z, yaw, pitch in degrees), present, showGraph,
 //           external (the slots are driven from outside, as Fireplace's guest does: the camera follows them) }
 import * as L from '../src/layout.mjs';
 import { arenaWord, unpackArena, boxRay } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, PALETTE, project } from './arena-render.mjs';
-import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
+import { AMC, need, newsOf } from './am/load.mjs';
+import { SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/sides.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Fighter } from './arena-bot.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf } from './looks.mjs';
 
@@ -111,7 +112,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else if (BOT) {
-    if (!external) bot = new Fighter(0, (Math.random() * 1e9) | 0, skill);
+    if (!external) bot = new (await import('./arena-bot.mjs')).Fighter(0, (Math.random() * 1e9) | 0, skill); // loaded only for ?bot=1
     on(document, 'keydown', (e) => {
       if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); }
       if (e.code === 'KeyN' && !e.repeat) showGraph = !showGraph;
@@ -590,7 +591,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
     // the team mode's objective: its sprites, glows and beams ahead of everything else's, its waypoints and zone
     const md = view.mode();
-    const kit = AMC[md.mode];
+    const kit = AMC[md.mode] || (need(md.mode), undefined);
     const out = { solid: [], glow: [], beams: [], markers: [], zone: null };
     const playT = h.state === L.H_PLAY ? (h.tick - h.start) * 0.008 + dt : 0;
     // the fighter whose eyes the camera has: yours, or the one a spectator watches (none for a fixed camera)
