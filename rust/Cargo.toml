@@ -1,0 +1,16 @@
+# Party minigames written in Rust: rust/mg/<key>/ each, on the engine's
+# bindings in rust/fp/. node tools/rust.mjs builds them (cargo, wasm32) and
+# writes src/mg/<key>.wat, the WAT the assembler takes like any other
+# minigame's; docs/rust.md says how. No crates from outside this directory.
+[workspace]
+members = ["fp", "mg/*"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+panic = "abort"
+lto = true
+codegen-units = 1
+debug = false
+overflow-checks = false
+incremental = false

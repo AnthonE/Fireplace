@@ -53,6 +53,7 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 27 | GATE CRASH | finishing order | 148 to 256 m of straight, railed course crossed by 8 to 12 walls of portcullises, 3 gates a wall for one ball up to 9 for 256; each gate on its own clock from the seed, a period of 3.6 s at the first wall down to 2.4 s at the last, up for 60% of it shrinking to 38% down the course and over the first 60 s; it flashes 0.8 s, then slams down in 0.1 s; under a ball's top it's a wall, and coming down on a ball it knocks it back at 12 m/s and up; between walls, belts running back at 3 m/s and rows of bumper posts; the first over the line leaves the rest 30 s, who place by how far down the course they are; bumps without the kick |
 | 28 | STOMPIN GROUND | last one in | boulders on stubby legs drop out of the sky onto a slate disc and charge across it on curved arcs, each path glowing on the floor 1.4 s ahead; one that meets you sends you flying its way and up, a glancing one shoves you aside; from 15 s some leap in onto a marked ring instead: under it you're thrown clear, and its shockwave runs out along the floor at ball height to 14 m, knocking outward whoever is on the floor as it passes (hop it); waves grow, close from 3.2 s to 1.4 s apart and run 10 to 15 m/s, more of them leaping; from 60 s the rim crumbles in to 12 m; balls one stomper sent off share the win |
 | 29 | SEESAWS | last one in | planks 18 m long on pivots over the sea, one for every 4 balls, in rows with 2 m hops between; each tips under the weight on it 2.05 s late (the slope it's heading for glows over it as a ghost), up to 32 degrees, and levels slowly when empty; the slope pulls you down it and off its low end; from 30 s planks are cut shorter or narrower one by one, from 60 s they drop away for good, flashing 3 s first; bumps on |
+| 30 | SUMO RING | last one in | a round ring over the sea sized for the crowd, bumps on; posts orbit it, swinging 12 s one way and then back, and knock any ball they meet away at 9 m/s and up; from 20 s the ring shrinks over 50 s to 35% of its size (6 m at least); balls that go off together share the win. Written in Rust (`rust/mg/sumo/`, [rust.md](rust.md)) |
 
 **How it fits on the engine.** `src/party.wat` is the framework: the rounds,
 the rotation, joins, the ball's roll over any stage, outs, places and points.
@@ -157,5 +158,11 @@ ticks ahead into a ring (96 KiB of `PG_BIG`), so whatever the prediction
 reaches is already decided, and the client draws the coming slope as the
 warning. A tick of 256 balls costs 0.13 to 0.27 ms in each; Party's wasm is
 134 KB, 57 KB gzipped.
+
+**In Rust.** SUMO RING (30) is written in Rust: `rust/mg/sumo/src/lib.rs`,
+built by `node tools/rust.mjs` into `src/mg/sumo.wat`, which is checked in and
+assembled like any other minigame's, so `npm run build` needs no Rust and
+the gates run the wasm. `node tools/new-mg.mjs <key> <prefix> "<NAME>" --rust`
+starts one; [rust.md](rust.md) is how, and what the sim refuses.
 
 Not done yet: teams, and power-ups in more of the minigames.

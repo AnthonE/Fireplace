@@ -82,7 +82,9 @@ shell whose own command line contains the name: it kills that shell.
   write only that ball's record and that ring. A seed whose top byte is 0xA7
   forces a minigame (`--mg k`). `node tools/new-mg.mjs <key> <prefix> NAME`
   writes a new one and appends it to every list that names them
-  (`test/new-mg.test.mjs` holds its anchors).
+  (`test/new-mg.test.mjs` holds its anchors). A minigame may be Rust
+  (`rust/mg/<key>/`, `--rust`, `docs/rust.md`): `node tools/rust.mjs` writes
+  its `src/mg/<key>.wat`, checked in; never edit that file by hand.
 - The arena's match modes (`M_*`: Fiesta, Infection, gun game, Juggernaut,
   and the team modes Team Slayer, Capture the Flag, Oddball, King of the
   Hill, Headhunter, Territories, VIP, Assault) are picked per match at run
