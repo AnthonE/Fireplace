@@ -27,5 +27,9 @@ import maze from './maze.mjs';
 import bullseye from './bullseye.mjs';
 import cannon from './cannon.mjs';
 import rope from './rope.mjs';
+import glass from './glass.mjs';
+import gates from './gates.mjs';
+import stomp from './stomp.mjs';
+import seesaw from './seesaw.mjs';
 
-export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope];
+export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw];

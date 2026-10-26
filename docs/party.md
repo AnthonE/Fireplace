@@ -2,7 +2,7 @@
 
 ![Fruit Chute with 128 balls: the belt carrying everyone down, fruit rolling down the lanes](p1-chute-128.png)
 
-Bumper balls' ball, and every round a different minigame: twenty-six of them,
+Bumper balls' ball, and every round a different minigame: thirty of them,
 after Mario Party, Fall Guys, Squid Game and Roblox, up to 256 in a room.
 `src/` built with `BUMPER` and `PARTY` set (`build/party/game.wasm`), with the
 same lockstep, relays, keyframes, prediction, spectators and replays.
@@ -49,6 +49,10 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 23 | BULLSEYE | points | a target on an icy disc; every 10 s a bell scores each ball by the ring it's in, 5 the bull, 3, 2, 1, double the last three ends, then a shove wave carries every ball in the house out past its edge (1.2 s, pushing back or not); a hard bump kicks 0.8 times its speed more apart; off the edge, down 1.5 s |
 | 24 | CANNONADE | last one in | 8 to 16 cannons round a disc of hex tiles fire volleys down red stripes, 1.5 s after each shows; a cannonball, 1.2 to 2.5 m, knocks you on along its path, glancing ones aside; volleys grow and close from 3 s to 1.2 s apart; from 30 s one in three is lobbed onto a target ring; from 60 s the rim crumbles in to 12 m; hop the small ones (up to 1.33 m); balls one cannonball took off together share the win |
 | 25 | JUMP ROPE | last one in | a rope turns round the long stage's long axis, overhead then along the floor at ball height; hop it as it comes under or it knocks you across and up; a turn in 1.8 s quickening to 0.9 s; from 30 s double dutch, a second rope half a turn behind; from 60 s the turners hold it at a side and turn it back; the ends drop from 70 s; no bumps |
+| 26 | GLASS BRIDGE | finishing order | bridges side by side, one for every 8 balls, from a start deck to a finish deck: 7 to 11 rows of glass in pairs, 2.5 m of drop between rows, so every row is a hop (7 m/s here; a roll needs 15 m/s to cross); of each pair one pane holds and one, the seed's pick, cracks as a ball lands, holds 0.32 s and goes for good, and you can't hop off cracked glass; the first across wins, the rest place by the row they reached, the fallen by the row they fell from; 78 to 94 s; bumps without the kick |
+| 27 | GATE CRASH | finishing order | 148 to 256 m of straight, railed course crossed by 8 to 12 walls of portcullises, 3 gates a wall for one ball up to 9 for 256; each gate on its own clock from the seed, a period of 3.6 s at the first wall down to 2.4 s at the last, up for 60% of it shrinking to 38% down the course and over the first 60 s; it flashes 0.8 s, then slams down in 0.1 s; under a ball's top it's a wall, and coming down on a ball it knocks it back at 12 m/s and up; between walls, belts running back at 3 m/s and rows of bumper posts; the first over the line leaves the rest 30 s, who place by how far down the course they are; bumps without the kick |
+| 28 | STOMPIN GROUND | last one in | boulders on stubby legs drop out of the sky onto a slate disc and charge across it on curved arcs, each path glowing on the floor 1.4 s ahead; one that meets you sends you flying its way and up, a glancing one shoves you aside; from 15 s some leap in onto a marked ring instead: under it you're thrown clear, and its shockwave runs out along the floor at ball height to 14 m, knocking outward whoever is on the floor as it passes (hop it); waves grow, close from 3.2 s to 1.4 s apart and run 10 to 15 m/s, more of them leaping; from 60 s the rim crumbles in to 12 m; balls one stomper sent off share the win |
+| 29 | SEESAWS | last one in | planks 18 m long on pivots over the sea, one for every 4 balls, in rows with 2 m hops between; each tips under the weight on it 2.05 s late (the slope it's heading for glows over it as a ghost), up to 32 degrees, and levels slowly when empty; the slope pulls you down it and off its low end; from 30 s planks are cut shorter or narrower one by one, from 60 s they drop away for good, flashing 3 s first; bumps on |
 
 **How it fits on the engine.** `src/party.wat` is the framework: the rounds,
 the rotation, joins, the ball's roll over any stage, outs, places and points.
@@ -106,7 +110,7 @@ danger, its goal and the room from rivals, and lets a minigame steer outright
 builds' bytes unchanged, rounds laid out for 1 to 256 balls, the rotation, a
 forced minigame, both kinds of end, places and points, late joiners, the
 prediction, and rounds of AI balls equal on every tick on 1 and 4 threads.
-Each minigame has its own file (`test/mg-<key>.test.mjs`, 175 tests in all):
+Each minigame has its own file (`test/mg-<key>.test.mjs`, 232 tests in all):
 its stage for 1, 8, 64 and 256 balls, each rule, the prediction through its
 hazards, and rounds of 8 and 64 AI balls on the debug build, equal on 1 and 4
 threads. Every minigame's recorded log, 20,000 ticks of 16 AI balls, replays
@@ -136,5 +140,22 @@ build reads a ball's radius and weight from its record when a round sets
 replay as they did); Rising Lava and Maze Run keep a ball that finished or
 burnt out of play and let it watch the rest (`outForGood`). A tick of 256
 balls costs 0.17 to 0.28 ms in each; Party's wasm is 120 KB, 51 KB gzipped.
+
+**The third wave.** Four more (26 to 29), from the roadmap's list, went in
+the same way: slots reserved with `tools/new-mg.mjs`, then one agent each in
+its own worktree, about an hour apiece, four at once on this 4-core machine,
+none touching a file outside its own four. 13 to 17 tests a file; each one's
+recorded log of 16 AI balls equal in all 27 configurations; each forced
+online with Chrome and 15 AI balls and with 127, every hash equal (943 to
+1,872 at 16, 7,455 to 15,009 at 128). Glass Bridge is Thin Ice's predicted
+crack made a choice: the seed picks which pane of a pair goes, and the AI
+balls read only what a player sees (a test flips every answer and no bot's
+word changes). Gate Crash and Stompin' Ground are schedules, exact in the
+prediction as Gale Force's fans are. Seesaws is the first stage moved by the
+crowd: the confirmed world sums each plank's load and writes its slope 256
+ticks ahead into a ring (96 KiB of `PG_BIG`), so whatever the prediction
+reaches is already decided, and the client draws the coming slope as the
+warning. A tick of 256 balls costs 0.13 to 0.27 ms in each; Party's wasm is
+134 KB, 57 KB gzipped.
 
 Not done yet: teams, and power-ups in more of the minigames.
