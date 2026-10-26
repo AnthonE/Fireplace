@@ -40,6 +40,15 @@ as up. A game whose input word differs from golf's passes its own
 `--tap-mask` (bits cleared on every tick a player's input is missing) and
 `--hold-mask` (cleared after 30) through `relay_args`.
 
+**A room that never empties.** A room with bots always in it (or a busy
+pool's) runs for days, so nothing the relay keeps may grow with the room's
+age. A relay that saves no replay and feeds no edge keeps only the last
+`--referee-lag` + 20 s of the record, all a joiner's fill or a repair asks
+for; the timing samples and hash lists keep their newest entries. Before
+that, 128 bots grew a relay by about 1.1 GB an hour, and the slack samples
+passed V8's array limit and killed it after 2 h 20 min. With replays on, the
+record is kept whole, as the replay needs it.
+
 What a room costs, measured on this repo's 4-core dev container with
 Fireplace's wasm: an empty room 5% of one core (12% before an empty room
 stopped using the precise clock), a room of 4 guests 16%, about 115 MB

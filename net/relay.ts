@@ -166,6 +166,14 @@ let roomStart = -1;
 let recordStart = -1;
 let roomSeed = newSeed();
 let record: Uint8Array[][] = [];
+// The record's oldest tick still held. A root relay that saves no replay lets
+// go of ticks older than RECORD_KEEP, which nothing asks for again (a fill
+// starts at the referee's keyframe, no more than --referee-lag behind; a
+// repair is for a recent hole): otherwise a room that never empties holds
+// every tick it ever closed, about 240 MB an hour with 128 in.
+let recordKept = -1;
+const trimRecord = !replaysDir && !upstreams.length;
+const RECORD_KEEP = Math.ceil((REFEREE_LAG_S + 20) * 1000 / W.TICK_MS);
 // for the replay: the region the record starts from (an edge's keyframe; null
 // from the room's start) and the referee's interval hashes over it
 let recordRegion: Uint8Array | null = null;
@@ -175,6 +183,15 @@ const recBase = new W.TickBase();
 const recLive = new Set<number>();
 // The room's tick now, fractional, as pongs tell it: the clock's, or on an edge the upstream's.
 let serverNow = () => (performance.now() - E0) / W.TICK_MS;
+// The per-tick samples (closeLate, slack) keep the newest SAMPLES, the oldest
+// overwritten in turn: a room that never empties (a pool's, its guests always
+// in) would otherwise grow them without end, 16,000 slack samples a second
+// with 128 in, until the array passes V8's length limit and the relay dies in
+// about 2 h 20 min. A gate's run fits whole (240 s of 128 guests is 3.8 M).
+// The interval hashes (the referee's, each player's reports) keep the newest
+// HASHES and PLAYER_HASHES the same way, n the interval's number.
+const SAMPLES = 1 << 22, HASHES = 1 << 17, PLAYER_HASHES = 1 << 10;
+const sample = <T>(a: T[], n: number, v: T, cap = SAMPLES) => { if (a.length < cap) a.push(v); else a[n % cap] = v; };
 const stats = {
   ticks: 0, closeLate: [] as number[], stallEvents: [] as number[][], sent: 0, sentBytes: 0, maxBundle: 0, bundles: 0, bundleBytes: 0, tickBytes: 0, maxTick: 0, lateArrivals: 0,
   recv: 0, recvBytes: 0, onTime: 0, substituted: 0, sessions: 0, rejected: 0, slack: [] as number[], activeTicks: 0, activeSlotTicks: 0, silent: 0, warmup: 0,
@@ -206,8 +223,8 @@ referee.onmessage = (e: MessageEvent) => {
   if (m.intervals) {
     for (const iv of m.intervals) {
       refIntervals.set(iv.tick, iv);
-      recordHashes.push([iv.tick, iv.hash]);
-      stats.refHashes.push([iv.tick, iv.hash.toString(16)]);
+      if (!trimRecord) recordHashes.push([iv.tick, iv.hash]);
+      sample(stats.refHashes, iv.tick >> 7, [iv.tick, iv.hash.toString(16)], HASHES);
       for (const s of everyone()) check(s, iv.tick);
       if (edge) up.report = { interval: iv.tick, hash: iv.hash, left: 8 };
     }
@@ -218,7 +235,7 @@ referee.onmessage = (e: MessageEvent) => {
 // The record and the referee from tick `start`: a room's first tick, or the
 // keyframe an edge begins from (its region; null at the room's start).
 function startRecord(start: number, region: Uint8Array | null = null) {
-  recordStart = start;
+  recordStart = recordKept = start;
   record = [];
   recordRegion = region;
   recordHashes = [];
@@ -252,7 +269,7 @@ function keyframe(): Promise<{ tick: number; raw: number; packed: Uint8Array }> 
   return new Promise((ok) => {
     keyWaiters.set(id, ok);
     referee.postMessage({ room: refRoom, want: id });
-    if (recordStart === roomStart) setTimeout(() => { if (keyWaiters.delete(id)) ok({ tick: 0, raw: 0, packed: new Uint8Array(0) }); }, 5000);
+    if (recordStart === roomStart && recordKept === recordStart) setTimeout(() => { if (keyWaiters.delete(id)) ok({ tick: 0, raw: 0, packed: new Uint8Array(0) }); }, 5000);
   });
 }
 
@@ -270,6 +287,7 @@ async function sendKey(s: Slot, reason: number, desync?: { interval: number; dig
   if (room !== roomStart || gen !== refRoom || gone(s)) { log(`key for slot ${s.slot} dropped: room ${room} now ${roomStart}`); s.syncing = false; return; }
   const tick = room + k.tick;
   const to = closed + 1;
+  if (tick < recordKept) { log(`key for slot ${s.slot} dropped: sim tick ${k.tick} is older than the record held`); s.syncing = false; return; }
   const ticks = record.slice(tick - recordStart, Math.max(tick - recordStart, to - recordStart));
   const fill = W.encodeFill(tick, ticks);
   s.fromTick = to;
@@ -300,7 +318,7 @@ function check(s: Slot, interval: number) {
   const now = performance.now();
   stats.mismatches.push({ slot: s.slot, watch: s.watch, interval, at: Number(((now - E) / 1000).toFixed(2)), client: h.toString(16), referee: ref.hash.toString(16) });
   // (an edge's record starts at a keyframe, not the room's start: no log to replay)
-  if (stats.dumps.length < 4 && recordStart === roomStart) {
+  if (stats.dumps.length < 4 && recordStart === roomStart && recordKept === recordStart) {
     // the room's record as a log the harness replays: the desync's repro case
     const file = `traces/desync-${roomStart}-${interval}.qgl`;
     stats.dumps.push(file);
@@ -316,7 +334,7 @@ function check(s: Slot, interval: number) {
 const REPAIR_MS = 100;
 function repair(s: Slot, ackTick: number, ackBits: bigint, now: number) {
   if (recordStart < 0 || s.fromTick > closed) return;
-  const due = W.holes(ackTick, ackBits, Math.max(s.fromTick, recordStart)).filter((t: number) => {
+  const due = W.holes(ackTick, ackBits, Math.max(s.fromTick, recordKept)).filter((t: number) => {
     if (t > closed) return false;
     const i = t & (W.RING - 1);
     return s.repairTick[i] !== t || now - s.repairAt[i] >= REPAIR_MS;
@@ -368,7 +386,7 @@ function onInput(s: Slot, buf: Uint8Array, now: number) {
   if (r && r.interval > s.lastReport && r.epoch === (s.keys & 255)) {
     s.lastReport = r.interval;
     s.reports.set(r.interval, r.hash);
-    if (!s.watch) (stats.reports[s.slot] ||= []).push([r.interval, r.hash.toString(16)]);
+    if (!s.watch) sample(stats.reports[s.slot] ||= [], r.interval >> 7, [r.interval, r.hash.toString(16)], PLAYER_HASHES);
     for (const t of s.reports.keys()) if (t < r.interval - 16 * 128) s.reports.delete(t);
     check(s, r.interval);
   }
@@ -401,7 +419,7 @@ function onInput(s: Slot, buf: Uint8Array, now: number) {
 
 function closeTick(T: number, now: number) {
   stats.ticks++;
-  stats.closeLate.push(now - deadline(T));
+  sample(stats.closeLate, stats.ticks, now - deadline(T));
   const row = new Uint32Array(W.NP);
   const dl = deadline(T);
   let active = 0;
@@ -423,7 +441,7 @@ function closeTick(T: number, now: number) {
       s.missing = 0;
       s.lastSlack = dl - s.arrival[i];
       s.periodSlack = Math.min(s.periodSlack, s.lastSlack);
-      if (T >= s.joinTick + WARMUP) { stats.slack.push(s.lastSlack); stats.onTime++; }
+      if (T >= s.joinTick + WARMUP) { sample(stats.slack, stats.onTime, s.lastSlack); stats.onTime++; }
     } else {
       // repeat the last real input, jump cleared, shot counter unchanged (so no
       // shot fires); after ~30 missing ticks the keys decay to idle
@@ -446,11 +464,12 @@ function closeTick(T: number, now: number) {
     stats.tickBytes += bytes;
     stats.maxTick = Math.max(stats.maxTick, bytes);
     record.push(parts);
+    if (trimRecord) for (; recordKept < T - RECORD_KEEP; recordKept++) record[recordKept - recordStart] = undefined!;
     toReferee.push(parts);
     // the last one out: the next joiner starts a new room, and its spectators go
     if (!slots.some((x) => x)) {
       saveReplay();
-      roomStart = recordStart = -1; record = []; toReferee = []; roomSeed = newSeed();
+      roomStart = recordStart = recordKept = -1; record = []; toReferee = []; roomSeed = newSeed();
       for (const w of [...watchers]) w.leave?.('room-ended');
     }
   }
