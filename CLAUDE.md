@@ -9,19 +9,22 @@ Four games build from `src/`: golf (`build/game.wasm`), the arena with
 of them: all four in one module, a playlist the room plays through, a living
 room for a menu (`client/fireplace.html`). README.md is the front page; the
 long-form docs are `docs/<game>.md` (golf, arena, bumper, party, fireplace)
-and `docs/netcode.md`: read the one for whatever you touch. `docs/roadmap.md`
-is the plan for what comes next.
+and `docs/netcode.md`: read the one for whatever you touch. `docs/wire.md` is
+the protocol for writing a client, `docs/hosting.md` the room pool
+(`net/rooms.mjs`), and `docs/roadmap.md` the plan for what comes next.
 
 ## Commands
 
 ```sh
 npm ci && sh tools/install-deno.sh   # once: wabt, binaryen, Deno 2.9.7 in .tools/
 npm run build                        # every sim; prints each wasm's sha256
-npm test                             # node --test test/*.test.mjs, 644 tests, about 9 min
+npm test                             # node --test test/*.test.mjs, about 10 min; prints its own count
 node --test test/bumper.test.mjs     # one file
 node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.wasm   # Node, Deno, Chrome x JIT tiers x 1/2/4 threads
 node net/play.mjs [--arena [--mode k] | --bumper | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
 node net/run-arena.mjs / run-bumper.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
+node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
+node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -144,8 +147,9 @@ shell whose own command line contains the name: it kills that shell.
   own terms; match the density around them. The docs follow the same
   voice, with measured numbers, not adjectives.
 - No new npm dependencies; the whole stack is wabt, binaryen (measurement
-  only), Node, Deno and Chrome.
+  only), Node, Deno and Chrome. The gates load `playwright` or
+  `playwright-core`, whichever resolves; CI adds the latter with `--no-save`.
 - Tests use `node:test` with helpers in `test/helpers.mjs` (`newSim`,
-  `newArena`, `newBumper`); a new mode gets its own test file, a recorded
+  `newArena`, `newBumper`, `newParty`, `newFireplace`); a new mode gets its own test file, a recorded
   log for the matrix, a CI step in `.github/workflows/determinism.yml`, and an
   online gate.
