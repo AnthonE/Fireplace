@@ -58,7 +58,7 @@ const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.mi
 // failover: a relay silent for SILENT_MS is gone (a dead one's QUIC session would idle for far longer)
 const SILENT_MS = 1500;
 // arena: the arena's input words (src/layout.mjs), with its frames; fireplace:
-// the arena's while it is the game on (FP_GAME in the confirmed world), else golf's
+// the arena's while it or Dogfight is the game on (FP_GAME in the confirmed world), else golf's
 // looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK)
 async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false }) {
   const imp = createImpair({ ...impair, seed: (Math.random() * 2 ** 32) >>> 0 });
@@ -188,7 +188,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   const lastFrame = {}; // the last frame sent: its lag and tick
   const take = (a) => { if (((rd(a) - sent[a]) | 0) > 0) { sent[a]++; return true; } return false; };
   const sample = (t) => {
-    const armed = fireplace ? rd(L.FP_GAME) === L.G_ARENA : arena;
+    const armed = fireplace ? rd(L.FP_GAME) === L.G_ARENA || rd(L.FP_GAME) === L.G_FLIGHT : arena;
     // an automatic held: a shot asked for every tick, so it fires as fast as it can
     if (armed && rd(L.CL_AUTO) && ((rd(L.CL_PRESSES) - sentPresses) | 0) <= 0) Atomics.store(i32, L.CL_PRESSES >> 2, sentPresses + 1);
     // a press advances the counter one step a tick, so quick clicks never merge

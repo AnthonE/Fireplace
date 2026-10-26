@@ -11,7 +11,8 @@
 // cut through it runs across the north-east, four ring gates hang in the open
 // air, two radio towers stand off the canyon. Each team has a hangar and a
 // control tower on a flat pad at its end, red west, blue east; the spawns
-// mirror each other across the middle.
+// mirror each other across the middle. Ring Race goes through the rings and
+// the outer arches in a loop (raceGates).
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodePng } from './png.mjs';
@@ -102,6 +103,17 @@ function basePrefab() {
   return B.map((b) => b.map(tidy));
 }
 
+// Ring Race's course (src/flight.wat $f_race), clockwise round the map: the
+// west ring, the north ring, the arch at z 300, the east ring, the south
+// ring, the arch at z 724. A ring's gate is its opening's centre, 8 m round
+// (the opening is 12 m across); an arch's the middle of the gap under its
+// lintel, 11 m round.
+function raceGates() {
+  const ring = (x, z) => { const [, , up] = RINGS.find((r) => r[0] === x && r[1] === z); return [x, ground(x, z).h + up, z, 8]; };
+  const arch = (z) => [canyonX(z), FLOOR + 11, z, 11];
+  return [ring(300, 420), ring(512, 248), arch(300), ring(724, 604), ring(512, 776), arch(724)].map((g) => g.map(tidy));
+}
+
 export function skyways() {
   const g = (x, z) => ground(x, z).h;
   const at = (b) => [b.x, PAD, C];
@@ -146,6 +158,7 @@ export function skyways() {
     flags: BASES.map((b) => ({ team: b.team, at: [b.x, C] })),
     ball: { at: [C, C] },
     hills: [{ at: [C, C], radius: 10 }, { at: [400, 512], radius: 10 }, { at: [624, 512], radius: 10 }],
+    race: raceGates(),
   };
 }
 

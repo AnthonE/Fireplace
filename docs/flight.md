@@ -29,12 +29,43 @@ ship to an AI pilot; `?watch=1` spectates; `?cam=x,y,z,yaw,pitch` holds a
 camera anywhere. More pilots for a running room:
 `node net/bot-host.mjs --flight --relay 127.0.0.1:4434 --bots 50`.
 
-The match modes are the arena's, three of them (`FLIGHT_MODES` in
-`src/layout.mjs`), in turn: Dogfight (every ship for itself, ten minutes,
-the most kills wins), Team Dogfight (Team Slayer: red against blue, every
-kill a point for your side) and Juggernaut (one ship has an overshield and
-lasers that hit twice as hard; shoot it down to become it, 10 points wins).
-A seed that forces any other mode plays a Dogfight.
+Four modes, in turn (`FLIGHT_MODES` in `src/layout.mjs`): three of the
+arena's, Dogfight (every ship for itself, ten minutes, the most kills
+wins), Team Dogfight (Team Slayer: red against blue, every kill a point for
+your side) and Juggernaut (one ship has an overshield and lasers that hit
+twice as hard; shoot it down to become it, 10 points wins); and flight's
+own, Ring Race (below). A seed that forces any other mode plays a Dogfight.
+
+## Ring Race
+
+![Ring Race: gate 2 of 6 on the second lap, the waypoint on the next gate](fl3-race.png)
+
+Through the map's gates in order, three laps, the first home wins; five
+minutes, and when the clock runs out the ships place by gates passed, then
+kills. Skyways' course runs clockwise round the map through six gates: the
+west ring, the north ring, the arch at z 300, the east ring, the south
+ring, the arch at z 724. A ring's gate is a ball of 8 m round its 12 m
+opening's centre, an arch's 11 m under its lintel. The guns stay on, so the
+race is a fight too. A ship shot down comes back at the last gate it
+passed, its nose toward the next. The next gate glows gold and pulses, the
+one after it fainter, and a gold diamond over it carries its distance; the
+HUD says your gate and lap and who leads, the feed every lap, and the board
+GATES, LAP and KILLS. AI pilots fly at their next gate, boosting on the long
+legs, and fire only at what is already on their nose: 8 of them finished
+three laps in 112 s, the leader about 37 s a lap.
+
+**How it fits on the engine.** Ring Race is flight's own: its number,
+`M_RACE` (12), sits past the arena's modes, so the arena's build, whose
+`MODES` it never joins, stays bit-identical. Its clock comes from
+`FLIGHT_TICKS` (the arena's `MODE_TICKS` and the race's past them) under
+`#if FLIGHT` in the match and the prediction; `$a_mode_play` hands it to
+`$f_race` before the arena's own modes are asked. A ship's progress is the
+gates it has passed, in `MODE_REC`'s points, so the arena's `$a_key` and
+`$a_places` place a race as they place Juggernaut, and Fireplace scores it
+by that place. The course is the map's: map.json's `race`, `[x, y, z,
+radius]` gates in order, compiled into the map's segment only when a map
+has one (so Box Canyon's bytes never change) and copied out by flight's
+init to `MAP_RACE`.
 
 ## A ship
 
@@ -49,6 +80,7 @@ A seed that forces any other mode plays a Dogfight.
 | Shields, hull | the arena's: 100 shields, back 5 s after the last hit, 100 hull under them |
 | The ground, boxes | a ship bounces off, losing half the speed into it; more than 5 m/s into it hurts, 0.9 a m/s past that and 5 more |
 | The edge, the ceiling | hold it (Skyways' ceiling is 147 m, 70 m over the highest ground) |
+| Other ships | two whose centres come within 2.4 m are pushed apart and bounced (40% of the closing speed kept); past 5 m/s closing both are hurt as by a crash, each hit credited to the other, so a head-on at the cruise costs each 61; allies only bounce |
 
 | Weapon | Fires | Damage | Notes |
 | --- | --- | --- | --- |
@@ -93,11 +125,19 @@ nearest ships (the lock in yellow), a radar of 300 m, a kill feed, PULL UP,
 TURN BACK and the board. The map's edge shows as a red grid as you near
 it. `client/flight-bot.mjs` is the AI pilot: the nearest enemy, a settling
 aim, lasers with its nose on, a charge now and then, a bomb into two or
-more ahead, boost to close and brake not to overshoot, a roll when hit,
-and under it all the ground looked for 85 m ahead, the ceiling and the
-edge.
+more ahead, boost to close and brake not to overshoot, a swerve from a
+ship whose closest approach in the next 0.8 s is under 6 m, a roll when
+hit, and under it all the ground looked for 85 m ahead, the ceiling and
+the edge.
 
-**Results.** `test/flight.test.mjs` (11 tests): the sim's exports and
+Ships meeting is the one thing here that touches two records, so it is the
+confirmed world's alone: `$f_collide`, serial at the start of the arena's
+end-of-tick pass (before everyone's place goes into `HIST`), pairs in slot
+order. The prediction never moves your ship off another's body; a
+collision's bounce reaches its pilot a round trip later, as a blast's push
+does in the arena.
+
+**Results.** `test/flight.test.mjs` (13 tests): the sim's exports and
 Skyways' bounds, boxes and ceiling; a spawn (in the air, its nose level
 toward the middle, the meter full, three bombs) and the countdown's wait;
 the turn rates, the pitch limit and the cruise; the meter running dry and
@@ -106,7 +146,14 @@ lasers through shields and hull to a kill, every shot a hit, and a roll
 turning them away; a laser landing where its shooter's frames say it saw
 its target 12 ticks before; a charge shot homing onto a target 12 degrees
 off the nose, one let go early firing nothing, and a bomb; the modes in
-turn and a juggernaut's nose kept; the prediction equal to the confirmed
+turn and a juggernaut's nose kept; two ships head on at the cruise never
+passing through each other, each hurt about 61 at the first meeting and
+bounced, each hit credited to the other, a gentle touch hurting nobody, and
+two of one side only bouncing; Ring Race on Skyways' six gates as map.json
+lists them, a gate out of order counting for nothing, news for every gate
+and lap, three laps to a win, the match over and placed by gates passed,
+and a ship shot down coming back at its last gate facing the next; the
+prediction equal to the confirmed
 ship bit for bit through turns, boost, brake, a roll, lasers, a charge
 shot and a bomb; and eight AI pilots shooting each other down, equal on
 every tick on 1 and 4 threads. `tools/genflight.mjs` records a match and
@@ -130,9 +177,10 @@ checked by the referee, all equal; 7 bytes a closed tick on average, about
 Forced to one mode, 64 pilots for 60 s each: Team Dogfight 3,702 hashes all
 equal, 32 pilots a side, 162 to 177; Juggernaut 3,701 all equal.
 
-Pilots on Skyways, 8 for 12,000 ticks: 37 shot down by lasers, 11 by
-charge shots, 12 by bombs, none crashed; median height over the ground
-30 m, median speed 34 m/s. The match recorded for the matrix is 2 MB for
+Pilots on Skyways, 16 for 12,000 ticks: 55 shot down by lasers, 19 by
+charge shots, 22 by bombs, 3 by meeting another ship (23 of 144 before the
+pilots learned to swerve); median height over the ground 37 m, median
+speed 33 m/s. The match recorded for the matrix is 2 MB for
 160 s: a pilot's aim moves every tick, so its word does too.
 
 ![Skyways from over the red base](fl2-skyways.png)
@@ -154,7 +202,10 @@ to an eighth of a metre so the image packs: flight's wasm is 400 KB,
 100 KB gzipped, 80 KB of that the map. Flight always builds on Skyways
 (`FLIGHT_MAP`); `--map` and `QG_MAP` still choose only the arena's.
 
-Not done yet: Dogfight on Fireplace's playlist (its map differs from the
-arena's, so a switch between them must regrid both), ship-to-ship
-collisions, more maps and modes (capture the flag in the air, a race
-through the rings), and a frame rate on a real GPU.
+Dogfight is on Fireplace's playlist too ([docs/fireplace.md](fireplace.md)):
+a three-minute match of a mode drawn for it, between party and golf, in
+`build/fireplace/game.wasm` under the prefix `$f.` with Skyways as its own
+segment.
+
+Not done yet: more maps and modes (capture the flag in the air), and a
+frame rate on a real GPU.

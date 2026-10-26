@@ -48,6 +48,18 @@ export const KILL_BOMB = 18;
 export const KILL_CRASH = 19;
 export const HIT_DEFLECT = 4; // FX_HIT's size for a laser a roll turned away
 
+// Ring Race, flight's own mode (src/flight.wat $f_race): past the arena's
+// M_* so its build never sees it, through the map's gates (map.json "race",
+// MAP_RACE) in order, LAPS times round; a ship's progress is the gates it
+// has passed (MODE_REC's MR_POINTS), which places it as the arena's modes
+// place by points. Its news codes sit past every team mode's MX codes.
+export const M_RACE = 12;
+export const LAPS = 3;
+export const RACE_TICKS = 37500; // 5 min
+export const NGATE = 16; // gates a map may have at most
+export const MX_GATE = 96; // owner passed a gate, shot its count of gates passed
+export const MX_LAP = 97; // owner started lap shot + 1 (shot the laps done)
+
 // The f32 literals.
 export const FL_CRUISE = '34'; // m/s
 export const FL_BOOST = '62';
@@ -59,6 +71,9 @@ export const FL_HIT = '1.8'; // a ship's sphere for shots and blasts
 export const FL_NOSE = '2.5'; // where the guns are, ahead of the centre
 export const FL_CRASH = '5'; // m/s into the ground or a wall before it hurts
 export const FL_CRASHK = '0.9'; // damage a m/s past that
+export const FL_MEET = '2.4'; // two ships closer than this, centre to centre, have met
+export const FL_MEET2 = '5.76'; // its square
+export const FL_BOUNCE = '0.7'; // (1 + restitution 0.4) / 2: each ship's share of the closing speed turned back
 export const FL_CHARGEV = '95'; // m/s
 export const FL_CHARGE_TURN = '0.1'; // of the turn toward its target a tick
 export const FL_CHARGE_RAD = '7'; // m

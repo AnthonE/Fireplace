@@ -450,6 +450,11 @@ export const MAP_HILLS = MAP_OBJ + 0x40; // NHILL x 16 B
 export const NHILL = 8;
 export const MAP_OBJ_SIZE = 0xc0;
 export const MAP_END = MAP_OBJ + MAP_OBJ_SIZE;
+// Flight's race course (map.json "race", tools/map.mjs), after the rest: u32
+// gates, 12 B zero, then up to NGATE x 16 B: f32 x, y, z, radius, in order.
+// A map without one leaves it 0; flight's init copies it out (src/flight.wat).
+export const MAP_RACE = MAP_END;
+export const MAP_RACE_END = MAP_RACE + 16 + 16 * 16;
 export const NBOX = 512;
 export const NGROUP = 64;
 export const NTELE = 16;
@@ -660,8 +665,10 @@ export const AM_CONSTS = Object.freeze({ ...am_consts });
 // outside them is a free-for-all).
 import * as flight_consts from './flight.mjs';
 export const FLIGHT_CONSTS = Object.freeze({ ...flight_consts });
-export const FLIGHT_MODES = [M_FIESTA, M_SLAYER, M_JUGGERNAUT];
+export const FLIGHT_MODES = [M_FIESTA, M_SLAYER, M_JUGGERNAUT, flight_consts.M_RACE];
 export const FLIGHT_OK = FLIGHT_MODES.reduce((b, m) => b | (1 << m), 0);
+// a flight match's clock by mode: the arena's, and Ring Race's past them
+export const FLIGHT_TICKS = [...MODES.map((m) => m.ticks), flight_consts.RACE_TICKS];
 
 // ---- Bumper balls: src/ built with BUMPER (build/bumper/game.wasm). The
 // same world, netcode and lockstep; every player is a ball now, and the golf
@@ -914,7 +921,8 @@ export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, m
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come
 // and go as they please. Each game is its own build, unchanged, under a prefix
-// ($g. golf, $a. the arena, $b. bumper balls, $p. party); src/fireplace.wat
+// ($g. golf, $a. the arena, $b. bumper balls, $p. party, $f. flight's
+// Dogfight); src/fireplace.wat
 // dispatches every export to the game on now and, at the end of a tick, runs
 // the playlist: when a game's last match ends it hands out marshmallows (3, 2
 // and 1 for the top three), holds the result, then wipes the world, builds the
@@ -923,14 +931,17 @@ export const G_GOLF = 0;
 export const G_ARENA = 1;
 export const G_BUMPER = 2;
 export const G_PARTY = 3;
-export const GAMES = ['GOLF', 'ARENA', 'BUMPER BALLS', 'PARTY'];
+export const G_FLIGHT = 4;
+export const GAMES = ['GOLF', 'ARENA', 'BUMPER BALLS', 'PARTY', 'DOGFIGHT'];
 // By position, so a game may come round more than once: the room plays entry
 // (games played) % length next.
-export const PLAYLIST = [G_BUMPER, G_PARTY, G_ARENA, G_PARTY, G_GOLF];
-export const FP_MATCHES = [1, 1, 2, 3]; // by game: matches it plays before the next game (bumper's rounds, party's minigames)
+export const PLAYLIST = [G_BUMPER, G_PARTY, G_ARENA, G_PARTY, G_FLIGHT, G_GOLF];
+export const FP_MATCHES = [1, 1, 2, 3, 1]; // by game: matches it plays before the next game (bumper's rounds, party's minigames)
 export const FP_HOLD = 750; // 6 s of the result, the standings, then the next game
 export const FP_ARENA_TICKS = 22500; // an arena match of 3 min, whatever its mode (Infection's is 3 already; the rest 5 or 10)
+export const FP_FLIGHT_TICKS = 22500; // a Dogfight of 3 min, whatever its mode
 export const FP_GOLF_TICKS = 18750; // a hole of at most 2.5 min, not 4
+export const FP_START = 0xf1; // a Fireplace seed with this top byte starts the playlist at entry (seed >>> 16) & 0xff, for gates and dev
 export const FP_PARTY_FORCE = 0xa7; // a party seed with this top byte plays one minigame only (party.wat's $bumper_gen): Fireplace's never has it
 // In the header's last 16 bytes, which no game uses (inside the prediction's copy):
 export const FP_GAME = REGION + 0xf0; // u32 G_*: the game on now
@@ -942,7 +953,7 @@ export const FP = REGION + 0xe000;
 export const FP_MALLOWS = FP; // u16[256] marshmallows, ever
 export const FP_LAST = FP + 0x200; // u8[256] where each came in the last game (0: not in it)
 export const FP_GOT = FP + 0x300; // u8[256] marshmallows each got for it
-export const FP_NEXT = FP + 0x400; // u32 the next game's seed, drawn as this one's result is held (the arena's forces a mode)
+export const FP_NEXT = FP + 0x400; // u32 the next game's seed, drawn as this one's result is held (the arena's and Dogfight's force a mode)
 export const FP_MODE = FP + 0x404; // u8 1 + the index in ARENA_MODES of the arena's last mode (0: none yet); the next is another
 // Outside the region: which game's static world (terrain, map) is built, so a
 // keyframe from another game rebuilds it; and a stash for the region while it is.

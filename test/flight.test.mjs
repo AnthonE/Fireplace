@@ -234,7 +234,7 @@ test('a charge shot built and let go homes on the ship nearest the nose; a bomb 
   assert.ok(fxs(g.v, L.FX_BLAST).some((f) => f.size === Number(F.FL_BOMB_RAD)));
 });
 
-test('modes: a free-for-all, then red against blue, then the juggernaut (lasers twice as hard, its nose kept); a forced mode flight has not is a free-for-all', async () => {
+test('modes: a free-for-all, then red against blue, then the juggernaut (lasers twice as hard, its nose kept), then the race; a forced mode flight has not is a free-for-all', async () => {
   const g = await flight(7, 4);
   assert.equal(g.v.mode().mode, L.M_FIESTA);
   const next = () => {
@@ -254,11 +254,95 @@ test('modes: a free-for-all, then red against blue, then the juggernaut (lasers 
   assert.equal(js.bombs, 0);
   assert.ok(g.v.dv.getUint16(L.PLAYERS + j * L.PSIZE + F.F_YAW, true) < 16384, 'no gun over its nose');
   next();
+  assert.equal(g.v.mode().mode, F.M_RACE, 'then the race');
+  next();
   assert.equal(g.v.mode().mode, L.M_FIESTA, 'round again');
   const h = await flight(forcedSeed(L.M_CTF), 2);
   assert.equal(h.v.mode().mode, L.M_FIESTA);
   const k = await flight(forcedSeed(L.M_SLAYER), 2);
   assert.equal(k.v.mode().mode, L.M_SLAYER);
+});
+
+test('two ships that meet bounce apart and both take a crash\'s damage, each credited to the other; allies only bounce', async () => {
+  const g = await flight(7, 2);
+  // head on, 6 m apart, at the cruise: 68 m/s closing
+  put(g, 0, MID - 3, SKY, MID, 0, 0, 34);
+  put(g, 1, MID + 3, SKY, MID, 8192, 0, 34);
+  const words = [[L.EV_INPUT, 0, flightWord(level)], [L.EV_INPUT, 1, flightWord({ yaw: 8192, pitch: 512 })]];
+  let close = Infinity, first = null;
+  for (let k = 0; k < 40; k++) {
+    g.step(words);
+    const [a, b] = [g.v.ship(0), g.v.ship(1)];
+    close = Math.min(close, Math.hypot(a.pos[0] - b.pos[0], a.pos[1] - b.pos[1], a.pos[2] - b.pos[2]));
+    if (!first && a.sh < 100) first = { a: a.sh, b: b.sh, va: a.vel[0], vb: b.vel[0] };
+    assert.ok(a.pos[0] < b.pos[0], 'never through each other');
+  }
+  assert.ok(close >= Number(F.FL_MEET) - 1e-3, `never closer than they meet: ${close}`);
+  // the first meeting: about 68 m/s closing, each turned back
+  const hurt = Math.trunc((68 - Number(F.FL_CRASH)) * Number(F.FL_CRASHK) + 5);
+  assert.ok(Math.abs(100 - first.a - hurt) <= 2 && first.a === first.b, `shields ${first.a}, ${first.b}: about ${hurt} each`);
+  assert.ok(first.va < 0 && first.vb > 0, `bounced: ${first.va}, ${first.vb}`);
+  const hits = fxs(g.v, L.FX_HIT);
+  assert.ok(hits.some((h) => h.owner === 1 && h.shot === 0) && hits.some((h) => h.owner === 0 && h.shot === 1), 'each hit credited to the other');
+  // a gentle touch (under FL_CRASH closing) only bounces
+  for (let k = 0; k < L.SHIELD_DELAY + 300; k++) { put(g, 0, MID - 40, SKY, MID - 40); put(g, 1, MID + 40, SKY, MID + 40); g.step(); }
+  put(g, 0, MID - 1.5, SKY, MID, 0, 0, 2);
+  put(g, 1, MID + 1.5, SKY, MID, 8192, 0, 2);
+  g.step();
+  assert.deepEqual([g.v.ship(0).sh, g.v.ship(1).sh], [100, 100]);
+  // red against blue: two reds meeting head on only bounce
+  const t = await flight(forcedSeed(L.M_SLAYER), 3);
+  assert.equal(t.v.ship(0).team, t.v.ship(2).team);
+  put(t, 0, MID - 3, SKY, MID, 0, 0, 34);
+  put(t, 2, MID + 3, SKY, MID, 8192, 0, 34);
+  put(t, 1, MID, SKY, MID + 200);
+  for (let k = 0; k < 20; k++) t.step([[L.EV_INPUT, 0, flightWord(level)], [L.EV_INPUT, 2, flightWord({ yaw: 8192, pitch: 512 })]]);
+  assert.deepEqual([t.v.ship(0).sh, t.v.ship(2).sh], [100, 100]);
+  assert.ok(t.v.ship(0).pos[0] < t.v.ship(2).pos[0]);
+});
+
+test('Ring Race: the map\'s gates in order, three laps, the first home wins, places by gates passed; a ship comes back at its last gate', async () => {
+  const g = await flight(forcedSeed(F.M_RACE), 2);
+  assert.equal(g.v.mode().mode, F.M_RACE);
+  const h = g.v.hole();
+  assert.equal(h.until - h.start, F.RACE_TICKS, "the race's clock");
+  const gates = g.v.race();
+  assert.deepEqual(gates.map((x) => [...x.pos, x.r]), compileMap(mapDir(F.FLIGHT_MAP)).race.map((x) => x.map(Math.fround)));
+  assert.equal(gates.length, 6);
+  // a gate out of order counts for nothing
+  const at = (p, k) => put(g, p, ...gates[k].pos);
+  at(0, 2); g.step();
+  assert.equal(g.v.racer(0).passed, 0);
+  // round the course three times
+  let gateNews = 0;
+  const seen = g.v.fxCount();
+  for (let k = 0; k < gates.length * F.LAPS; k++) {
+    at(0, k % gates.length);
+    put(g, 1, MID, SKY, MID);
+    g.step();
+    if (k < gates.length * F.LAPS - 1) assert.equal(g.v.racer(0).passed, k + 1, `gate ${k}`);
+  }
+  for (let k = seen; k < g.v.fxCount(); k++) { const f = g.v.fx(k); if (f.kind === L.FX_MODE && f.owner === 0 && (f.size === F.MX_GATE || f.size === F.MX_LAP)) gateNews++; }
+  assert.equal(gateNews, gates.length * F.LAPS, 'news for every gate and lap');
+  assert.equal(g.dv.getUint32(L.AH_WINNER, true), 1, 'P1 home first');
+  assert.equal(g.v.hole().state, L.H_OVER);
+  assert.deepEqual([0, 1].map((p) => g.v.u8[L.MODE_REC + p * L.MR_SIZE + L.MR_PLACE]), [1, 2]);
+  // the next race: P2 through two gates, shot down, back at the second facing the third
+  const r = await flight(forcedSeed(F.M_RACE), 2);
+  const gs = r.v.race();
+  for (const k of [0, 1]) { put(r, 1, ...gs[k].pos); r.step(); }
+  assert.equal(r.v.racer(1).passed, 2);
+  const b = L.PLAYERS + L.PSIZE;
+  r.dv.setUint8(b + L.P_FL, r.v.u8[b + L.P_FL] | L.PF_DEAD);
+  r.dv.setUint16(b + L.A_RESPAWN, 1, true);
+  put(r, 1, MID, SKY, MID);
+  r.step();
+  const s = r.v.ship(1);
+  assert.ok(!s.dead);
+  assert.ok(Math.hypot(...[0, 1, 2].map((i) => s.pos[i] - gs[1].pos[i])) < 1, `at gate 2: ${s.pos}`);
+  const to = Math.atan2(gs[2].pos[2] - s.pos[2], gs[2].pos[0] - s.pos[0]);
+  assert.ok(Math.cos(s.heading[0] - to) > Math.cos(Math.PI / 16 + F.TURN / 16384 * 2 * Math.PI), 'facing gate 3');
+  assert.equal(r.v.racer(1).passed, 2, 'its gates kept');
 });
 
 // Predicts slot 0 through `inputs` from every tick (1 ahead, and 6 and 30 every

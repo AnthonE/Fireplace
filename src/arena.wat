@@ -73,8 +73,10 @@
   (f32.store (i32.const @HDR_TEE) (f32.const 512))
   (f32.store (i32.const @(HDR_TEE + 8)) (f32.const 512))
 #if FLIGHT
-  ;; how high a ship may fly, for the page and the bots (the sim folds it in)
+  ;; how high a ship may fly, for the page and the bots (the sim folds it in),
+  ;; and the race's gates, if the map has a race
   (f32.store (i32.const @MAP_CEILING) (f32.const @MAP_CEIL))
+  (memory.init $map (i32.const @MAP_RACE) (i32.const @MAPSEG_RACE) (i32.const @MAPSEG_NRACEB))
 #endif
   (f32.store (i32.const @HDR_DIR) (f32.const 1)))
 
@@ -1108,6 +1110,10 @@
   (local $p i32) (local $pb i32) (local $fl i32) (local $live i32) (local $best i32) (local $t i32) (local $state i32)
   (local $h i32) (local $n i32) (local $k i32) (local $a i32) (local $mode i32) (local $over i32)
   (local $team i32) (local $blue i32)
+#if FLIGHT
+  ;; ships that met this tick, before anyone's place goes into HIST (src/flight.wat)
+  (call $f_collide)
+#endif
   (local.set $t (i32.load (i32.const @HDR_TICK)))
   (local.set $state (i32.load (i32.const @HDR_STATE)))
   (local.set $team (i32.and (i32.shl (i32.const 1) (i32.load (i32.const @AH_MODE))) (i32.const @TEAMED)))
@@ -1172,7 +1178,11 @@
           (local.set $mode (i32.load (i32.const @AH_MODE)))
           (i32.store (i32.const @HDR_STATE) (i32.const @H_PLAY))
           (i32.store (i32.const @HDR_START) (local.get $t))
+#if FLIGHT
+          (i32.store (i32.const @HDR_UNTIL) (i32.add (local.get $t) (!tab FLIGHT_TICKS (local.get $mode))))
+#else
           (i32.store (i32.const @HDR_UNTIL) (i32.add (local.get $t) (!tab MODE_TICKS (local.get $mode))))
+#endif
           ;; Infection's zombies, one for every ten (at least one); the juggernaut
           (if (i32.eq (local.get $mode) (i32.const @M_INFECTION))
             (then (call $a_draw (select (i32.div_u (local.get $live) (i32.const 10)) (i32.const 1) (i32.ge_u (local.get $live) (i32.const 20))))))
@@ -1425,6 +1435,10 @@
   (local $m i32) (local $p i32) (local $h i32) (local $z i32) (local $last i32) (local $key i32) (local $best i32) (local $lead i32)
   (local $done i32) (local $target i32)
   (local.set $m (i32.load (i32.const @AH_MODE)))
+#if FLIGHT
+  ;; flight's Ring Race, past the arena's modes (src/flight.wat)
+  (if (i32.eq (local.get $m) (i32.const @M_RACE)) (then (return (call $f_race))))
+#endif
   (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @TEAMED))
     (then
       (local.set $done (!am i32 tick))

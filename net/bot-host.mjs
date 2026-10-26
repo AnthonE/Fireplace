@@ -42,7 +42,7 @@ import { View, modeName } from '../src/arena-view.mjs';
 import { BrainBot, GOLFER } from '../client/brain.mjs';
 import { Fighter } from '../client/arena-bot.mjs';
 import { Pilot } from '../client/flight-bot.mjs';
-import '../src/flight-view.mjs';
+import { modeName as flightMode } from '../src/flight-view.mjs';
 import { Roller } from '../client/bumper-bot.mjs';
 import { Partier } from '../client/party-bot.mjs';
 import '../src/bumper-view.mjs';
@@ -137,7 +137,7 @@ function step() {
     // Fireplace: each game the room moved into (the arena by the mode its seed forces), and when
     if (fireplace) {
       const dv = world.view.dv, g = dv.getUint32(L.FP_GAME, true), seed = dv.getUint32(L.HDR_SEED, true), n = dv.getUint16(L.FP_COUNT + 2, true);
-      if (world.games.at(-1)?.n !== n) world.games.push({ game: g, n, name: g === L.G_ARENA && modeName(seed) !== null ? `ARENA ${modeName(seed)}` : L.GAMES[g], simTick: sim.tick });
+      if (world.games.at(-1)?.n !== n) world.games.push({ game: g, n, name: g === L.G_ARENA && modeName(seed) !== null ? `ARENA ${modeName(seed)}` : g === L.G_FLIGHT && modeName(seed) !== null ? flightMode((seed >>> 16) & 0xff).name : L.GAMES[g], simTick: sim.tick });
     }
     // the arena: each match's mode as play starts, and how it ended (a team mode's scores and winner)
     if (arena) {

@@ -11,8 +11,8 @@ not measured yet, it says so.
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
 Territories, VIP, Assault) and Party's 30 minigames. Fireplace plays them in turn.
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
-over its own map, is gated online too (256 pilots, every hash equal) but
-plays alone, not yet on the playlist.
+over its own map, is gated online too (256 pilots, every hash equal) and is
+on Fireplace's playlist between party and golf.
 
 What a page downloads, gzipped, everything it imports included:
 
@@ -64,7 +64,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
-| Flight (the ship, `#if FLIGHT` on the arena) | 1 (3 modes) | 6 | a ring race, capture the flag in the air, escort, a base raid, survival against waves |
+| Flight (the ship, `#if FLIGHT` on the arena) | 1 (4 modes) | 6 | capture the flag in the air, escort, a base raid, survival against waves |
 | Golf, bumper balls | 2 | 2 | |
 
 The grid kit is this engine's model at its plainest: your own board is

@@ -2,7 +2,7 @@
 // Play: the relay and the page server, until Ctrl-C. Open the printed URL in
 // two tabs (or more) of the newest Chrome; each tab is a player. Each room's
 // replay lands in replays/ when it ends, and plays at ?replay=../replays/<file>.
-//   node net/play.mjs [--seed 7] [--port 4433] [--web 8080] [--host 127.0.0.1] [--arena [--bots 7] [--mode k]] [--flight [--bots 7] [--mode k]] [--bumper [--bots 15]] [--party [--mg k] [--bots 15]] [--fireplace [--bots 15]]
+//   node net/play.mjs [--seed 7] [--port 4433] [--web 8080] [--host 127.0.0.1] [--arena [--bots 7] [--mode k]] [--flight [--bots 7] [--mode k]] [--bumper [--bots 15]] [--party [--mg k] [--bots 15]] [--fireplace [--bots 15] [--start k]]
 // --arena runs the room on the arena's sim (build/arena/game.wasm), the
 // deathmatch, with --bots AI fighters in it (net/bot-host.mjs --arena); its
 // matches play the modes in turn, or with --mode k only mode k (layout.mjs, M_*:
@@ -10,21 +10,22 @@
 // Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill).
 // --flight runs it on flight's sim (build/flight/game.wasm): Dogfight, every
 // fighter a ship over Skyways, with --bots AI pilots (net/bot-host.mjs
-// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut).
+// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 12 Ring Race).
 // --bumper runs it on bumper balls' sim (build/bumper/game.wasm), with --bots
 // AI balls in it (net/bot-host.mjs --bumper); up to 256 in the room.
 // --party runs it on Party's sim (build/party/game.wasm): a minigame a round,
 // with --bots AI balls in it (net/bot-host.mjs --party); --mg k plays only
 // minigame k (src/layout.mjs MINIGAMES), through the room's seed.
 // --fireplace runs Fireplace (build/fireplace/game.wasm): every game in turn,
-// with --bots guests who play whatever is on (net/bot-host.mjs --fireplace).
+// with --bots guests who play whatever is on (net/bot-host.mjs --fireplace);
+// --start k begins the playlist at its entry k (layout.mjs FP_START).
 // Another machine on the LAN can join with --host 0.0.0.0 if its Chrome treats
 // this page as secure: chrome://flags/#unsafely-treat-insecure-origin-as-secure
 // with http://<this machine>:8080 (shared memory and WebTransport need it).
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { serve } from '../tools/serve.mjs';
-import { PLAYLIST, GAMES, MINIGAMES } from '../src/layout.mjs';
+import { PLAYLIST, GAMES, MINIGAMES, FP_START } from '../src/layout.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { partySeed } from '../tools/genparty.mjs';
 
@@ -38,6 +39,7 @@ const mg = opt('mg', null);
 // a party room forced to one minigame takes it in its seed's top bytes (src/party.wat $bumper_gen),
 // an arena room forced to one mode likewise (src/arena-view.mjs forcedSeed)
 const seed = party && mg !== null ? String(partySeed(Number(opt('seed', 7)), Number(mg)))
+  : argv.includes('--fireplace') && opt('start', '') !== '' ? String((((FP_START << 24) | ((Number(opt('start', '')) & 0xff) << 16) | (Number(opt('seed', 7)) & 0xffff)) >>> 0))
   : opt('mode', '') !== '' ? String(forcedSeed(Number(opt('mode', '')), Number(opt('seed', 7)))) : opt('seed', '');
 const arena = argv.includes('--arena');
 const flight = argv.includes('--flight');

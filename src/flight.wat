@@ -20,15 +20,31 @@
 ;; spawn point, full; here it is lifted SPAWN_ALT m into the air (under the
 ;; ceiling), its nose level and turned toward the middle of the map (the most
 ;; that way of 16 headings), at cruising speed, the meter full, BOMBS bombs.
+;; In Ring Race it comes back at the last gate it passed (none yet: its spawn
+;; point), its nose toward the next.
 (func $f_spawn (param $p i32)
   (local $pb i32) (local $k i32) (local $hy i32) (local $s f32) (local $c f32) (local $dx f32) (local $dz f32) (local $dot f32) (local $best f32)
+  (local $n i32) (local $pts i32) (local $a i32) (local $tx f32) (local $tz f32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
   (!put f32 @(PLAYERS + P_PY) (local.get $pb)
     (f32.min (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.const @SPAWN_ALT)) (f32.const @(MAP_CEIL - 5))))
-  (local.set $dx (f32.sub (f32.mul (f32.add (f32.load (i32.const @MAP_BOUNDS)) (f32.load (i32.const @(MAP_BOUNDS + 4)))) (f32.const 0.5))
-                          (!at f32 @(PLAYERS + P_PX) (local.get $pb))))
-  (local.set $dz (f32.sub (f32.mul (f32.add (f32.load (i32.const @(MAP_BOUNDS + 8))) (f32.load (i32.const @(MAP_BOUNDS + 12)))) (f32.const 0.5))
-                          (!at f32 @(PLAYERS + P_PZ) (local.get $pb))))
+  (local.set $tx (f32.mul (f32.add (f32.load (i32.const @MAP_BOUNDS)) (f32.load (i32.const @(MAP_BOUNDS + 4)))) (f32.const 0.5)))
+  (local.set $tz (f32.mul (f32.add (f32.load (i32.const @(MAP_BOUNDS + 8))) (f32.load (i32.const @(MAP_BOUNDS + 12)))) (f32.const 0.5)))
+  (local.set $n (i32.load (i32.const @MAP_RACE)))
+  (if (i32.and (i32.eq (i32.load (i32.const @AH_MODE)) (i32.const @M_RACE)) (i32.ne (local.get $n) (i32.const 0)))
+    (then
+      (local.set $pts (i32.load16_u offset=@(MODE_REC + MR_POINTS) (i32.shl (local.get $p) (i32.const 3))))
+      (local.set $a (i32.add (i32.const @(MAP_RACE + 16)) (i32.shl (i32.rem_u (local.get $pts) (local.get $n)) (i32.const 4))))
+      (local.set $tx (f32.load (local.get $a)))
+      (local.set $tz (f32.load offset=8 (local.get $a)))
+      (if (local.get $pts)
+        (then
+          (local.set $a (i32.add (i32.const @(MAP_RACE + 16)) (i32.shl (i32.rem_u (i32.sub (local.get $pts) (i32.const 1)) (local.get $n)) (i32.const 4))))
+          (!put f32 @(PLAYERS + P_PX) (local.get $pb) (f32.load (local.get $a)))
+          (!put f32 @(PLAYERS + P_PY) (local.get $pb) (f32.load offset=4 (local.get $a)))
+          (!put f32 @(PLAYERS + P_PZ) (local.get $pb) (f32.load offset=8 (local.get $a)))))))
+  (local.set $dx (f32.sub (local.get $tx) (!at f32 @(PLAYERS + P_PX) (local.get $pb))))
+  (local.set $dz (f32.sub (local.get $tz) (!at f32 @(PLAYERS + P_PZ) (local.get $pb))))
   (local.set $best (f32.const -1e30))
   (!for $k (i32.const 0) (i32.const 16)
     (call $sincos (i32.shl (local.get $k) (i32.const 10)))
@@ -546,3 +562,111 @@
             (if (f32.ge (local.get $f) (f32.const 1))
               (then (call $a_hurt (local.get $q) (local.get $owner) (i32.trunc_sat_f32_u (local.get $f)) (i32.const 0) (local.get $cause)
                                   (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (!at f32 @(PLAYERS + P_PY) (local.get $qb)) (!at f32 @(PLAYERS + P_PZ) (local.get $qb)))))))))))
+
+;; Ships that have met (centres within FL_MEET), on the confirmed world at the
+;; end of the tick, in slot order by pair: pushed apart along the line between
+;; them, half the overlap each, and bounced, 40% of the closing speed kept;
+;; closing faster than FL_CRASH hurts both as a crash does, each hit credited
+;; to the other (so allies, whom $a_hurt spares, only bounce). The prediction
+;; never sees another ship's body: a ship's own bounce reaches its pilot a
+;; round trip later, as a blast's push does.
+(func $f_collide
+  (local $p i32) (local $q i32) (local $pb i32) (local $qb i32) (local $hurt i32)
+  (local $dx f32) (local $dy f32) (local $dz f32) (local $d2 f32) (local $d f32) (local $nx f32) (local $ny f32) (local $nz f32)
+  (local $c f32) (local $j f32) (local $push f32) (local $mx f32) (local $my f32) (local $mz f32)
+  (if (i32.ne (i32.load (i32.const @HDR_STATE)) (i32.const @H_PLAY)) (then (return)))
+  (!for $p (i32.const 0) (i32.const @NPLAYER)
+    (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+    (if (i32.eq (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
+      (then
+        (!for $q (i32.add (local.get $p) (i32.const 1)) (i32.const @NPLAYER)
+          (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
+          ;; (a dead one is skipped: p may have just died against an earlier q)
+          (if (i32.and (i32.eq (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
+                       (i32.eqz (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_DEAD))))
+            (then
+              (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (!at f32 @(PLAYERS + P_PX) (local.get $pb))))
+              (if (f32.lt (f32.abs (local.get $dx)) (f32.const @FL_MEET))
+                (then
+                  (local.set $dy (f32.sub (!at f32 @(PLAYERS + P_PY) (local.get $qb)) (!at f32 @(PLAYERS + P_PY) (local.get $pb))))
+                  (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $qb)) (!at f32 @(PLAYERS + P_PZ) (local.get $pb))))
+                  (local.set $d2 (!dot3 (local.get $dx) (local.get $dy) (local.get $dz) (local.get $dx) (local.get $dy) (local.get $dz)))
+                  (if (f32.lt (local.get $d2) (f32.const @FL_MEET2))
+                    (then
+                      ;; the normal, p to q (along x if they sit on one point)
+                      (local.set $d (f32.sqrt (local.get $d2)))
+                      (if (f32.gt (local.get $d) (f32.const 1e-4))
+                        (then
+                          (local.set $nx (f32.div (local.get $dx) (local.get $d)))
+                          (local.set $ny (f32.div (local.get $dy) (local.get $d)))
+                          (local.set $nz (f32.div (local.get $dz) (local.get $d))))
+                        (else (local.set $nx (f32.const 1)) (local.set $ny (f32.const 0)) (local.set $nz (f32.const 0))))
+                      ;; apart, half the overlap each
+                      (local.set $push (f32.mul (f32.sub (f32.const @FL_MEET) (local.get $d)) (f32.const 0.5)))
+                      (!put f32 @(PLAYERS + P_PX) (local.get $pb) (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $pb)) (f32.mul (local.get $nx) (local.get $push))))
+                      (!put f32 @(PLAYERS + P_PY) (local.get $pb) (f32.sub (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.mul (local.get $ny) (local.get $push))))
+                      (!put f32 @(PLAYERS + P_PZ) (local.get $pb) (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $pb)) (f32.mul (local.get $nz) (local.get $push))))
+                      (!put f32 @(PLAYERS + P_PX) (local.get $qb) (!madd (local.get $nx) (local.get $push) (!at f32 @(PLAYERS + P_PX) (local.get $qb))))
+                      (!put f32 @(PLAYERS + P_PY) (local.get $qb) (!madd (local.get $ny) (local.get $push) (!at f32 @(PLAYERS + P_PY) (local.get $qb))))
+                      (!put f32 @(PLAYERS + P_PZ) (local.get $qb) (!madd (local.get $nz) (local.get $push) (!at f32 @(PLAYERS + P_PZ) (local.get $qb))))
+                      ;; the closing speed along the normal, turned back
+                      (local.set $c (f32.neg (!dot3 (f32.sub (!at f32 @(PLAYERS + P_VX) (local.get $qb)) (!at f32 @(PLAYERS + P_VX) (local.get $pb)))
+                                                    (f32.sub (!at f32 @(PLAYERS + P_VY) (local.get $qb)) (!at f32 @(PLAYERS + P_VY) (local.get $pb)))
+                                                    (f32.sub (!at f32 @(PLAYERS + P_VZ) (local.get $qb)) (!at f32 @(PLAYERS + P_VZ) (local.get $pb)))
+                                                    (local.get $nx) (local.get $ny) (local.get $nz))))
+                      (if (f32.gt (local.get $c) (f32.const 0))
+                        (then
+                          (local.set $j (f32.mul (local.get $c) (f32.const @FL_BOUNCE)))
+                          (!put f32 @(PLAYERS + P_VX) (local.get $pb) (f32.sub (!at f32 @(PLAYERS + P_VX) (local.get $pb)) (f32.mul (local.get $nx) (local.get $j))))
+                          (!put f32 @(PLAYERS + P_VY) (local.get $pb) (f32.sub (!at f32 @(PLAYERS + P_VY) (local.get $pb)) (f32.mul (local.get $ny) (local.get $j))))
+                          (!put f32 @(PLAYERS + P_VZ) (local.get $pb) (f32.sub (!at f32 @(PLAYERS + P_VZ) (local.get $pb)) (f32.mul (local.get $nz) (local.get $j))))
+                          (!put f32 @(PLAYERS + P_VX) (local.get $qb) (!madd (local.get $nx) (local.get $j) (!at f32 @(PLAYERS + P_VX) (local.get $qb))))
+                          (!put f32 @(PLAYERS + P_VY) (local.get $qb) (!madd (local.get $ny) (local.get $j) (!at f32 @(PLAYERS + P_VY) (local.get $qb))))
+                          (!put f32 @(PLAYERS + P_VZ) (local.get $qb) (!madd (local.get $nz) (local.get $j) (!at f32 @(PLAYERS + P_VZ) (local.get $qb))))))
+                      (if (f32.gt (local.get $c) (f32.const @FL_CRASH))
+                        (then
+                          (local.set $mx (!madd (local.get $nx) (f32.const 1.2) (!at f32 @(PLAYERS + P_PX) (local.get $pb))))
+                          (local.set $my (!madd (local.get $ny) (f32.const 1.2) (!at f32 @(PLAYERS + P_PY) (local.get $pb))))
+                          (local.set $mz (!madd (local.get $nz) (f32.const 1.2) (!at f32 @(PLAYERS + P_PZ) (local.get $pb))))
+                          (call $fx (i32.const 0) (i32.const @FX_BLAST) (local.get $p) (i32.const 0) (local.get $mx) (local.get $my) (local.get $mz) (f32.const 0.6))
+                          (local.set $hurt (i32.trunc_sat_f32_u (!madd (f32.sub (local.get $c) (f32.const @FL_CRASH)) (f32.const @FL_CRASHK) (f32.const 5))))
+                          (call $a_hurt (local.get $p) (local.get $q) (local.get $hurt) (i32.const 0) (i32.const @KILL_CRASH) (local.get $mx) (local.get $my) (local.get $mz))
+                          (call $a_hurt (local.get $q) (local.get $p) (local.get $hurt) (i32.const 0) (i32.const @KILL_CRASH) (local.get $mx) (local.get $my) (local.get $mz)))))))))))))))
+
+;; Ring Race (M_RACE), a tick of play after every ship's own: a live ship
+;; whose centre is inside its next gate (MAP_RACE's, gates passed mod their
+;; count) has passed it; LAPS times round the course and it has finished,
+;; and the first to finish wins. A ship's gates passed are its MR_POINTS, so
+;; the match places by them, then by kills, as the arena's modes place by
+;; points. 1 once someone has won. The confirmed world's alone, as every
+;; mode's tick is.
+(func $f_race (result i32)
+  (local $n i32) (local $p i32) (local $pb i32) (local $r i32) (local $pts i32) (local $a i32)
+  (local $dx f32) (local $dy f32) (local $dz f32) (local $rr f32)
+  (local.set $n (i32.load (i32.const @MAP_RACE)))
+  (if (i32.eqz (local.get $n)) (then (return (i32.const 0))))
+  (!for $p (i32.const 0) (i32.const @NPLAYER)
+    (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+    (local.set $r (i32.shl (local.get $p) (i32.const 3)))
+    (local.set $pts (i32.load16_u offset=@(MODE_REC + MR_POINTS) (local.get $r)))
+    (if (i32.and (i32.eq (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
+                 (i32.lt_u (local.get $pts) (i32.mul (local.get $n) (i32.const @LAPS))))
+      (then
+        (local.set $a (i32.add (i32.const @(MAP_RACE + 16)) (i32.shl (i32.rem_u (local.get $pts) (local.get $n)) (i32.const 4))))
+        (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $pb)) (f32.load (local.get $a))))
+        (local.set $dy (f32.sub (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.load offset=4 (local.get $a))))
+        (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $pb)) (f32.load offset=8 (local.get $a))))
+        (local.set $rr (f32.load offset=12 (local.get $a)))
+        (if (f32.lt (!dot3 (local.get $dx) (local.get $dy) (local.get $dz) (local.get $dx) (local.get $dy) (local.get $dz))
+                    (f32.mul (local.get $rr) (local.get $rr)))
+          (then
+            (local.set $pts (i32.add (local.get $pts) (i32.const 1)))
+            (i32.store16 offset=@(MODE_REC + MR_POINTS) (local.get $r) (local.get $pts))
+            (if (i32.rem_u (local.get $pts) (local.get $n))
+              (then (call $a_news (i32.const @MX_GATE) (local.get $p) (local.get $pts)))
+              (else (call $a_news (i32.const @MX_LAP) (local.get $p) (i32.div_u (local.get $pts) (local.get $n)))))
+            (if (i32.and (i32.eq (local.get $pts) (i32.mul (local.get $n) (i32.const @LAPS))) (i32.eqz (i32.load (i32.const @AH_WINNER))))
+              (then
+                (i32.store (i32.const @AH_WINNER) (i32.add (local.get $p) (i32.const 1)))
+                (call $a_news (i32.const @MX_WIN) (local.get $p) (local.get $p)))))))))
+  (i32.ne (i32.load (i32.const @AH_WINNER)) (i32.const 0)))

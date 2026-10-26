@@ -12,6 +12,7 @@ export const MODE_NAMES = {
   [L.M_FIESTA]: { name: 'DOGFIGHT', rules: 'EVERY SHIP FOR ITSELF  MOST KILLS IN 10 MIN' },
   [L.M_SLAYER]: { name: 'TEAM DOGFIGHT', rules: 'RED V BLUE  EVERY KILL SCORES FOR YOUR SIDE' },
   [L.M_JUGGERNAUT]: { name: 'JUGGERNAUT', rules: 'SHOOT DOWN THE JUGGERNAUT TO BECOME IT  10 POINTS' },
+  [F.M_RACE]: { name: 'RING RACE', rules: `THROUGH THE GATES IN ORDER  ${F.LAPS} LAPS  FIRST HOME WINS` },
 };
 export const modeName = (m) => MODE_NAMES[m] ?? MODE_NAMES[L.M_FIESTA];
 
@@ -44,4 +45,24 @@ View.prototype.ship = function ship(p) {
     boost: d.getUint8(b + F.F_BOOST), spent: !!(bits & F.FB_SPENT), roll: d.getUint8(b + F.F_ROLL), rollLeft: !!(bits & F.FB_LEFT),
     charge: d.getUint8(b + F.F_CHARGE), held: !!(bits & F.FB_HELD), bombs: f.grens,
   };
+};
+
+// Ring Race's course as init laid it out (layout.mjs MAP_RACE): its gates in
+// order, each { pos: [x, y, z], r }; none for a map without a race.
+View.prototype.race = function race() {
+  const d = this.dv;
+  const n = Math.min(d.getUint32(L.MAP_RACE, true), F.NGATE);
+  const gates = [];
+  for (let k = 0; k < n; k++) {
+    const a = L.MAP_RACE + 16 + 16 * k;
+    gates.push({ pos: [d.getFloat32(a, true), d.getFloat32(a + 4, true), d.getFloat32(a + 8, true)], r: d.getFloat32(a + 12, true) });
+  }
+  return gates;
+};
+
+// Slot p's place in a race: gates passed (MR_POINTS), and from them its lap
+// (0-based) and next gate; done once it has been round LAPS times.
+View.prototype.racer = function racer(p, n = this.race().length) {
+  const passed = this.dv.getUint16(L.MODE_REC + p * L.MR_SIZE + L.MR_POINTS, true);
+  return { passed, lap: n ? Math.floor(passed / n) : 0, next: n ? passed % n : 0, done: n > 0 && passed >= n * F.LAPS };
 };

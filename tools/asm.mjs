@@ -11,8 +11,8 @@
 // FLIGHT set too: every fighter a ship; bumper balls (build/bumper/) is src/ with
 // BUMPER set: every player a ball; party (build/party/) is src/ with BUMPER
 // and PARTY set: bumper's ball, a different minigame every round.
-// Fireplace (build/fireplace/) is golf, the arena, bumper balls and party in one
-// module, each as its own build would be under a prefix, with src/fireplace.wat
+// Fireplace (build/fireplace/) is golf, the arena, bumper balls, party and
+// flight in one module (the arena on Box Canyon, flight on its own map), each as its own build would be under a prefix, with src/fireplace.wat
 // dispatching to the one on now.
 //   (!macro args...)        JS macros from src/macros.mjs; args are raw s-expressions
 //
@@ -306,10 +306,12 @@ export function prefixed(wat, prefix) {
   return out.replace(/\(func (\$[\w.]+) \(export "\w+"\)/g, '(func $1');
 }
 
-export const GAMESETS = [['g', {}], ['a', { ARENA: true }], ['b', { BUMPER: true }], ['p', { BUMPER: true, PARTY: true }]];
+export const GAMESETS = [['g', {}], ['a', { ARENA: true }], ['b', { BUMPER: true }], ['p', { BUMPER: true, PARTY: true }], ['f', { ARENA: true, FLIGHT: true }]];
 
 export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = makeMacros, map = compileMap(), src = join(ROOT, 'src') } = {}) {
-  const games = GAMESETS.map(([prefix, flags]) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...flags, layout: lay, macros, map: flags.ARENA ? map : null }), prefix));
+  // flight flies its own map, whatever the arena's
+  const flightMap = compileMap(mapDir(lay.FLIGHT_CONSTS.FLIGHT_MAP));
+  const games = GAMESETS.map(([prefix, flags]) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...flags, layout: lay, macros, map: flags.FLIGHT ? flightMap : flags.ARENA ? map : null }), prefix));
   const fp = expand(join(src, 'fireplace.wat'), { DEBUG, layout: lay, macros });
   const wat = `(module\n  (import "env" "mem" (memory ${lay.PAGES} ${lay.PAGES} shared))\n${games.join('\n')}\n${fp}\n)\n`;
   forbid(wat);

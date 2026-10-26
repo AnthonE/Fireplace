@@ -5,7 +5,7 @@
 // them, it sees the world that old and says so in its frames, so its lasers
 // are checked where it saw its targets. The determinism matrix replays it.
 // --mode k forces every match to mode k (layout.mjs FLIGHT_MODES: 0 a
-// free-for-all, 4 Team Slayer, 3 Juggernaut) through the seed.
+// free-for-all, 4 Team Slayer, 3 Juggernaut, 12 Ring Race) through the seed.
 //   node tools/genflight.mjs [--seed 7] [--bots 8] [--ticks 20000] [--delay 6] [--mode k] [--out logs/flight.qgl]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

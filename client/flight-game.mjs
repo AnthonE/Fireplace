@@ -9,8 +9,10 @@
 // engine trails, markers on the ships about you, a radar, shields and hull,
 // the boost meter, bombs, the charge, a kill feed and the board, each as the
 // match's mode has them (layout.mjs FLIGHT_MODES: a free-for-all, red
-// against blue, the juggernaut). flight.html mounts it alone.
-//   opts: { canvas, lockTarget, bot, skill, sens, fixed (a spectator's held camera: x, y, z, yaw, pitch in degrees), present, showGraph }
+// against blue, the juggernaut). flight.html mounts it alone; Fireplace
+// mounts it while the room plays Dogfight.
+//   opts: { canvas, lockTarget, bot, skill, sens, fixed (a spectator's held camera: x, y, z, yaw, pitch in degrees), present, showGraph,
+//           external (the slots are driven from outside, as Fireplace's guest does: the camera follows them) }
 //
 // Controls: the mouse aims; left click fires lasers (held, as fast as they
 // go); right click or Space held builds the charge shot, let go fires it;
@@ -42,11 +44,12 @@ const MARKS = 32; // ships marked on screen at most, the nearest
 // How a pilot stands under the match's mode, higher is better (the sim's $a_key while play goes on).
 function standing(m, o, teamWin = 0) {
   if (m < 32 && (1 << m) & L.TEAMED) return (teamWin && teamWin === o.team + 1 ? 2 ** 31 : 0) + Math.min(o.points, 0x7fff) * 65536 + Math.min(o.kills, 0xffff);
-  if (m === L.M_JUGGERNAUT) return o.points * 65536 + o.kills;
+  // Ring Race's gates passed are its points
+  if (m === L.M_JUGGERNAUT || m === F.M_RACE) return o.points * 65536 + o.kills;
   return o.kills * 65536 - o.deaths;
 }
 
-export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, skill = 0.7, sens: SENS = 3, fixed: FIXED = null, present = true, showGraph: graphOn = false } = {}) {
+export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, skill = 0.7, sens: SENS = 3, fixed: FIXED = null, present = true, showGraph: graphOn = false, external = false } = {}) {
   const { u8, i32, f32, f64, view, pview, set, get, press, sound, memory, hashes, keys } = host;
   const WATCH = host.watch || !!FIXED;
   const W = canvas.width, H = canvas.height;
@@ -99,7 +102,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else if (BOT) {
-    bot = new Pilot(0, (Math.random() * 1e9) | 0, skill);
+    if (!external) bot = new Pilot(0, (Math.random() * 1e9) | 0, skill);
     on(document, 'keydown', (e) => {
       if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); }
       if (e.code === 'KeyN' && !e.repeat) showGraph = !showGraph;
@@ -250,6 +253,14 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
             glow: (g) => glows.push({ ...g, born: now, life: g.life ?? 400 }), sound, dist: d, C, now, view });
           break;
         }
+        // Ring Race: a gate (your own: a tick), a lap begun or the race finished
+        if (f.size === F.MX_GATE) { if (own) sound.tick(); break; }
+        if (f.size === F.MX_LAP) {
+          const done = f.shot >= F.LAPS;
+          say(`${name(f.owner, slot)} ${done ? 'FINISHED' : `LAP ${f.shot + 1}`}`, own ? C.GREEN : C.WHITE, now);
+          if (own) { banner = { text: done ? 'FINISHED' : f.shot + 1 === F.LAPS ? 'LAST LAP' : `LAP ${f.shot + 1} OF ${F.LAPS}`, until: now + 2000, color: done ? C.YELLOW : C.CYAN }; sound.pickup(); }
+          break;
+        }
         if (f.size === L.MX_JUGG) { say(`${name(f.owner, slot)} ${own ? 'ARE' : 'IS'} THE JUGGERNAUT`, C.ORANGE, now); if (own) banner = { text: 'YOU ARE THE JUGGERNAUT', until: now + 2500, color: C.ORANGE }; }
         else if (f.size === L.MX_WIN) say(`${name(f.owner, slot)} ${own ? 'WIN' : 'WINS'}`, C.YELLOW, now);
         else if (f.size === L.MX_TEAMWIN) {
@@ -334,6 +345,17 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       }
       if (p === lock) r(X - 1, Y - 1, X + 1, Y + 1, c, Math.floor(now / 100) % 2 ? 1 : 0.3);
     }
+    // Ring Race: the next gate's waypoint, a diamond and its distance (pulled in to the screen's edge off it)
+    const gates = md.mode === F.M_RACE ? view.race() : [];
+    if (gates.length && f.slot >= 0) {
+      const g = gates[view.racer(f.slot, gates.length).next];
+      let [x, y, z] = project(cv, W, H, g.pos);
+      if (z < 0.3) { x = x < W / 2 ? 0 : W; y = H / 2; }
+      // kept over the radar (bottom right) and the bars (bottom left)
+      const X = Math.max(8, Math.min(312, x / S)), Y = Math.max(30, Math.min(150, y / S)), c = [1, 0.85, 0.25];
+      r(X - 1, Y - 5, X + 1, Y + 5, c, 0.95); r(X - 5, Y - 1, X + 5, Y + 1, c, 0.95); r(X - 3, Y - 3, X + 3, Y + 3, c, 0.5);
+      gateAt = [X, Y, Math.round(Math.hypot(g.pos[0] - f.drawn[0], g.pos[1] - f.drawn[1], g.pos[2] - f.drawn[2]))];
+    }
     // the radar, bottom right: 300 m about you, your heading up
     const R = 26, cx = W - 34 * S, cy = H - 34 * S;
     const fy = Math.cos(f.heading[0]), fz = Math.sin(f.heading[0]);
@@ -384,6 +406,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   }
 
   let myPos = [0, 0, 0];
+  let gateAt = null; // Ring Race: the next gate's waypoint on screen [x, y (320 x 200 units), metres away], for its text
   let camState = null; // the spectator's and the dead's eased camera: { pos, f }
   let last = null;
   const mine = new Uint8Array(L.PSIZE);
@@ -412,6 +435,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       tgt = watched >= 0 ? view.ship(watched) : null;
     }
     // the pilot flies the slot as the keys and mouse would
+    if (external) { yaw = get(L.CL_YAW); pitch = get(L.CL_PITCH); }
     if (bot && me?.live && st === 2) {
       bot.slot = slot;
       const w = unpackArena(bot.think(view, h.tick, Math.round(readClock(i32, f64, L.CL_PRED, nowE) - readClock(i32, f64, L.CL_PLAY, nowE))));
@@ -513,6 +537,16 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       const grow = g.grow ? 0.35 + 0.65 * Math.min(1, a / 0.4) : 1;
       glow.push({ pos: g.pos, size: g.size * grow, color: [g.color[0], g.color[1], g.color[2], (g.color[3] ?? 1) * (1 - a)], kind: g.kind, minpx: 1 });
     }
+    // Ring Race's gates: the next one yours bright and pulsing, the one after it fainter, the rest a glimmer
+    if (view.dv.getUint32(L.AH_MODE, true) === F.M_RACE) {
+      const gates = view.race();
+      const who = tgt ? watched : slot;
+      const next = who >= 0 ? view.racer(who, gates.length).next : -1;
+      gates.forEach((g, k) => {
+        const lead = k === next, after = gates.length && k === (next + 1) % gates.length;
+        glow.push({ pos: g.pos, size: g.r * (lead ? 1 + 0.06 * Math.sin(now / 120) : 1), color: lead ? [1, 0.85, 0.25, 0.9] : after ? [1, 0.85, 0.25, 0.4] : [0.6, 0.8, 1, 0.18], kind: 6, minpx: 3 });
+      });
+    }
     // every ship's charge building on its nose
     for (let p = 0; p < L.NPLAYER; p++) {
       const o = p === slot && pme ? pme : null;
@@ -568,6 +602,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
     let rects = [], blips = [], radar = null;
     const playing = st === 2 && f?.live;
+    gateAt = null;
     if (playing && !f.dead && !FIXED) {
       const hr = hudRects({ ...f, drawn: f === pme || f === me ? myPos : f.pos }, now, cv, cam);
       rects = hr.rects; blips = hr.blips; radar = hr.radar;
@@ -625,6 +660,17 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         put(t, COLS, 1, 0, `${who}: ${SIDE[team] ?? ''}`, SIDE_C[team] ?? C.YELLOW);
         put(t, COLS, 1, 1, `${f.kills} KILL${f.kills === 1 ? '' : 'S'}  ${f.deaths} DEATH${f.deaths === 1 ? '' : 'S'}`, C.GREY);
         AMC[m]?.hud(view, { put: (x, y, s, c) => put(t, COLS, x, y, s, c), centre, right, rect: () => {}, rows, C, slot, me: f, team, now, t: 0 });
+      } else if (m === F.M_RACE) {
+        // your gate and lap, and who leads
+        const n = view.race().length;
+        const rc = view.racer(f.slot, n);
+        put(t, COLS, 1, 0, rc.done ? `${who}: FINISHED` : `${who}: GATE ${rc.next + 1} OF ${n}  LAP ${rc.lap + 1} OF ${F.LAPS}`, C.YELLOW);
+        const lead = list[0];
+        if (lead && lead.slot !== f.slot) { const lr = view.racer(lead.slot, n); put(t, COLS, 1, 1, `P${lead.slot + 1} ${lr.done ? 'FINISHED' : `LAP ${lr.lap + 1} GATE ${lr.next + 1}`}`, C.GREY); }
+        if (gateAt && !f.dead) {
+          const col = Math.max(0, Math.min(COLS - 6, Math.round(gateAt[0] * S / 4) - 2)), row = Math.round(gateAt[1] * S / 6);
+          put(t, COLS, col, Math.min(rows - 1, row + 2), `${gateAt[2]}M`, C.YELLOW);
+        }
       } else if (m === L.M_JUGGERNAUT) {
         put(t, COLS, 1, 0, `${who} ${f.points} POINT${f.points === 1 ? '' : 'S'}${f.jugg ? '  JUGGERNAUT' : ''}`, f.jugg ? C.ORANGE : C.YELLOW);
         const j = md.leader >= 0 ? view.ship(md.leader) : null;
@@ -659,8 +705,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (!board) return;
     const y0 = 6;
     const over = h.state === L.H_OVER;
-    const cols = m === L.M_JUGGERNAUT ? ['POINTS', 'KILLS', 'DEATHS'] : ['KILLS', 'DEATHS'];
-    const cells = (o) => (m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths] : [o.kills, o.deaths]);
+    const n = m === F.M_RACE ? view.race().length : 0;
+    const cols = m === L.M_JUGGERNAUT ? ['POINTS', 'KILLS', 'DEATHS'] : m === F.M_RACE ? ['GATES', 'LAP', 'KILLS'] : ['KILLS', 'DEATHS'];
+    const cells = (o) => (m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths]
+      : m === F.M_RACE ? [o.points, view.racer(o.slot, n).done ? 'DONE' : `${view.racer(o.slot, n).lap + 1}/${F.LAPS}`, o.kills] : [o.kills, o.deaths]);
     const row = (rank, nm, xs) => `${String(rank).padStart(4)}  ${String(nm).padEnd(8)}${xs.map((x, k) => '  ' + String(x).padStart(Math.max(6, cols[k].length))).join('')}`;
     const nameOf = (o) => (o.slot === slot && !WATCH ? 'YOU ' : 'P') + String(o.slot + 1);
     if (md.teamed) {

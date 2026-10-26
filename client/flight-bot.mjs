@@ -4,11 +4,13 @@
 // nose on it with an aim that settles as a human's does, fires lasers while
 // the nose is on, now and then holds a charge shot and lets it go with the
 // target ahead, drops a bomb into a crowd close ahead, boosts to close a long
-// gap and brakes rather than overshoot, and rolls when it's hit. Under it
+// gap and brakes rather than overshoot, swerves from a ship about to meet
+// it, and rolls when it's hit. Under it
 // all it keeps off the ground (looking ahead along where it's going), under
 // the ceiling and inside the map, which wins over any target. With nobody
 // to chase it flies to waypoints. Under a mode with sides it leaves its own
-// alone. Deterministic from its seed and what it sees, so a match of pilots
+// alone. In Ring Race it flies at its next gate, boosting on the long legs,
+// and fires only at what is already on its nose. Deterministic from its seed and what it sees, so a match of pilots
 // is an ordinary event log.
 import * as L from '../src/layout.mjs';
 import * as F from '../src/flight.mjs';
@@ -76,8 +78,16 @@ export class Pilot {
     this.err = [this.err[0] * k, this.err[1] * k];
     const wobble = (1 - this.skill) * 0.04;
 
-    let want, dist = Infinity, to = null;
-    if (this.target >= 0) {
+    let want, dist = Infinity, to = null, gate = null;
+    const racing = view.dv.getUint32(L.AH_MODE, true) === F.M_RACE && h.state === L.H_PLAY;
+    if (racing) {
+      const gates = view.race();
+      if (gates.length) gate = gates[view.racer(this.slot, gates.length).next];
+    }
+    if (this.target >= 0) to = pos(this.target), dist = Math.hypot(to[0] - me.pos[0], to[1] - me.pos[1], to[2] - me.pos[2]);
+    if (gate) {
+      want = norm([gate.pos[0] - me.pos[0], gate.pos[1] - me.pos[1], gate.pos[2] - me.pos[2]]);
+    } else if (this.target >= 0) {
       to = pos(this.target);
       const d = [to[0] - me.pos[0], to[1] - me.pos[1], to[2] - me.pos[2]];
       dist = Math.hypot(...d);
@@ -93,6 +103,27 @@ export class Pilot {
     let yaw = Math.atan2(want[2], want[0]) + this.err[0] + wobble * Math.sin(t * 0.05 + this.slot);
     let pitch = Math.asin(Math.max(-1, Math.min(1, want[1]))) + this.err[1] + wobble * Math.sin(t * 0.07 + 2 * this.slot);
 
+    // a ship about to meet it (closest within 6 m in the next 0.8 s): swerve
+    // to the side away from it and up, ships meeting hurt both (src/flight.wat $f_collide)
+    for (let q = 0; q < L.NPLAYER; q++) {
+      if (q === this.slot || (view.u8[L.PLAYERS + q * L.PSIZE + L.P_FL] & (L.PF_LIVE | L.PF_DEAD)) !== L.PF_LIVE) continue;
+      const p = pos(q);
+      const d = [p[0] - me.pos[0], p[1] - me.pos[1], p[2] - me.pos[2]];
+      if (Math.abs(d[0]) > 60 || Math.abs(d[2]) > 60) continue;
+      const b = L.PLAYERS + q * L.PSIZE;
+      const rv = [L.P_VX, L.P_VY, L.P_VZ].map((o, k) => view.dv.getFloat32(b + o, true) - me.vel[k]);
+      const rv2 = rv[0] ** 2 + rv[1] ** 2 + rv[2] ** 2;
+      if (rv2 < 1) continue;
+      const tc = -(d[0] * rv[0] + d[1] * rv[1] + d[2] * rv[2]) / rv2;
+      if (tc < 0 || tc > 0.8) continue;
+      const miss = Math.hypot(d[0] + rv[0] * tc, d[1] + rv[1] * tc, d[2] + rv[2] * tc);
+      if (miss > 6) continue;
+      const side = d[0] * Math.sin(yaw) - d[2] * Math.cos(yaw) > 0 ? 1 : -1; // it's to the left: go right
+      yaw += side * 0.7;
+      pitch += 0.35;
+      break;
+    }
+
     // the map's edge: heading out near it, turn for the middle
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
     const out = me.pos[0] < x0 + EDGE && Math.cos(yaw) < 0 || me.pos[0] > x1 - EDGE && Math.cos(yaw) > 0
@@ -107,7 +138,9 @@ export class Pilot {
       if (need > pitch) pitch = need;
     }
     const ahead = [cy * Math.cos(pitch), Math.sin(pitch), sy * Math.cos(pitch)];
-    if (boxRay(map, me.pos, ahead, 50) < 50) pitch = Math.max(pitch, 0.6);
+    // (anything built nearer than the gate it's flying through)
+    const reach = gate ? Math.min(50, Math.hypot(gate.pos[0] - me.pos[0], gate.pos[1] - me.pos[1], gate.pos[2] - me.pos[2]) - gate.r) : 50;
+    if (reach > 0 && boxRay(map, me.pos, ahead, reach) < reach) pitch = Math.max(pitch, 0.6);
     if (me.pos[1] - view.height(me.pos[0], me.pos[2]) < CLEAR) pitch = Math.max(pitch, 0.45);
     if (me.pos[1] > ceil - 10) pitch = Math.min(pitch, -0.1);
     pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch));
@@ -140,8 +173,9 @@ export class Pilot {
     if (health < this.health && !me.roll && this.rand() < 0.3) this.roll ^= 1;
     this.health = health;
     // a long way to go: boost; about to overshoot: brake
-    const boost = to && dist > 140 && me.boost > 60 && !me.spent;
-    const brake = to && dist < 30 && me.boost > 30 && !me.spent;
+    const gd = gate ? Math.hypot(gate.pos[0] - me.pos[0], gate.pos[2] - me.pos[2]) : 0;
+    const boost = gate ? gd > 120 && me.boost > 60 && !me.spent : to && dist > 140 && me.boost > 60 && !me.spent;
+    const brake = !gate && to && dist < 30 && me.boost > 30 && !me.spent;
     return this.word({
       yaw: Math.round(yaw / TAU * 16384) & 16383, pitch: Math.max(0, Math.min(1023, Math.round(512 + pitch / Math.PI * 1024))),
       boost, brake, left: (t >> 9) & 1, charge, serial,
