@@ -48,6 +48,7 @@ import * as W from './wire.mjs';
 import * as L from '../src/layout.mjs';
 import { recordLog } from './inbox.mjs';
 import { encodeReplay } from './replay.mjs';
+import { simRefusal } from './sim-check.mjs';
 
 const argv = Deno.args;
 const opt = (k: string, d: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
@@ -101,18 +102,11 @@ const prefix = await W.wasmPrefix(wasm);
 const game = opt('game', ((d) => (d && d !== 'build' ? d : 'golf'))(wasmPath.split('/').slice(-2, -1)[0]));
 // The sim may be someone else's: the referee gives it the shared memory and
 // nothing else, so it can't reach a file or a socket, and a module that asks
-// for more is refused here, by name, rather than failing in the Worker.
+// for more is refused here, by name, rather than failing in the Worker
+// (net/sim-check.mjs, which the kit's room pool checks with too).
 {
-  const refuse = (why: string) => { console.error(`relay: ${wasmPath}: ${why}`); Deno.exit(2); };
-  let mod: WebAssembly.Module | null = null;
-  try { mod = await WebAssembly.compile(wasm); } catch (e) { refuse(`not a wasm module (${e})`); }
-  const imports = WebAssembly.Module.imports(mod!);
-  const odd = imports.filter((i) => !(i.module === 'env' && i.name === 'mem' && i.kind === 'memory'));
-  if (odd.length || imports.length !== 1) refuse(`imports ${imports.map((i) => `${i.module}.${i.name} (${i.kind})`).join(', ') || 'nothing'}; a sim imports only env.mem, its shared memory`);
-  const have = new Set(WebAssembly.Module.exports(mod!).map((e) => e.name));
-  const need = ['init', 'step', 'snapshot', 'regrid', ...(refereeThreads > 1 ? ['step_mt', 'worker_run'] : [])];
-  const missing = need.filter((n) => !have.has(n));
-  if (missing.length) refuse(`does not export ${missing.join(', ')}`);
+  const why = await simRefusal(wasm, refereeThreads);
+  if (why) { console.error(`relay: ${wasmPath}: ${why}`); Deno.exit(2); }
 }
 
 type Slot = {
