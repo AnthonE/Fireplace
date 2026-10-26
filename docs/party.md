@@ -2,8 +2,8 @@
 
 ![Fruit Chute with 128 balls: the belt carrying everyone down, fruit rolling down the lanes](p1-chute-128.png)
 
-Bumper balls' ball, and every round a different minigame: thirty of them,
-after Mario Party, Fall Guys, Squid Game and Roblox, up to 256 in a room.
+Bumper balls' ball, and every round a different minigame: thirty-one of them,
+after Mario Party, Mario Kart's battle mode, Fall Guys, Squid Game and Roblox, up to 256 in a room.
 `src/` built with `BUMPER` and `PARTY` set (`build/party/game.wasm`), with the
 same lockstep, relays, keyframes, prediction, spectators and replays.
 
@@ -53,6 +53,7 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 27 | GATE CRASH | finishing order | 148 to 256 m of straight, railed course crossed by 8 to 12 walls of portcullises, 3 gates a wall for one ball up to 9 for 256; each gate on its own clock from the seed, a period of 3.6 s at the first wall down to 2.4 s at the last, up for 60% of it shrinking to 38% down the course and over the first 60 s; it flashes 0.8 s, then slams down in 0.1 s; under a ball's top it's a wall, and coming down on a ball it knocks it back at 12 m/s and up; between walls, belts running back at 3 m/s and rows of bumper posts; the first over the line leaves the rest 30 s, who place by how far down the course they are; bumps without the kick |
 | 28 | STOMPIN GROUND | last one in | boulders on stubby legs drop out of the sky onto a slate disc and charge across it on curved arcs, each path glowing on the floor 1.4 s ahead; one that meets you sends you flying its way and up, a glancing one shoves you aside; from 15 s some leap in onto a marked ring instead: under it you're thrown clear, and its shockwave runs out along the floor at ball height to 14 m, knocking outward whoever is on the floor as it passes (hop it); waves grow, close from 3.2 s to 1.4 s apart and run 10 to 15 m/s, more of them leaping; from 60 s the rim crumbles in to 12 m; balls one stomper sent off share the win |
 | 29 | SEESAWS | last one in | planks 18 m long on pivots over the sea, one for every 4 balls, in rows with 2 m hops between; each tips under the weight on it 2.05 s late (the slope it's heading for glows over it as a ghost), up to 32 degrees, and levels slowly when empty; the slope pulls you down it and off its low end; from 30 s planks are cut shorter or narrower one by one, from 60 s they drop away for good, flashing 3 s first; bumps on |
+| 30 | KART GRAB | points | every ball drives a go-kart round a walled square course: the nose turns toward where you look (2.5 rad/s at speed, 45% of it standing), W the gas to 15 m/s, S the brake and then reverse, grip that bleeds off a slide; Space held through a turn hops into a drift that keeps its speed and charges a mini-turbo (0.64 s held for a short boost, 1.44 s for a long one); toy blocks on a 14 m lattice, dash panels in the lanes between them, item boxes in every cell and round the middle handing out bumper's power-ups (DASH a mushroom, ROCKET a shell, a kart behind the room's average more POW and MEGA); coins drop in lines all over it; a blast, a stomp or a MEGA kart spins you out 1 s and knocks 3 to 8 of your coins loose for anyone; the last 15 s a coin fever |
 
 **How it fits on the engine.** `src/party.wat` is the framework: the rounds,
 the rotation, joins, the ball's roll over any stage, outs, places and points.

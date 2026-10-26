@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-44 games, each gated online: golf, bumper balls, the arena's twelve modes
+45 games, each gated online: golf, bumper balls, the arena's twelve modes
 (Grab Bag, Zombies, gun game, Juggernaut, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 30 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 31 minigames. Fireplace plays them in turn.
 
 What a page downloads, gzipped, everything it imports included:
 
@@ -56,7 +56,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 30 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
+| Party (the ball) | 31 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
 | Arena (the fighter) | 12 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
@@ -203,7 +203,12 @@ marshmallows).
    Party's teams and their games (Fall Ball, Egg Scramble, Tug o' War,
    Volleyfall), the champion kit and FFA ARAM are left.
 2. The grid kit: Tetris 99, Bomberman 128, Snake, Puyo 99.
-3. The vehicle kit and karts.
+3. The vehicle kit and karts. A kart's handling exists already, as one
+   Party minigame's push on the ball (Kart Grab, `src/mg/kart.wat`): a
+   heading, a drift's charge and a spin-out packed in the record's `PG_M`,
+   the gas, the grip and the drift worked along the heading, exact in the
+   prediction. The kit makes the kart a body of its own (a box on wheels, not
+   a ball) and puts a race, balloon battle and the rest of the list on it.
 4. Then waves of 12 to 16 Party and arena games.
 5. The Elo Pros wrapper, whenever: it depends on nothing above.
 

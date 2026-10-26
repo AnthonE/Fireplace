@@ -31,5 +31,6 @@ import glass from './glass.mjs';
 import gates from './gates.mjs';
 import stomp from './stomp.mjs';
 import seesaw from './seesaw.mjs';
+import kart from './kart.mjs';
 
-export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw];
+export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw, kart];
