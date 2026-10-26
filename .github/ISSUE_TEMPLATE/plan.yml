@@ -1,0 +1,126 @@
+name: Plan my game
+description: Answer a few questions and Claude writes your game's plan as a pull request, with your first tasks as issues
+title: "[plan] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Answer what you can. A guess is fine; you can change everything later.
+
+        When you open this issue, Claude reads your answers and opens a pull request with three files: `docs/design.md` (your game on one page), `docs/plan.md` (the steps, each with a command that checks it's done) and `elo.json` (your game's card for the Elo Pros store). Each first step also becomes an issue. Comment `@claude` on one and Claude builds it as a pull request.
+
+        This needs a secret in this repo first: **Settings > Secrets and variables > Actions > New repository secret**, named `ANTHROPIC_API_KEY` (a key from console.anthropic.com) or `CLAUDE_CODE_OAUTH_TOKEN` (run `claude setup-token` if you have a Claude plan). It runs on your Claude usage; a plan costs about as much as a long chat. No secret yet? Open the issue anyway and the bot says what to do.
+  - type: input
+    id: name
+    attributes:
+      label: What is your game called?
+      description: A working title is fine.
+      placeholder: Snow Fort Party
+    validations:
+      required: true
+  - type: textarea
+    id: pitch
+    attributes:
+      label: In one sentence, what do players do together?
+      placeholder: Everyone builds a snow fort, then the snowballs fly and the last fort standing wins.
+    validations:
+      required: true
+  - type: dropdown
+    id: players
+    attributes:
+      label: How many people play at once?
+      options:
+        - 2 to 4
+        - 5 to 16
+        - 17 to 100
+        - more than 100
+    validations:
+      required: true
+  - type: dropdown
+    id: session
+    attributes:
+      label: How long is one game?
+      options:
+        - under 5 minutes
+        - 5 to 30 minutes
+        - over 30 minutes
+        - it never ends
+    validations:
+      required: true
+  - type: dropdown
+    id: stakes
+    attributes:
+      label: Does anyone gain by cheating?
+      options:
+        - no, it's for fun
+        - "yes: rank, items or money are at stake"
+    validations:
+      required: true
+  - type: dropdown
+    id: persist
+    attributes:
+      label: Does the world remember between games?
+      options:
+        - no, every game starts fresh
+        - yes, things stay built or owned
+    validations:
+      required: true
+  - type: dropdown
+    id: secrets
+    attributes:
+      label: Do players see different things?
+      options:
+        - no, everyone sees the same board
+        - "yes: fog of war, hidden cards"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where do people play?
+      options:
+        - in a browser tab
+        - a desktop app
+        - both
+    validations:
+      required: true
+  - type: dropdown
+    id: agents
+    attributes:
+      label: May AI agents play it too?
+      options:
+        - "yes"
+        - "no"
+        - not sure yet
+    validations:
+      required: true
+  - type: dropdown
+    id: money
+    attributes:
+      label: Do you want to sell it?
+      description: No is fine. You can add this later.
+      options:
+        - it's free
+        - sell copies
+        - sell copies and have a coin
+    validations:
+      required: true
+  - type: input
+    id: price
+    attributes:
+      label: If you sell it, what does a copy cost, in dollars?
+      placeholder: "4.99"
+  - type: checkboxes
+    id: have
+    attributes:
+      label: What do you have already?
+      options:
+        - label: nothing yet
+        - label: some code
+        - label: art
+        - label: a GitHub repo
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else Claude should know?
+      description: Games you like, how it should feel, what you want to learn.

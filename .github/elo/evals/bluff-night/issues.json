@@ -1,0 +1,27 @@
+[
+  {
+    "title": "Run the game once, unchanged",
+    "check": "npm ci && node tools/kit.mjs check",
+    "body": "Make sure your copy builds and passes its quick tests:\n\n```sh\nnpm ci && node tools/kit.mjs check\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Start the HIGH LOW minigame",
+    "check": "npm run build && node --test test/mg-bluff.test.mjs test/party.test.mjs",
+    "body": "Secret cards need a different kit (see docs/design.md), so the first round has nothing hidden:\n\n```sh\nnode tools/new-mg.mjs bluff bf \"HIGH LOW\"\n```\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-bluff.test.mjs test/party.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "A card everyone sees, and two pads",
+    "check": "npm run build && node --test test/mg-bluff.test.mjs",
+    "body": "Show a card to everyone, and put a \"higher\" pad and a \"lower\" pad on the table.\n\n```sh\nnpm run build && node --test test/mg-bluff.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "The wrong pad tips you off",
+    "check": "npm run build && node --test test/mg-bluff.test.mjs",
+    "body": "When the next card turns over, the wrong pad tips its balls off the table.\n\n```sh\nnpm run build && node --test test/mg-bluff.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "See it on your page",
+    "check": "npm run build && node tools/site.mjs",
+    "body": "Turn on your page once: Settings > Pages > Source: GitHub Actions. Then `client/party.html?mg=30` plays HIGH LOW.\n\n```sh\nnpm run build && node tools/site.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  }
+]

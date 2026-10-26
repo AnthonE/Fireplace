@@ -1,0 +1,27 @@
+[
+  {
+    "title": "Run the game once, unchanged",
+    "check": "npm ci && node tools/kit.mjs check",
+    "body": "Make sure your copy builds and passes its quick tests:\n\n```sh\nnpm ci && node tools/kit.mjs check\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Start the CASTLE RAID minigame",
+    "check": "npm run build && node --test test/mg-keep.test.mjs test/party.test.mjs",
+    "body": "Castles that last between games need a different kit (see docs/design.md), so the raid comes first, as a round of Party:\n\n```sh\nnode tools/new-mg.mjs keep kk \"CASTLE RAID\"\n```\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-keep.test.mjs test/party.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "30 seconds to stack a castle",
+    "check": "npm run build && node --test test/mg-keep.test.mjs",
+    "body": "At the start of a round each player stacks a small castle on their spot.\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-keep.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Knock castles down; the last one standing wins",
+    "check": "npm run build && node --test test/mg-keep.test.mjs",
+    "body": "After the build, roll into the other castles to knock them down.\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-keep.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "See it on your page",
+    "check": "npm run build && node tools/site.mjs",
+    "body": "Turn on your page once: Settings > Pages > Source: GitHub Actions. Then `client/party.html?mg=30` plays CASTLE RAID.\n\n```sh\nnpm run build && node tools/site.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  }
+]

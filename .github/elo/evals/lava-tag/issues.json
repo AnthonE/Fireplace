@@ -1,0 +1,32 @@
+[
+  {
+    "title": "Run the game once, unchanged",
+    "check": "npm ci && node tools/kit.mjs check",
+    "body": "Make sure your copy builds and passes its quick tests:\n\n```sh\nnpm ci && node tools/kit.mjs check\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Start the LAVA TAG minigame",
+    "check": "npm run build && node --test test/mg-lavatag.test.mjs test/party.test.mjs",
+    "body": "This writes a new minigame that already plays and adds it to Party:\n\n```sh\nnode tools/new-mg.mjs lavatag lg \"LAVA TAG\"\n```\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-lavatag.test.mjs test/party.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "One player is it, and a tag passes it on",
+    "check": "npm run build && node --test test/mg-lavatag.test.mjs",
+    "body": "Pick who starts as \"it\". Bumping another player makes them \"it\".\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-lavatag.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "A lava trail behind whoever is it",
+    "check": "npm run build && node --test test/mg-lavatag.test.mjs",
+    "body": "The floor turns to lava where \"it\" rolls, for a few seconds. Touch it and you're out.\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-lavatag.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Bots that chase and dodge",
+    "check": "node --test test/mg-lavatag.test.mjs",
+    "body": "Teach the AI players the rules: chase when they're it, dodge the lava when they're not.\n\nCheck:\n\n```sh\nnode --test test/mg-lavatag.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "See it on your page",
+    "check": "npm run build && node tools/site.mjs",
+    "body": "Turn on your page once: Settings > Pages > Source: GitHub Actions. Then `client/party.html?mg=30` on it plays LAVA TAG.\n\n```sh\nnpm run build && node tools/site.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  }
+]

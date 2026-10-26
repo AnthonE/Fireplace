@@ -1,0 +1,9 @@
+{
+  "title": "[plan] Marble Mayhem",
+  "number": 1,
+  "expect": {
+    "kit": "party",
+    "sells": true
+  },
+  "body": "### What is your game called?\n\nMarble Mayhem\n\n### In one sentence, what do players do together?\n\nUp to four marbles race down a twisty track and knock each other off the edges.\n\n### How many people play at once?\n\n2 to 4\n\n### How long is one game?\n\nunder 5 minutes\n\n### Does anyone gain by cheating?\n\nno, it's for fun\n\n### Does the world remember between games?\n\nno, every game starts fresh\n\n### Do players see different things?\n\nno, everyone sees the same board\n\n### Where do people play?\n\nin a browser tab\n\n### May AI agents play it too?\n\nnot sure yet\n\n### Do you want to sell it?\n\nsell copies\n\n### If you sell it, what does a copy cost, in dollars?\n\n4.99\n\n### What do you have already?\n\n- [ ] nothing yet\n- [ ] some code\n- [X] art\n- [ ] a GitHub repo\n\n### Anything else Claude should know?\n\n_No response_"
+}

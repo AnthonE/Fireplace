@@ -1,0 +1,170 @@
+# Plan my game, then build it a task at a time, with Claude, on this repo's
+# own Claude usage (an ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN secret).
+#
+# plan: an issue opened from the "Plan my game" form (its title starts
+# "[plan]") by someone who can write to the repo. Its answers are read
+# (.github/elo/plan.mjs form), the repo takes the game's name (tools/kit.mjs
+# init), Claude writes docs/design.md, docs/plan.md and elo.json by
+# .github/elo/plan-prompt.md, the plan is checked and the kit's first run is
+# run, and it all goes up as one pull request, with each milestone-1 task
+# opened as an issue.
+#
+# build: "@claude" in a comment on an issue or a pull request, by someone who
+# can write to the repo. Claude does what it asks on a branch and links a pull
+# request.
+#
+# With no secret set, each says how to add one in a comment and stops. Issue
+# text reaches the scripts below only as files and environment variables,
+# never pasted into a command.
+name: elo-plan
+on:
+  issues:
+    types: [opened, reopened]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+jobs:
+  plan:
+    if: >-
+      github.event_name == 'issues' &&
+      startsWith(github.event.issue.title, '[plan]') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: plan-${{ github.event.issue.number }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is there a Claude secret?
+        id: secret
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$KEY$TOKEN" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "ok=0" >> "$GITHUB_OUTPUT"
+          gh issue comment "$ISSUE" --body-file .github/elo/no-secret.md
+      - uses: actions/setup-node@v4
+        if: steps.secret.outputs.ok == '1'
+        with:
+          node-version: 22
+      - name: Read the answers, and give the repo the game's name
+        if: steps.secret.outputs.ok == '1'
+        run: |
+          node .github/elo/plan.mjs form "$GITHUB_EVENT_PATH" .elo-plan/answers.json
+          node tools/kit.mjs init "$(jq -r .name .elo-plan/answers.json)" --slug "$(jq -r .slug .elo-plan/answers.json)" --blurb "$(jq -r .pitch .elo-plan/answers.json)"
+      - name: Claude writes the plan
+        if: steps.secret.outputs.ok == '1'
+        uses: anthropics/claude-code-action@v1.0.262
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Read .github/elo/plan-prompt.md and do what it says. The answers are in
+            .elo-plan/answers.json, from issue #${{ github.event.issue.number }} in ${{ github.repository }}.
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(node .github/elo/plan.mjs check:*)"
+      - name: Check the plan, and run the kit's first run on it
+        if: steps.secret.outputs.ok == '1'
+        id: check
+        run: |
+          set +e
+          node .github/elo/plan.mjs check . --answers .elo-plan/answers.json --issues .elo-plan/issues.json --pr .elo-plan/pr.md > .elo-plan/check.txt 2>&1
+          echo "plan=$?" >> "$GITHUB_OUTPUT"
+          (npm ci && node tools/kit.mjs check) > .elo-plan/first-run.txt 2>&1
+          echo "first=$?" >> "$GITHUB_OUTPUT"
+          cat .elo-plan/check.txt
+          tail -20 .elo-plan/first-run.txt
+      - name: Open the pull request and the first tasks
+        if: steps.secret.outputs.ok == '1'
+        env:
+          PLAN_OK: ${{ steps.check.outputs.plan }}
+          FIRST_OK: ${{ steps.check.outputs.first }}
+        run: |
+          name=$(jq -r .name .elo-plan/answers.json)
+          branch="plan/issue-$ISSUE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add -A
+          git commit -q -m "Plan: $name" -m "From #$ISSUE, by Claude (.github/elo/plan-prompt.md)."
+          git push -f origin "$branch"
+          {
+            if [ -s .elo-plan/pr.md ]; then cat .elo-plan/pr.md; else echo "The plan for **$name**."; fi
+            echo; echo "---"; echo "From #$ISSUE."
+            if [ "$PLAN_OK" = 0 ]; then echo "The plan passes its checks."; else echo "The plan checker found these (comment \`@claude\` here to have them fixed):"; echo; sed 's/^/    /' .elo-plan/check.txt; fi
+            if [ "$FIRST_OK" = 0 ]; then echo "The first run (\`npm ci && node tools/kit.mjs check\`) passes."; else echo "The first run (\`npm ci && node tools/kit.mjs check\`) failed; the log is in this workflow run."; fi
+          } > .elo-plan/body.md
+          url=$(gh pr view "$branch" --json url -q .url 2>/dev/null || gh pr create --head "$branch" --title "Plan: $name" --body-file .elo-plan/body.md || true)
+          if [ -z "$url" ]; then
+            url="https://github.com/$GITHUB_REPOSITORY/compare/$branch?expand=1"
+            note="Actions could not open the pull request itself (Settings > Actions > General > Workflow permissions: tick \"Allow GitHub Actions to create and approve pull requests\"). Open it here: $url"
+          else
+            note="The plan is ready for you to read: $url"
+          fi
+          tasks=""
+          if [ -s .elo-plan/issues.json ]; then
+            tasks=$(node .github/elo/plan.mjs issues .elo-plan/issues.json --plan "$ISSUE" --pr "$url" | sed 's/^/- /')
+          fi
+          {
+            echo "$note"
+            echo
+            if [ -n "$tasks" ]; then echo "Your first tasks:"; echo "$tasks"; echo; echo "Merge the plan, then do the first task, or comment \`@claude please do this task\` on it."; fi
+          } > .elo-plan/comment.md
+          gh issue comment "$ISSUE" --body-file .elo-plan/comment.md
+      - name: Say so if it stopped
+        if: failure()
+        run: |
+          gh issue comment "$ISSUE" --body "The plan stopped partway. What happened is in the run's log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Close and reopen this issue to try again."
+
+  build:
+    if: >-
+      (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is there a Claude secret?
+        id: secret
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -n "$KEY$TOKEN" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "ok=0" >> "$GITHUB_OUTPUT"
+          gh issue comment "$NUMBER" --body-file .github/elo/no-secret.md
+      - uses: actions/setup-node@v4
+        if: steps.secret.outputs.ok == '1'
+        with:
+          node-version: 22
+      - name: Install, so Claude can build and test
+        if: steps.secret.outputs.ok == '1'
+        run: npm ci
+      - name: Claude does the task
+        if: steps.secret.outputs.ok == '1'
+        uses: anthropics/claude-code-action@v1.0.262
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          claude_args: |
+            --max-turns 80
+            --allowedTools "Bash(npm ci),Bash(npm run build),Bash(npm test),Bash(node:*)"
+            --append-system-prompt "This repo is a browser game made from Fireplace; read CLAUDE.md and follow its rules. The person asking may be new to code: when you finish, say in plain words what you changed, how to try it (the command, or the page on their GitHub Pages site), and run the task's check command (it is in the issue) before you say it is done."

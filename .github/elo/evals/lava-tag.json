@@ -1,0 +1,9 @@
+{
+  "title": "[plan] Lava Tag",
+  "number": 1,
+  "expect": {
+    "kit": "party",
+    "sells": true
+  },
+  "body": "### What is your game called?\n\nLava Tag\n\n### In one sentence, what do players do together?\n\nWhoever is it turns the floor to lava where they roll, and everyone else has to dodge.\n\n### How many people play at once?\n\n17 to 100\n\n### How long is one game?\n\n5 to 30 minutes\n\n### Does anyone gain by cheating?\n\nno, it's for fun\n\n### Does the world remember between games?\n\nno, every game starts fresh\n\n### Do players see different things?\n\nno, everyone sees the same board\n\n### Where do people play?\n\nboth\n\n### May AI agents play it too?\n\nyes\n\n### Do you want to sell it?\n\nsell copies and have a coin\n\n### If you sell it, what does a copy cost, in dollars?\n\n_No response_\n\n### What do you have already?\n\n- [ ] nothing yet\n- [X] some code\n- [ ] art\n- [X] a GitHub repo\n\n### Anything else Claude should know?\n\nI want my friends and some bots to play at lunch."
+}

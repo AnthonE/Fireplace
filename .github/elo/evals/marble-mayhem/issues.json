@@ -1,0 +1,27 @@
+[
+  {
+    "title": "Run the game once, unchanged",
+    "check": "npm ci && node tools/kit.mjs check",
+    "body": "First, make sure your copy builds and its quick tests pass:\n\n```sh\nnpm ci && node tools/kit.mjs check\n```\n\nIt worked if it ends with `fail 0`.\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Start the MARBLE RUN minigame",
+    "check": "npm run build && node --test test/mg-marbles.test.mjs test/party.test.mjs",
+    "body": "A minigame is one short round. This writes one that already plays and adds it to Party:\n\n```sh\nnode tools/new-mg.mjs marbles mb \"MARBLE RUN\"\n```\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-marbles.test.mjs test/party.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "A twisty track with edges",
+    "check": "npm run build && node --test test/mg-marbles.test.mjs",
+    "body": "Swap the sumo ring for a track that winds downhill, with edges a marble can fall off. One bend first.\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-marbles.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Checkpoints, and first to the bottom wins",
+    "check": "npm run build && node --test test/mg-marbles.test.mjs",
+    "body": "A marble that falls off comes back at its last checkpoint. The first one to the bottom wins the round.\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-marbles.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "See it on your page",
+    "check": "npm run build && node tools/site.mjs",
+    "body": "Turn on your page once: Settings > Pages > Source: GitHub Actions. Then `client/party.html?mg=30` on your page plays MARBLE RUN.\n\nCheck that the site builds:\n\n```sh\nnpm run build && node tools/site.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  }
+]

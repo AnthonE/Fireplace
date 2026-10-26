@@ -1,0 +1,9 @@
+{
+  "title": "[plan] Kingdom Keep",
+  "number": 1,
+  "expect": {
+    "kit": "world",
+    "sells": false
+  },
+  "body": "### What is your game called?\n\nKingdom Keep\n\n### In one sentence, what do players do together?\n\nPlayers build castles that stay up between games and raid each other for gold.\n\n### How many people play at once?\n\n17 to 100\n\n### How long is one game?\n\nover 30 minutes\n\n### Does anyone gain by cheating?\n\nyes: rank, items or money are at stake\n\n### Does the world remember between games?\n\nyes, things stay built or owned\n\n### Do players see different things?\n\nno, everyone sees the same board\n\n### Where do people play?\n\nin a browser tab\n\n### May AI agents play it too?\n\nno\n\n### Do you want to sell it?\n\nit's free\n\n### If you sell it, what does a copy cost, in dollars?\n\n_No response_\n\n### What do you have already?\n\n- [X] nothing yet\n- [ ] some code\n- [ ] art\n- [ ] a GitHub repo\n\n### Anything else Claude should know?\n\n_No response_"
+}
