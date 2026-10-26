@@ -87,10 +87,16 @@ Know the menu before you plan. Everything here is in the repo today.
   their idea needs one of these, say which part and give the closest thing
   that fits.
 
-<!-- RUST MINIGAMES. Another track is testing minigames written in Rust and
-compiled to wasm (BUILD-A-GAME.md E4 in the Elo Pros docs). When that lands,
-one paragraph goes here: how to start a Rust minigame, its check command, and
-when to pick it over hand-written WAT. Until it does, do not offer Rust. -->
+- **A minigame in Rust.** A new minigame's rules can be Rust instead of
+  hand-written WebAssembly: `node tools/new-mg.mjs <key> <prefix> "<NAME>" --rust`
+  starts one (a sumo ring, SUMO RING's scaffold), `node tools/rust.mjs` turns
+  the crate into the minigame's `.wat` after every change, and the check is
+  `npm run build && node --test test/mg-<key>.test.mjs test/rust.test.mjs`
+  (`docs/rust.md`). Pick Rust for a new minigame whose rules are more than
+  the scaffold's, since it is easier to read and change; pick WAT to change an
+  existing minigame, all of which are WAT. Rust here has rules of its own (no
+  statics, no stack, nothing from outside `rust/`): `docs/rust.md`'s table says
+  what `tools/rust.mjs` refuses, so a task's check catches it.
 
 ## Which kit
 

@@ -140,6 +140,7 @@ jobs:
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
+      RUSTUP_TOOLCHAIN: 1.97.0
       NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v4
@@ -159,6 +160,9 @@ jobs:
       - name: Install, so Claude can build and test
         if: steps.secret.outputs.ok == '1'
         run: npm ci
+      - name: Rust 1.97.0 and its wasm32 target, for minigames written in Rust (docs/rust.md)
+        if: steps.secret.outputs.ok == '1'
+        run: rustup toolchain install 1.97.0 --profile minimal --target wasm32-unknown-unknown
       - name: Claude does the task
         if: steps.secret.outputs.ok == '1'
         uses: anthropics/claude-code-action@v1.0.262
@@ -168,5 +172,5 @@ jobs:
           github_token: ${{ github.token }}
           claude_args: |
             --max-turns 80
-            --allowedTools "Bash(npm ci),Bash(npm run build),Bash(npm test),Bash(node:*)"
+            --allowedTools "Bash(npm ci),Bash(npm run build),Bash(npm test),Bash(node:*),Bash(cargo:*)"
             --append-system-prompt "This repo is a browser game made from Fireplace; read CLAUDE.md and follow its rules. The person asking may be new to code: when you finish, say in plain words what you changed, how to try it (the command, or the page on their GitHub Pages site), and run the task's check command (it is in the issue) before you say it is done."

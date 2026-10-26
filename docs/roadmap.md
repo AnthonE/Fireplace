@@ -9,7 +9,7 @@ not measured yet, it says so.
 44 games, each gated online: golf, bumper balls, the arena's twelve modes
 (Grab Bag, Zombies, gun game, Juggernaut, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 30 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 31 minigames. Fireplace plays them in turn.
 
 What a page downloads, gzipped, everything it imports included:
 
