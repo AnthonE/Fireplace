@@ -12,7 +12,7 @@
 //   ?bot=1 sits a guest (client/fireplace-bot.mjs) at the controls, and sits down at once
 //   ?look=<word> wears that look (client/looks.mjs packLook) for this visit, earned or not, and keeps nothing
 //   ?watch=1 spectates; ?url=, ?hash=, ?impair=, ?sens=, ?res=, ?music=0 as the games'
-//   ?room=<id> joins the kit pool's room <id> (client/kit.mjs), the link the room's line copies
+//   ?room=<id> joins the kit pool's room <id> (client/kit.mjs): where play online with friends goes, the link copy invite link copies
 //   ?replay=<url> plays a replay file (net/replay.mjs) as a spectator
 //   ?film=<seconds> with ?replay=: no clock of its own; tools/film.mjs steps it a frame at a time (window.__film)
 import * as L from '../src/layout.mjs';
@@ -28,7 +28,7 @@ import { readClock } from './clock.mjs';
 import { BALLS, HATS, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
 import { filmClock, filmSound, compose } from './film.mjs';
-import { kit, room as pool } from './kit.mjs';
+import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 
 const q = new URLSearchParams(location.search);
 const stage = document.getElementById('stage');
@@ -46,6 +46,7 @@ const PER_PAGE = 6; // achievements a page, in type the TV can show from the cou
 // what each game's picture lights the room with, roughly: golf's grass, the
 // arena's grey, the cheese, party's sky
 const TV_LIGHT = [[0.45, 0.7, 0.45], [0.6, 0.65, 0.6], [1, 0.85, 0.5], [0.55, 0.75, 1]];
+const WASM = '../build/fireplace/game.wasm';
 const FRONTENDS = { [L.G_GOLF]: './golf-game.mjs', [L.G_ARENA]: './arena-game.mjs', [L.G_BUMPER]: './bumper-game.mjs', [L.G_PARTY]: './party-game.mjs' };
 // the title card's name and line, client/kit.json's (node tools/kit.mjs init writes them)
 const TITLE = String(kit.name || 'Fireplace').toUpperCase();
@@ -63,7 +64,7 @@ async function main() {
   [canvases[L.G_BUMPER].width, canvases[L.G_BUMPER].height] = [W, H];
   [canvases[L.G_PARTY].width, canvases[L.G_PARTY].height] = [W, H];
   const clock = FILM ? filmClock() : null;
-  const host = await createHost({ wasm: '../build/fireplace/game.wasm', q, watch: WATCH, fireplace: true, connect: false });
+  const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;
   if (track) host.sound = track.sound;
   const { view, get, set, press, sound, i32, f64 } = host;
@@ -298,19 +299,39 @@ async function main() {
   const gameName = (g, seed) => (g === L.G_ARENA && modeName(seed) !== null ? `ARENA ${modeName(seed)}` : L.GAMES[g]);
   const GAMES_LINE = L.PLAYLIST.map((g) => L.GAMES[g]).join(' . ');
 
-  // ---- one quiet line under the room: the pool's room and a link to it to
-  // send friends, or why the room is local; nothing for a page with its own relay
+  // ---- one quiet line under the room. In a local room, on a page with no
+  // relay of its own and a pool to ask: play online with friends, which asks
+  // the kit's pool for a room and reloads into it (the address is the invite).
+  // In the pool's room: its id, and copy invite link. Nothing otherwise.
   const line = document.getElementById('line');
-  const copy = line.querySelector('button');
+  const [invite, online] = ['invite', 'online'].map((id) => document.getElementById(id));
+  const offer = !WATCH && !FILM && (await canGoOnline(q).catch(() => false));
   let lineText = null;
-  copy.addEventListener('click', (e) => {
+  invite.addEventListener('click', (e) => {
     e.stopPropagation();
-    const done = (ok) => { copy.textContent = ok ? 'copied' : pool.invite; setTimeout(() => { copy.textContent = 'copy invite link'; }, ok ? 2000 : 15000); };
+    const done = (ok) => { invite.textContent = ok ? 'copied' : pool.invite; setTimeout(() => { invite.textContent = 'copy invite link'; }, ok ? 2000 : 15000); };
     navigator.clipboard?.writeText(pool.invite).then(() => done(true), () => done(false)) ?? done(false);
   });
+  online.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (online.disabled) return;
+    online.disabled = true;
+    online.textContent = 'finding a room…';
+    goOnline(q, { wasm: WASM, bytes: host.bytes }).then((to) => { location.href = to; }, (err) => {
+      pool.why = String(err.message || err);
+      online.disabled = false;
+      online.textContent = 'play online with friends';
+    });
+  });
   const showLine = (roomInView) => {
-    const text = pool.id ? `online room ${pool.id}${pool.why ? ` (${pool.why})` : ''}` : pool.why ? `playing here with AI players: ${pool.why}` : '';
-    if (text !== lineText) { lineText = text; line.firstElementChild.textContent = text; copy.hidden = !pool.id; }
+    // local: as the room turned out, or before it opens, unless an invite will take it online
+    const local = host.connected ? host.local === true : !q.get('room');
+    const offering = !pool.id && offer && local;
+    const text = pool.id ? `online room ${pool.id}${pool.why ? ` (${pool.why})` : ''}`
+      : offering || pool.why ? `playing here with AI players${pool.why ? `: ${pool.why}` : ''}` : '';
+    if (text !== lineText) { lineText = text; line.firstElementChild.textContent = text; }
+    invite.hidden = !pool.id;
+    online.hidden = !offering;
     line.hidden = !text || !roomInView;
   };
 

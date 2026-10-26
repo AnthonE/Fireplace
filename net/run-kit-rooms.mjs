@@ -3,12 +3,15 @@
 // static site (tools/site.mjs) from a plain server with no COOP or COEP
 // header, as Pages serves it, its kit.json naming no relay, only the pool
 // (here, on this machine, fetching from this server alone). Passes when
-//   · the page, with no relay, gets a room from the pool running the site's
-//     own wasm, and plays it online (coi.js isolating it);
+//   · the page, with no relay, plays a local room with AI players, asking no
+//     pool, and offers play online with friends; pressed, it gets a room from
+//     the pool running the site's own wasm, reloads into it (its address the
+//     invite) and plays it online (coi.js isolating it); refused, it says why
+//     and stays; ?pool=0 offers nothing;
 //   · a second page opened from the first's invite link lands in that room;
 //   · the pages and bots at the room's native door (net/bot-host.mjs) agree
 //     with the referee (the relay's status) and with each other (gate.mjs grader);
-//   · a page whose pool is out of reach, or whose pool's room is (UDP
+//   · an invite whose pool is out of reach, or whose pool's room is (UDP
 //     blocked, say), plays a local room and says why;
 //   · the room closes once it has sat empty for idle_s, and an invite to it
 //     then gets another room, saying so;
@@ -91,7 +94,7 @@ writeFileSync(kitJson, JSON.stringify({ ...JSON.parse(readFileSync(kitJson, 'utf
 const statusDir = join(dir, 'status');
 const pool = startKitRooms({
   listen: `127.0.0.1:${POOL_PORT}`, public_base: poolUrl, host: '127.0.0.1', bind: '127.0.0.1', ports: PORTS, native_offset: NATIVE,
-  max_rooms: 2, per_site_rooms: 1, max_players: 8, idle_s: 6, hold_s: 5, max_wasm_bytes: 1024 * 1024, fetch_timeout_s: 5,
+  max_rooms: 2, per_site_rooms: 1, max_players: 8, idle_s: 6, hold_s: 15, max_wasm_bytes: 1024 * 1024, fetch_timeout_s: 5,
   fetch_from: [origin], allow_origins: [origin], refuse_after: 2, refuse_s: 600, per_ip_per_min: 1000,
   status_dir: statusDir, wasm_dir: join(dir, 'wasm'), relay_args: ['--referee-threads', '1', '--referee-lag', '4'],
 }, { log: (m) => process.stderr.write(`[kit-rooms] ${m}\n`) });
@@ -137,7 +140,7 @@ const browser = await chromium.launch({
   args: ['--no-sandbox', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--autoplay-policy=no-user-gesture-required'],
 });
 // what a page is expected to say: the 404 of certs/hash.txt, which a copy has none of; and the pool or room it can't reach
-const EXPECTED = { c: /ERR_CONNECTION_REFUSED/, d: /Failed to establish a connection to https:\/\/127\.0\.0\.1:\d+\/: net::ERR_QUIC/ };
+const EXPECTED = { c: /ERR_CONNECTION_REFUSED/, e: /ERR_CONNECTION_REFUSED/, d: /Failed to establish a connection to https:\/\/127\.0\.0\.1:\d+\/: net::ERR_QUIC/ };
 const watch = (page, label) => {
   page.on('console', (m) => { if (m.type() === 'error' && !/404/.test(m.text()) && !EXPECTED[label]?.test(m.text())) { report.errors.push(`${label}: ${m.text()}`); process.stderr.write(`[${label}] ${m.text()}\n`); } });
   page.on('pageerror', (e) => { report.errors.push(`${label}: ${e.message}`); process.stderr.write(`[${label}] ${e.message}\n`); });
@@ -150,18 +153,35 @@ async function open(url, label) {
   await page.goto(url);
   return page;
 }
-const stateOf = (page) => page.evaluate(() => (window.__qa?.state ? { ...window.__qa.state(), hashes: window.__qa.hashes.slice(), isolated: crossOriginIsolated, line: document.querySelector('#line span')?.textContent } : null)).catch(() => null);
+const stateOf = (page) => page.evaluate(() => (window.__qa?.state ? { ...window.__qa.state(), hashes: window.__qa.hashes.slice(), isolated: crossOriginIsolated, line: document.querySelector('#line span')?.textContent, online: !document.getElementById('online')?.hidden, lineShown: !document.getElementById('line')?.hidden } : null)).catch(() => null);
 const playing = (s) => !!s && s.clState === 2 && s.slot >= 0;
 
 const sha = createHash('sha256').update(readFileSync(join(out, 'build/fireplace/game.wasm'))).digest('hex');
 let roomId = null, roomPort = 0;
 try {
-  // ── a page with no relay gets a pool room; its invite brings a second in ──
-  const a = await open(`${site('good')}?x=1${GAME}`, 'a');
+  // ── a page with no relay plays a local room, and offers to go online ──
+  const lone = await open(`${site('good')}?x=1${GAME}`, 'lone');
+  let sl = null;
+  await until(async () => playing(sl = await stateOf(lone)) && sl.hashes.length > 0, 60000, 500);
+  check('a page with no relay plays a local room with AI players, asking no pool', playing(sl) && sl.pool.local && !sl.pool.id && pool.rooms.size === 0 && sl.isolated, JSON.stringify(sl && { clState: sl.clState, pool: sl.pool, error: sl.error }));
+  check('its line says so and offers play online with friends', sl?.line === 'playing here with AI players' && sl.online, JSON.stringify(sl && { line: sl.line, online: sl.online }));
+  await lone.context().close();
+  // a player on the couch presses it: a pool room, the page reloaded into it; sitting down plays it online
+  const COUCH = '&present=0&res=320x200&music=0';
+  const a = await open(`${site('good')}?x=1${COUCH}`, 'a');
+  await a.waitForSelector('#online', { state: 'visible', timeout: 30000 });
+  // where the button sends the page (the site's index then opens Fireplace's page, the query kept)
+  const navs = [];
+  a.on('request', (r) => { if (r.isNavigationRequest() && r.frame() === a.mainFrame()) navs.push(r.url()); });
+  await Promise.all([a.waitForURL(/fireplace\.html\?room=/, { timeout: 30000 }), a.click('#online')]);
+  const went = navs[0] || '';
+  await a.waitForFunction(() => window.__qa?.state, null, { timeout: 30000 });
+  await a.click('#stage');
   let sa = null;
   await until(async () => playing(sa = await stateOf(a)) && sa.pool?.id, 60000, 500);
   roomId = sa?.pool?.id;
-  check('a page with no relay is given a room by the pool and plays it online', playing(sa) && !!roomId && !sa.pool.local && sa.isolated, JSON.stringify(sa && { clState: sa.clState, slot: sa.slot, pool: sa.pool, error: sa.error }));
+  check('play online with friends lands the page in a pool room, its address the invite', playing(sa) && !!roomId && !sa.pool.local && sa.isolated
+    && went.startsWith(`${site('good')}?room=${roomId}&`), JSON.stringify({ went, ...(sa && { clState: sa.clState, slot: sa.slot, pool: sa.pool, error: sa.error }) }));
   const info = roomId ? await ask(null, { method: 'GET', path: `rooms/${roomId}` }) : {};
   roomPort = info.json?.url ? portOf(info.json.url) : 0;
   check('the room runs the site\'s own wasm, pinned by its sha256', info.status === 200 && info.json.game_sha256 === sha && info.json.game === 'fireplace', JSON.stringify(info.json));
@@ -183,10 +203,11 @@ try {
   const bots = roomPort ? botHost(join(dir, 'bots.json'), ['--fireplace', '--relay', `127.0.0.1:${roomPort + NATIVE}`, '--bots', '2', '--seconds', String(seconds - 10)]) : null;
   check('the room counts both pages and both bots', await until(() => statusOf(roomPort)?.players === 4, 20000), JSON.stringify(statusOf(roomPort)));
   // the pool unreachable: the local room, and a line saying why
-  const c = await open(`${site('good')}?pool=${encodeURIComponent(`http://127.0.0.1:${POOL_PORT - 1}/kit/`)}${GAME}`, 'c');
+  const DEAD = encodeURIComponent(`http://127.0.0.1:${POOL_PORT - 1}/kit/`);
+  const c = await open(`${site('good')}?room=${roomId}&pool=${DEAD}${GAME}`, 'c');
   let sc = null;
   await until(async () => playing(sc = await stateOf(c)) && sc.hashes.length > 0, 60000, 500);
-  check('a page whose pool is out of reach plays a local room and says why', playing(sc) && sc.pool.local && /out of reach/.test(sc.pool.why) && sc.line?.includes('out of reach'), JSON.stringify(sc && { clState: sc.clState, pool: sc.pool, line: sc.line }));
+  check('an invite whose pool is out of reach plays a local room and says why', playing(sc) && sc.pool.local && /out of reach/.test(sc.pool.why) && sc.line?.includes('out of reach'), JSON.stringify(sc && { clState: sc.clState, pool: sc.pool, line: sc.line }));
   await c.context().close();
   // a pool whose room can't be reached (UDP blocked, say): the local room once the session fails
   const deadPool = createServer((req, res) => {
@@ -196,12 +217,28 @@ try {
     res.writeHead(200, { ...cors, 'Content-Type': 'application/json' }).end(JSON.stringify({ room: 'dead', url: `https://127.0.0.1:${POOL_PORT - 1}/`, hash: info.json?.hash }));
   });
   await new Promise((ok) => deadPool.listen(0, '127.0.0.1', ok));
-  const d = await open(`${site('good')}?pool=${encodeURIComponent(`http://127.0.0.1:${deadPool.address().port}/kit/`)}${GAME}`, 'd');
+  const d = await open(`${site('good')}?room=dead&pool=${encodeURIComponent(`http://127.0.0.1:${deadPool.address().port}/kit/`)}${GAME}`, 'd');
   let sd = null;
   await until(async () => playing(sd = await stateOf(d)) && sd.hashes.length > 0, 90000, 500);
   check('a page given a room it can\'t reach plays a local room and says why', playing(sd) && sd.pool.local && !sd.pool.id && /didn't let this page in/.test(sd.pool.why) && !sd.error, JSON.stringify(sd && { clState: sd.clState, pool: sd.pool, error: sd.error }));
   await d.context().close();
   deadPool.close();
+  // the button with the pool out of reach: its why in the line, the page where it was
+  const e = await open(`${site('good')}?pool=${DEAD}${COUCH}`, 'e');
+  await e.waitForSelector('#online', { state: 'visible', timeout: 30000 });
+  const at = e.url();
+  await e.click('#online');
+  let se = null;
+  await until(async () => /out of reach/.test((se = await stateOf(e))?.line || ''), 30000, 500);
+  check('play online with friends refused: the why in the line, the page stays local', /^playing here with AI players: the room pool is out of reach/.test(se?.line || '') && se.online && e.url() === at, JSON.stringify(se && { line: se.line, online: se.online, url: e.url() }));
+  await e.context().close();
+  // ?pool=0: no offer
+  const f = await open(`${site('good')}?pool=0${COUCH}`, 'f');
+  await f.waitForFunction(() => window.__qa?.state, null, { timeout: 30000 });
+  await sleep(1000);
+  const sf = await stateOf(f);
+  check('?pool=0 offers nothing', !!sf && !sf.online && !sf.lineShown, JSON.stringify(sf && { line: sf.line, online: sf.online, shown: sf.lineShown }));
+  await f.context().close();
   const t0 = Date.now();
   while (Date.now() - t0 < (seconds - 15) * 1000) {
     await sleep(2000);
