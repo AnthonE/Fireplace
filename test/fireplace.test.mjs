@@ -8,7 +8,7 @@ import { hash32 } from '../src/party-view.mjs';
 import { playFireplace } from '../tools/genfireplace.mjs';
 import { replay, parseLog, decodeTrace } from '../harness/core.mjs';
 import { startWorkers } from '../harness/run-node.mjs';
-import { prefixed } from '../tools/asm.mjs';
+import { prefixed, mergeTwins } from '../tools/asm.mjs';
 import * as L from '../src/layout.mjs';
 import { emptyTally, record, readResult } from '../client/achievements.mjs';
 
@@ -25,6 +25,30 @@ test('the prefixer: every identifier under its prefix, exports made internal, st
   assert.match(out, /\(func \$q\.step \(call \$q\.f\)\)/);
   assert.match(out, /\(data \$q\.d "a\$b"\)/);
   assert.doesNotMatch(out, /export|module|import/);
+});
+
+test('mergeTwins: the same code in two games kept once and called there; a difference anywhere down the calls keeps both', () => {
+  const wat = `(module
+  (import "env" "mem" (memory 1 1 shared))
+  (func $g.leaf (param $g.x i32) (result i32) (i32.add (local.get $g.x) (i32.const 1)))
+  (func $b.leaf (param $b.x i32) (result i32) (i32.add (local.get $b.x) (i32.const 1)))
+  (func $p.leaf (param $p.x i32) (result i32) (i32.add (local.get $p.x) (i32.const 2)))
+  (func $g.mid (result i32) (call $g.leaf (i32.const 3)))
+  (func $b.mid (result i32) (call $b.leaf (i32.const 3)))
+  (func $p.mid (result i32) (call $p.leaf (i32.const 3)))
+  (func $g.data (memory.init $g.blob (i32.const 0) (i32.const 0) (i32.const 1)))
+  (func $b.data (memory.init $b.blob (i32.const 0) (i32.const 0) (i32.const 1)))
+  (data $g.blob "(")
+  (data $b.blob ")")
+  (func (export "step") (result i32) (i32.add (call $b.mid) (call $p.mid)))
+)`;
+  const { wat: out, merged } = mergeTwins(wat);
+  assert.equal(merged, 2, 'b.leaf into g.leaf, b.mid into g.mid');
+  const names = [...out.matchAll(/\(func (\$[\w.]+)/g)].map((m) => m[1]);
+  assert.deepEqual(names, ['$g.leaf', '$p.leaf', '$g.mid', '$p.mid', '$g.data', '$b.data']);
+  assert.match(out, /\(func \(export "step"\) \(result i32\) \(i32\.add \(call \$g\.mid\) \(call \$p\.mid\)\)\)/);
+  assert.ok(out.includes('(data $g.blob "(")') && out.includes('(data $b.blob ")")'), 'data kept, a ( in a string no harm');
+  assert.equal(mergeTwins(out).merged, 0, 'a fixpoint');
 });
 
 test('Fireplace is one module with every game in it, and the games on their own build as before', async () => {

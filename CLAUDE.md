@@ -102,7 +102,7 @@ shell whose own command line contains the name: it kills that shell.
   objectives (flags, skull, hills) are `MAP_OBJ`, from `map.json`.
 - Fireplace (`src/fireplace.wat`): each game is its own build under a prefix
   (`tools/asm.mjs` `prefixed()`, `GAMESETS`), so a change to a game changes
-  Fireplace too. The playlist's state is the header's last 16 bytes
+  Fireplace too; a function two games share is kept once (`mergeTwins`). The playlist's state is the header's last 16 bytes
   (`FP_GAME`...) and `REGION + 0xe000` (8 KiB no game uses: marshmallows,
   `FP_NEXT`, `FP_MODE`): keep games out of both. `PLAYLIST` goes by position
   (games played mod its length), so a game may come twice; the next seed is
@@ -123,6 +123,12 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
+- A page imports only what its room plays: Fireplace a game's frontend as
+  the playlist reaches it; Party and the arena a minigame's or team mode's
+  module as its round comes up (`client/mg/load.mjs`, `client/am/load.mjs`;
+  each `index.mjs` is the eager list for Node, the bots and the tests); a
+  bot only for `?bot=1`. Keep a frontend's static imports to what every
+  round draws.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
 - The room's look is a theme (`client/themes/<id>.json`, `client/themes.mjs`):

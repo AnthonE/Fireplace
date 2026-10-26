@@ -28,6 +28,11 @@ visit).
 bumper balls and party in one module: `tools/asm.mjs` expands each exactly as
 its own build is, puts its every identifier under a prefix (`$g.`, `$a.`,
 `$b.`, `$p.`) and makes its exports internal, and appends `src/fireplace.wat`.
+A function that is the same code in two games (the hash, the snapshot, the
+prediction, bumper's ball in bumper balls and party) is kept once
+(`mergeTwins`): the same text with the prefixes out, calling the same in
+turn. That is 279 of 1,018 functions, and the wasm goes from 298 KB to 248 KB
+(105 KB gzipped); every instruction a game runs is what it was.
 That sends every export to the game on now (the header's `FP_GAME`) and runs
 the playlist at the end of each tick. The ball phases and the barrier are the
 same code in every game, so the worker threads never change games. The

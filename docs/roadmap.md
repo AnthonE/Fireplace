@@ -11,18 +11,27 @@ not measured yet, it says so.
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
 Territories, VIP, Assault) and Party's 30 minigames. Fireplace plays them in turn.
 
-What a page downloads, gzipped, everything it imports included:
+What a page downloads before play, gzipped, everything it imports included
+(the wasm and the workers too), and what comes as the room plays on:
 
-| Page | Files | Gzipped |
-| --- | --- | --- |
-| `client/party.html` | 54 | 275 KB (wasm 29 KB) |
-| `client/fireplace.html` | 72 | 436 KB (wasm 85 KB, 68 KB of it Box Canyon's height map) |
-| `client/bumper.html` | 38 | 114 KB |
-| `client/arena.html` | 44 | 190 KB (the team modes: 6 files and 31 KB of it) |
+| Page | Files | Gzipped | Then |
+| --- | --- | --- | --- |
+| `client/fireplace.html` | 33 | 198 KB (wasm 103 KB, 67 KB of it Box Canyon's height map) | a game's frontend as the playlist reaches it: golf 15 KB, bumper balls 23, the arena 33, party 44 |
+| `client/party.html` | 33 | 170 KB (wasm 55 KB) | a minigame's client module as its round comes up: 5 to 16 KB, 11 the median |
+| `client/arena.html` | 32 | 153 KB (wasm 52 KB) | a team mode's module as its match comes up: 2 to 7 KB |
+| `client/bumper.html` | 31 | 103 KB (wasm 11 KB) | |
+
+A page imports what its room plays and no more: a minigame's or a team mode's
+client module through `client/mg/load.mjs` or `client/am/load.mjs`, a bot only
+for `?bot=1`, and `src/layout.mjs` none of the minigames' constants. Before
+that, Fireplace's page fetched 643 KB and Party's 517 KB, nearly all of it
+every minigame's module. Fireplace's wasm keeps one copy of a function its
+games share (`mergeTwins` in `tools/asm.mjs`): 279 of 1,018 functions,
+298 KB to 248 KB raw, 114 KB to 105 KB gzipped.
 
 No textures, models, sound files or fonts: sounds are synthesized, the font is
 3x5 bitmaps, every shape is drawn on the GPU. A Party minigame adds about
-10 KB of client code and 2 to 3 KB of wasm.
+11 KB of client code and 1 to 3 KB of wasm.
 
 Cost a tick at 256 players: 0.2 to 0.4 ms of the sim's 8 ms. Cost a frame on
 the main thread: 0.5 ms for 256 balls, 0.25 ms for 1,172 ice tiles, about
