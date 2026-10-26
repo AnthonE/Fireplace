@@ -105,7 +105,7 @@ fn vnoise(p: vec2f) -> f32 {
 fn surfColor(s: u32, w: vec2f) -> vec3f {
   let n = hash2(floor(w * 2.0));
   switch s {
-    case 0u: { return vec3f(0.3, 0.5, 0.2) * (0.86 + 0.24 * n) * (0.9 + 0.2 * hash2(floor(w * 0.08))); }
+    case 0u: { return vec3f(0.3, 0.5, 0.2) * (0.86 + 0.24 * n) * (0.88 + 0.24 * vnoise(w * 0.05)); }
     case 1u: { return vec3f(0.48, 0.43, 0.36) * (0.8 + 0.35 * hash2(floor(w * 0.7))); }
     case 2u: { return vec3f(0.72, 0.62, 0.42) * (0.92 + 0.12 * n); }
     default: {

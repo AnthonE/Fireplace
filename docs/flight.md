@@ -127,6 +127,9 @@ checked by the referee, all equal; 7 bytes a closed tick on average, about
 | down / up a session | 61 KB/s / 2 KB/s |
 | a tick of the bot host's shared world | 0.16 ms mean, 3 ms worst |
 
+Forced to one mode, 64 pilots for 60 s each: Team Dogfight 3,702 hashes all
+equal, 32 pilots a side, 162 to 177; Juggernaut 3,701 all equal.
+
 Pilots on Skyways, 8 for 12,000 ticks: 37 shot down by lasers, 11 by
 charge shots, 12 by bombs, none crashed; median height over the ground
 30 m, median speed 34 m/s. The match recorded for the matrix is 2 MB for
