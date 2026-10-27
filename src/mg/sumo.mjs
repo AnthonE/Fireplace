@@ -36,7 +36,7 @@ export const SU_A0 = 12; // u32 post 0's bearing at the start, 1/2^24 of a turn
 export const SU_SPIN = 16; // i32 1/2^24 turns a tick the posts swing, signed: the way they set off
 // Its state in PG_S.
 export const SU_FELL = 0; // u16 per ball: the tick into play (plus one) it first fell, for over
-// FX kinds, FX_MG + 4 * MG_SUMO + k: 152 to 155.
-export const SU_FX_BONK = 152; // a post knocks a ball: the ball as owner, the post as shot, the knock's m/s as size
-export const SU_FX_RING = 153; // the ring starts to shrink (shot 0) or reaches its least (shot 1): its least as size
-export const SU_FX_TURN = 154; // the posts swing back: shot the swings so far
+// FX kinds, FX_MG + 4 * MG_SUMO + k: 192 to 195.
+export const SU_FX_BONK = 192; // a post knocks a ball: the ball as owner, the post as shot, the knock's m/s as size
+export const SU_FX_RING = 193; // the ring starts to shrink (shot 0) or reaches its least (shot 1): its least as size
+export const SU_FX_TURN = 194; // the posts swing back: shot the swings so far

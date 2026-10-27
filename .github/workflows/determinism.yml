@@ -92,6 +92,26 @@ jobs:
         run: |
           node tools/genarena.mjs --bots 8 --ticks 20000 --mode 11 --out logs/arena-assault.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/arena-assault.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Lucky Blocks (everyone for itself, blocks paying out by the PRNG), eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 12 --out logs/arena-lucky.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-lucky.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Evade (everyone against the chasers, downed and revived), eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 13 --out logs/arena-evade.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-evade.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Escape (one hunter against the room, terminals and exits), eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 14 --out logs/arena-escape.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-escape.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: Flight (build/flight/), a match of eight AI pilots on Skyways, its Team Slayer, and Ring Race
+        run: |
+          node tools/genflight.mjs --bots 8 --ticks 20000 --out logs/flight.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/flight.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
+          node tools/genflight.mjs --bots 8 --ticks 20000 --mode 4 --out logs/flight-slayer.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/flight-slayer.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
+          node tools/genflight.mjs --bots 8 --ticks 20000 --mode 15 --out logs/flight-race.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/flight-race.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
       - name: Bumper balls (build/bumper/), rounds of sixteen AI balls
         run: |
           node tools/genbumper.mjs --bots 16 --ticks 20000 --out logs/bumper.qgl
@@ -102,7 +122,7 @@ jobs:
           node harness/matrix.mjs --ticks 20000 --log logs/party.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
       - name: SUMO RING (the minigame written in Rust), sixteen AI balls
         run: |
-          node tools/genparty.mjs --mg 30 --bots 16 --ticks 20000 --out logs/sumo.qgl
+          node tools/genparty.mjs --mg 40 --bots 16 --ticks 20000 --out logs/sumo.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/sumo.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
       - if: failure()
         uses: actions/upload-artifact@v4
@@ -151,12 +171,16 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm run build
-      - name: Fireplace (build/fireplace/), the playlist round once (bumper balls, party, the arena in a drawn mode, party, golf, bumper again), guests coming and going
+      - name: Fireplace (build/fireplace/), the playlist round once (bumper balls, party, the arena in a drawn mode, party, Dogfight in a drawn mode, golf, bumper again), guests coming and going
         run: |
-          node tools/genfireplace.mjs --bots 12 --ticks 145000 --out logs/fireplace.qgl
-          node harness/matrix.mjs --ticks 145000 --log logs/fireplace.qgl --wasm build/fireplace/game.wasm --runtimes node,deno,chromium
+          node tools/genfireplace.mjs --bots 12 --ticks 155000 --out logs/fireplace.qgl
+          node harness/matrix.mjs --ticks 155000 --log logs/fireplace.qgl --wasm build/fireplace/game.wasm --runtimes node,deno,chromium
       - name: Fireplace online (a relay on Fireplace's sim, 64 guests, the room moved from bumper balls into party, every hash checked)
         run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 240
+      - name: Fireplace online from Dogfight (the playlist started at its entry 4, 64 guests, the room moved on into golf, every hash checked)
+        run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 220 --start 4
+      - name: Elo Pros online (guests sign in through the relay, one refused; the first game's places reported once, signed with the server key)
+        run: node net/run-elo.mjs --bots 6 --seconds 150
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -224,12 +248,24 @@ jobs:
           node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 9
           node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 10
           node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 11
+      - name: The arena's Lucky Blocks online (64 AI fighters, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 12
+      - name: The arena's Evade online (64 AI fighters, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 13
+      - name: The arena's Escape online (64 AI fighters, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 14
+      - name: Flight online, full (a relay on flight's sim, 256 AI pilots through its native door, every hash checked), and its team, juggernaut and race modes
+        run: |
+          node net/run-flight.mjs --chrome 0 --bots 256 --seconds 40
+          node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 4
+          node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 3
+          node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 15
       - name: Bumper balls online, full (a relay on bumper balls' sim, 256 AI balls through its native door, a round won, every hash checked)
         run: node net/run-bumper.mjs --chrome 0 --bots 256 --seconds 100
       - name: Party online, full (a relay on Party's sim, 256 AI balls through its native door, the rotation, a round placed, every hash checked)
         run: node net/run-party.mjs --chrome 0 --bots 256 --seconds 100
       - name: SUMO RING online (the minigame written in Rust forced, 64 AI balls, every hash checked)
-        run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 30
+        run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 40
       - name: 256 players in one room (the bot host's golfers, impaired, the 257th refused)
         run: node net/run-n1.mjs --chrome 0 --seconds 60
       - name: Spectators through a tree of relays (two edges on the root, a third two deep, 100 verifying spectators each, a player turned away at an edge)

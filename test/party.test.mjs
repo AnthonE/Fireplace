@@ -58,10 +58,17 @@ test('the layout: the header between golf\'s and Fireplace\'s, the state between
   assert.equal(L.PG_BIG + L.PG_BIG_SIZE, L.REGION + L.REGION_SIZE);
   assert.ok(L.PG_SCORE >= L.B_BUMPS + 2 && L.PG_M + 4 <= L.PSIZE);
   assert.equal(L.MINIGAMES.length, L.NMG);
-  const ids = [L.MG_THINICE, L.MG_COLOR, L.MG_SWEEP, L.MG_LIGHT, L.MG_BOMBS, L.MG_WALL, L.MG_PADS, L.MG_HILL, L.MG_POTATO, L.MG_COINS, L.MG_PAINT, L.MG_RACE, L.MG_CHUTE, L.MG_TAG, L.MG_SNOWBALL, L.MG_TILT, L.MG_LAVA, L.MG_GALE, L.MG_DRUMS, L.MG_HOOPS, L.MG_PINBALL, L.MG_TRAILS, L.MG_MAZE, L.MG_BULLSEYE, L.MG_CANNON, L.MG_ROPE, L.MG_GLASS, L.MG_GATES, L.MG_STOMP, L.MG_SEESAW, L.MG_SUMO];
+  const ids = [L.MG_THINICE, L.MG_COLOR, L.MG_SWEEP, L.MG_LIGHT, L.MG_BOMBS, L.MG_WALL, L.MG_PADS, L.MG_HILL, L.MG_POTATO, L.MG_COINS, L.MG_PAINT, L.MG_RACE, L.MG_CHUTE, L.MG_TAG, L.MG_SNOWBALL, L.MG_TILT, L.MG_LAVA, L.MG_GALE, L.MG_DRUMS, L.MG_HOOPS, L.MG_PINBALL, L.MG_TRAILS, L.MG_MAZE, L.MG_BULLSEYE, L.MG_CANNON, L.MG_ROPE, L.MG_GLASS, L.MG_GATES, L.MG_STOMP, L.MG_SEESAW, L.MG_KART, L.MG_DISASTER, L.MG_SLAP, L.MG_TRAP, L.MG_PARRY, L.MG_MINGLE, L.MG_HONEY, L.MG_DODGE, L.MG_VOLLEY, L.MG_SOCCER, L.MG_SUMO];
   assert.deepEqual(ids, [...Array(L.NMG).keys()]);
-  assert.deepEqual(L.MINIGAMES.map((m) => m.prefix), ['ti', 'cc', 'sw', 'rl', 'bo', 'wl', 'mp', 'kh', 'hp', 'cr', 'pp', 'rc', 'fc', 'tg', 'sb', 'tt', 'lv', 'gf', 'dr', 'ho', 'pn', 'lt', 'mz', 'be', 'cn', 'jr', 'gb', 'gc', 'sg', 'ss', 'su']);
+  assert.deepEqual(L.MINIGAMES.map((m) => m.prefix), ['ti', 'cc', 'sw', 'rl', 'bo', 'wl', 'mp', 'kh', 'hp', 'cr', 'pp', 'rc', 'fc', 'tg', 'sb', 'tt', 'lv', 'gf', 'dr', 'ho', 'pn', 'lt', 'mz', 'be', 'cn', 'jr', 'gb', 'gc', 'sg', 'ss', 'kt', 'nd', 'sl', 'tr', 'py', 'mi', 'hc', 'db', 'vb', 'so', 'su']);
   assert.equal(MC.TI_FX_CRACK, L.FX_MG + 4 * L.MG_THINICE);
+  // every minigame's FX kinds are literals in its .mjs: each in its own block of four, FX_MG + 4 * its id
+  for (const [k, v] of Object.entries(L.MG_CONSTS)) {
+    const m = /^([A-Z]{2})_FX_/.exec(k);
+    if (!m) continue;
+    const id = L.MINIGAMES.findIndex((g) => g.prefix === m[1].toLowerCase());
+    assert.ok(id >= 0 && v >= L.FX_MG + 4 * id && v < L.FX_MG + 4 * id + 4, `${k} = ${v}, not in ${L.MINIGAMES[id]?.key}'s block`);
+  }
 });
 
 test('MG_CONSTS: every minigame\'s constants, none named twice or after a layout name; the layout\'s own names held under V8\'s dictionary line', async () => {

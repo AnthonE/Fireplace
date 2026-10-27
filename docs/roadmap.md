@@ -6,10 +6,13 @@ not measured yet, it says so.
 
 ## Where it is
 
-44 games, each gated online: golf, bumper balls, the arena's twelve modes
-(Grab Bag, Zombies, gun game, Juggernaut, and red against blue: Team
+58 games, each gated online: golf, bumper balls, the arena's fifteen modes
+(Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 31 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 41 minigames. Fireplace plays them in turn.
+Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
+over its own map, is gated online too (256 pilots, every hash equal) and is
+on Fireplace's playlist between party and golf.
 
 What a page downloads, gzipped, everything it imports included:
 
@@ -56,11 +59,12 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 30 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
-| Arena (the fighter) | 12 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Party (the ball) | 40 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War |
+| Arena (the fighter) | 15 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
+| Flight (the ship, `#if FLIGHT` on the arena) | 1 (4 modes) | 6 | capture the flag in the air, escort, a base raid, survival against waves |
 | Golf, bumper balls | 2 | 2 | |
 
 The grid kit is this engine's model at its plainest: your own board is
@@ -79,13 +83,26 @@ only of your own body), physics sandboxes, open worlds.
    against blue as a kit of team modes (`src/am/<key>.wat`, four hooks; a
    carrier bit for flags and the skull; the map's objectives in `MAP_OBJ`),
    with Team Slayer, Capture the Flag, Oddball and King of the Hill on it, a
-   mode on the kit about an hour of one agent. Party's and the champion
-   kit's are next: the same side bit, scores and places.
+   mode on the kit about an hour of one agent. Party's is done too: the same
+   side bit, dealt from the round's seed, a score a side and the winners all
+   first (`PGF_TEAMS`), with Dodgeball on it. The champion kit's is next.
 2. The champion, grid and vehicle kits. The champion and vehicle kits draw
    with `client/party-render.mjs` (its decals are the telegraphs of a
    top-down game); the grid kit wants a small board renderer.
 3. The arena: several maps in one build chosen at run time, boxes that move
-   (obbies), new maps.
+   (obbies), new maps. A map now comes from the map editor
+   (`client/map-editor.html`) as well as from code, so maps chosen at run time
+   are the step that lets players' maps into rooms. What that takes:
+   - the map's sizes and offsets read from its own head in memory, not
+     compiled in (`$arena_gen`'s `MAPIMG_*` and `MAPSEG_*`, flight's
+     `MAP_CEIL`), so its bytes can come from outside the build;
+   - the map as the room's choice: lockstep needs every machine on the same
+     bytes, so the room names a map by its sha256 and each client fetches and
+     checks it before the first tick;
+   - the bytes checked again before they reach memory, since the limits are
+     enforced only by `tools/map-compile.mjs` at build time today;
+   - a replay that names its map's sha256 beside the wasm's;
+   - a map cycle: a list of map hashes the room walks, beside `PLAYLIST`.
 4. Fireplace: a vote for the next game, then a board between games (dice,
    stars, coins) over the minigames.
 5. Pipelines compiled before a Fireplace switch: on SwiftShader the first
@@ -151,16 +168,17 @@ crediting who made what (every theme is one). Next, in order:
 ## Accounts and persistence through Elo Pros
 
 What `AnthonE/scry-forge` has today: the wallet is the whole identity;
-`sdk/js/elo-2.js` (served at `https://elopros.com/sdk/elo-2.js`) gives a
+`sdk/js/elo-3.js` (served at `https://elopros.com/sdk/elo-3.js`) gives a
 third-party game `Elo.signIn({nonce})` (Sign-In With Ethereum, or Solana's),
-which the game's own server verifies with viem, with no Elo call; profiles at
+which the game's own server checks with `POST /api/signin/check`; profiles at
 `GET /api/face/{wallet}` (CORS on); friends and presence (`meter/friends.py`,
 `meter/playtime.py` polling a game server's `online.json`); chat; items and
 copies on chain (`/api/items/of/{wallet}`); a self-serve listing
 (`meter/openlane.py`, `play_url`). It has no logins without a wallet (the
-design is `docs/client/ACCOUNTS.md`), no per-game saves, stats or key-value
-store, leaderboards only for Gates, no matchmaking, and no way to submit a
-match result.
+design is `docs/client/ACCOUNTS.md`); stats, achievements and boards any
+game's servers report (`meter/gamestats.py`); Elo-scale ratings from the
+match results they report (`meter/ratings.py`); and a rated queue that
+matches parties by rating (`meter/lobbies.py`, op `queue`).
 
 The wrapper, ours first:
 
@@ -173,9 +191,9 @@ The wrapper, ours first:
    room pool is on the game box (scry-forge's NOW row 23). `elo.json`
    lands on the row once its steward signs it (`sign_manifest.py --game
    fireplace --seq 1`, scry-forge's `docs/store/GAME-REPO.md`).
-2. Sign-in: the page calls `Elo.signIn({nonce})` with a nonce from the relay's
-   hello; `net/relay.ts` verifies it and keeps the wallet as the slot's
-   player. Guests still play.
+2. Sign-in: built. The page's button calls `Elo.signIn({nonce})` with a
+   nonce the relay hands out, and `net/relay.ts` has Elo Pros check it and
+   keeps the wallet as the slot's player ([wire.md](wire.md)). Guests still play.
 3. Names, faces and skins: the relay reads `/api/face/{wallet}` and
    `/api/items/of/{wallet}` and sends them beside the sim, never in it, so the
    hashed world is the same with or without them. Skins on chain become ball
@@ -184,26 +202,32 @@ The wrapper, ours first:
    `servers.json`), so playtime and friends' join links work.
 5. Results: the relay's referee steps the room itself, so its standings and
    interval hashes are the room's truth, not any client's: the "replay"
-   evidence tier of `docs/store/ACHIEVEMENTS.md`. The page's achievements are
+   evidence tier of `docs/store/ACHIEVEMENTS.md`. Ratings are built: each
+   game's places go to Elo Pros as a rated match ([hosting.md](hosting.md)).
+   The page's achievements are
    already tests over those standings as the world holds them
    (`client/achievements.mjs` `readResult`, `record`), so the relay can run the
    same ones for each signed-in slot and publish them per wallet, the shape
    Gates' shards serve (`/achievements.json`), and they follow the player
    off one browser.
 
-Then, in scry-forge: an endpoint to submit a result, leaderboards for any
-title, and a key-value store per wallet for what lasts (party points,
-marshmallows).
+Then, in scry-forge: a key-value store per wallet for what lasts (party
+points, marshmallows).
 
 ## Sessions
 
 1. Teams; the champion kit and FFA ARAM; Team Slayer, CTF, Oddball and King of
    the Hill in the arena. The arena's half is done (its teams, the kit and the
    four modes: one session of about five and a half hours, up to four agents at once);
-   Party's teams and their games (Fall Ball, Egg Scramble, Tug o' War,
-   Volleyfall), the champion kit and FFA ARAM are left.
+   Party's teams are in, with Dodgeball, Volleyball and Soccer; their other games
+   (Fall Ball, Egg Scramble, Tug o' War), the champion kit and FFA ARAM are left.
 2. The grid kit: Tetris 99, Bomberman 128, Snake, Puyo 99.
-3. The vehicle kit and karts.
+3. The vehicle kit and karts. A kart's handling exists already, as one
+   Party minigame's push on the ball (Kart Grab, `src/mg/kart.wat`): a
+   heading, a drift's charge and a spin-out packed in the record's `PG_M`,
+   the gas, the grip and the drift worked along the heading, exact in the
+   prediction. The kit makes the kart a body of its own (a box on wheels, not
+   a ball) and puts a race, balloon battle and the rest of the list on it.
 4. Then waves of 12 to 16 Party and arena games.
 5. The Elo Pros wrapper, whenever: it depends on nothing above.
 

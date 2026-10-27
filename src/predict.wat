@@ -30,7 +30,11 @@
         (i32.store (i32.const @(HDR_START + PRED_D)) (local.get $t))
 #if ARENA
         (local.set $o (i32.load (i32.const @(AH_MODE + PRED_D))))
+#if FLIGHT
+        (i32.store (i32.const @(HDR_UNTIL + PRED_D)) (i32.add (local.get $t) (!tab FLIGHT_TICKS (local.get $o))))))
+#else
         (i32.store (i32.const @(HDR_UNTIL + PRED_D)) (i32.add (local.get $t) (!tab MODE_TICKS (local.get $o))))))
+#endif
 #else
 #if BUMPER
 #if PARTY

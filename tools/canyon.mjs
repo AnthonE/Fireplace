@@ -15,7 +15,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodePng } from './png.mjs';
-import { compileMap, SURFACES, placePoint } from './map.mjs';
+import { compileMap, SURFACES, placePoint, formatSpec } from './map.mjs';
 import { isMain } from './main.mjs';
 
 export const ORIGIN = [320, 400]; // world x, z of the first pixel; 2 m a pixel
@@ -174,8 +174,7 @@ if (isMain(import.meta.url)) {
   writeFileSync(join(dir, 'surface.png'), encodePng({ width: SIZE[0], height: SIZE[1], channels: 3, depth: 8, data: rgb }));
   const spec = boxCanyon();
   // one box to a line, so the file reads (and diffs) like a level script
-  const text = JSON.stringify(spec, null, 2).replace(/\[\s+(-?[\d.]+|"[^"]*"),\s+([^[\]{}]*?)\s+\]/g, (m) => m.replace(/\s+/g, ' ').replace('[ ', '[').replace(' ]', ']'));
-  writeFileSync(join(dir, 'map.json'), text + '\n');
+  writeFileSync(join(dir, 'map.json'), formatSpec(spec));
   const m = compileMap(dir);
   console.log(`${m.name}: ${m.boxes.length} boxes in ${m.groups.length} structures, ${m.teleporters.length} teleporters, ${m.spawns.length} spawns, ${m.bytes.length} B`);
 }

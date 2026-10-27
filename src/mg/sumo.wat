@@ -7,8 +7,8 @@
 ;;   PF_GROUND=2 PF_LIVE=1 PG_CX=65660 PG_H=65664 PG_KIND=65612 PG_LEN=65616
 ;;   PG_M=60 PG_S=114944 PG_SCORE=56 PG_SIZE=65624 PK_OUT=0 PLAT_Y=40
 ;;   PLAYERS=65792 PSIZE=64 P_FL=28 P_PX=0 P_PY=4 P_PZ=8
-;;   P_VX=12 P_VY=16 P_VZ=20 SU_A0=12 SU_FELL=0 SU_FX_BONK=152
-;;   SU_FX_RING=153 SU_FX_TURN=154 SU_HOLD=2500 SU_KICK=9 SU_LEN=12500 SU_NP=8
+;;   P_VX=12 P_VY=16 P_VZ=20 SU_A0=12 SU_FELL=0 SU_FX_BONK=192
+;;   SU_FX_RING=193 SU_FX_TURN=194 SU_HOLD=2500 SU_KICK=9 SU_LEN=12500 SU_NP=8
 ;;   SU_ORBIT=0.55 SU_P0=2 SU_PMAX=10 SU_POP=2.5 SU_POSTH=2.4 SU_POSTR=1.1
 ;;   SU_PPER=16 SU_PV=5 SU_R0=8 SU_RAD=0 SU_RK=3 SU_RLOW=4
 ;;   SU_RLOWK=0.35 SU_RMAX=48 SU_RMIN=6 SU_SHRINK=6250 SU_SPAWNM=1.6 SU_SPIN=16
@@ -727,7 +727,7 @@
           call $su__pk_sincos
           local.set 34
           local.get 1
-          i32.const 152
+          i32.const 192
           local.get 0
           local.get 5
           local.get 36
@@ -1003,7 +1003,7 @@
       i32.ne
       br_if 1
       i32.const 0
-      i32.const 153
+      i32.const 193
       i32.const 255
       i32.const 0
       local.get 2
@@ -1014,7 +1014,7 @@
       return
     end
     i32.const 0
-    i32.const 153
+    i32.const 193
     i32.const 255
     i32.const 1
     local.get 2
@@ -1036,7 +1036,7 @@
     local.get 3
     br_if 0
     i32.const 0
-    i32.const 154
+    i32.const 194
     i32.const 255
     local.get 0
     i32.const 1500

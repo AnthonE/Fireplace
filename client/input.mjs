@@ -3,8 +3,8 @@
 // presses and its frame. The net worker (client/net.mjs) sends these words to
 // the relay; the local room (client/local.mjs) closes its ticks with them.
 // sampler() returns sample(t), called once per tick in order.
-//   arena: the arena's words always; fireplace: the arena's while it is the
-//   game on (FP_GAME in the confirmed world), else golf's
+//   arena: the arena's words always; fireplace: the arena's while it or Dogfight
+//   is the game on (FP_GAME in the confirmed world), else golf's
 import * as W from '../net/wire.mjs';
 import * as L from '../src/layout.mjs';
 import { readClock } from './clock.mjs';
@@ -25,7 +25,7 @@ export function sampler({ memory, roomStart, arena = false, fireplace = false })
   const lastFrame = {}; // the last frame sent: its lag and tick
   const take = (a) => { if (((rd(a) - sent[a]) | 0) > 0) { sent[a]++; return true; } return false; };
   return (t) => {
-    const armed = fireplace ? rd(L.FP_GAME) === L.G_ARENA : arena;
+    const armed = fireplace ? rd(L.FP_GAME) === L.G_ARENA || rd(L.FP_GAME) === L.G_FLIGHT : arena;
     // an automatic held: a shot asked for every tick, so it fires as fast as it can
     if (armed && rd(L.CL_AUTO) && ((rd(L.CL_PRESSES) - sentPresses) | 0) <= 0) Atomics.store(i32, L.CL_PRESSES >> 2, sentPresses + 1);
     // a press advances the counter one step a tick, so quick clicks never merge

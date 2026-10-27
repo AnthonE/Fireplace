@@ -1,35 +1,43 @@
 ;; Fireplace: every game in one module, a playlist the room plays through.
-;; tools/asm.mjs builds golf, the arena, bumper balls and party each as its own
-;; build would be, puts each under a prefix ($g., $a., $b., $p.) with its
-;; exports made internal, and appends this file: the module's exports, each
-;; sent to the game on now (FP_GAME), and the playlist, run at the end of every
-;; tick.
+;; tools/asm.mjs builds golf, the arena, bumper balls, party and flight's
+;; Dogfight each as its own build would be, puts each under a prefix ($g.,
+;; $a., $b., $p., $f.) with its exports made internal, and appends this file:
+;; the module's exports, each sent to the game on now (FP_GAME), and the
+;; playlist, run at the end of every tick.
 ;;
 ;; A game plays its matches as it always does. When its last one ends, the
 ;; room's marshmallows are handed out by how everyone placed, the next entry's
-;; seed is drawn from the room's PRNG (the arena's forcing a mode), the result
-;; is held FP_HOLD ticks, and then the world is wiped and the next game's built
+;; seed is drawn from the room's PRNG (the arena's and Dogfight's forcing a
+;; mode), the result is held FP_HOLD ticks, and then the world is wiped and the next game's built
 ;; on that seed, with everyone in the room joined into it on that tick. The
 ;; playlist goes by position (PLAYLIST[games played % length]), so a game may
 ;; come round more than once. What lasts from game to game (the marshmallows,
 ;; the next seed, the arena's last mode) lives in a part of the region no game
-;; touches. The games' static worlds (terrain, the arena's map) are outside
-;; the region: FP_WORLD says which is built, and a keyframe from another game
-;; rebuilds it under the restored region.
+;; touches. The games' static worlds (terrain, the arena's map and flight's,
+;; each its own) are outside the region: FP_WORLD says which is built, and a
+;; keyframe from another game rebuilds it under the restored region.
 
 ;; ---- the exports
 
+;; A seed whose top byte is FP_START starts the playlist at its entry
+;; (seed >>> 16) & 0xff, as if the room had played that many games already.
 (func (export "init") (param $seed i32)
+  (local $k i32)
   (call $g.init (local.get $seed))
-  (call $fp_switch (i32.const @(PLAYLIST[0])) (local.get $seed)))
+  (if (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FP_START))
+    (then
+      (local.set $k (i32.rem_u (i32.and (i32.shr_u (local.get $seed) (i32.const 16)) (i32.const 0xff)) (i32.const @(PLAYLIST.length))))
+      (i32.store16 (i32.const @(FP_COUNT + 2)) (local.get $k))))
+  (call $fp_switch (!tab PLAYLIST (local.get $k)) (local.get $seed)))
 
 (func (export "step")
-  (!pick none (call $g.step) (call $a.step) (call $b.step) (call $p.step))
+  (!pick none (call $g.step) (call $a.step) (call $b.step) (call $p.step) (call $f.step))
   (call $fp_after))
 
 (func (export "step_mt") (param $n i32) (result i32)
   (local $r i32)
-  (local.set $r (!pick i32 (call $g.step_mt (local.get $n)) (call $a.step_mt (local.get $n)) (call $b.step_mt (local.get $n)) (call $p.step_mt (local.get $n))))
+  (local.set $r (!pick i32 (call $g.step_mt (local.get $n)) (call $a.step_mt (local.get $n)) (call $b.step_mt (local.get $n)) (call $p.step_mt (local.get $n))
+                          (call $f.step_mt (local.get $n))))
   (if (i32.eqz (local.get $r)) (then (call $fp_after)))
   (local.get $r))
 
@@ -41,15 +49,16 @@
 (func (export "integrate") (param $lo i32) (param $hi i32) (call $g.integrate (local.get $lo) (local.get $hi)))
 
 (func (export "tick_begin") (result i32)
-  (!pick i32 (call $g.tick_begin) (call $a.tick_begin) (call $b.tick_begin) (call $p.tick_begin)))
+  (!pick i32 (call $g.tick_begin) (call $a.tick_begin) (call $b.tick_begin) (call $p.tick_begin) (call $f.tick_begin)))
 
 (func (export "tick_end")
-  (!pick none (call $g.tick_end) (call $a.tick_end) (call $b.tick_end) (call $p.tick_end))
+  (!pick none (call $g.tick_end) (call $a.tick_end) (call $b.tick_end) (call $p.tick_end) (call $f.tick_end))
   (call $fp_after))
 
 (func (export "predict") (param $p i32) (param $n i32)
   (!pick none (call $g.predict (local.get $p) (local.get $n)) (call $a.predict (local.get $p) (local.get $n))
-              (call $b.predict (local.get $p) (local.get $n)) (call $p.predict (local.get $p) (local.get $n))))
+              (call $b.predict (local.get $p) (local.get $n)) (call $p.predict (local.get $p) (local.get $n))
+              (call $f.predict (local.get $p) (local.get $n))))
 
 (func (export "snapshot") (param $k i32) (call $g.snapshot (local.get $k)))
 
@@ -70,9 +79,14 @@
 
 ;; ---- the static world
 
-;; Builds game's terrain (and the arena's map) for seed. Each game's own gen,
-;; which writes parts of the region as well: callers keep what they need.
+;; Builds game's terrain (and the arena's map, or flight's) for seed. Each
+;; game's own gen, which writes parts of the region as well: callers keep
+;; what they need. The
+;; map's area is cleared first, so what one map laid past another's counts
+;; (Box Canyon's structures past Skyways' fewer) is never left behind: the
+;; static world is the game's and the seed's alone, however the sim got there.
 (func $fp_world (param $game i32) (param $seed i32)
+  (memory.fill (i32.const @MAP) (i32.const 0) (i32.const @(MAP_RACE_END - MAP)))
   (if (i32.eq (local.get $game) (i32.const @G_GOLF))
     (then (call $g.terrain_gen (local.get $seed)) (call $g.course_gen (local.get $seed))))
   (if (i32.eq (local.get $game) (i32.const @G_ARENA))
@@ -81,6 +95,8 @@
     (then (call $b.terrain_gen (local.get $seed)) (call $b.bumper_gen (local.get $seed))))
   (if (i32.eq (local.get $game) (i32.const @G_PARTY))
     (then (call $p.terrain_gen (local.get $seed)) (call $p.bumper_gen (local.get $seed))))
+  (if (i32.eq (local.get $game) (i32.const @G_FLIGHT))
+    (then (call $f.terrain_gen (local.get $seed)) (call $f.arena_gen (local.get $seed))))
   (i32.store (i32.const @FP_WORLD) (i32.add (local.get $game) (i32.const 1)))
   (i32.store (i32.const @(FP_WORLD + 4)) (local.get $seed)))
 
@@ -101,8 +117,8 @@
 ;; confirmed world's): a hash of the room's PRNG and the games played. The
 ;; arena's forces a mode (FORCE_MODE in its top byte, the mode in the next),
 ;; drawn by the PRNG from ARENA_MODES, never the one the arena played last;
-;; party's keeps its top byte off FP_PARTY_FORCE, so its rounds are the
-;; rotation's.
+;; Dogfight's forces one of FLIGHT_MODES; party's keeps its top byte off
+;; FP_PARTY_FORCE, so its rounds are the rotation's.
 (func $fp_seed (param $next i32) (result i32)
   (local $seed i32) (local $last i32) (local $k i32)
   (local.set $seed (call $g.hash32 (i32.load (i32.const @HDR_RNG)) (i32.load16_u (i32.const @(FP_COUNT + 2))) (i32.const 0x46495245)))
@@ -117,6 +133,11 @@
       (i32.store8 (i32.const @FP_MODE) (i32.add (local.get $k) (i32.const 1)))
       (local.set $seed (i32.or (i32.or (i32.const @(FORCE_MODE << 24)) (i32.shl (!tab ARENA_MODES (local.get $k)) (i32.const 16)))
                                (i32.and (local.get $seed) (i32.const 0xffff))))))
+  (if (i32.eq (local.get $next) (i32.const @G_FLIGHT))
+    (then
+      (local.set $k (i32.rem_u (call $g.rand) (i32.const @(FLIGHT_MODES.length))))
+      (local.set $seed (i32.or (i32.or (i32.const @(FORCE_MODE << 24)) (i32.shl (!tab FLIGHT_MODES (local.get $k)) (i32.const 16)))
+                               (i32.and (local.get $seed) (i32.const 0xffff))))))
   (if (i32.and (i32.eq (local.get $next) (i32.const @G_PARTY)) (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FP_PARTY_FORCE)))
     (then (local.set $seed (i32.xor (local.get $seed) (i32.const 0x01000000)))))
   (local.get $seed))
@@ -124,14 +145,15 @@
 ;; Everyone into game `next` on seed: the world wiped but for the tick, the
 ;; PRNG and the playlist's own state; the next game's built; the players in
 ;; the room joined into it in slot order, keeping their input words when the
-;; two games read the same word (golf's, which bumper and party share), else
-;; starting from none.
+;; two games read the same word (golf's, which bumper and party share, or the
+;; arena's, which Dogfight shares), else starting from none.
 (func $fp_switch (param $next i32) (param $seed i32)
   (local $p i32) (local $pb i32) (local $t i32) (local $rng i32) (local $played i32) (local $keep i32) (local $last i32) (local $rec i32)
   (local.set $t (i32.load (i32.const @HDR_TICK)))
   (local.set $rng (i32.load (i32.const @HDR_RNG)))
   (local.set $played (i32.load16_u (i32.const @(FP_COUNT + 2))))
-  (local.set $keep (i32.eq (i32.eq (i32.load (i32.const @FP_GAME)) (i32.const @G_ARENA)) (i32.eq (local.get $next) (i32.const @G_ARENA))))
+  ;; the arena and Dogfight read the arena's word, the rest golf's
+  (local.set $keep (i32.eq (call $fp_armed (i32.load (i32.const @FP_GAME))) (call $fp_armed (local.get $next))))
   ;; who's in, and their words, into the stash (scratch for the length of this call)
   (!for $p (i32.const 0) (i32.const @NPLAYER)
     (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
@@ -165,7 +187,10 @@
             (i32.store8 offset=5 (local.get $rec) (local.get $p))
             (if (i32.eq (local.get $next) (i32.const @G_GOLF))
               (then (call $g.ev_join (local.get $rec)))
-              (else (call $a.ev_join (local.get $rec))))))
+              (else
+                (if (i32.eq (local.get $next) (i32.const @G_FLIGHT))
+                  (then (call $f.ev_join (local.get $rec)))
+                  (else (call $a.ev_join (local.get $rec))))))))
         (!put i32 @(PLAYERS + P_IN) (local.get $pb) (i32.load offset=@FP_STASH (i32.shl (local.get $p) (i32.const 2)))))))
   (if (i32.ge_s (local.get $last) (i32.const 0))
     (then
@@ -173,6 +198,10 @@
         (then (call $b.b_join (local.get $last)))
         (else (call $p.b_join (local.get $last))))))
   (memory.fill (i32.const @FP_STASH) (i32.const 0) (i32.const 0x510)))
+
+;; 1 if game reads the arena's input word (the arena, Dogfight), 0 golf's.
+(func $fp_armed (param $game i32) (result i32)
+  (i32.or (i32.eq (local.get $game) (i32.const @G_ARENA)) (i32.eq (local.get $game) (i32.const @G_FLIGHT))))
 
 ;; After every tick: a slot that's empty keeps no marshmallows; matches cut to
 ;; the playlist's length; a match that just ended counted, the game's last one
@@ -199,7 +228,9 @@
       (if (i32.eq (local.get $game) (i32.const @G_ARENA))
         (then (call $fp_cut (i32.const @FP_ARENA_TICKS))))
       (if (i32.eq (local.get $game) (i32.const @G_GOLF))
-        (then (call $fp_cut (i32.const @FP_GOLF_TICKS))))))
+        (then (call $fp_cut (i32.const @FP_GOLF_TICKS))))
+      (if (i32.eq (local.get $game) (i32.const @G_FLIGHT))
+        (then (call $fp_cut (i32.const @FP_FLIGHT_TICKS))))))
   (if (i32.and (i32.eq (local.get $state) (i32.const @H_OVER))
                (i32.ne (i32.load8_u (i32.const @(FP_COUNT + 1))) (i32.const @H_OVER)))
     (then
@@ -226,8 +257,8 @@
 
 ;; How well slot p did in this game, higher is better, or -1 if it wasn't in it:
 ;; golf, fewest strokes on the hole (with the penalty for not finishing); the
-;; arena, a Fiesta by most kills, then fewest deaths, any other mode by the
-;; place it gave (MR_PLACE, set as the match ended); bumper, most rounds won,
+;; arena and Dogfight, a Fiesta by most kills, then fewest deaths, any other
+;; mode by the place it gave (MR_PLACE, set as the match ended); bumper, most rounds won,
 ;; then KOs, then hard bumps; party, most party points, then minigames won (a
 ;; ball that only watched isn't placed in either).
 (func $fp_score (param $game i32) (param $p i32) (result i32)
@@ -236,7 +267,7 @@
   (if (i32.eqz (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_LIVE))) (then (return (i32.const -1))))
   (if (i32.eq (local.get $game) (i32.const @G_GOLF))
     (then (return (i32.sub (i32.const 0xffff) (!at u16 @(PLAYERS + P_SCORE) (local.get $pb))))))
-  (if (i32.eq (local.get $game) (i32.const @G_ARENA))
+  (if (i32.or (i32.eq (local.get $game) (i32.const @G_ARENA)) (i32.eq (local.get $game) (i32.const @G_FLIGHT)))
     (then
       (if (i32.load (i32.const @AH_MODE))
         (then

@@ -44,6 +44,16 @@
 #include "mg/gates.wat"
 #include "mg/stomp.wat"
 #include "mg/seesaw.wat"
+#include "mg/kart.wat"
+#include "mg/disaster.wat"
+#include "mg/slap.wat"
+#include "mg/trap.wat"
+#include "mg/parry.wat"
+#include "mg/mingle.wat"
+#include "mg/honey.wat"
+#include "mg/dodge.wat"
+#include "mg/volley.wat"
+#include "mg/soccer.wat"
 #include "mg/sumo.wat"
 
 ;; ---- the room and the round
@@ -71,6 +81,10 @@
   (i32.store (i32.const @PG_RESPAWN) (i32.const 250))
   (i32.store (i32.const @PG_FLAGS) (i32.const @PGF_BUMPS))
   (f32.store (i32.const @PG_CX) (f32.const @B_CX))
+  (i64.store (i32.const @PG_TSCORE) (i64.const 0))
+  (i32.store (i32.const @PG_TSIDE) (i32.const 0))
+  (i64.store (i32.const @PG_TK) (i64.const 0))
+  (i32.store (i32.const @PG_TWIN) (i32.const 0))
   (memory.fill (i32.const @PG_H) (i32.const 0) (i32.const @PG_H_SIZE)))
 
 ;; The next round's minigame: PG_FORCE's, else any but the last two played,
@@ -78,7 +92,7 @@
 (func $p_pick (result i32)
   (local $prev i32) (local $f i32) (local $g i32) (local $m i32) (local $r i32)
   (local.set $prev (i32.load (i32.const @PG_PREV)))
-  (local.set $f (i32.load (i32.const @PG_FORCE)))
+  (local.set $f (i32.and (i32.load (i32.const @PG_FORCE)) (i32.const 0xff)))
   (if (i32.and (i32.ne (local.get $f) (i32.const 0)) (i32.le_u (local.get $f) (i32.const @NMG)))
     (then (local.set $g (i32.sub (local.get $f) (i32.const 1))))
     (else
@@ -99,10 +113,12 @@
 
 ;; Lays a round out for the balls in the room: a new minigame if pick (the
 ;; countdown's re-lays for a newcomer keep it), its state wiped, the knobs at
-;; their defaults, the minigame's setup, and every ball on its spawn, still,
-;; in slot order.
+;; their defaults, the minigame's setup, the sides if it plays in teams, and
+;; every ball on its spawn, still, in slot order. In a team round spawn is
+;; told the ball's side (PG_TSIDE) and its place among that side's (PG_TK of
+;; PG_TN's count), k and n still the room's.
 (func $p_round (param $pick i32)
-  (local $p i32) (local $pb i32) (local $n i32) (local $k i32) (local $x f32) (local $y f32) (local $z f32)
+  (local $p i32) (local $pb i32) (local $n i32) (local $k i32) (local $x f32) (local $y f32) (local $z f32) (local $side i32) (local $kb i32)
   (!for $p (i32.const 0) (i32.const @NPLAYER)
     (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
     (!put u16 @(PLAYERS + PG_SCORE) (local.get $pb) (i32.const 0))
@@ -115,17 +131,76 @@
   (memory.fill (i32.const @PROJ) (i32.const 0) (i32.const @(NPROJ * JSIZE)))
   (call $p_defaults)
   (!mg none setup (local.get $n))
+  (if (i32.and (i32.load (i32.const @PG_FORCE)) (i32.const @FORCE_TEAMS))
+    (then (i32.store (i32.const @PG_FLAGS) (i32.or (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS)))))
+  (call $p_deal (local.get $n))
   (!for $p (i32.const 0) (i32.const @NPLAYER)
-    (if (i32.and (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $p) (i32.const 6))) (i32.const @PF_LIVE))
+    (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+    (if (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_LIVE))
       (then
+        (if (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS))
+          (then
+            (local.set $side (call $p_side (local.get $pb)))
+            (i32.store (i32.const @PG_TSIDE) (local.get $side))
+            (i32.store (i32.const @PG_TK) (select (local.get $kb) (i32.sub (local.get $k) (local.get $kb)) (local.get $side)))
+            (local.set $kb (i32.add (local.get $kb) (local.get $side)))))
         (!mg f32 f32 f32 spawn (local.get $k) (local.get $n))
         (local.set $z) (local.set $y) (local.set $x)
         (call $p_place (local.get $p) (local.get $x) (local.get $y) (local.get $z))
         (call $p_fresh (local.get $p))
         (!inc $k)))))
 
-;; Slot p's ball still on the ground at (x, y, z), y its bottom; a press it
-;; has already made doesn't fire.
+;; The sides as a round is laid out. Not a team round: nobody has one. A
+;; team round: the balls in, in slot order, shuffled from the round's seed,
+;; then red, blue, red... down the shuffle, red with the odd one, and PG_TN
+;; counting them. A countdown's re-lay for a newcomer deals again, so a room
+;; joining together is even and mixed however it came in, as the spawns are
+;; laid out again anyway.
+(func $p_deal (param $n i32)
+  (local $p i32) (local $pb i32) (local $k i32) (local $j i32) (local $a i32) (local $nb i32) (local $fl i32)
+  (if (i32.eqz (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS)))
+    (then
+      (!for $p (i32.const 0) (i32.const @NPLAYER)
+        (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+        (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @(255 ^ PF_BLUE)))))
+      (return)))
+  (!for $p (i32.const 0) (i32.const @NPLAYER)
+    (if (i32.and (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $p) (i32.const 6))) (i32.const @PF_LIVE))
+      (then (!st u8 @B_SCR (local.get $k) (local.get $p)) (!inc $k))))
+  ;; Fisher and Yates, from the back
+  (local.set $k (i32.sub (local.get $n) (i32.const 1)))
+  (block $done
+    (loop $more
+      (br_if $done (i32.le_s (local.get $k) (i32.const 0)))
+      (local.set $j (i32.rem_u (call $p_seed (i32.add (i32.const 0x5eed0000) (local.get $k))) (i32.add (local.get $k) (i32.const 1))))
+      (local.set $a (!ld u8 @B_SCR (local.get $k)))
+      (!st u8 @B_SCR (local.get $k) (!ld u8 @B_SCR (local.get $j)))
+      (!st u8 @B_SCR (local.get $j) (local.get $a))
+      (local.set $k (i32.sub (local.get $k) (i32.const 1)))
+      (br $more)))
+  (!for $k (i32.const 0) (local.get $n)
+    (local.set $pb (i32.shl (!ld u8 @B_SCR (local.get $k)) (i32.const 6)))
+    (local.set $fl (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @(255 ^ PF_BLUE))))
+    (!put u8 @(PLAYERS + P_FL) (local.get $pb) (select (i32.or (local.get $fl) (i32.const @PF_BLUE)) (local.get $fl) (i32.and (local.get $k) (i32.const 1)))))
+  (local.set $nb (i32.shr_u (local.get $n) (i32.const 1)))
+  (i32.store (i32.const @PG_TN) (i32.or (i32.sub (local.get $n) (local.get $nb)) (i32.shl (local.get $nb) (i32.const 16)))))
+
+;; A newcomer's side in a team round: the smaller one in the room, red on a
+;; tie (nobody is moved as others leave).
+(func $p_join_side (param $p i32)
+  (local $q i32) (local $fl i32) (local $d i32) (local $pb i32)
+  (if (i32.eqz (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS))) (then (return)))
+  (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+  ;; d: blue less red, the others in the room
+  (!for $q (i32.const 0) (i32.const @NPLAYER)
+    (local.set $fl (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $q) (i32.const 6))))
+    (if (i32.and (i32.ne (local.get $q) (local.get $p)) (i32.ne (i32.and (local.get $fl) (i32.const @PF_LIVE)) (i32.const 0)))
+      (then (local.set $d (i32.add (local.get $d) (select (i32.const 1) (i32.const -1) (i32.and (local.get $fl) (i32.const @PF_BLUE))))))))
+  (local.set $fl (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @(255 ^ PF_BLUE))))
+  (!put u8 @(PLAYERS + P_FL) (local.get $pb) (select (i32.or (local.get $fl) (i32.const @PF_BLUE)) (local.get $fl) (i32.lt_s (local.get $d) (i32.const 0)))))
+
+;; Slot p's ball still on the ground at (x, y, z), y its bottom, on the side
+;; it's on; a press it has already made doesn't fire.
 (func $p_place (param $p i32) (param $x f32) (param $y f32) (param $z f32)
   (local $pb i32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
@@ -135,7 +210,7 @@
   (!put f32 @(PLAYERS + P_VX) (local.get $pb) (f32.const 0))
   (!put f32 @(PLAYERS + P_VY) (local.get $pb) (f32.const 0))
   (!put f32 @(PLAYERS + P_VZ) (local.get $pb) (f32.const 0))
-  (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.const @(PF_LIVE | PF_GROUND)))
+  (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.or (i32.const @(PF_LIVE | PF_GROUND)) (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_BLUE))))
   (!put u8 @(PLAYERS + P_FIRED) (local.get $pb) (i32.and (i32.shr_u (!at i32 @(PLAYERS + P_IN) (local.get $pb)) (i32.const 29)) (i32.const 3)))
   (!put u16 @(PLAYERS + P_REFIRE) (local.get $pb) (i32.const 0)))
 
@@ -154,14 +229,19 @@
   (!put i32 @(PLAYERS + PG_M) (local.get $pb) (i32.const 0)))
 
 ;; PK_SCORE: slot p back in (or in for the first time) at a spawn point 6 m
-;; up, falling in.
+;; up, falling in (in a team round, one of its side's: spawn's k as PG_TK).
 (func $p_respawn (param $p i32)
-  (local $pb i32) (local $x f32) (local $y f32) (local $z f32)
+  (local $pb i32) (local $k i32) (local $x f32) (local $y f32) (local $z f32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
-  (!mg f32 f32 f32 spawn (i32.and (call $rand) (i32.const 1023)) (i32.const 1024))
+  (local.set $k (i32.and (call $rand) (i32.const 1023)))
+  (if (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS))
+    (then
+      (i32.store (i32.const @PG_TSIDE) (call $p_side (local.get $pb)))
+      (i32.store (i32.const @PG_TK) (local.get $k))))
+  (!mg f32 f32 f32 spawn (local.get $k) (i32.const 1024))
   (local.set $z) (local.set $y) (local.set $x)
   (call $p_place (local.get $p) (local.get $x) (f32.add (local.get $y) (f32.const 6)) (local.get $z))
-  (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.const @PF_LIVE))
+  (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.or (i32.const @PF_LIVE) (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_BLUE))))
   (!put u8 @(PLAYERS + B_HITBY) (local.get $pb) (i32.const 255))
   (!put u16 @(PLAYERS + B_HITT) (local.get $pb) (i32.const 0)))
 
@@ -169,7 +249,8 @@
 ;; countdown the round is laid out again with the newcomer in it; in play a
 ;; PK_SCORE game's newcomer falls straight in, and a PK_OUT game's watches
 ;; from high over the centre until the next round, as one does through the
-;; result.
+;; result. In a team round the countdown's re-lay deals the sides again; in
+;; play the newcomer takes the smaller side.
 (func $b_join (param $p i32)
   (local $pb i32) (local $state i32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
@@ -181,11 +262,13 @@
       (call $p_round (i32.const 1))
       (return)))
   (if (i32.eq (local.get $state) (i32.const @H_COUNT)) (then (call $p_round (i32.const 0)) (return)))
+  ;; in play (or the result), a team round's newcomer on the smaller side
+  (call $p_join_side (local.get $p))
   (call $p_fresh (local.get $p))
   (if (i32.and (i32.eq (local.get $state) (i32.const @H_PLAY)) (i32.eq (i32.load (i32.const @PG_KIND)) (i32.const @PK_SCORE)))
     (then (call $p_respawn (local.get $p)) (return)))
   (call $p_place (local.get $p) (f32.load (i32.const @PG_CX)) (f32.const @(+PLAT_Y + 20)) (f32.load (i32.const @PG_CX)))
-  (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.const @(PF_LIVE | PF_DEAD))))
+  (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.or (i32.const @(PF_LIVE | PF_DEAD)) (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_BLUE)))))
 
 ;; ---- a ball's own tick, on bank d
 
@@ -376,10 +459,14 @@
 ;; PK_OUT's balls going out (PF_FALL) go out first, at the place BH_LEFT
 ;; gives this tick, when a ball is still in or the round began with one;
 ;; else they're the last up of two or more and share 1st (as an over hook
-;; ends a round whose balls all went off at once).
+;; ends a round whose balls all went off at once). A team round won by a side
+;; ($p_twin) places by side: every ball of it 1st, out or not, and a win
+;; each; the other side's after them, by their own PG_SCORE; a PK_OUT ball
+;; that only watched (joined in play) isn't placed. A draw places as without
+;; teams.
 (func $p_end (param $t i32)
-  (local $p i32) (local $q i32) (local $pb i32) (local $fl i32) (local $kind i32) (local $m i32) (local $pl i32) (local $s i32)
-  (local $win i32) (local $nwin i32) (local $out i32)
+  (local $p i32) (local $q i32) (local $pb i32) (local $qb i32) (local $fl i32) (local $kind i32) (local $m i32) (local $pl i32) (local $s i32)
+  (local $win i32) (local $nwin i32) (local $out i32) (local $tw i32) (local $nw i32)
   (local.set $kind (i32.load (i32.const @PG_KIND)))
   (if (i32.eq (local.get $kind) (i32.const @PK_OUT))
     (then
@@ -391,24 +478,51 @@
           (!for $p (i32.const 0) (i32.const @NPLAYER)
             (if (i32.and (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $p) (i32.const 6))) (i32.const @PF_FALL))
               (then (call $p_out (local.get $p)))))))))
+  ;; a side's win: tw 1 red, 2 blue (0: no teams, or a draw)
+  (local.set $tw (call $p_twin (local.get $kind)))
+  (if (i32.eq (local.get $tw) (i32.const 3)) (then (local.set $tw (i32.const 0))))
+  (if (local.get $tw)
+    (then
+      (!for $q (i32.const 0) (i32.const @NPLAYER)
+        (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
+        (if (i32.and (call $p_tplaced (local.get $qb) (local.get $kind)) (i32.eq (i32.add (call $p_side (local.get $qb)) (i32.const 1)) (local.get $tw)))
+          (then (!inc $nw))))))
   (!for $p (i32.const 0) (i32.const @NPLAYER)
     (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
     (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
     (if (i32.and (local.get $fl) (i32.const @PF_LIVE))
       (then
-        (if (i32.eq (local.get $kind) (i32.const @PK_SCORE))
+        (if (local.get $tw)
           (then
-            (local.set $s (!at u16 @(PLAYERS + PG_SCORE) (local.get $pb)))
-            (local.set $pl (i32.const 1))
-            (!for $q (i32.const 0) (i32.const @NPLAYER)
-              (if (i32.and (i32.ne (i32.and (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $q) (i32.const 6))) (i32.const @PF_LIVE)) (i32.const 0))
-                           (i32.gt_u (!at u16 @(PLAYERS + PG_SCORE) (i32.shl (local.get $q) (i32.const 6))) (local.get $s)))
-                (then (!inc $pl))))
-            (if (i32.gt_u (local.get $pl) (i32.const 255)) (then (local.set $pl (i32.const 255))))
-            (!put u8 @(PLAYERS + B_PLACE) (local.get $pb) (local.get $pl)))
+            (if (call $p_tplaced (local.get $pb) (local.get $kind))
+              (then
+                (local.set $pl (i32.const 1))
+                (if (i32.ne (i32.add (call $p_side (local.get $pb)) (i32.const 1)) (local.get $tw))
+                  (then
+                    (local.set $s (!at u16 @(PLAYERS + PG_SCORE) (local.get $pb)))
+                    (local.set $pl (i32.add (local.get $nw) (i32.const 1)))
+                    (!for $q (i32.const 0) (i32.const @NPLAYER)
+                      (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
+                      (if (i32.and (i32.and (call $p_tplaced (local.get $qb) (local.get $kind))
+                                            (i32.ne (i32.add (call $p_side (local.get $qb)) (i32.const 1)) (local.get $tw)))
+                                   (i32.gt_u (!at u16 @(PLAYERS + PG_SCORE) (local.get $qb)) (local.get $s)))
+                        (then (!inc $pl))))))
+                (if (i32.gt_u (local.get $pl) (i32.const 255)) (then (local.set $pl (i32.const 255))))
+                (!put u8 @(PLAYERS + B_PLACE) (local.get $pb) (local.get $pl)))))
           (else
-            (if (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD)))
-              (then (!put u8 @(PLAYERS + B_PLACE) (local.get $pb) (i32.const 1))))))
+            (if (i32.eq (local.get $kind) (i32.const @PK_SCORE))
+              (then
+                (local.set $s (!at u16 @(PLAYERS + PG_SCORE) (local.get $pb)))
+                (local.set $pl (i32.const 1))
+                (!for $q (i32.const 0) (i32.const @NPLAYER)
+                  (if (i32.and (i32.ne (i32.and (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $q) (i32.const 6))) (i32.const @PF_LIVE)) (i32.const 0))
+                               (i32.gt_u (!at u16 @(PLAYERS + PG_SCORE) (i32.shl (local.get $q) (i32.const 6))) (local.get $s)))
+                    (then (!inc $pl))))
+                (if (i32.gt_u (local.get $pl) (i32.const 255)) (then (local.set $pl (i32.const 255))))
+                (!put u8 @(PLAYERS + B_PLACE) (local.get $pb) (local.get $pl)))
+              (else
+                (if (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD)))
+                  (then (!put u8 @(PLAYERS + B_PLACE) (local.get $pb) (i32.const 1))))))))
         (if (!at u8 @(PLAYERS + B_PLACE) (local.get $pb)) (then (!inc $m))))))
   (local.set $win (i32.const 255))
   (!for $p (i32.const 0) (i32.const @NPLAYER)
@@ -425,9 +539,10 @@
                                                      (select (i32.sub (local.get $m) (i32.const 1)) (i32.const 1) (i32.gt_u (local.get $m) (i32.const 1)))))))
         (if (i32.or (i32.eq (local.get $kind) (i32.const @PK_SCORE)) (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD))))
           (then (!put u16 @(PLAYERS + B_ROUNDS) (local.get $pb) (i32.add (!at u16 @(PLAYERS + B_ROUNDS) (local.get $pb)) (i32.const 1)))))
-        ;; a win for each 1st (PK_OUT: still in; a ball alone that fell came 1st of 1 but didn't win)
+        ;; a win for each 1st (PK_OUT: still in, or on the side that won; a ball alone that fell came 1st of 1 but didn't win)
         (if (i32.and (i32.eq (!at u8 @(PLAYERS + B_PLACE) (local.get $pb)) (i32.const 1))
-                     (i32.or (i32.eq (local.get $kind) (i32.const @PK_SCORE)) (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD)))))
+                     (i32.or (i32.or (i32.eq (local.get $kind) (i32.const @PK_SCORE)) (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD))))
+                             (i32.ne (local.get $tw) (i32.const 0))))
           (then
             (!put u16 @(PLAYERS + B_WINS) (local.get $pb) (i32.add (!at u16 @(PLAYERS + B_WINS) (local.get $pb)) (i32.const 1)))
             (local.set $win (local.get $p))
@@ -436,13 +551,45 @@
   (i32.store (i32.const @HDR_STATE) (i32.const @H_OVER))
   (i32.store (i32.const @HDR_UNTIL) (i32.add (local.get $t) (i32.const @P_OVER))))
 
+;; Is the ball at record pb placed in a team round's end: in the room, and
+;; not a PK_OUT ball that only watched (out, with no place)?
+(func $p_tplaced (param $pb i32) (param $kind i32) (result i32)
+  (local $fl i32)
+  (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
+  (if (i32.eqz (i32.and (local.get $fl) (i32.const @PF_LIVE))) (then (return (i32.const 0))))
+  (i32.eqz (i32.and (i32.and (i32.eq (local.get $kind) (i32.const @PK_OUT)) (i32.ne (i32.and (local.get $fl) (i32.const @PF_DEAD)) (i32.const 0)))
+                    (i32.eqz (!at u8 @(PLAYERS + B_PLACE) (local.get $pb))))))
+
+;; A team round's result, kept in PG_TWIN (0 for any other round): the
+;; minigame's, if it set one; else, PK_OUT, the side with more balls still
+;; in; else the side with the higher PG_TSCORE; else a draw (3).
+(func $p_twin (param $kind i32) (result i32)
+  (local $p i32) (local $pb i32) (local $d i32) (local $tw i32)
+  (if (i32.eqz (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS))) (then (return (i32.const 0))))
+  (local.set $tw (i32.load (i32.const @PG_TWIN)))
+  (if (i32.and (i32.eqz (local.get $tw)) (i32.eq (local.get $kind) (i32.const @PK_OUT)))
+    (then
+      ;; d: red's balls in less blue's
+      (!for $p (i32.const 0) (i32.const @NPLAYER)
+        (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+        (if (i32.eq (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
+          (then (local.set $d (i32.add (local.get $d) (select (i32.const -1) (i32.const 1) (call $p_side (local.get $pb))))))))
+      (if (local.get $d) (then (local.set $tw (select (i32.const 1) (i32.const 2) (i32.gt_s (local.get $d) (i32.const 0))))))))
+  (if (i32.eqz (local.get $tw))
+    (then
+      (local.set $tw (i32.const 3))
+      (if (i32.gt_u (i32.load (i32.const @PG_TSCORE)) (i32.load (i32.const @(PG_TSCORE + 4)))) (then (local.set $tw (i32.const 1))))
+      (if (i32.lt_u (i32.load (i32.const @PG_TSCORE)) (i32.load (i32.const @(PG_TSCORE + 4)))) (then (local.set $tw (i32.const 2))))))
+  (i32.store (i32.const @PG_TWIN) (local.get $tw))
+  (local.get $tw))
+
 ;; The round, at the end of every tick: while it plays, the bumps and the
 ;; minigame's tick; balls under the lowest floor out (or down, and back after
 ;; PG_RESPAWN); the count; then the clock: the countdown, play until the
 ;; minigame is over, the result, the next round laid out.
 (func $bumper
   (local $p i32) (local $pb i32) (local $fl i32) (local $live i32) (local $left i32) (local $t i32) (local $state i32)
-  (local $n i32) (local $kind i32) (local $end i32) (local $floor f32)
+  (local $n i32) (local $kind i32) (local $end i32) (local $floor f32) (local $blue i32)
   (local.set $t (i32.load (i32.const @HDR_TICK)))
   (local.set $state (i32.load (i32.const @HDR_STATE)))
   (local.set $kind (i32.load (i32.const @PG_KIND)))
@@ -471,7 +618,11 @@
             (if (i32.and (i32.and (i32.eq (local.get $state) (i32.const @H_PLAY)) (i32.eq (local.get $kind) (i32.const @PK_SCORE)))
                          (i32.ge_u (i32.sub (local.get $t) (!at i32 @(PLAYERS + B_OUTAT) (local.get $pb))) (i32.load (i32.const @PG_RESPAWN))))
               (then (call $p_respawn (local.get $p))))))
-        (if (i32.eqz (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_DEAD))) (then (!inc $left))))))
+        (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
+        (if (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD)))
+          (then
+            (!inc $left)
+            (if (i32.and (local.get $fl) (i32.const @PF_BLUE)) (then (!inc $blue))))))))
   (i32.store (i32.const @HDR_LIVE) (local.get $live))
   (i32.store (i32.const @BH_LEFT) (local.get $left))
   (if (i32.eqz (local.get $live))
@@ -491,12 +642,15 @@
       (return)))
   (if (i32.eq (local.get $state) (i32.const @H_PLAY))
     (then
-      ;; PK_OUT also ends with one ball left of two or more, or none; a ball alone plays till it falls
+      ;; PK_OUT also ends with one ball left of two or more (in teams, one side), or none; a ball alone plays till it falls
       (local.set $end (!mg i32 over))
       (if (i32.ge_u (local.get $t) (i32.load (i32.const @HDR_UNTIL))) (then (local.set $end (i32.const 1))))
+      (if (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS))
+        (then (local.set $n (i32.or (i32.eqz (local.get $blue)) (i32.eq (local.get $blue) (local.get $left)))))
+        (else (local.set $n (i32.le_u (local.get $left) (i32.const 1)))))
       (if (i32.and (i32.eq (local.get $kind) (i32.const @PK_OUT))
                    (i32.or (i32.eqz (local.get $left))
-                           (i32.and (i32.ge_u (i32.load (i32.const @BH_N0)) (i32.const 2)) (i32.le_u (local.get $left) (i32.const 1)))))
+                           (i32.and (i32.ge_u (i32.load (i32.const @BH_N0)) (i32.const 2)) (local.get $n))))
         (then (local.set $end (i32.const 1))))
       (if (local.get $end) (then (call $p_end (local.get $t))))
       (return)))
@@ -572,3 +726,24 @@
 ;; what is scheduled from the round's start: which wall, which colour).
 (func $p_seed (param $k i32) (result i32)
   (call $hash32 (i32.load (i32.const @HDR_SEED)) (i32.load (i32.const @HDR_HOLE)) (local.get $k)))
+
+;; ---- teams (PGF_TEAMS): red against blue, the side P_FL's PF_BLUE
+
+;; The side of the ball at record pb (a bank's offset in it, so the prediction
+;; may ask of its own): 0 red, 1 blue; 0 for everyone outside a team round.
+(func $p_side (param $pb i32) (result i32)
+  (i32.ne (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_BLUE)) (i32.const 0)))
+
+;; 1 if slots p and q are teammates in a team round (never p and p).
+(func $p_mates (param $p i32) (param $q i32) (result i32)
+  (if (i32.or (i32.eq (local.get $p) (local.get $q)) (i32.eqz (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @PGF_TEAMS))))
+    (then (return (i32.const 0))))
+  (i32.eqz (i32.and (i32.xor (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $p) (i32.const 6)))
+                             (!at u8 @(PLAYERS + P_FL) (i32.shl (local.get $q) (i32.const 6))))
+                    (i32.const @PF_BLUE))))
+
+;; Side s's score (PG_TSCORE) n more: confirmed code only.
+(func $p_tadd (param $s i32) (param $n i32)
+  (local $a i32)
+  (local.set $a (i32.add (i32.const @PG_TSCORE) (i32.shl (i32.and (local.get $s) (i32.const 1)) (i32.const 2))))
+  (i32.store (local.get $a) (i32.add (i32.load (local.get $a)) (local.get $n))))

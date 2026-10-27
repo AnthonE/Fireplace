@@ -96,6 +96,11 @@
 #if ARENA
   (local $t f32) (local $lo f32) (local $floor f32) (local $ceil f32) (local $went i32)
 #endif
+#if FLIGHT
+  ;; a ship (src/flight.wat)
+  (call $f_move (local.get $p) (local.get $d))
+  (return)
+#endif
   (local.set $pb (i32.add (i32.shl (local.get $p) (i32.const 6)) (local.get $d)))
   (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
   (local.set $in (!at i32 @(PLAYERS + P_IN) (local.get $pb)))
@@ -128,8 +133,9 @@
       (local.set $wx (f32.div (local.get $wx) (local.get $len)))
       (local.set $wz (f32.div (local.get $wz) (local.get $len)))
 #if ARENA
-      ;; a zombie's legs, or the juggernaut's
-      (local.set $wish (select (f32.const @ZRUN) (f32.const @RUN) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG)))))))
+      ;; a zombie's legs, or the juggernaut's, or a lucky block's; Evade's downed crawl
+      (local.set $wish (select (f32.const @ZRUN) (f32.const @RUN) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST)))))
+      (if (i32.eq (i32.and (local.get $fl) (i32.const @PF_DOWN)) (i32.const @PF_DOWN)) (then (local.set $wish (f32.const @ED_CRAWL))))))
 #else
       (local.set $wish (f32.const @RUN))))
 #endif
@@ -150,10 +156,15 @@
           (local.set $vz (f32.mul (local.get $vz) (local.get $scale)))))
       (call $accel (local.get $vx) (local.get $vz) (local.get $wx) (local.get $wz) (local.get $wish) (local.get $wish))
       (local.set $vz) (local.set $vx)
+#if ARENA
+      ;; (the downed don't jump)
+      (if (i32.and (i32.ne (i32.and (local.get $in) (i32.const 0x10000000)) (i32.const 0)) (i32.ne (i32.and (local.get $fl) (i32.const @PF_DOWN)) (i32.const @PF_DOWN)))
+#else
       (if (i32.and (local.get $in) (i32.const 0x10000000))
+#endif
         (then
 #if ARENA
-          (local.set $vy (select (f32.const @ZJUMP) (f32.const @JUMP) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG)))))
+          (local.set $vy (select (f32.const @ZJUMP) (f32.const @JUMP) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST)))))
 #else
           (local.set $vy (f32.const @JUMP))
 #endif

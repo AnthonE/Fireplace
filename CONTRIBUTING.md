@@ -5,10 +5,12 @@ bumper balls, the arena and Party's minigames. It is on the Elo Pros store as
 Fireplace, and this repo is its source (CC0). Anyone can change it, people and
 agents alike, and an accepted pull request is paid.
 
-Four ways in, from no code to the engine:
+Five ways in, from no code to the engine:
 
 - **A theme**: a reskin of the living room, one JSON file. No code.
 - **A ball or a hat**: a new look players can pick, one entry in a list.
+- **A map**: a place to fight in, for the arena or Dogfight, drawn in the
+  browser. No code.
 - **A Party minigame**: a new round for Party, and so for Fireplace. A tool
   writes one that already plays; you make it yours.
 - **Anything else**: bots, the renderers, the netcode, fixes. Read CLAUDE.md
@@ -137,7 +139,7 @@ crate, `rust/mg/<key>/src/lib.rs`, and `node tools/rust.mjs` turns it into
 `src/mg/<key>.wat` after each change (docs/rust.md; SUMO RING is the worked
 example).
 
-Then make it yours. The thirty others in `src/mg/` are worked examples, and
+Then make it yours. The forty others in `src/mg/` are worked examples, and
 the top of `src/party.wat` and `client/party-game.mjs` says what each hook is
 given and may do. The rules every machine must agree on are CLAUDE.md's "The
 sim's rules", and the build refuses some of them outright. The ones that bite
@@ -196,6 +198,38 @@ node --test test/looks.test.mjs
 A new pattern or hat style is code: a case in the ball's or the head's
 shader, in both `client/bumper-render.mjs` and `client/party-render.mjs`
 (`lookBall`, `lookHat`), and the test checks both have it.
+
+## A map
+
+A map is where the arena's fighters (Box Canyon) or Dogfight's ships
+(Skyways) play: a folder in `maps/` holding `map.json`, `height.png` and
+`surface.png`. The map editor draws one in the browser:
+
+```sh
+npm ci && npm run build      # once
+node tools/serve.mjs         # then open http://127.0.0.1:8080/client/map-editor.html
+```
+
+Start from Box Canyon, Skyways or an empty square. Raise, lower, flatten
+and smooth the ground and paint it grass, rock, sand or metal; drag out
+boxes for walls, floors and roofs; place spawns, weapon pads, teleporters,
+the two flags, the skull, King of the Hill's hills and, for Dogfight, the
+race's gates. The panel checks the map with the build's own compiler as you
+go and says what it would refuse. Save writes the three files: in Chrome,
+pick a new folder in `maps/`; elsewhere they download and you put them
+there. Then play it with bots:
+
+```sh
+node net/play.mjs --arena --map <folder>                # open the URL it prints
+node net/play.mjs --flight --mode 12 --map <folder>     # Dogfight's Ring Race, on a map with gates
+```
+
+Send it as a pull request with the folder in `maps/`, and say which game
+it is for. A map is part of the game's build, not just a look, so it
+reaches everyone when it is merged and a game is built on it. Each game
+builds one map today; several in one build is on the roadmap.
+`docs/arena.md`'s "Making a map" has the format, for editing `map.json` by
+hand.
 
 ## Anything else
 

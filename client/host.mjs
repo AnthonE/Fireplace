@@ -11,7 +11,7 @@
 // room from the kit's pool, ?room= an invite's) the room is local
 // (client/local.mjs): this page's player and ?bots= AI players (7 by default),
 // on ?seed=, or ?mg=k (a party room playing only minigame k) or ?mode=k (an
-// arena room in mode k). A pool's room that won't let the page in before its
+// arena or flight room in mode k). A pool's room that won't let the page in before its
 // welcome gives way to the local room too, kit.mjs's room.why saying why.
 import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
@@ -54,6 +54,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     device: null,
     renderers: new Map(), // a frontend's renderer, kept for when it mounts again
     connected: false,
+    // the relay's sign-in (net/elo.mjs): the nonce it handed this session, and its answer to the last one
+    signin: { nonce: '', status: 0, address: '' },
   };
   h.set(L.CL_SLOT, -1);
   h.set(L.CL_PITCH, 512);
@@ -82,10 +84,14 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       h.sim = new Worker(new URL('./sim.mjs', import.meta.url), { type: 'module' });
       h.net.onmessage = (e) => {
         // a pool's room that turns this page away, or can't be reached (UDP blocked, say), before it is in: the local room instead
-        if (e.data.error && relay?.pool && !h.welcome) { local(e.data.error.split('\n')[0]); return; }
-        if (e.data.error) h.error = e.data.error.split('\n')[0];
-        if (e.data.welcome) h.welcome = e.data.welcome;
-        if (e.data.replay) h.replay = e.data.replay;
+        const m = e.data;
+        if (m.error && relay?.pool && !h.welcome) { local(m.error.split('\n')[0]); return; }
+        if (m.error) h.error = m.error.split('\n')[0];
+        // a new session (a failover's included) is signed in to nothing yet
+        if (m.welcome) { h.welcome = m.welcome; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); }
+        if (m.replay) h.replay = m.replay;
+        if (m.signinNonce) h.signin.nonce = m.signinNonce;
+        if (m.signed) Object.assign(h.signin, m.signed);
       };
       h.sim.onmessage = (e) => {
         const m = e.data;
@@ -98,7 +104,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
       else if (relay) {
         const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
-        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true }, [ch.port1]);
+        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, signin: fireplace }, [ch.port1]);
       } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
       h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     };
@@ -112,17 +118,24 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     open(relay);
     addEventListener('pagehide', () => h.net.postMessage({ leave: true }));
   };
+  // Sign in with the player's wallet through the Elo Pros web SDK (window.Elo),
+  // on the nonce the relay handed out; the relay checks it and answers.
+  h.signIn = async (Elo) => {
+    if (!h.signin.nonce) throw new Error('the relay has not offered a sign-in');
+    const { message, signature } = await Elo.signIn({ nonce: h.signin.nonce });
+    h.net.postMessage({ signedMessage: { message, signature } });
+  };
   if (connect) await h.connect();
   return h;
 }
 
 // A local room's AI players (their brain by the page's game) and its seed.
 function localRoom(q, wasm, { arena, fireplace }) {
-  const kind = fireplace ? 'fireplace' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '';
+  const kind = fireplace ? 'fireplace' : /\/flight\//.test(wasm) ? 'flight' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '';
   const rand = crypto.getRandomValues(new Uint32Array(1))[0];
   const seed = q.has('seed') ? Number(q.get('seed')) >>> 0
     : q.has('mg') && kind === 'party' ? ((0xa7 << 24) | ((Number(q.get('mg')) & 0xff) << 16) | (rand & 0xffff)) >>> 0
-      : q.has('mode') && kind === 'arena' ? forcedSeed(Number(q.get('mode')), rand) : undefined;
+      : q.has('mode') && (kind === 'arena' || kind === 'flight') ? forcedSeed(Number(q.get('mode')), rand) : undefined;
   return { kind, bots: q.has('bots') ? Number(q.get('bots')) : 7, seed };
 }
 

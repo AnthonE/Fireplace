@@ -3,10 +3,10 @@
 A party game for up to 256 people in one room, in the browser. You sit down in
 a living room at night, the fire going, snow at the window, and the TV is
 playing whatever the room is on: bumper balls, a Party minigame, an arena
-match, a hole of golf. Click and the camera closes in until the TV fills the
-screen and you're in it. When a game ends it pulls back to the room, hands
-out marshmallows to the top three and tunes in the next. Come and go as you
-like.
+match, a Dogfight, a hole of golf. Click and the camera closes in until the
+TV fills the screen and you're in it. When a game ends it pulls back to the
+room, hands out marshmallows to the top three and tunes in the next. Come and
+go as you like.
 
 ![The living room: the fire going, the TV on, Fireplace's title card](docs/f1-fireplace.png)
 
@@ -49,15 +49,18 @@ its own web page, a plan for your game, and Claude to help build it.
 ## The games
 
 The room plays a playlist, round and round: bumper balls (two rounds), Party
-(three minigames), the arena (one three-minute match), Party again, a hole of
-golf. The top three of each game get 3, 2 and 1 marshmallows.
+(three minigames), the arena (one three-minute match), Party again, a
+three-minute Dogfight, a hole of golf. The top three of each game get 3, 2 and
+1 marshmallows.
 
 | | |
 | --- | --- |
 | [**Bumper balls**](docs/bumper.md) | Every player a ball on a wheel of Swiss cheese. Bump the others into the holes and keep out yourself; the rim crumbles, the holes widen, power-ups drop from the sky. Last ball rolling wins. |
-| [**Party**](docs/party.md) | Bumper balls' ball and a different minigame every round, 31 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Sumo Ring. |
-| [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and twelve modes: Grab Bag, Zombies, Gun Game, Juggernaut, and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault. |
+| [**Party**](docs/party.md) | Bumper balls' ball and a different minigame every round, 41 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring. |
+| [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and fifteen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault. |
+| [**Dogfight**](docs/flight.md) | The arena with wings: every fighter a ship over Skyways, a valley with a river canyon, spires, arches and ring gates. Lasers, a homing charge shot, bombs, boost, brake and barrel rolls, in a free-for-all, red against blue, the juggernaut or Ring Race, three laps through the gates. |
 | [**Golf**](docs/golf.md) | One course for everyone, rockets and grenades for clubs: a blast just behind your ball drives it 200 m, and every ball ever hit stays in play. |
+
 
 <p>
 <img src="docs/b1-bumper-256.png" width="49%" alt="Bumper balls with 256 players">
@@ -90,6 +93,8 @@ fullscreen. Each game also runs alone, with its own page:
 node net/play.mjs --bumper               # client/bumper.html, 15 AI balls
 node net/play.mjs --party [--mg k]       # client/party.html, the rotation or minigame k
 node net/play.mjs --arena [--mode k]     # client/arena.html, the modes in turn or mode k
+node net/play.mjs --flight [--mode k]    # client/flight.html, Dogfight
+node net/play.mjs --fireplace --start 4  # Fireplace from the playlist's entry 4 (Dogfight) on
 node net/play.mjs                        # golf, client/index.html
 ```
 
@@ -106,9 +111,9 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
 
 - **Hand-written WebAssembly.** The whole simulation, every game, is WAT
   written by hand (`src/`), folded by a small macro assembler
-  (`tools/asm.mjs`) and assembled with wabt. No compiler, no engine. All four
-  games build into one 285 KB module, `build/fireplace/game.wasm`, 109 KB
-  gzipped, of which 68 KB is Box Canyon's height map.
+  (`tools/asm.mjs`) and assembled with wabt. No compiler, no engine. All five
+  games build into one 698 KB module, `build/fireplace/game.wasm`, 213 KB
+  gzipped, of which 35 KB is Box Canyon's height map and 80 KB Skyways'.
 - **Deterministic lockstep at 125 Hz.** Only input words cross the network,
   one 32-bit word per player per tick. Every machine steps the same bits, so
   bandwidth follows players, never balls or bullets: about 9 KB/s down per
@@ -132,12 +137,12 @@ protocol, for writing a client in any language, and
 
 | | |
 | --- | --- |
-| `src/` | the sim: the engine and golf (`game.wat` and friends), the arena (`arena.wat`, its team modes in `am/`), bumper balls (`bumper.wat`), Party (`party.wat`, a minigame a file in `mg/`), the playlist (`fireplace.wat`), and `layout.mjs`, the one memory map everything reads |
-| `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements |
+| `src/` | the sim: the engine and golf (`game.wat` and friends), the arena (`arena.wat`, its team modes in `am/`), flight (`flight.wat`), bumper balls (`bumper.wat`), Party (`party.wat`, a minigame a file in `mg/`), the playlist (`fireplace.wat`), and `layout.mjs`, the one memory map everything reads |
+| `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, and the map editor (`map-editor.html`) |
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
 | `tools/` | the assembler, the map compiler, match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
-| `maps/canyon/` | Box Canyon: two images and a JSON file |
+| `maps/` | Box Canyon and Skyways: two images and a JSON file each |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, the roadmap |
 
