@@ -44,6 +44,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     device: null,
     renderers: new Map(), // a frontend's renderer, kept for when it mounts again
     connected: false,
+    // the relay's sign-in (net/elo.mjs): the nonce it handed this session, and its answer to the last one
+    signin: { nonce: '', status: 0, address: '' },
   };
   h.set(L.CL_SLOT, -1);
   h.set(L.CL_PITCH, 512);
@@ -69,7 +71,15 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     const ch = new MessageChannel();
     h.net = new Worker(new URL(replay ? './replay.mjs' : './net.mjs', import.meta.url), { type: 'module' });
     h.sim = new Worker(new URL('./sim.mjs', import.meta.url), { type: 'module' });
-    h.net.onmessage = (e) => { if (e.data.error) h.error = e.data.error.split('\n')[0]; if (e.data.welcome) h.welcome = e.data.welcome; if (e.data.replay) h.replay = e.data.replay; };
+    h.net.onmessage = (e) => {
+      const m = e.data;
+      if (m.error) h.error = m.error.split('\n')[0];
+      // a new session (a failover's included) is signed in to nothing yet
+      if (m.welcome) { h.welcome = m.welcome; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); }
+      if (m.replay) h.replay = m.replay;
+      if (m.signinNonce) h.signin.nonce = m.signinNonce;
+      if (m.signed) Object.assign(h.signin, m.signed);
+    };
     h.sim.onmessage = (e) => {
       const m = e.data;
       if (m.error) h.error = m.error.split('\n')[0];
@@ -79,9 +89,16 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     };
     for (const w of [h.net, h.sim]) w.onerror = (e) => { h.error = String(e.message || e); e.preventDefault?.(); };
     if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
-    else h.net.postMessage({ url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true }, [ch.port1]);
+    else h.net.postMessage({ url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, signin: fireplace }, [ch.port1]);
     h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     addEventListener('pagehide', () => h.net.postMessage({ leave: true }));
+  };
+  // Sign in with the player's wallet through the Elo Pros web SDK (window.Elo),
+  // on the nonce the relay handed out; the relay checks it and answers.
+  h.signIn = async (Elo) => {
+    if (!h.signin.nonce) throw new Error('the relay has not offered a sign-in');
+    const { message, signature } = await Elo.signIn({ nonce: h.signin.nonce });
+    h.net.postMessage({ signedMessage: { message, signature } });
   };
   if (connect) await h.connect();
   return h;

@@ -20,11 +20,15 @@
 // asks the minigame what is safe (client/party-bot.mjs). With --fireplace it is Fireplace's
 // (build/fireplace/game.wasm), every game in turn, and every bot a guest who
 // plays whatever is on (client/fireplace-bot.mjs).
+// With --signin <domain> each bot signs in when the relay offers it (W.HELLO_SIGNIN),
+// as its own made-up wallet (0xb07…, from its number) and with a signature
+// nobody could check: for a gate whose relay asks a stand-in for Elo Pros
+// (net/run-elo.mjs), never the real one.
 // Given several relays, a session whose relay goes away tries the next, a few
 // times a second for up to 10 s, asking for its slot back (a resume): a
 // standby relay that has taken the room over holds it (net/relay.ts --standby).
 //   node net/bot-host.mjs [--relay 127.0.0.1:4434[,host:port...]] [--bots 250] [--seconds 0] [--rate 50] [--genome qg2:...] [--arena | --flight | --bumper | --party | --fireplace [--skill 0.6]]
-//                         [--impair delay=60,jitter=10,loss=0.02] [--out traces/bot-host.json] [--watch]
+//                         [--impair delay=60,jitter=10,loss=0.02] [--out traces/bot-host.json] [--watch] [--signin domain]
 // --seconds 0 plays until Ctrl-C; --rate: sessions opened a second. The summary
 // (--out, else stdout) holds every session's delivery and inputs, and the
 // shared world's interval hashes.
@@ -37,6 +41,7 @@ import * as W from './wire.mjs';
 import * as L from '../src/layout.mjs';
 import { createImpair, parseImpair } from './impair.js';
 import { feedTick } from './inbox.mjs';
+import { readResult } from './elo.mjs';
 import { newMemory, instantiate, Sim } from '../harness/core.mjs';
 import { View, modeName } from '../src/arena-view.mjs';
 import { BrainBot, GOLFER } from '../client/brain.mjs';
@@ -67,6 +72,7 @@ const bumper = argv.includes('--bumper');
 const fireplace = argv.includes('--fireplace');
 const party = argv.includes('--party');
 const skill = Number(opt('skill', 0.6));
+const signinDomain = opt('signin', '');
 const genome = opt('genome', GOLFER);
 const HOLE_TICKS = 56; // client/sim.mjs: a repair can come until a hole is 64 ticks old
 const TARGET_SLACK = (W.SEND_EVERY + 1) * W.TICK_MS; // net/bot.mjs: a lost input's repeat must still land
@@ -86,7 +92,7 @@ const world = {
   sim: null, view: null, base: new W.TickBase(), store: new Map(), newest: -1,
   roomStart: -1, seed: 0, started: false, starting: false, filling: null, syncAt: -1e9, relay: 0,
   sBase: 0, sEpoch: 0, bestRtt: Infinity, // the server's clock, from the first session's welcome and pings
-  hashes: [], keys: [], stepped: 0, stepMs: 0, worstStepMs: 0, syncs: 0, games: [],
+  hashes: [], keys: [], stepped: 0, stepMs: 0, worstStepMs: 0, syncs: 0, games: [], results: [], stage: -1,
 };
 const memory = newMemory();
 world.sim = new Sim(await instantiate(await WebAssembly.compile(bytes), memory), memory);
@@ -138,6 +144,10 @@ function step() {
     if (fireplace) {
       const dv = world.view.dv, g = dv.getUint32(L.FP_GAME, true), seed = dv.getUint32(L.HDR_SEED, true), n = dv.getUint16(L.FP_COUNT + 2, true);
       if (world.games.at(-1)?.n !== n) world.games.push({ game: g, n, name: g === L.G_ARENA && modeName(seed) !== null ? `ARENA ${modeName(seed)}` : g === L.G_FLIGHT && modeName(seed) !== null ? flightMode((seed >>> 16) & 0xff).name : L.GAMES[g], simTick: sim.tick });
+      // each game's places as its result is held, what the referee reads (net/elo.mjs)
+      const stage = dv.getUint32(L.FP_STAGE, true);
+      if (stage === 1 && world.stage === 0) world.results.push({ simTick: sim.tick, ...readResult(sim.u8, dv) });
+      world.stage = stage;
     }
     // the arena: each match's mode as play starts, and how it ended (a team mode's scores and winner)
     if (arena) {
@@ -209,6 +219,9 @@ class Session {
     this.relay = 0; // which of relays
     this.lostAt = -1; // when the relay went away, until another has us
     this.failovers = [];
+    this.wallet = '0x' + (0xb07 * 2 ** 32 + k).toString(16).padStart(40, '0');
+    this.signed = null; // the relay's answer: { status, address }
+    this.signins = 0;
   }
 
   open() {
@@ -226,7 +239,7 @@ class Session {
     tcp.on('data', (d) => { this.rx = this.rx.length ? Buffer.concat([this.rx, d]) : d; this.parse(); });
     // back after a failover: the same slot in the same room
     const resume = this.lostAt >= 0 && !watch ? this.slot : -1;
-    tcp.on('connect', () => this.stream(W.encodeHello({ maxDatagram: 1400, wasmPrefix: prefix, nonce: this.k, watch, room: resume >= 0 ? this.roomStart : 0, resume })));
+    tcp.on('connect', () => this.stream(W.encodeHello({ maxDatagram: 1400, wasmPrefix: prefix, nonce: this.k, watch, room: resume >= 0 ? this.roomStart : 0, resume, signin: !!signinDomain && !watch })));
   }
 
   // The relay went away (or wouldn't have us yet): the next one, in a quarter
@@ -291,6 +304,7 @@ class Session {
       let need = 16;
       if (b[0] === W.T_FILL) need += dv.getUint32(12, true);
       if (b[0] === W.T_KEY) need += (b[1] === W.SYNC.DESYNC ? 8 + 1024 : 0) + dv.getUint32(12, true);
+      if (b[0] === W.T_SIGNED) need += b[2];
       if (b.length < need) return;
       const m = Buffer.from(b.subarray(0, need));
       this.rx = b.subarray(need);
@@ -328,6 +342,16 @@ class Session {
 
   async control(m) {
     const dv = new DataView(m.buffer, m.byteOffset, m.length);
+    // a nonce to sign: once, and again only after an answer that says to try again
+    if (m[0] === W.T_SIGNIN && this.signed?.status !== 1 && this.signins < 3) {
+      this.signins++;
+      const nonce = new TextDecoder().decode(m.subarray(4, 16)).replace(/\0+$/, '');
+      const message = [`${signinDomain} wants you to sign in with your Ethereum account:`, this.wallet, '', 'Sign in to play.', '',
+        `URI: https://${signinDomain}`, 'Version: 1', 'Chain ID: 4663', `Nonce: ${nonce}`, `Issued At: ${new Date().toISOString()}`].join('\n');
+      this.stream(W.encodeSignin(message, '0x' + '00'.repeat(65)));
+      return;
+    }
+    if (m[0] === W.T_SIGNED) { this.signed = { status: m[1], address: new TextDecoder().decode(m.subarray(16, 16 + m[2])) }; return; }
     if (m[0] === W.T_PONG) {
       this.stats.pongs++;
       const rtt = performance.now() - this.pingAt[dv.getUint32(4, true)];
@@ -455,11 +479,13 @@ const per = sessions.map((s) => {
     k: s.k, joined: s.joined, slot: s.slot, reject: s.reject, error: s.error || null, joinTick: s.joinTick0 ?? null, keys: s.keys, failovers: s.failovers,
     expected, bundleTicks: s.stats.bundleTicks, repairTicks: s.stats.repairTicks, bundles: s.stats.bundles,
     downKB: Number((s.stats.down / 1000).toFixed(1)), upKB: Number((s.stats.up / 1000).toFixed(1)), mine: s.mine, matched: s.matched,
+    wallet: signinDomain ? s.wallet : undefined, signed: s.signed,
   };
 });
 const summary = {
   bots: nBots, seconds, impair, genome: arena || bumper || party ? null : genome, arena, flight, bumper, party, fireplace,
   games: fireplace || party || arena ? world.games : undefined,
+  results: fireplace ? world.results : undefined,
   // the arena's match as the run ended: its mode, and a team mode's scores, target, winner and sides' counts
   mode: arena ? world.view.mode() : undefined,
   watch, joined: per.filter((p) => p.joined).length, rejected: per.filter((p) => p.reject !== null).length,

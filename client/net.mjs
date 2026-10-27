@@ -20,8 +20,11 @@ const epoch = () => performance.timeOrigin + performance.now();
 
 let leave = () => {};
 let leaving = false;
+// a sign-in the page's wallet signed, to the relay (net/elo.mjs)
+let signin = (_m) => {};
 self.onmessage = (e) => {
   if (e.data.leave) { leaving = true; leave(); return; }
+  if (e.data.signedMessage) { signin(e.data.signedMessage); return; }
   connect(e.data);
 };
 
@@ -60,7 +63,8 @@ const SILENT_MS = 1500;
 // arena: the arena's input words (src/layout.mjs), with its frames; fireplace:
 // the arena's while it or Dogfight is the game on (FP_GAME in the confirmed world), else golf's
 // looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK)
-async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false }) {
+// signin: ask the relay for a sign-in nonce (W.HELLO_SIGNIN); the page hears it, and the answer, as { signinNonce } and { signed }
+async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false, signin: wantSignin = false }) {
   const imp = createImpair({ ...impair, seed: (Math.random() * 2 ** 32) >>> 0 });
   const i32 = new Int32Array(memory.buffer);
   const u32 = new Uint32Array(memory.buffer);
@@ -78,7 +82,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   const sw = bidi.writable.getWriter();
   const tHello = epoch();
   const resume = back && !watch ? back.slot : -1;
-  await sw.write(W.encodeHello({ maxDatagram: wt.datagrams.maxDatagramSize, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks }));
+  await sw.write(W.encodeHello({ maxDatagram: wt.datagrams.maxDatagramSize, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch }));
   const sr = W.bufferedReader(bidi.readable.getReader());
   const head = await sr.read(4);
   if (head[0] === W.T_REJECT) throw new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected');
@@ -112,6 +116,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
     sw.write(W.encodeLook(w)).catch(() => {});
   };
   sendLook();
+  signin = ({ message, signature }) => { sw.write(W.encodeSignin(message, signature)).catch(() => {}); };
   // closing the control stream is how the relay hears we left
   let left = false;
   leave = async () => {
@@ -158,6 +163,8 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
       if (!m) break;
       if (m.type === W.T_PONG) { seen.pongs++; onPong(m); }
       if (m.type === W.T_LOOK) for (const [p, w] of m.looks) if (p < L.NPLAYER) u32[(L.CL_LOOKS >> 2) + p] = w;
+      if (m.type === W.T_SIGNIN) self.postMessage({ signinNonce: m.nonce });
+      if (m.type === W.T_SIGNED) self.postMessage({ signed: { status: m.status, address: m.address } });
       if (m.type === W.T_KEY) {
         seen.keys++;
         Atomics.add(i32, L.CL_RX_STREAM >> 2, 16 + m.packed.length + (m.digests ? 1032 : 0));
