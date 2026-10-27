@@ -557,6 +557,11 @@ export const M_JUGGERNAUT = 3;
 // In a team mode everyone spawns on their own half with an assault rifle and
 // a magnum, the map's pads are laid, and a flag's or the skull's carrier has
 // no guns or frags, only a swing that kills (PF_CARRY).
+// A mode on the kit may have no sides (MODES' team 0: everyone for itself,
+// as in a Fiesta), its hooks called all the same:
+//   M_LUCKY (LUCKY BLOCKS): everyone spawns with a magnum alone; blocks on the
+//   map's spots pay out at random when shot, struck or blown up (a gun, an
+//   overshield, legs, frags, or a blast on whoever broke it); LK_TARGET kills win.
 export const M_SLAYER = 4;
 export const M_CTF = 5;
 export const M_ODDBALL = 6;
@@ -565,6 +570,19 @@ export const M_HEADHUNT = 8;
 export const M_TERRITORY = 9;
 export const M_VIP = 10;
 export const M_ASSAULT = 11;
+export const M_LUCKY = 12;
+// Evade, on the kit with no sides too:
+//   M_EVADE: everyone against the chasers; a chaser that reaches a fighter
+//   downs it (PF_DOWN), the still beside it revive it, downed ED_BLEED it's
+//   out; survive the clock. Its constants in src/am/evade.mjs.
+export const M_EVADE = 13;
+// Escape, on the kit with no sides too (one hunter against the room):
+//   M_ESCAPE: one fighter in ES_PER the hunter (PF_JUGG: the sword, a
+//   zombie's legs, no hurt), the rest survivors with no guns, a shove that
+//   stuns it. Its swing downs (PF_DOWN, Evade's), held still over the downed
+//   it finishes; hack the terminals, the exits open, escape. Its constants in
+//   src/am/escape.mjs.
+export const M_ESCAPE = 14;
 // name is what a player sees (the M_* and FIESTA names are only the code's)
 export const MODES = [
   { name: FIESTA ? 'GRAB BAG' : 'FREE FOR ALL', rules: FIESTA ? 'RANDOM GUNS  MOST KILLS IN 10 MIN' : `${FRAG_LIMIT} KILLS WIN`, ticks: MATCH_TICKS },
@@ -579,14 +597,17 @@ export const MODES = [
   { name: 'TERRITORIES', rules: 'TAKE THE TERRITORIES  HOLD THEM TO SCORE', ticks: 45000, team: 1, pads: 1 },
   { name: 'VIP', rules: 'GUARD YOUR VIP  KILL THEIRS  10 TO WIN', ticks: 45000, team: 1, pads: 1 },
   { name: 'ASSAULT', rules: 'PLANT THE BOMB AT THEIR BASE  3 TO WIN', ticks: 60000, team: 1, pads: 1 },
+  { name: 'LUCKY BLOCKS', rules: 'BREAK THE BLOCKS FOR LOOT  15 KILLS WIN', ticks: 37500, team: 0 },
+  { name: 'EVADE', rules: 'RUN FROM THE CHASERS  REVIVE THE DOWNED  SURVIVE', ticks: 26250, team: 0 },
+  { name: 'ESCAPE', rules: 'HACK THE TERMINALS  REACH AN EXIT  OUTRUN THE HUNTER', ticks: 30000, team: 0 },
 ];
 export const MODE_TICKS = MODES.map((m) => m.ticks);
-// a room opens on a Fiesta, then two team matches to every free-for-all
-export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT];
+// a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks, Evade and Escape before it comes round
+export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT, M_LUCKY, M_EVADE, M_ESCAPE];
 export const FORCE_MODE = 0xa8;
 export const TEAMED = MODES.reduce((b, m, k) => (m.team ? b | (1 << k) : b), 0); // red against blue
 export const PAD_MODES = MODES.reduce((b, m, k) => (m.pads ? b | (1 << k) : b), 0); // the FIESTA build lays the map's pads for these
-export const TEAM_MODES = (1 << M_INFECTION) | (1 << M_JUGGERNAUT) | TEAMED; // modes with sides: no hurting your own
+export const TEAM_MODES = (1 << M_INFECTION) | (1 << M_JUGGERNAUT) | TEAMED | (1 << M_EVADE) | (1 << M_ESCAPE); // modes with sides: no hurting your own (Evade's one side, everyone; Escape's hunters and survivors)
 export const LADDER = [W_AR, W_BR, W_MAGNUM, W_SHOTGUN, W_PLASMA, W_NEEDLER, W_SNIPER, W_ROCKET, W_SWORD];
 export const JUGG_POINTS = 10;
 export const ZRESPAWN_TICKS = 250; // 2 s: a zombie comes back sooner
@@ -595,8 +616,8 @@ export const OVERSHIELD = 200; // the juggernaut's shields; they recharge only t
 export const AH_MODE = REGION + 0x48; // u32 M_*: this match's
 export const AH_HUMANS = REGION + 0x4c; // u32 Infection: live humans, counted every tick of play
 export const AH_ZOMBIES = REGION + 0x50; // u32 Infection: live zombies
-export const AH_LEADER = REGION + 0x54; // u32 gun game: the leader + 1; Juggernaut: the juggernaut + 1 (0 none)
-export const AH_WINNER = REGION + 0x58; // u32 gun game: the sword's killer + 1; Juggernaut: who reached JUGG_POINTS + 1
+export const AH_LEADER = REGION + 0x54; // u32 gun game, Lucky Blocks: the leader + 1; Juggernaut: the juggernaut + 1 (0 none)
+export const AH_WINNER = REGION + 0x58; // u32 gun game: the sword's killer + 1; Juggernaut: who reached JUGG_POINTS + 1; Lucky Blocks: LK_TARGET kills
 // The team modes' (TEAMED), red's then blue's where there are two:
 export const AH_SCORE = REGION + 0x5c; // u32 x 2: each side's score (kills, captures, seconds held)
 export const AH_TARGET = REGION + 0x64; // u32 the score that wins, set as play starts (0: none)
@@ -608,6 +629,8 @@ export const PF_ZOMBIE = 16; // Infection: a zombie
 export const PF_JUGG = 32; // Juggernaut: the juggernaut
 export const PF_BLUE = 64; // a team mode: on blue (red without it)
 export const PF_CARRY = 128; // a team mode: carrying the flag or the skull (no guns, no frags, a swing that kills)
+export const PF_FAST = 4; // Lucky Blocks: a zombie's legs for a while (golf's PF_DONE, which the arena never sets)
+export const PF_DOWN = PF_CARRY | PF_FAST; // Evade, Escape: downed (a crawl, no jump, no guns, no swing), both bits, which no other mode sets together; Escape's hunter stunned
 // Per fighter, past the spawn points (hashed, in every keyframe, not in the
 // prediction's copy: only the confirmed world reads it), cleared as a mode is picked:
 export const MODE_REC = ARENA + 0x300; // 256 x 8 B
@@ -638,7 +661,11 @@ export const MX_TEAMWIN = 8; // a team mode's match is over: shot AH_TEAMWIN (1 
 export const MX_AM = 16;
 
 // The arena's kit of team modes: mode AM[k].mode is src/am/<key>.wat, its
-// hooks $<prefix>_start, _tick, _kill and _bar called through (!am) while it is on.
+// hooks $<prefix>_start, _tick, _kill and _bar called through (!am) while it
+// is on, and any of the optional ones named in its hooks: _strike (a shot's
+// line, a swing's reach or a blast, on the confirmed world in play),
+// _spawn (a fighter armed as it comes into the fight) and _hurt (damage
+// about to be dealt, which the mode may take in its place).
 export const AM = [
   { mode: M_SLAYER, key: 'slayer', prefix: 'ts' },
   { mode: M_CTF, key: 'ctf', prefix: 'cf' },
@@ -648,7 +675,12 @@ export const AM = [
   { mode: M_TERRITORY, key: 'territories', prefix: 'tr' },
   { mode: M_VIP, key: 'vip', prefix: 'vp' },
   { mode: M_ASSAULT, key: 'assault', prefix: 'as' },
+  { mode: M_LUCKY, key: 'lucky', prefix: 'lk', hooks: ['strike', 'spawn'] },
+  { mode: M_EVADE, key: 'evade', prefix: 'ed', hooks: ['strike', 'spawn'] },
+  { mode: M_ESCAPE, key: 'escape', prefix: 'es', hooks: ['spawn', 'hurt'] },
 ];
+export const AM_HOOKS = ['start', 'tick', 'kill', 'bar']; // every mode on the kit has these
+export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on the kit, sides or none
 // Each team mode's own constants (src/am/<key>.mjs), gathered as one object
 // the assembler spreads into its scope, as MG_CONSTS is, and not names of this
 // module (V8's dictionary line, below); JS reads them from src/am/consts.mjs.
@@ -811,6 +843,15 @@ export const MINIGAMES = [
   { key: 'stomp', prefix: 'sg', name: 'STOMPIN GROUND' },
   { key: 'seesaw', prefix: 'ss', name: 'SEESAWS' },
   { key: 'kart', prefix: 'kt', name: 'KART GRAB' },
+  { key: 'disaster', prefix: 'nd', name: 'DISASTER ISLAND' },
+  { key: 'slap', prefix: 'sl', name: 'SLAP HAPPY' },
+  { key: 'trap', prefix: 'tr', name: 'TRAP RUN' },
+  { key: 'parry', prefix: 'py', name: 'PARRY BALL' },
+  { key: 'mingle', prefix: 'mi', name: 'MINGLE' },
+  { key: 'honey', prefix: 'hc', name: 'HONEYCOMB' },
+  { key: 'dodge', prefix: 'db', name: 'DODGEBALL' },
+  { key: 'volley', prefix: 'vb', name: 'VOLLEYBALL' },
+  { key: 'soccer', prefix: 'so', name: 'SOCCER' },
 ]; // index = MG_*
 export const MG_THINICE = 0;
 export const MG_COLOR = 1;
@@ -843,13 +884,25 @@ export const MG_GATES = 27;
 export const MG_STOMP = 28;
 export const MG_SEESAW = 29;
 export const MG_KART = 30;
-export const NMG = 31;
+export const MG_DISASTER = 31;
+export const MG_SLAP = 32;
+export const MG_TRAP = 33;
+export const MG_PARRY = 34;
+export const MG_MINGLE = 35;
+export const MG_HONEY = 36;
+export const MG_DODGE = 37;
+export const MG_VOLLEY = 38;
+export const MG_SOCCER = 39;
+export const NMG = 40;
 
 export const PK_OUT = 0; // out is out: the last ball in wins
 export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE at the end
 export const PGF_BUMPS = 1; // PG_FLAGS: balls bump
 export const PGF_NOKICK = 2; // PG_FLAGS: a bump has no kick, only what the balls bring (elastic)
 export const PGF_SIZE = 4; // PG_FLAGS: a ball's radius is its PG_M, an f32 (B_RAD while that's less), its weight the radius cubed
+export const PGF_TEAMS = 8; // PG_FLAGS: red against blue (P_FL's PF_BLUE), dealt as the round is laid out; scores by side, placed by side
+export const PGF_MATES = 16; // PG_FLAGS, with PGF_TEAMS: teammates bump (and a ball's blast shoves its own side); without it they pass through
+export const FORCE_TEAMS = 0x100; // PG_FORCE: every round in teams, whatever its minigame (a test and gate hook)
 export const P_COUNT = 750; // 6 s countdown, the minigame's title up
 export const P_OVER = 625; // 5 s of the result
 export const FX_MG = 32; // minigame k's own FX kinds are FX_MG + 4k .. FX_MG + 4k + 3
@@ -872,6 +925,13 @@ export const PG_PREV = REGION + 0x78; // u32 the last minigame played (low byte)
 export const PG_CX = REGION + 0x7c; // f32 the stage's centre, world x and z
 export const PG_H = REGION + 0x80; // 112 B the minigame's own header (phase, timings, the call, seeds), to 0xf0
 export const PG_H_SIZE = 112;
+// A team round's (PGF_TEAMS), in golf's tee, cup and par fields that party leaves free (inside the
+// prediction's copy), zeroed each round; the side of a ball is P_FL's PF_BLUE (red without it).
+export const PG_TSCORE = HDR_TEE; // u32 red's score, then blue's at +4: the minigame adds to them
+export const PG_TSIDE = HDR_CUP; // u32 the side of the ball spawn is placing, 0 red, 1 blue
+export const PG_TK = HDR_DIR; // u32 its place among that side's balls as laid out, in slot order (a respawn: spawn's own k)
+export const PG_TN = HDR_DIR + 4; // u16 red's balls as laid out, u16 blue's
+export const PG_TWIN = HDR_PAR; // u32 the side that won, 1 red, 2 blue, 3 a draw; 0 till the end, unless the minigame decides it
 // A ball's fields past bumper's, in bytes golf leaves free.
 export const PG_SCORE = 56; // u16 this round's score, zeroed each round
 export const PG_PTS = 58; // u16 party points, every round so far
@@ -919,7 +979,16 @@ import * as mg_gates from './mg/gates.mjs';
 import * as mg_stomp from './mg/stomp.mjs';
 import * as mg_seesaw from './mg/seesaw.mjs';
 import * as mg_kart from './mg/kart.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart));
+import * as mg_disaster from './mg/disaster.mjs';
+import * as mg_slap from './mg/slap.mjs';
+import * as mg_trap from './mg/trap.mjs';
+import * as mg_parry from './mg/parry.mjs';
+import * as mg_mingle from './mg/mingle.mjs';
+import * as mg_honey from './mg/honey.mjs';
+import * as mg_dodge from './mg/dodge.mjs';
+import * as mg_volley from './mg/volley.mjs';
+import * as mg_soccer from './mg/soccer.mjs';
+export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer));
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come

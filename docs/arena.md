@@ -128,16 +128,17 @@ node --test test/map.test.mjs
 
 ## Modes
 
-Each match plays one of twelve modes, chosen as its countdown starts: match k
-of a room plays `ARENA_MODES[k % 12]` (`src/layout.mjs`), Fiesta, Team Slayer,
+Each match plays one of fifteen modes, chosen as its countdown starts: match k
+of a room plays `ARENA_MODES[k % 15]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
-Juggernaut, King of the Hill, Assault, and round again: a free-for-all, then
-two [team modes](#teams). So a room
+Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, Escape, and round
+again: a free-for-all, then two [team modes](#teams), and the three kit modes
+without sides last. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it (see Fireplace). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
@@ -228,6 +229,62 @@ node tools/genarena.mjs --bots 8 --ticks 20000 --mode 1 --out logs/arena-infecti
 node harness/matrix.mjs --ticks 20000 --log logs/arena-infection.qgl --wasm build/arena/game.wasm
 node net/run-arena.mjs --mode 1 [--bots 15] [--seconds 60]
 ```
+
+Lucky Blocks (mode 12) is everyone for itself on the [kit](#teams), the first
+mode there without sides (MODES' `team: 0`). Everyone spawns with a magnum in
+both hands and no frags. As play starts a gold block with a ? is laid over
+each of the map's spots: its pads, both stands, the skull's spot and the
+hills, one to a spot, 18 on Box Canyon. A hitscan round through one, a swing
+reaching it, a blast within half its radius or a bolt through it breaks it,
+and none of them stops on it. At the tick's end the room's PRNG draws what it
+pays its breaker, out of 64: a gun (rarer ones less often: the rocket and the
+sword 3 each), an overshield, a zombie's legs for 15 s, two frags, or unlucky,
+either a 300 blast at the breaker or eight frags falling round it. The feed
+says which ("P7 LUCKY ROCKET", "P3 UNLUCKY"). A block is back 15 s on. 15
+kills win, or the most at 5 min. The strike and spawn hooks are optional kit
+hooks, the payout is drawn serially in the tick hook, and the legs are P_FL's
+PF_FAST, which the prediction runs. The AI fighter goes for the nearest block
+while it holds only the magnum and fights once armed.
+`test/arena-lucky.test.mjs` (13 tests).
+
+Evade (mode 13) is everyone against the chasers: flat faces the sim moves over
+Box Canyon, 2 to 6 of them, more as the clock runs and the room fills, each
+after its nearest standing fighter at 11.5 m/s, a fighter's 10 on the flat,
+but slowed to 0.4 of that up stairs and slopes and to 2.5 m/s up a ledge,
+which it climbs only when its prey is up there (out of a base first, if its
+prey is on the roof over it). A chaser that reaches you downs you: you crawl
+at 2 m/s, with no gun and no jump. A friend holding still within 2 m of you
+for 3 s gets you up, and your 30 s of bleeding stop while they do; bleed out
+and you watch the others for the rest of the match. A hit stuns a chaser for
+1.2 s, then it ignores hits for 2 s. Survive 3:30 and whoever stands wins;
+nobody standing, the chasers do. Places go standing at the end, then time
+standing, then revives. The chasers are records in `AO`, 48 B each, moved
+serially on the confirmed world after every fighter's own tick; downed is both
+`PF_CARRY` and `PF_FAST` in `P_FL`, so the prediction runs the crawl. Sixteen
+AI fighters are usually caught to the last in 150 to 200 s; online with 64, 46
+stood at 90 s (5,623 hashes, all equal). `test/arena-evade.test.mjs` (13
+tests).
+
+Escape (mode 14) is one hunter against the room: one fighter in 14 (at least
+one) is drawn the hunter as play starts, in the juggernaut's gold, with its
+sword and its 12.5 m/s legs, at the spawn point farthest from everyone. The
+rest have no guns; their melee is a shove that knocks the hunter down for 1.5
+s, once in 40 s each, and it shrugs shoves off for 2 s after. The hunter's
+swing downs you (Evade's crawl); a friend holding still by you for 3 s gets
+you up, the hunter holding still over you for 2 s finishes you, and 30 s down
+you bleed out. Terminals stand on the map's objective spots and pads, one for
+every three survivors (three at least). Hold still within 2 m of one to hack
+it: 50 s alone, faster with friends. While it's hacked its screen flickers and
+the hunter's HUD marks the noise. Once two in three are hacked, or with a
+minute left, two exits open on the ground, and reaching one gets you out. It's
+over when nobody is left in it, or at 4:00 (3:00 in Fireplace, the exits open
+at 2:00). The escaped place first by order, then the hunter by survivors
+finished, then the rest. Nothing hurts anybody: the kit's optional hurt hook
+takes every blow. The terminals live in `AO`, and both the downed and the
+stunned hunter are `PF_DOWN`, so the prediction runs every crawl. Matches of 8
+or 16 AI fighters run 57 to 144 s, 2 of 7 to 13 of 15 survivors escaping;
+online with 64, 28 escaped in 90 s (5,623 hashes, all equal).
+`test/arena-escape.test.mjs` (13 tests).
 
 ## Teams
 

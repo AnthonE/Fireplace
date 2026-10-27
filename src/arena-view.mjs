@@ -48,7 +48,7 @@ View.prototype.fighter = function fighter(p) {
     yaw: (pl.input & 0x7ff) / 2048 * 2 * Math.PI, pitch: (((pl.input >>> L.AW_PITCH) & 0x3ff) - 512) / 1024 * Math.PI,
     // the match's mode: a side, and the confirmed world's record (MODE_REC is not in the prediction's copy).
     // team is 0 red, 1 blue, -1 in a mode without them: red is PF_BLUE clear, so the bit alone would make every Fiesta fighter red
-    zombie: !!(fl & L.PF_ZOMBIE), jugg: !!(fl & L.PF_JUGG), team: this.teamed() ? (fl & L.PF_BLUE ? 1 : 0) : -1, carry: !!(fl & L.PF_CARRY), ...this.modeRec(p),
+    zombie: !!(fl & L.PF_ZOMBIE), jugg: !!(fl & L.PF_JUGG), team: this.teamed() ? (fl & L.PF_BLUE ? 1 : 0) : -1, carry: (fl & L.PF_DOWN) !== L.PF_DOWN && !!(fl & L.PF_CARRY), down: (fl & L.PF_DOWN) === L.PF_DOWN, ...this.modeRec(p),
   };
 };
 
