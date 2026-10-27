@@ -158,4 +158,27 @@ reaches is already decided, and the client draws the coming slope as the
 warning. A tick of 256 balls costs 0.13 to 0.27 ms in each; Party's wasm is
 134 KB, 57 KB gzipped.
 
-Not done yet: teams, and power-ups in more of the minigames.
+**Teams.** A minigame plays red against blue by setting `PGF_TEAMS` in its
+setup (`FORCE_TEAMS` in `PG_FORCE` plays any of them so, for tests and
+gates). The framework deals the balls in, shuffled from the round's seed, red
+and blue in turn down the shuffle (red takes the odd one: 3 balls are 2
+against 1, 256 are 128 a side), and deals again when the countdown lays the round out for a
+newcomer; a join in play goes to the smaller side, red on a tie. The side is
+the arena's bit, `PF_BLUE` in the record, so the prediction has it; spawn is
+told the ball's side and its place among that side's (`PG_TSIDE`, `PG_TK` of
+`PG_TN`). Teammates pass through each other and a ball's POW spares its own
+side, unless the round sets `PGF_MATES`. The sides keep a score each
+(`PG_TSCORE`, the minigame's to add to), and at the end the side that won
+(`PG_TWIN`: the minigame's, else for PK_OUT the side with more balls in, else
+the higher score) has every ball 1st with a win, out or not; the other side's
+place after them by their own `PG_SCORE`, and the points follow the places as
+always (8 against 8: 10 each for the winners, 5 down to 1 for the rest). A
+draw places as without teams. The page rings each ball in its side's colour
+on the floor, keeps both scores at the top left, and shows the sides on the
+title card, the board and the result; `client/party-bot.mjs`'s `team()` hands
+a brain its teammates and its foes. Every other minigame steps the bits it
+did: a rotation log of 60,000 ticks (six minigames) and forced logs of
+Slap Happy and Tag replay to the same hash on every tick before and after.
+`test/party-teams.test.mjs` (8 tests) covers it.
+
+Not done yet: power-ups in more of the minigames.

@@ -22,6 +22,8 @@ View.prototype.party = function party() {
     ...h, game, name: L.MINIGAMES[game]?.name ?? '', kind: u(L.PG_KIND), len: u(L.PG_LEN), floor: f(L.PG_FLOOR), size: f(L.PG_SIZE), cx: f(L.PG_CX),
     acc: f(L.PG_ACC), drag: f(L.PG_DRAG), idle: f(L.PG_IDLE), hop: f(L.PG_HOP), respawn: u(L.PG_RESPAWN), flags: u(L.PG_FLAGS), force: u(L.PG_FORCE),
     prev: [prev & 255, (prev >>> 8) & 255], n0: u(L.BH_N0), left: u(L.BH_LEFT), winner: u(L.BH_WINNER),
+    // a team round (PGF_TEAMS): the sides' scores, red's and blue's balls as laid out, who won (1 red, 2 blue, 3 a draw, 0 not yet)
+    teams: !!(u(L.PG_FLAGS) & L.PGF_TEAMS), tscore: [u(L.PG_TSCORE), u(L.PG_TSCORE + 4)], tn: [u(L.PG_TN) & 0xffff, u(L.PG_TN) >>> 16], twin: u(L.PG_TWIN),
     // ticks into play, as $p_t counts them: the sim's i32 subtraction wraps
     t: h.state >= L.H_PLAY ? (h.tick - h.start) | 0 : 0,
     round: h.hole,
@@ -29,12 +31,14 @@ View.prototype.party = function party() {
 };
 
 // A ball, with this round's score, its party points and the minigame's own
-// field; its radius as $b_rad has it (a round with PGF_SIZE sizes each ball).
+// field; its radius as $b_rad has it (a round with PGF_SIZE sizes each ball);
+// its side, 0 red or 1 blue (P_FL's PF_BLUE: 0 outside a team round).
 View.prototype.partier = function partier(p) {
   const b = L.PLAYERS + this.bank + p * L.PSIZE;
   const ball = this.bumper(p);
   if (this.dv.getUint32(L.PG_FLAGS, true) & L.PGF_SIZE) ball.radius = Math.max(this.dv.getFloat32(b + L.PG_M, true), B_RAD);
-  return { ...ball, score: this.dv.getUint16(b + L.PG_SCORE, true), pts: this.dv.getUint16(b + L.PG_PTS, true), m: this.dv.getUint32(b + L.PG_M, true) };
+  return { ...ball, score: this.dv.getUint16(b + L.PG_SCORE, true), pts: this.dv.getUint16(b + L.PG_PTS, true), m: this.dv.getUint32(b + L.PG_M, true),
+    side: (this.dv.getUint8(b + L.P_FL) & L.PF_BLUE) ? 1 : 0 };
 };
 
 const f = Math.fround;
@@ -85,3 +89,6 @@ export function hash32(x, z, s) {
 export function seed(view, k) {
   return hash32(view.dv.getUint32(L.HDR_SEED + view.bank, true), view.dv.getUint32(L.HDR_HOLE + view.bank, true), k);
 }
+
+// The sides' colours, red and blue, and their names, as a team round's HUD and rings show them.
+export const SIDES = [{ name: 'RED', color: [1, 0.22, 0.18] }, { name: 'BLUE', color: [0.25, 0.5, 1] }];

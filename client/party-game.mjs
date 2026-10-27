@@ -7,8 +7,11 @@
 // overview), its fx() turns its own FX into flashes and sounds and its hud()
 // adds its lines. The countdown is a title card over a fly-round of the
 // stage; then the camera is behind your ball. The board (Tab, and through
-// the result) ranks the room by party points. party.html mounts it alone;
-// Fireplace mounts it while the room plays party.
+// the result) ranks the room by party points. A team round (PGF_TEAMS) rings
+// each ball in its side's colour on the floor under it, keeps the sides'
+// scores at the top left, and shows the sides on the title card, the board
+// and the result. party.html mounts it alone; Fireplace mounts it while the
+// room plays party.
 //   opts: { canvas, lockTarget (what the pointer locks to, the canvas by default), bot, skill, sens, hud, present, showGraph,
 //           external (the slots are driven from outside, as Fireplace's guest does: the camera follows them) }
 //
@@ -35,8 +38,8 @@
 //     The frontend keeps rows 0 and 1 (the clock, who's left or the scores, the round's name), the middle band
 //     (banners), the feed and the bottom rows; a minigame's lines go on rows 2 to 6, right-aligned by custom.
 import * as L from '../src/layout.mjs';
-import { partyWord } from '../src/party-view.mjs';
-import { createRenderer, Scene, COLS, SPRITE } from './party-render.mjs';
+import { partyWord, SIDES } from '../src/party-view.mjs';
+import { createRenderer, Scene, COLS, SPRITE, DECAL } from './party-render.mjs';
 import { MG } from './mg/index.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
@@ -54,6 +57,8 @@ export const slotColor = (s) => { const h = (s * 0.618034) % 1; return [0, 0.33,
 export const ordinal = (n) => `${n}${[, 'ST', 'ND', 'RD'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10] || 'TH'}`;
 // the points a place earns, as $p_end gives them: 10 for 1st down to 1 for last of m placed
 export const gain = (place, m) => 1 + Math.floor((9 * (m - Math.min(place, m))) / Math.max(1, m - 1));
+// a side's colour in the HUD's palette: red, and cyan for blue
+const SIDE_C = [C.RED, C.CYAN];
 const smooth = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
 const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
 
@@ -292,7 +297,12 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     const secs = Math.ceil((g.until - g.tick) / 125);
     if (g.state === L.H_COUNT && secs !== lastSecs && secs <= 3 && secs > 0) sound.count(secs);
     if (g.state === L.H_PLAY && lastState === L.H_COUNT) { sound.count(0); setBanner('GO!', C.GREEN, 1000, 4); }
-    if (g.state === L.H_OVER && lastState === L.H_PLAY) {
+    if (g.state === L.H_OVER && lastState === L.H_PLAY && g.teams) {
+      // a side's win: yours, theirs, or a draw
+      const won = g.twin === 1 || g.twin === 2 ? g.twin - 1 : -1;
+      if (won >= 0 && me?.live && me.side === won && me.place === 1) { setBanner(`${SIDES[won].name} WINS!`, C.YELLOW, 5000, 4); sound.holed(); }
+      else setBanner(won >= 0 ? `${SIDES[won].name} WINS` : 'A DRAW', won >= 0 ? SIDE_C[won] : C.YELLOW, 5000, 3);
+    } else if (g.state === L.H_OVER && lastState === L.H_PLAY) {
       if (g.winner === slot && slot >= 0) { setBanner('YOU WIN!', C.YELLOW, 5000, 4); sound.holed(); }
       else if (me?.live && me.place === 1) { setBanner('A SHARED WIN', C.YELLOW, 5000, 3); sound.holed(); }
       else setBanner(g.winner === 255 ? 'TIME' : `P${g.winner + 1} WINS`, C.YELLOW, 5000, 3);
@@ -404,6 +414,8 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       if (own) solid.push({ pos: [pos[0], pos[1] + 2 * r + (src.item ? 2.15 : 1.65) + 0.1 * Math.sin(now / 200), pos[2]], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });
       if (src.dash) glow.push({ pos: [pos[0] - src.vel[0] * 0.05, pos[1] + r, pos[2] - src.vel[2] * 0.05], size: r * 1.3, color: [0.4, 0.85, 1, 0.5], kind: SPRITE.FLASH, minpx: 1 });
       if (src.mega) glow.push({ pos: [pos[0], pos[1] + r, pos[2]], size: r * 1.25, color: [1, 0.35, 0.3, 0.35 + 0.15 * Math.sin(now / 120)], kind: SPRITE.RING, minpx: 1 });
+      // a team round: its side's ring on the floor round it (the ball and its rider keep their look)
+      if (g.teams) decals.push({ pos: [pos[0], pos[1] + 0.03, pos[2]], radius: r * 1.35, width: 0.24, color: [...SIDES[src.side].color, own ? 1 : 0.8], kind: DECAL.RING });
     }
     for (const c of extra) casters.push(c);
     for (const j of view.projectiles()) {
@@ -477,12 +489,22 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       bigLine(y0 + 2, mod.name || g.name, C.YELLOW, 4);
       centre(y0 + 7, mod.hint || '', C.WHITE);
       centre(y0 + 9, mod.rules || (score ? `MOST POINTS WINS  A FALL KEEPS YOU OUT ${Math.round(g.respawn / 125)} S` : 'FALL AND YOU ARE OUT  THE LAST ONE IN WINS'), C.CYAN);
+      if (g.teams) {
+        band(y0 + 11, y0 + 13);
+        const side = me?.live ? me.side : -1;
+        centre(y0 + 11, `${g.tn[0]} RED AGAINST ${g.tn[1]} BLUE${side >= 0 ? `   YOU ARE ${SIDES[side].name}` : ''}`, side >= 0 ? SIDE_C[side] : C.WHITE);
+      }
     }
     if (g.state === L.H_PLAY) {
       centre(0, clock(left), left < 10 * 125 ? C.RED : C.WHITE);
       centre(1, mod.name || g.name, C.GREY);
     }
-    if (g.state !== L.H_IDLE && st === 2 && !mod.ownScore) {
+    if (g.state !== L.H_IDLE && st === 2 && !mod.ownScore && g.teams) {
+      // the sides' scores, yours first
+      const mine = me?.live ? me.side : 0;
+      put(tx, COLS, 1, 0, `${SIDES[mine].name} ${g.tscore[mine]}`, SIDE_C[mine]);
+      put(tx, COLS, 1, 1, `${SIDES[1 - mine].name} ${g.tscore[1 - mine]}`, SIDE_C[1 - mine]);
+    } else if (g.state !== L.H_IDLE && st === 2 && !mod.ownScore) {
       if (score) {
         // your score and the leader's
         let lead = -1, best = -1;
@@ -539,11 +561,12 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     let y0 = 3;
     if (over) {
       // the result: you won, or your place, and who won
-      const won = me?.live && me.place === 1 && (g.kind === L.PK_SCORE || !me.out);
-      const who = g.winner !== 255 ? (g.winner === slot ? 'YOU WIN' : `P${g.winner + 1} WINS`) : list.some((o) => o.place === 1) ? 'A SHARED WIN' : 'NO WINNER';
+      const side = g.teams && (g.twin === 1 || g.twin === 2) ? g.twin - 1 : -1;
+      const won = me?.live && me.place === 1 && (g.kind === L.PK_SCORE || !me.out || side >= 0);
+      const who = side >= 0 ? `${SIDES[side].name} WINS` : g.winner !== 255 ? (g.winner === slot ? 'YOU WIN' : `P${g.winner + 1} WINS`) : list.some((o) => o.place === 1) ? 'A SHARED WIN' : 'NO WINNER';
       band(1, 9, 0.55);
       if (me?.live && me.place) {
-        bigLine(2, won ? (g.winner === slot ? 'YOU WIN!' : 'A SHARED WIN') : `${ordinal(me.place)} OF ${m}`, won ? C.YELLOW : C.WHITE, 4);
+        bigLine(2, won ? (side >= 0 ? `${SIDES[side].name} WINS!` : g.winner === slot ? 'YOU WIN!' : 'A SHARED WIN') : `${ordinal(me.place)} OF ${m}`, won ? C.YELLOW : C.WHITE, 4);
         centre(7, `${won ? `${ordinal(me.place)} OF ${m}  ` : ''}+${gain(me.place, m)} POINTS${won ? '' : `   ${who}`}`, C.GREEN);
       } else {
         bigLine(2, who, C.YELLOW, 4);
@@ -558,7 +581,14 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     const shown = mineAt >= fit ? [...list.slice(0, fit - 1), list[mineAt]] : list.slice(0, fit);
     band(y0 - 1, y0 + 4 + shown.length, 0.45);
     centre(y0, `ROUND ${g.round + 1}  ${mod.name || g.name}  ${list.length} PLAYERS${over && nextIn ? `  NEXT IN ${nextIn}` : ''}`, C.YELLOW);
-    centre(y0 + 2, 'RANK  PLAYER    POINTS  WINS  KOS  ROUND  ', C.GREY);
+    // a team round: the sides' scores over the board, and each ball's side in it
+    if (g.teams) {
+      const a = `RED ${g.tscore[0]}`, b = `BLUE ${g.tscore[1]}`;
+      const x = Math.floor((COLS - a.length - b.length - 3) / 2);
+      put(text, COLS, x, y0 + 1, a, C.RED);
+      put(text, COLS, x + a.length + 3, y0 + 1, b, C.CYAN);
+    }
+    centre(y0 + 2, g.teams ? 'RANK  PLAYER   SIDE  POINTS  WINS  KOS  ROUND  ' : 'RANK  PLAYER    POINTS  WINS  KOS  ROUND  ', C.GREY);
     let rank = 0;
     shown.forEach((o, k) => {
       const i = list.indexOf(o);
@@ -566,7 +596,8 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       rank = i > 0 && list[i - 1].pts === o.pts && list[i - 1].wins === o.wins && k > 0 && shown[k - 1] === list[i - 1] ? rank : i + 1;
       const nm = (o.slot === slot && !WATCH ? 'YOU ' : 'P') + String(o.slot + 1);
       const now = !o.out && g.state === L.H_PLAY && g.kind === L.PK_OUT ? 'IN' : o.place ? `${ordinal(o.place)}${over ? ` +${gain(o.place, m)}` : ''}` : '-';
-      centre(y0 + 3 + k, `${String(rank).padStart(4)}  ${nm.padEnd(8)}  ${String(o.pts).padStart(6)}  ${String(o.wins).padStart(4)}  ${String(o.kos).padStart(3)}  ${now.padEnd(7)}`, o.slot === slot ? C.YELLOW : C.WHITE);
+      if (g.teams) centre(y0 + 3 + k, `${String(rank).padStart(4)}  ${nm.padEnd(7)}  ${SIDES[o.side].name.padEnd(4)}  ${String(o.pts).padStart(6)}  ${String(o.wins).padStart(4)}  ${String(o.kos).padStart(3)}  ${now.padEnd(7)}`, o.slot === slot ? C.YELLOW : SIDE_C[o.side]);
+      else centre(y0 + 3 + k, `${String(rank).padStart(4)}  ${nm.padEnd(8)}  ${String(o.pts).padStart(6)}  ${String(o.wins).padStart(4)}  ${String(o.kos).padStart(3)}  ${now.padEnd(7)}`, o.slot === slot ? C.YELLOW : C.WHITE);
     });
   }
 

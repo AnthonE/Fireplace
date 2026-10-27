@@ -409,11 +409,22 @@
 
 ;; Golf's blast, on balls: everyone but the owner within r of (x, y, z) shoved
 ;; away and up, s m/s at the centre falling to nothing at r, less for heavy balls.
+;; In party, a team round without PGF_MATES spares the owner's side.
 (func $b_blast (param $x f32) (param $y f32) (param $z f32) (param $r f32) (param $s f32) (param $owner i32)
   (local $q i32) (local $qb i32) (local $rq f32) (local $dx f32) (local $dy f32) (local $dz f32) (local $d2 f32) (local $hd f32) (local $f f32)
+#if PARTY
+  (local $mates i32)
+  (local.set $mates (i32.and (i32.eq (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @(PGF_TEAMS | PGF_MATES))) (i32.const @PGF_TEAMS))
+                             (i32.lt_u (local.get $owner) (i32.const @NPLAYER))))
+#endif
   (!for $q (i32.const 0) (i32.const @NPLAYER)
     (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
+#if PARTY
+    (if (i32.and (i32.and (call $b_in (local.get $qb)) (i32.ne (local.get $q) (local.get $owner)))
+                 (i32.eqz (i32.and (local.get $mates) (call $p_mates (local.get $q) (local.get $owner)))))
+#else
     (if (i32.and (call $b_in (local.get $qb)) (i32.ne (local.get $q) (local.get $owner)))
+#endif
       (then
         (local.set $rq (call $b_rad (local.get $qb)))
         (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (local.get $x)))
@@ -472,13 +483,18 @@
 
 ;; Every pair of balls on the cheese, in slot order: out of each other's way
 ;; (the lighter one more) and, if they were closing, an elastic bump with a
-;; kick on top (in party, none while the round says PGF_NOKICK). Each
+;; kick on top (in party, none while the round says PGF_NOKICK; and in a team
+;; round without PGF_MATES, teammates pass through each other). Each
 ;; remembers who hit it, for the KO.
 (func $b_bumps
   (local $n i32) (local $a i32) (local $b i32) (local $i i32) (local $j i32) (local $ib i32) (local $jb i32) (local $p i32)
   (local $ri f32) (local $rj f32) (local $rs f32) (local $dx f32) (local $dy f32) (local $dz f32) (local $d2 f32) (local $d f32)
   (local $nx f32) (local $ny f32) (local $nz f32) (local $mi f32) (local $mj f32) (local $w f32) (local $vrel f32) (local $over f32) (local $jj f32)
   (local $ui f32) (local $uj f32) (local $si f32) (local $sj f32)
+#if PARTY
+  (local $mates i32) (local $fi i32)
+  (local.set $mates (i32.eq (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @(PGF_TEAMS | PGF_MATES))) (i32.const @PGF_TEAMS)))
+#endif
   (!for $p (i32.const 0) (i32.const @NPLAYER)
     (if (call $b_in (i32.shl (local.get $p) (i32.const 6)))
       (then (!st u8 @B_SCR (local.get $n) (local.get $p)) (!inc $n))))
@@ -486,6 +502,9 @@
     (local.set $i (!ld u8 @B_SCR (local.get $a)))
     (local.set $ib (i32.shl (local.get $i) (i32.const 6)))
     (local.set $ri (call $b_rad (local.get $ib)))
+#if PARTY
+    (local.set $fi (!at u8 @(PLAYERS + P_FL) (local.get $ib)))
+#endif
     (!for $b (i32.add (local.get $a) (i32.const 1)) (local.get $n)
       (local.set $j (!ld u8 @B_SCR (local.get $b)))
       (local.set $jb (i32.shl (local.get $j) (i32.const 6)))
@@ -493,7 +512,12 @@
       (local.set $rs (f32.add (local.get $ri) (local.get $rj)))
       (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $jb)) (!at f32 @(PLAYERS + P_PX) (local.get $ib))))
       (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $jb)) (!at f32 @(PLAYERS + P_PZ) (local.get $ib))))
+#if PARTY
+      (if (i32.and (i32.and (f32.lt (f32.abs (local.get $dx)) (local.get $rs)) (f32.lt (f32.abs (local.get $dz)) (local.get $rs)))
+                   (i32.or (i32.eqz (local.get $mates)) (i32.ne (i32.and (i32.xor (local.get $fi) (!at u8 @(PLAYERS + P_FL) (local.get $jb))) (i32.const @PF_BLUE)) (i32.const 0))))
+#else
       (if (i32.and (f32.lt (f32.abs (local.get $dx)) (local.get $rs)) (f32.lt (f32.abs (local.get $dz)) (local.get $rs)))
+#endif
         (then
           (local.set $dy (f32.sub (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $jb)) (local.get $rj))
                                   (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $ib)) (local.get $ri))))

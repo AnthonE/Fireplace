@@ -853,6 +853,9 @@ export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE a
 export const PGF_BUMPS = 1; // PG_FLAGS: balls bump
 export const PGF_NOKICK = 2; // PG_FLAGS: a bump has no kick, only what the balls bring (elastic)
 export const PGF_SIZE = 4; // PG_FLAGS: a ball's radius is its PG_M, an f32 (B_RAD while that's less), its weight the radius cubed
+export const PGF_TEAMS = 8; // PG_FLAGS: red against blue (P_FL's PF_BLUE), dealt as the round is laid out; scores by side, placed by side
+export const PGF_MATES = 16; // PG_FLAGS, with PGF_TEAMS: teammates bump (and a ball's blast shoves its own side); without it they pass through
+export const FORCE_TEAMS = 0x100; // PG_FORCE: every round in teams, whatever its minigame (a test and gate hook)
 export const P_COUNT = 750; // 6 s countdown, the minigame's title up
 export const P_OVER = 625; // 5 s of the result
 export const FX_MG = 32; // minigame k's own FX kinds are FX_MG + 4k .. FX_MG + 4k + 3
@@ -875,6 +878,13 @@ export const PG_PREV = REGION + 0x78; // u32 the last minigame played (low byte)
 export const PG_CX = REGION + 0x7c; // f32 the stage's centre, world x and z
 export const PG_H = REGION + 0x80; // 112 B the minigame's own header (phase, timings, the call, seeds), to 0xf0
 export const PG_H_SIZE = 112;
+// A team round's (PGF_TEAMS), in golf's tee, cup and par fields that party leaves free (inside the
+// prediction's copy), zeroed each round; the side of a ball is P_FL's PF_BLUE (red without it).
+export const PG_TSCORE = HDR_TEE; // u32 red's score, then blue's at +4: the minigame adds to them
+export const PG_TSIDE = HDR_CUP; // u32 the side of the ball spawn is placing, 0 red, 1 blue
+export const PG_TK = HDR_DIR; // u32 its place among that side's balls as laid out, in slot order (a respawn: spawn's own k)
+export const PG_TN = HDR_DIR + 4; // u16 red's balls as laid out, u16 blue's
+export const PG_TWIN = HDR_PAR; // u32 the side that won, 1 red, 2 blue, 3 a draw; 0 till the end, unless the minigame decides it
 // A ball's fields past bumper's, in bytes golf leaves free.
 export const PG_SCORE = 56; // u16 this round's score, zeroed each round
 export const PG_PTS = 58; // u16 party points, every round so far
