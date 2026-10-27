@@ -89,7 +89,7 @@ export const DB_JAILT = 12; // u32 tick into play it last went to jail
 export const DB_PLAY = 1;
 export const DB_JAIL = 2;
 // FX kinds, FX_MG + 4 * MG_DODGE + k.
-export const DB_FX_THROW = 176; // owner the thrower, shot the dodgeball, at its launch, size its speed
-export const DB_FX_HIT = 177; // owner the ball jailed, shot the thrower | the dodgeball << 8, at the dodgeball, size its speed
-export const DB_FX_CATCH = 178; // owner the catcher, shot the thrower | the ball freed << 8 (255 none), at the dodgeball, size its speed
-export const DB_FX_WHIFF = 179; // owner the clicker, shot 1 if it was locked already, at the ball, size the lock in ticks
+export const DB_FX_THROW = 180; // owner the thrower, shot the dodgeball, at its launch, size its speed
+export const DB_FX_HIT = 181; // owner the ball jailed, shot the thrower | the dodgeball << 8, at the dodgeball, size its speed
+export const DB_FX_CATCH = 182; // owner the catcher, shot the thrower | the ball freed << 8 (255 none), at the dodgeball, size its speed
+export const DB_FX_WHIFF = 183; // owner the clicker, shot 1 if it was locked already, at the ball, size the lock in ticks

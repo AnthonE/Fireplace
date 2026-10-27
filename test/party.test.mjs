@@ -62,6 +62,13 @@ test('the layout: the header between golf\'s and Fireplace\'s, the state between
   assert.deepEqual(ids, [...Array(L.NMG).keys()]);
   assert.deepEqual(L.MINIGAMES.map((m) => m.prefix), ['ti', 'cc', 'sw', 'rl', 'bo', 'wl', 'mp', 'kh', 'hp', 'cr', 'pp', 'rc', 'fc', 'tg', 'sb', 'tt', 'lv', 'gf', 'dr', 'ho', 'pn', 'lt', 'mz', 'be', 'cn', 'jr', 'gb', 'gc', 'sg', 'ss', 'kt', 'nd', 'sl', 'tr', 'py', 'mi', 'hc', 'db', 'vb', 'so']);
   assert.equal(MC.TI_FX_CRACK, L.FX_MG + 4 * L.MG_THINICE);
+  // every minigame's FX kinds are literals in its .mjs: each in its own block of four, FX_MG + 4 * its id
+  for (const [k, v] of Object.entries(L.MG_CONSTS)) {
+    const m = /^([A-Z]{2})_FX_/.exec(k);
+    if (!m) continue;
+    const id = L.MINIGAMES.findIndex((g) => g.prefix === m[1].toLowerCase());
+    assert.ok(id >= 0 && v >= L.FX_MG + 4 * id && v < L.FX_MG + 4 * id + 4, `${k} = ${v}, not in ${L.MINIGAMES[id]?.key}'s block`);
+  }
 });
 
 test('MG_CONSTS: every minigame\'s constants, none named twice or after a layout name; the layout\'s own names held under V8\'s dictionary line', async () => {

@@ -142,7 +142,7 @@ export const SO_SAVES = 4; // u16 saves
 export const SO_OWN = 6; // u16 own goals (its touch the last, its side's the only one in SO_OWNT)
 export const SO_NEXT = 8; // u32 tick into play its next touch counts from
 // FX kinds, FX_MG + 4 * MG_SOCCER + k.
-export const SO_FX_TOUCH = 184; // owner the toucher, shot the football | 256 from the air | 512 a keeper's | 1024 a save, at it, size its new speed
-export const SO_FX_GOAL = 185; // owner the scorer (an own goal: the ball that put it in; 255 none), shot the football | the scoring side << 8 | 512 an own goal, at it, size the side's goals
-export const SO_FX_SPOT = 186; // owner 255, shot the football | 256 everyone back too, at its spot, size the s till it's let go
-export const SO_FX_HIT = 187; // owner 255, shot the football | 256 the frame (else a wall or a net), at it, size its speed into it
+export const SO_FX_TOUCH = 188; // owner the toucher, shot the football | 256 from the air | 512 a keeper's | 1024 a save, at it, size its new speed
+export const SO_FX_GOAL = 189; // owner the scorer (an own goal: the ball that put it in; 255 none), shot the football | the scoring side << 8 | 512 an own goal, at it, size the side's goals
+export const SO_FX_SPOT = 190; // owner 255, shot the football | 256 everyone back too, at its spot, size the s till it's let go
+export const SO_FX_HIT = 191; // owner 255, shot the football | 256 the frame (else a wall or a net), at it, size its speed into it

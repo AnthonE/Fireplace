@@ -423,7 +423,7 @@ test('the prediction across the countdown\'s end: its own ball in the round from
 });
 
 // A round of Partier balls on the debug build: no trap, a round played to its end, equal on every tick on 1 and 4 threads.
-for (const [balls, sd] of [[8, 3], [64, 5]]) {
+for (const [balls, sd] of [[8, 3], [64, 6]]) {
   test(`a round of ${balls} AI balls on the debug build: no trap, slaps land, knock-offs scored, the points spread; equal on 1 and 4 threads`, async () => {
     let start = -1, over = -1, places = null, scores = null, trap = 0, slaps = 0, misses = 0, kos = 0, falls = 0, seen = 0, onMain = 0, samples = 0;
     const was = [];

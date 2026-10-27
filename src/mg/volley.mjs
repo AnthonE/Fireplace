@@ -109,7 +109,7 @@ export const VB_SPIKES = 2; // u16 of them spikes
 export const VB_KILLS = 4; // u16 points its side won off its last touch
 export const VB_FAULTS = 6; // u16 fourth touches
 // FX kinds, FX_MG + 4 * MG_VOLLEY + k.
-export const VB_FX_TOUCH = 180; // owner the toucher, shot the volleyball | 256 a spike | the side's touches in a row << 9, at it, size its flat speed
-export const VB_FX_POINT = 181; // owner its last toucher (255 none), shot the volleyball | the side scoring << 8 | 512 a fourth touch, at it, size the scorer's score
-export const VB_FX_SERVE = 182; // owner 255, shot the volleyball | the serving side << 8, at its launch, size its flight in s
-export const VB_FX_NET = 183; // owner 255, shot the volleyball, at it, size its speed into the net
+export const VB_FX_TOUCH = 184; // owner the toucher, shot the volleyball | 256 a spike | the side's touches in a row << 9, at it, size its flat speed
+export const VB_FX_POINT = 185; // owner its last toucher (255 none), shot the volleyball | the side scoring << 8 | 512 a fourth touch, at it, size the scorer's score
+export const VB_FX_SERVE = 186; // owner 255, shot the volleyball | the serving side << 8, at its launch, size its flight in s
+export const VB_FX_NET = 187; // owner 255, shot the volleyball, at it, size its speed into the net

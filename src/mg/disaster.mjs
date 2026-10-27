@@ -279,7 +279,7 @@ export const ND_ND = 12; // u32 disasters
 export const ND_NE = 16; // u32 strikes
 export const ND_COUNT = 20; // u32 cells at the start
 // FX kinds, FX_MG + 4 * MG_DISASTER + k.
-export const ND_FX_CALL = 152; // a disaster called (shot its kind), hitting (+ 0x100) or over (+ 0x200); size its number
-export const ND_FX_STRIKE = 153; // a meteor or bolt lands: shot its record, size its reach, at the spot
-export const ND_FX_HIT = 154; // a ball hit: owner the ball, shot ND_HIT_*, size how hard (m/s); on the ball's bank
-export const ND_FX_QUAKE = 155; // a shove (shot its number, size its push) or a fissure opening (shot 0x100 + it)
+export const ND_FX_CALL = 156; // a disaster called (shot its kind), hitting (+ 0x100) or over (+ 0x200); size its number
+export const ND_FX_STRIKE = 157; // a meteor or bolt lands: shot its record, size its reach, at the spot
+export const ND_FX_HIT = 158; // a ball hit: owner the ball, shot ND_HIT_*, size how hard (m/s); on the ball's bank
+export const ND_FX_QUAKE = 159; // a shove (shot its number, size its push) or a fissure opening (shot 0x100 + it)

@@ -79,7 +79,7 @@ export const PY_LOCKT = 2; // u16 tick into play its parry is locked till
 export const PY_PARRIES = 4; // u16 parries this round
 export const PY_WHIFFS = 6; // u16 clicks with nothing in reach this round
 // FX kinds, FX_MG + 4 * MG_PARRY + k.
-export const PY_FX_PARRY = 164; // owner the parrier, shot the ball it now hunts | the orb << 8, at the orb, size its speed
-export const PY_FX_HIT = 165; // owner the ball out, shot the last to parry it (255 none) | the orb << 8, at the orb, size its speed
-export const PY_FX_SERVE = 166; // owner the ball it will hunt, shot the orb, at its spot, size the ticks to its launch
-export const PY_FX_WHIFF = 167; // owner the clicker, shot 1 if it was locked already, at the ball, size the lock in ticks
+export const PY_FX_PARRY = 168; // owner the parrier, shot the ball it now hunts | the orb << 8, at the orb, size its speed
+export const PY_FX_HIT = 169; // owner the ball out, shot the last to parry it (255 none) | the orb << 8, at the orb, size its speed
+export const PY_FX_SERVE = 170; // owner the ball it will hunt, shot the orb, at its spot, size the ticks to its launch
+export const PY_FX_WHIFF = 171; // owner the clicker, shot 1 if it was locked already, at the ball, size the lock in ticks

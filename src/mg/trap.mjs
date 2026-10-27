@@ -165,8 +165,8 @@ export const TR_IDLEP = 0;
 export const TR_WARN = 1;
 export const TR_LIVE = 2;
 export const TR_COOLP = 3;
-// Its FX kinds are FX_MG + 4 * MG_TRAP + k, k 0 to 3: 160 to 163.
-export const TR_FX_TRAP = 160; // a trap armed (owner the trapper) or fired (owner its trapper): shot the trap | 256 fired, at its pad
-export const TR_FX_HIT = 161; // a trap had a ball (its bank's ring): owner, shot the trap | kind << 8, size the speed it leaves at
-export const TR_FX_HOME = 162; // a runner over the line: owner, size its place; shot the seconds the rest have left if it's the first
-export const TR_FX_TAKEN = 163; // a trapper's trap took a runner out: owner the runner, shot the trapper, size the trap's kind
+// Its FX kinds are FX_MG + 4 * MG_TRAP + k, k 0 to 3: 164 to 167.
+export const TR_FX_TRAP = 164; // a trap armed (owner the trapper) or fired (owner its trapper): shot the trap | 256 fired, at its pad
+export const TR_FX_HIT = 165; // a trap had a ball (its bank's ring): owner, shot the trap | kind << 8, size the speed it leaves at
+export const TR_FX_HOME = 166; // a runner over the line: owner, size its place; shot the seconds the rest have left if it's the first
+export const TR_FX_TAKEN = 167; // a trapper's trap took a runner out: owner the runner, shot the trapper, size the trap's kind
