@@ -3,18 +3,23 @@
 // runs it in a Worker). It is the source of truth for the interval hashes the
 // clients report, and for keyframes: the region right after each interval
 // closes, kept in the sim's two snapshot slots and packed only when asked for.
+// With results on (Fireplace's build), it also says when a game in the
+// playlist ends, with the places the game gave (net/elo.mjs).
 import * as L from '../src/layout.mjs';
+import { readResult } from './elo.mjs';
 import * as W from './wire.mjs';
 import { feedTick } from './inbox.mjs';
 import { startTeam, stepTeam } from './team.mjs';
 
 export class Referee {
   // threads: the referee's own and its helpers' (net/team.mjs), 1 for none
-  static async create(bytes, threads = 1) {
+  static async create(bytes, threads = 1, results = false) {
     const memory = new WebAssembly.Memory({ initial: L.PAGES, maximum: L.PAGES, shared: true });
     const module = await WebAssembly.compile(bytes);
     const { exports } = await WebAssembly.instantiate(module, { env: { mem: memory } });
-    return new Referee(exports, memory, await startTeam({ bytes, memory, n: threads }));
+    const r = new Referee(exports, memory, await startTeam({ bytes, memory, n: threads }));
+    r.results = results;
+    return r;
   }
 
   constructor(x, memory, team = null) {
@@ -26,6 +31,9 @@ export class Referee {
     this.keyTick = [-1, -1]; // sim tick in each snapshot slot
     this.newest = 0; // the slot holding the newest keyframe
     this.packed = new Map(); // sim tick -> packed keyframe, the newest few
+    this.results = false;
+    this.stage = 0; // FP_STAGE as of the last tick: a result is its rise to 1
+    this.result = null; // the result the last step held, if one began
   }
 
   get tick() { return this.dv.getUint32(L.HDR_TICK, true); }
@@ -37,6 +45,7 @@ export class Referee {
     if (region) { this.u8.set(region, L.REGION); this.x.regrid(); }
     this.packed.clear();
     this.keyTick = [-1, -1];
+    this.stage = this.dv.getUint32(L.FP_STAGE, true);
     this.keep();
   }
 
@@ -52,6 +61,11 @@ export class Referee {
     feedTick(this.u8, this.dv, d);
     stepTeam(this.x, this.i32, this.team);
     const t = this.tick;
+    if (this.results) {
+      const stage = this.dv.getUint32(L.FP_STAGE, true);
+      if (stage === 1 && this.stage !== 1) this.result = { tick: t, ...readResult(this.u8, this.dv) };
+      this.stage = stage;
+    }
     if (this.i32[L.INTERVAL_TICK >> 2] !== t) return null;
     this.keep();
     return { tick: t, hash: this.dv.getBigUint64(L.INTERVAL_HASH, true), digests: this.u8.slice(L.DIGESTS, L.DIGESTS + 8 * L.NSLICE) };

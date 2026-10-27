@@ -96,6 +96,11 @@
 #if ARENA
   (local $t f32) (local $lo f32) (local $floor f32) (local $ceil f32) (local $went i32)
 #endif
+#if FLIGHT
+  ;; a ship (src/flight.wat)
+  (call $f_move (local.get $p) (local.get $d))
+  (return)
+#endif
   (local.set $pb (i32.add (i32.shl (local.get $p) (i32.const 6)) (local.get $d)))
   (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
   (local.set $in (!at i32 @(PLAYERS + P_IN) (local.get $pb)))

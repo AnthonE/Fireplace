@@ -72,6 +72,12 @@
 #endif
   (f32.store (i32.const @HDR_TEE) (f32.const 512))
   (f32.store (i32.const @(HDR_TEE + 8)) (f32.const 512))
+#if FLIGHT
+  ;; how high a ship may fly, for the page and the bots (the sim folds it in),
+  ;; and the race's gates, if the map has a race
+  (f32.store (i32.const @MAP_CEILING) (f32.const @MAP_CEIL))
+  (memory.init $map (i32.const @MAP_RACE) (i32.const @MAPSEG_RACE) (i32.const @MAPSEG_NRACEB))
+#endif
   (f32.store (i32.const @HDR_DIR) (f32.const 1)))
 
 ;; The map's weapon pads laid out, each with its gun there: at init in slayer
@@ -372,7 +378,12 @@
   (!put u8 @(PLAYERS + A_NEEDT) (local.get $pb) (i32.const 0))
   ;; a mode on the kit that arms its own (Lucky Blocks)
   (!am none spawn (local.get $p))
-  (call $fx (i32.const 0) (i32.const @FX_SPAWN) (local.get $p) (i32.const 0) (local.get $sx) (local.get $h) (local.get $sz) (f32.const 1)))
+  (call $fx (i32.const 0) (i32.const @FX_SPAWN) (local.get $p) (i32.const 0) (local.get $sx) (local.get $h) (local.get $sz) (f32.const 1))
+#if FLIGHT
+  ;; a ship comes in flying (src/flight.wat)
+  (call $f_spawn (local.get $p))
+#endif
+  )
 
 ;; Slot p's two guns, g0 and g1 (the same gun twice is one gun in either
 ;; hand), full, with no reload or burst under way.
@@ -1125,6 +1136,10 @@
   (local $p i32) (local $pb i32) (local $fl i32) (local $live i32) (local $best i32) (local $t i32) (local $state i32)
   (local $h i32) (local $n i32) (local $k i32) (local $a i32) (local $mode i32) (local $over i32)
   (local $team i32) (local $blue i32)
+#if FLIGHT
+  ;; ships that met this tick, before anyone's place goes into HIST (src/flight.wat)
+  (call $f_collide)
+#endif
   (local.set $t (i32.load (i32.const @HDR_TICK)))
   (local.set $state (i32.load (i32.const @HDR_STATE)))
   (local.set $team (i32.and (i32.shl (i32.const 1) (i32.load (i32.const @AH_MODE))) (i32.const @TEAMED)))
@@ -1164,8 +1179,11 @@
               (then
                 (!put u8 @(PLAYERS + A_NEEDT) (local.get $pb) (i32.sub (local.get $n) (i32.const 1)))
                 (if (i32.eq (local.get $n) (i32.const 1)) (then (!put u8 @(PLAYERS + A_NEEDLES) (local.get $pb) (i32.const 0))))))
+#if !FLIGHT
             (if (i32.eqz (i32.and (i32.shl (i32.const 1) (i32.load (i32.const @AH_MODE))) (i32.const @((1 << M_INFECTION) | (1 << M_GUNGAME)))))
-              (then (call $a_pickup (local.get $p))))))
+              (then (call $a_pickup (local.get $p))))
+#endif
+            ))
         (!put u8 @(PLAYERS + A_ACT) (local.get $pb) (i32.and (!at u8 @(PLAYERS + A_ACT) (local.get $pb)) (i32.const @(255 ^ AB_USE)))))))
   (!for $k (i32.const 0) (i32.const @NPAD)
     (local.set $a (i32.add (i32.const @PAD) (i32.shl (local.get $k) (i32.const 4))))
@@ -1186,7 +1204,11 @@
           (local.set $mode (i32.load (i32.const @AH_MODE)))
           (i32.store (i32.const @HDR_STATE) (i32.const @H_PLAY))
           (i32.store (i32.const @HDR_START) (local.get $t))
+#if FLIGHT
+          (i32.store (i32.const @HDR_UNTIL) (i32.add (local.get $t) (!tab FLIGHT_TICKS (local.get $mode))))
+#else
           (i32.store (i32.const @HDR_UNTIL) (i32.add (local.get $t) (!tab MODE_TICKS (local.get $mode))))
+#endif
           ;; Infection's zombies, one for every ten (at least one); the juggernaut
           (if (i32.eq (local.get $mode) (i32.const @M_INFECTION))
             (then (call $a_draw (select (i32.div_u (local.get $live) (i32.const 10)) (i32.const 1) (i32.ge_u (local.get $live) (i32.const 20))))))
@@ -1262,17 +1284,30 @@
 (func $a_mode_pick
   (local $seed i32) (local $k i32) (local $m i32)
   (local.set $seed (i32.load (i32.const @HDR_SEED)))
+#if FLIGHT
+  ;; flight's own rotation; a forced mode it doesn't fly is a free-for-all
+  (local.set $k (i32.rem_u (i32.load (i32.const @HDR_HOLE)) (i32.const @(FLIGHT_MODES.length))))
+  (local.set $m (!tab FLIGHT_MODES (local.get $k)))
+  (if (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FORCE_MODE))
+    (then (local.set $m (i32.and (i32.shr_u (local.get $seed) (i32.const 16)) (i32.const 0xff)))))
+  (if (i32.or (i32.ge_u (local.get $m) (i32.const 32)) (i32.eqz (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @FLIGHT_OK))))
+    (then (local.set $m (i32.const @M_FIESTA))))
+#else
   (local.set $k (i32.rem_u (i32.load (i32.const @HDR_HOLE)) (i32.const @(ARENA_MODES.length))))
   (local.set $m (!tab ARENA_MODES (local.get $k)))
   (if (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FORCE_MODE))
     (then (local.set $m (i32.and (i32.shr_u (local.get $seed) (i32.const 16)) (i32.const 0xff)))))
   (if (i32.ge_u (local.get $m) (i32.const @(MODES.length))) (then (local.set $m (i32.const @M_FIESTA))))
+#endif
   (memory.fill (i32.const @AH_MODE) (i32.const 0) (i32.const @(AH_END - AH_MODE)))
   (i32.store (i32.const @AH_MODE) (local.get $m))
   (memory.fill (i32.const @MODE_REC) (i32.const 0) (i32.const @(NPLAYER * MR_SIZE)))
 #if FIESTA
+#if !FLIGHT
+  ;; (ships have no hands for a gun: no pads)
   (memory.fill (i32.const @PAD) (i32.const 0) (i32.const @(NPAD * PAD_SIZE)))
   (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @PAD_MODES)) (then (call $pads)))
+#endif
 #endif
   (memory.fill (i32.const @AO) (i32.const 0) (i32.const @AO_SIZE)))
 
@@ -1344,7 +1379,9 @@
   (local.set $jugg (i32.eq (i32.load (i32.const @AH_MODE)) (i32.const @M_JUGGERNAUT)))
   (!put u8 @(PLAYERS + P_FL) (local.get $qb)
     (i32.or (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (select (i32.const @PF_JUGG) (i32.const @PF_ZOMBIE) (local.get $jugg))))
+#if !FLIGHT
   (call $a_arm (local.get $q) (i32.const @W_SWORD) (i32.const @W_SWORD))
+#endif
   (!put u8 @(PLAYERS + A_SH) (local.get $qb) (select (i32.const @OVERSHIELD) (i32.const 0) (local.get $jugg)))
   (!put u8 @(PLAYERS + A_HP) (local.get $qb) (i32.const 100))
   (!put u16 @(PLAYERS + A_SHT) (local.get $qb) (i32.const 0))
@@ -1427,6 +1464,10 @@
   (local $m i32) (local $p i32) (local $h i32) (local $z i32) (local $last i32) (local $key i32) (local $best i32) (local $lead i32)
   (local $done i32) (local $target i32)
   (local.set $m (i32.load (i32.const @AH_MODE)))
+#if FLIGHT
+  ;; flight's Ring Race, past the arena's modes (src/flight.wat)
+  (if (i32.eq (local.get $m) (i32.const @M_RACE)) (then (return (call $f_race))))
+#endif
   (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @KIT))
     (then
       (local.set $done (!am i32 tick))

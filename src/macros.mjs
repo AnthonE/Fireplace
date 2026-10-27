@@ -93,12 +93,12 @@ export function makeMacros({ DEBUG }) {
       return a.slice(0, -1).reduceRight((out, v, k) => `(select (i32.const ${v}) ${out} (i32.eq ${i} (i32.const ${k})))`, `(i32.const ${a.at(-1)})`);
     },
 
-    // Fireplace: (!pick type golf arena bumper party), the expression for the
-    // game on now (FP_GAME); type is a result type, or none.
-    pick: (type, g, a, b, p) => {
+    // Fireplace: (!pick type golf arena bumper party flight), the expression
+    // for the game on now (FP_GAME); type is a result type, or none.
+    pick: (type, g, a, b, p, f) => {
       const r = type === 'none' ? '' : ` (result ${type})`;
       const on = (k) => `(i32.eq (i32.load (i32.const @FP_GAME)) (i32.const ${k}))`;
-      return `(if${r} ${on(1)} (then ${a}) (else (if${r} ${on(2)} (then ${b}) (else (if${r} ${on(3)} (then ${p}) (else ${g}))))))`;
+      return `(if${r} ${on(1)} (then ${a}) (else (if${r} ${on(2)} (then ${b}) (else (if${r} ${on(3)} (then ${p}) (else (if${r} ${on(4)} (then ${f}) (else ${g}))))))))`;
     },
     // (!fpmatches g): how many matches game g plays before the playlist moves on
     fpmatches: (g) => GAMES.reduceRight((out, _, k) => `(select (i32.const ${FP_MATCHES[k]}) ${out} (i32.eq ${g} (i32.const ${k})))`, '(i32.const 1)'),

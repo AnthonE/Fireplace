@@ -429,6 +429,7 @@ export const MAP_NGROUP = MAP + 4;
 export const MAP_NTELE = MAP + 8;
 export const MAP_NSPAWN = MAP + 12;
 export const MAP_NPAD = MAP + 16;
+export const MAP_CEILING = MAP + 20; // f32 flight's ceiling (tools/map.mjs), written by its init; 0 in the arena's
 export const MAP_BOUNDS = MAP + 32; // f32 x0, x1, z0, z1: where fighters can go
 export const MAP_SPAWN = MAP + 0x40; // 32 x 8 B: f32 x, z; a fighter spawns on what is under (x, z) from MAP_SPAWNY up
 export const MAP_SPAWNY = MAP + 0x140; // 32 x f32: the highest feet a spawn may stand at (-1000: the ground)
@@ -449,6 +450,11 @@ export const MAP_HILLS = MAP_OBJ + 0x40; // NHILL x 16 B
 export const NHILL = 8;
 export const MAP_OBJ_SIZE = 0xc0;
 export const MAP_END = MAP_OBJ + MAP_OBJ_SIZE;
+// Flight's race course (map.json "race", tools/map.mjs), after the rest: u32
+// gates, 12 B zero, then up to NGATE x 16 B: f32 x, y, z, radius, in order.
+// A map without one leaves it 0; flight's init copies it out (src/flight.wat).
+export const MAP_RACE = MAP_END;
+export const MAP_RACE_END = MAP_RACE + 16 + 16 * 16;
 export const NBOX = 512;
 export const NGROUP = 64;
 export const NTELE = 16;
@@ -681,6 +687,21 @@ export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on th
 import * as am_consts from './am/consts.mjs';
 export const AM_CONSTS = Object.freeze({ ...am_consts });
 
+// ---- Flight: src/ built with ARENA and FLIGHT (build/flight/game.wasm). The
+// arena's world, match, sides and netcode, every fighter a ship
+// (src/flight.wat): the word's yaw and pitch are where the pilot aims and the
+// nose turns toward them; forward boosts, back brakes, melee's bit rolls,
+// grenade's drops a bomb, the jump bit holds the charge shot, the trigger
+// fires lasers. Its constants are src/flight.mjs, gathered for the assembler
+// as a minigame's are. A match plays FLIGHT_MODES in turn (a forced mode
+// outside them is a free-for-all).
+import * as flight_consts from './flight.mjs';
+export const FLIGHT_CONSTS = Object.freeze({ ...flight_consts });
+export const FLIGHT_MODES = [M_FIESTA, M_SLAYER, M_JUGGERNAUT, flight_consts.M_RACE];
+export const FLIGHT_OK = FLIGHT_MODES.reduce((b, m) => b | (1 << m), 0);
+// a flight match's clock by mode: the arena's, and Ring Race's past them
+export const FLIGHT_TICKS = [...MODES.map((m) => m.ticks), flight_consts.RACE_TICKS];
+
 // ---- Bumper balls: src/ built with BUMPER (build/bumper/game.wasm). The
 // same world, netcode and lockstep; every player is a ball now, and the golf
 // cup is what you keep out of. A wheel of Swiss cheese floats at PLAT_Y over
@@ -821,6 +842,7 @@ export const MINIGAMES = [
   { key: 'gates', prefix: 'gc', name: 'GATE CRASH' },
   { key: 'stomp', prefix: 'sg', name: 'STOMPIN GROUND' },
   { key: 'seesaw', prefix: 'ss', name: 'SEESAWS' },
+  { key: 'kart', prefix: 'kt', name: 'KART GRAB' },
   { key: 'disaster', prefix: 'nd', name: 'DISASTER ISLAND' },
   { key: 'slap', prefix: 'sl', name: 'SLAP HAPPY' },
   { key: 'trap', prefix: 'tr', name: 'TRAP RUN' },
@@ -861,16 +883,17 @@ export const MG_GLASS = 26;
 export const MG_GATES = 27;
 export const MG_STOMP = 28;
 export const MG_SEESAW = 29;
-export const MG_DISASTER = 30;
-export const MG_SLAP = 31;
-export const MG_TRAP = 32;
-export const MG_PARRY = 33;
-export const MG_MINGLE = 34;
-export const MG_HONEY = 35;
-export const MG_DODGE = 36;
-export const MG_VOLLEY = 37;
-export const MG_SOCCER = 38;
-export const NMG = 39;
+export const MG_KART = 30;
+export const MG_DISASTER = 31;
+export const MG_SLAP = 32;
+export const MG_TRAP = 33;
+export const MG_PARRY = 34;
+export const MG_MINGLE = 35;
+export const MG_HONEY = 36;
+export const MG_DODGE = 37;
+export const MG_VOLLEY = 38;
+export const MG_SOCCER = 39;
+export const NMG = 40;
 
 export const PK_OUT = 0; // out is out: the last ball in wins
 export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE at the end
@@ -955,6 +978,7 @@ import * as mg_glass from './mg/glass.mjs';
 import * as mg_gates from './mg/gates.mjs';
 import * as mg_stomp from './mg/stomp.mjs';
 import * as mg_seesaw from './mg/seesaw.mjs';
+import * as mg_kart from './mg/kart.mjs';
 import * as mg_disaster from './mg/disaster.mjs';
 import * as mg_slap from './mg/slap.mjs';
 import * as mg_trap from './mg/trap.mjs';
@@ -964,12 +988,13 @@ import * as mg_honey from './mg/honey.mjs';
 import * as mg_dodge from './mg/dodge.mjs';
 import * as mg_volley from './mg/volley.mjs';
 import * as mg_soccer from './mg/soccer.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer));
+export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer));
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come
 // and go as they please. Each game is its own build, unchanged, under a prefix
-// ($g. golf, $a. the arena, $b. bumper balls, $p. party); src/fireplace.wat
+// ($g. golf, $a. the arena, $b. bumper balls, $p. party, $f. flight's
+// Dogfight); src/fireplace.wat
 // dispatches every export to the game on now and, at the end of a tick, runs
 // the playlist: when a game's last match ends it hands out marshmallows (3, 2
 // and 1 for the top three), holds the result, then wipes the world, builds the
@@ -978,14 +1003,17 @@ export const G_GOLF = 0;
 export const G_ARENA = 1;
 export const G_BUMPER = 2;
 export const G_PARTY = 3;
-export const GAMES = ['GOLF', 'ARENA', 'BUMPER BALLS', 'PARTY'];
+export const G_FLIGHT = 4;
+export const GAMES = ['GOLF', 'ARENA', 'BUMPER BALLS', 'PARTY', 'DOGFIGHT'];
 // By position, so a game may come round more than once: the room plays entry
 // (games played) % length next.
-export const PLAYLIST = [G_BUMPER, G_PARTY, G_ARENA, G_PARTY, G_GOLF];
-export const FP_MATCHES = [1, 1, 2, 3]; // by game: matches it plays before the next game (bumper's rounds, party's minigames)
+export const PLAYLIST = [G_BUMPER, G_PARTY, G_ARENA, G_PARTY, G_FLIGHT, G_GOLF];
+export const FP_MATCHES = [1, 1, 2, 3, 1]; // by game: matches it plays before the next game (bumper's rounds, party's minigames)
 export const FP_HOLD = 750; // 6 s of the result, the standings, then the next game
 export const FP_ARENA_TICKS = 22500; // an arena match of 3 min, whatever its mode (Infection's is 3 already; the rest 5 or 10)
+export const FP_FLIGHT_TICKS = 22500; // a Dogfight of 3 min, whatever its mode
 export const FP_GOLF_TICKS = 18750; // a hole of at most 2.5 min, not 4
+export const FP_START = 0xf1; // a Fireplace seed with this top byte starts the playlist at entry (seed >>> 16) & 0xff, for gates and dev
 export const FP_PARTY_FORCE = 0xa7; // a party seed with this top byte plays one minigame only (party.wat's $bumper_gen): Fireplace's never has it
 // In the header's last 16 bytes, which no game uses (inside the prediction's copy):
 export const FP_GAME = REGION + 0xf0; // u32 G_*: the game on now
@@ -997,7 +1025,7 @@ export const FP = REGION + 0xe000;
 export const FP_MALLOWS = FP; // u16[256] marshmallows, ever
 export const FP_LAST = FP + 0x200; // u8[256] where each came in the last game (0: not in it)
 export const FP_GOT = FP + 0x300; // u8[256] marshmallows each got for it
-export const FP_NEXT = FP + 0x400; // u32 the next game's seed, drawn as this one's result is held (the arena's forces a mode)
+export const FP_NEXT = FP + 0x400; // u32 the next game's seed, drawn as this one's result is held (the arena's and Dogfight's force a mode)
 export const FP_MODE = FP + 0x404; // u8 1 + the index in ARENA_MODES of the arena's last mode (0: none yet); the next is another
 // Outside the region: which game's static world (terrain, map) is built, so a
 // keyframe from another game rebuilds it; and a stash for the region while it is.
