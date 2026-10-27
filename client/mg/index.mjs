@@ -38,5 +38,6 @@ import parry from './parry.mjs';
 import mingle from './mingle.mjs';
 import honey from './honey.mjs';
 import dodge from './dodge.mjs';
+import volley from './volley.mjs';
 
-export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw, disaster, slap, trap, parry, mingle, honey, dodge];
+export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw, disaster, slap, trap, parry, mingle, honey, dodge, volley];

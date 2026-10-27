@@ -818,6 +818,7 @@ export const MINIGAMES = [
   { key: 'mingle', prefix: 'mi', name: 'MINGLE' },
   { key: 'honey', prefix: 'hc', name: 'HONEYCOMB' },
   { key: 'dodge', prefix: 'db', name: 'DODGEBALL' },
+  { key: 'volley', prefix: 'vb', name: 'VOLLEYBALL' },
 ]; // index = MG_*
 export const MG_THINICE = 0;
 export const MG_COLOR = 1;
@@ -856,7 +857,8 @@ export const MG_PARRY = 33;
 export const MG_MINGLE = 34;
 export const MG_HONEY = 35;
 export const MG_DODGE = 36;
-export const NMG = 37;
+export const MG_VOLLEY = 37;
+export const NMG = 38;
 
 export const PK_OUT = 0; // out is out: the last ball in wins
 export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE at the end
@@ -948,7 +950,8 @@ import * as mg_parry from './mg/parry.mjs';
 import * as mg_mingle from './mg/mingle.mjs';
 import * as mg_honey from './mg/honey.mjs';
 import * as mg_dodge from './mg/dodge.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge));
+import * as mg_volley from './mg/volley.mjs';
+export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley));
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come

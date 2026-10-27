@@ -51,6 +51,7 @@
 #include "mg/mingle.wat"
 #include "mg/honey.wat"
 #include "mg/dodge.wat"
+#include "mg/volley.wat"
 
 ;; ---- the room and the round
 
