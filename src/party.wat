@@ -50,6 +50,7 @@
 #include "mg/parry.wat"
 #include "mg/mingle.wat"
 #include "mg/honey.wat"
+#include "mg/dodge.wat"
 
 ;; ---- the room and the round
 
