@@ -151,16 +151,17 @@ crediting who made what (every theme is one). Next, in order:
 ## Accounts and persistence through Elo Pros
 
 What `AnthonE/scry-forge` has today: the wallet is the whole identity;
-`sdk/js/elo-2.js` (served at `https://elopros.com/sdk/elo-2.js`) gives a
+`sdk/js/elo-3.js` (served at `https://elopros.com/sdk/elo-3.js`) gives a
 third-party game `Elo.signIn({nonce})` (Sign-In With Ethereum, or Solana's),
-which the game's own server verifies with viem, with no Elo call; profiles at
+which the game's own server checks with `POST /api/signin/check`; profiles at
 `GET /api/face/{wallet}` (CORS on); friends and presence (`meter/friends.py`,
 `meter/playtime.py` polling a game server's `online.json`); chat; items and
 copies on chain (`/api/items/of/{wallet}`); a self-serve listing
 (`meter/openlane.py`, `play_url`). It has no logins without a wallet (the
-design is `docs/client/ACCOUNTS.md`), no per-game saves, stats or key-value
-store, leaderboards only for Gates, no matchmaking, and no way to submit a
-match result.
+design is `docs/client/ACCOUNTS.md`); stats, achievements and boards any
+game's servers report (`meter/gamestats.py`); Elo-scale ratings from the
+match results they report (`meter/ratings.py`); and a rated queue that
+matches parties by rating (`meter/lobbies.py`, op `queue`).
 
 The wrapper, ours first:
 
@@ -173,9 +174,9 @@ The wrapper, ours first:
    room pool is on the game box (scry-forge's NOW row 23). `elo.json`
    lands on the row once its steward signs it (`sign_manifest.py --game
    fireplace --seq 1`, scry-forge's `docs/store/GAME-REPO.md`).
-2. Sign-in: the page calls `Elo.signIn({nonce})` with a nonce from the relay's
-   hello; `net/relay.ts` verifies it and keeps the wallet as the slot's
-   player. Guests still play.
+2. Sign-in: built. The page's button calls `Elo.signIn({nonce})` with a
+   nonce the relay hands out, and `net/relay.ts` has Elo Pros check it and
+   keeps the wallet as the slot's player ([wire.md](wire.md)). Guests still play.
 3. Names, faces and skins: the relay reads `/api/face/{wallet}` and
    `/api/items/of/{wallet}` and sends them beside the sim, never in it, so the
    hashed world is the same with or without them. Skins on chain become ball
@@ -184,16 +185,17 @@ The wrapper, ours first:
    `servers.json`), so playtime and friends' join links work.
 5. Results: the relay's referee steps the room itself, so its standings and
    interval hashes are the room's truth, not any client's: the "replay"
-   evidence tier of `docs/store/ACHIEVEMENTS.md`. The page's achievements are
+   evidence tier of `docs/store/ACHIEVEMENTS.md`. Ratings are built: each
+   game's places go to Elo Pros as a rated match ([hosting.md](hosting.md)).
+   The page's achievements are
    already tests over those standings as the world holds them
    (`client/achievements.mjs` `readResult`, `record`), so the relay can run the
    same ones for each signed-in slot and publish them per wallet, the shape
    Gates' shards serve (`/achievements.json`), and they follow the player
    off one browser.
 
-Then, in scry-forge: an endpoint to submit a result, leaderboards for any
-title, and a key-value store per wallet for what lasts (party points,
-marshmallows).
+Then, in scry-forge: a key-value store per wallet for what lasts (party
+points, marshmallows).
 
 ## Sessions
 
