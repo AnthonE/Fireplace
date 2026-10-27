@@ -810,6 +810,7 @@ export const MINIGAMES = [
   { key: 'gates', prefix: 'gc', name: 'GATE CRASH' },
   { key: 'stomp', prefix: 'sg', name: 'STOMPIN GROUND' },
   { key: 'seesaw', prefix: 'ss', name: 'SEESAWS' },
+  { key: 'kart', prefix: 'kt', name: 'KART GRAB' },
 ]; // index = MG_*
 export const MG_THINICE = 0;
 export const MG_COLOR = 1;
@@ -841,7 +842,8 @@ export const MG_GLASS = 26;
 export const MG_GATES = 27;
 export const MG_STOMP = 28;
 export const MG_SEESAW = 29;
-export const NMG = 30;
+export const MG_KART = 30;
+export const NMG = 31;
 
 export const PK_OUT = 0; // out is out: the last ball in wins
 export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE at the end
@@ -916,7 +918,8 @@ import * as mg_glass from './mg/glass.mjs';
 import * as mg_gates from './mg/gates.mjs';
 import * as mg_stomp from './mg/stomp.mjs';
 import * as mg_seesaw from './mg/seesaw.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw));
+import * as mg_kart from './mg/kart.mjs';
+export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart));
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come
