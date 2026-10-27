@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-44 games, each gated online: golf, bumper balls, the arena's twelve modes
-(Grab Bag, Zombies, gun game, Juggernaut, and red against blue: Team
+52 games, each gated online: golf, bumper balls, the arena's thirteen modes
+(Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 30 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 37 minigames. Fireplace plays them in turn.
 
 What a page downloads, gzipped, everything it imports included:
 
@@ -56,8 +56,8 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 30 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
-| Arena (the fighter) | 12 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Party (the ball) | 37 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
+| Arena (the fighter) | 13 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
@@ -79,8 +79,9 @@ only of your own body), physics sandboxes, open worlds.
    against blue as a kit of team modes (`src/am/<key>.wat`, four hooks; a
    carrier bit for flags and the skull; the map's objectives in `MAP_OBJ`),
    with Team Slayer, Capture the Flag, Oddball and King of the Hill on it, a
-   mode on the kit about an hour of one agent. Party's and the champion
-   kit's are next: the same side bit, scores and places.
+   mode on the kit about an hour of one agent. Party's is done too: the same
+   side bit, dealt from the round's seed, a score a side and the winners all
+   first (`PGF_TEAMS`), with Dodgeball on it. The champion kit's is next.
 2. The champion, grid and vehicle kits. The champion and vehicle kits draw
    with `client/party-render.mjs` (its decals are the telegraphs of a
    top-down game); the grid kit wants a small board renderer.
@@ -200,8 +201,8 @@ marshmallows).
 1. Teams; the champion kit and FFA ARAM; Team Slayer, CTF, Oddball and King of
    the Hill in the arena. The arena's half is done (its teams, the kit and the
    four modes: one session of about five and a half hours, up to four agents at once);
-   Party's teams and their games (Fall Ball, Egg Scramble, Tug o' War,
-   Volleyfall), the champion kit and FFA ARAM are left.
+   Party's teams are in, with Dodgeball; their other games (Fall Ball, Egg
+   Scramble, Tug o' War, Volleyfall), the champion kit and FFA ARAM are left.
 2. The grid kit: Tetris 99, Bomberman 128, Snake, Puyo 99.
 3. The vehicle kit and karts.
 4. Then waves of 12 to 16 Party and arena games.

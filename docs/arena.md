@@ -128,16 +128,16 @@ node --test test/map.test.mjs
 
 ## Modes
 
-Each match plays one of twelve modes, chosen as its countdown starts: match k
-of a room plays `ARENA_MODES[k % 12]` (`src/layout.mjs`), Fiesta, Team Slayer,
+Each match plays one of thirteen modes, chosen as its countdown starts: match k
+of a room plays `ARENA_MODES[k % 13]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
-Juggernaut, King of the Hill, Assault, and round again: a free-for-all, then
-two [team modes](#teams). So a room
+Juggernaut, King of the Hill, Assault, Lucky Blocks, and round again: a
+free-for-all, then two [team modes](#teams), and Lucky Blocks last. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it (see Fireplace). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
@@ -228,6 +228,23 @@ node tools/genarena.mjs --bots 8 --ticks 20000 --mode 1 --out logs/arena-infecti
 node harness/matrix.mjs --ticks 20000 --log logs/arena-infection.qgl --wasm build/arena/game.wasm
 node net/run-arena.mjs --mode 1 [--bots 15] [--seconds 60]
 ```
+
+Lucky Blocks (mode 12) is everyone for itself on the [kit](#teams), the first
+mode there without sides (MODES' `team: 0`). Everyone spawns with a magnum in
+both hands and no frags. As play starts a gold block with a ? is laid over
+each of the map's spots: its pads, both stands, the skull's spot and the
+hills, one to a spot, 18 on Box Canyon. A hitscan round through one, a swing
+reaching it, a blast within half its radius or a bolt through it breaks it,
+and none of them stops on it. At the tick's end the room's PRNG draws what it
+pays its breaker, out of 64: a gun (rarer ones less often: the rocket and the
+sword 3 each), an overshield, a zombie's legs for 15 s, two frags, or unlucky,
+either a 300 blast at the breaker or eight frags falling round it. The feed
+says which ("P7 LUCKY ROCKET", "P3 UNLUCKY"). A block is back 15 s on. 15
+kills win, or the most at 5 min. The strike and spawn hooks are optional kit
+hooks, the payout is drawn serially in the tick hook, and the legs are P_FL's
+PF_FAST, which the prediction runs. The AI fighter goes for the nearest block
+while it holds only the magnum and fights once armed.
+`test/arena-lucky.test.mjs` (13 tests).
 
 ## Teams
 
