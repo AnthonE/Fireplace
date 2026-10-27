@@ -6,8 +6,10 @@
 // session and none differed, the room moved from one game to the next with
 // everyone in it (given time: bumper balls' two rounds come first, then
 // party), Chrome kept up, and each Chrome page's look (client/looks.mjs) went
-// round the relay to every page. Screenshots go to traces/.
-//   node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 240] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--res 1280x800]
+// round the relay to every page. Screenshots go to traces/. --start k starts
+// the playlist at its entry k (layout.mjs FP_START, through the relay's seed),
+// and the gate wants that entry's game played.
+//   node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 240] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--res 1280x800] [--start k]
 //                              [--port 4433: the relay's, its native door the next]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -24,6 +26,8 @@ const seconds = Number(opt('seconds', 240));
 const impair = opt('impair', '');
 const shots = opt('shots', '1') !== '0';
 const port = Number(opt('port', 4433));
+const start = opt('start', '') === '' ? null : Number(opt('start', ''));
+const seed = start === null ? 7 : ((L.FP_START << 24) | ((start & 0xff) << 16) | 7) >>> 0;
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 const LOCAL_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
@@ -33,7 +37,7 @@ const hash = readFileSync('certs/hash.txt', 'utf8').trim();
 mkdirSync('traces', { recursive: true });
 const summaryPath = 'traces/fireplace.relay.json';
 rmSync(summaryPath, { force: true });
-const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', String(port), '--native-port', String(port + 1), '--seed', '7',
+const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', String(port), '--native-port', String(port + 1), '--seed', String(seed),
   '--wasm', 'build/fireplace/game.wasm', '--duration', String(seconds + 40), '--summary', summaryPath, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
 await new Promise((ok) => setTimeout(ok, 1500));
 const botsPath = 'traces/fireplace.bots.json';
@@ -53,7 +57,7 @@ const pages = [];
 const lookOf = (k) => packLook(1 + (k % (BALLS.length - 1)), 1 + (k % (HATS.length - 1)));
 // software WebGPU here, so the page draws at golf's 320 x 200 unless asked for more (--res 1280x800)
 const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', res: opt('res', '320x200') });
-const report = { bots: nbots, chrome, seconds, impair: impair || 'none', screenshots: [], errors: [] };
+const report = { bots: nbots, chrome, seconds, impair: impair || 'none', start: start ?? 0, screenshots: [], errors: [] };
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(0);
 try {
@@ -102,7 +106,9 @@ const gate = {
   hashesAgree: !!r && (r.mismatches?.length ?? r.mismatches) === 0 && r.agreed === r.compared,
   // bumper balls' two rounds take three minutes or so: the first switch, into party, comes after
   switched: seconds < 220 || (report.botHost?.games?.length ?? 0) >= 2 || (report.chromeState || []).some((s) => s.games >= 2),
-  reachedParty: seconds < 220 || (report.botHost?.games || []).some((g) => g.game === L.G_PARTY),
+  reachedParty: start !== null || seconds < 220 || (report.botHost?.games || []).some((g) => g.game === L.G_PARTY),
+  // started at an entry: its game is the one played first
+  startedThere: start === null || (report.botHost?.games?.[0]?.game === L.PLAYLIST[start % L.PLAYLIST.length]),
   chromeKeptUp: (report.chromeState || []).every((s) => !s.behind),
   // every page's table holds every page's look at its slot, and nothing for the bots, who wear none
   looksWentRound: !!report.chromeState && report.chromeState.every((s) => JSON.stringify(s.relayLooks) === JSON.stringify(report.chromeState.map((x) => [x.slot, x.look]).sort((a, b) => a[0] - b[0]))),

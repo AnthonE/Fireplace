@@ -173,6 +173,9 @@
       (then (block $skip
         (!put u16 @(PROJ + J_AGE) (local.get $jb) (i32.add (!at u16 @(PROJ + J_AGE) (local.get $jb)) (i32.const 1)))
 #if ARENA
+#if FLIGHT
+        (if (i32.ge_u (local.get $kind) (i32.const @K_CHARGE)) (then (call $f_proj (local.get $jb) (local.get $d)) (br $skip)))
+#endif
         (if (i32.ge_u (local.get $kind) (i32.const @K_BOLT)) (then (call $a_bolt (local.get $jb) (local.get $d)) (br $skip)))
 #endif
         (if (i32.eq (local.get $kind) (i32.const @K_ROCKET))
