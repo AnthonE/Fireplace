@@ -6,9 +6,10 @@
 // flood that rises, drags outward and drowns, a meteor shower onto marked
 // rings, a tornado wandering a seeded path, an earthquake's shoves and
 // fissures, a tsunami's waves from one side (the lee of a house is shelter),
-// and lightning onto marked spots, roofs first. Later ones are harder and the
-// calm between them shorter; in the calm the rim crumbles in. Bumps on; the
-// last ball on wins, and the balls one disaster takes off together share it.
+// and lightning onto marked spots, roofs first and some at the balls. Later
+// ones are harder and the calm between them shorter; in the calm the rim
+// crumbles in. Bumps on; the last ball on wins, and the balls one disaster
+// takes off together share it.
 // Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const ND_R0 = 16; // the island: ND_R0 m plus ND_RK times the root of the balls in, at most ND_RMAX
@@ -119,7 +120,7 @@ export const ND_BREATH = 500; // 4 s
 // past the last (ND_HI).
 export const ND_EVS = 16384;
 export const ND_ESZ = 32;
-export const ND_NEMAX = 4096;
+export const ND_NEMAX = 8192;
 export const ND_LO = 11264;
 export const ND_HI = 11776;
 export const ND_BUCKET = 64;
@@ -127,6 +128,7 @@ export const ND_NB = 256;
 export const ND_EV_METEOR = 1;
 export const ND_EV_BOLT = 2;
 export const ND_EV_ROOF = 4;
+export const ND_EV_AIM = 8; // a bolt aimed at the balls (its spot fixed ND_LAHEAD before it lands)
 // A meteor's ring shows ND_MWARN ahead; it lands one every ND_MPER m^2 of
 // island a second (ND_MMIN at least), ND_MUP more a level; reach ND_MR0 to
 // ND_MR0 + ND_MRK: a ball under it (its bottom under the spot's top plus the
@@ -142,21 +144,32 @@ export const ND_MKICK = 14;
 export const ND_MFALL = 0.5;
 export const ND_MUPV = 6;
 // A bolt's spot flickers ND_LWARN ahead; one every ND_LPER m^2 a second
-// (ND_LMIN at least), ND_LUP more a level; ND_LROOF of them on a roof or a
-// rock while any stand, ND_LHILL on a hilltop (up to its top and a step
-// down); reach ND_LR: a ball there (its bottom from ND_LBELOW under the top
-// to ND_LOVER over it) is thrown off at ND_LKICK and up at ND_LUPV.
+// (ND_LMIN at least) and ND_LAIMR more for each ball in at the start, ND_LUP
+// more a level. As many as the balls bring are aimed at a ball in and the
+// crowd round it (the balls within ND_LCROWD of it, where they'd be ND_LLEAD
+// s on, give or take ND_LSCAT), fixed ND_LAHEAD before they land: PRED_MAX,
+// as far as the prediction runs. Of the rest, ND_LROOF on a roof or a rock
+// while any stand, ND_LHILL on a hilltop (up to its top and a step down).
+// Reach ND_LR: a ball there (its bottom from ND_LBELOW under the top to
+// ND_LOVER over it) is thrown off at ND_LKICK, less ND_LFALL of it by the
+// edge, and up at ND_LUPV.
 export const ND_LWARN = 106; // 0.85 s
-export const ND_LPER = 700;
-export const ND_LMIN = 1.5;
+export const ND_LPER = 500;
+export const ND_LMIN = 2.5;
 export const ND_LUP = 0.5;
+export const ND_LAIMR = 0.04;
+export const ND_LAHEAD = 256; // 2.05 s
+export const ND_LCROWD = 5;
+export const ND_LLEAD = 0.4;
+export const ND_LSCAT = 1;
 export const ND_LROOF = 0.35;
 export const ND_LHILL = 0.25;
-export const ND_LR = 2.5;
+export const ND_LR = 3.4;
 export const ND_LBELOW = 0.5;
 export const ND_LOVER = 4;
-export const ND_LKICK = 7;
-export const ND_LUPV = 10;
+export const ND_LKICK = 11;
+export const ND_LFALL = 0.5;
+export const ND_LUPV = 8;
 // A tornado (+24 f32 its path's centre x, z, its two arms, +40 i32 the first
 // arm's angle and turn, the second's (1/16384 turn, the turn a tick in
 // sixteenths), +56 f32 its pull's reach, its pull): its funnel at the path's

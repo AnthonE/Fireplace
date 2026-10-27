@@ -8,17 +8,20 @@
 ;; earthquake (the ground shoves on a rhythm, fissures open along glowing
 ;; lines), a tsunami (waves cross from one side; the lee of a house or a rock
 ;; is shelter, a roof over the water too) and lightning onto marked spots,
-;; roofs and rocks first. Each is harder than the last and the calm between
-;; them shorter; in the calm the rim crumbles in toward ND_RMIN. Bumps on.
+;; roofs and rocks first and some at the balls. Each is harder than the last
+;; and the calm between them shorter; in the calm the rim crumbles in toward
+;; ND_RMIN. Bumps on.
 ;; The last ball on wins; the balls one disaster takes off together share it.
 ;;
 ;; Everything a ball meets is laid by setup before the countdown, from the
 ;; round's random numbers: each cell's height and the tick into play the rim
 ;; takes it, the houses and rocks, the disasters (their ticks and their own
-;; numbers) and every meteor and bolt, in PG_BIG. Ground and push read only
-;; that, against their own bank's tick, so the prediction rolls a ball
-;; through every disaster exactly as the confirmed world will. A ball's
-;; breath is its own record's (PG_M), kept by push on either bank.
+;; numbers) and every meteor and bolt, in PG_BIG. The bolts aimed at the
+;; balls are moved onto them by the confirmed world's tick ND_LAHEAD before
+;; they land, PRED_MAX, as far ahead as the prediction ever runs. Ground and
+;; push read only that, against their own bank's tick, so the prediction
+;; rolls a ball through every disaster exactly as the confirmed world will.
+;; A ball's breath is its own record's (PG_M), kept by push on either bank.
 
 ;; Cell (q, r)'s index, -1 off the grid.
 (func $nd_cell (param $q i32) (param $r i32) (result i32)
@@ -345,13 +348,16 @@
 ;; Disaster j's meteors or bolts (bolt): one every ND_MPER (ND_LPER) m^2 of
 ;; the island it hits a second, ND_MMIN (ND_LMIN) at least, more each level;
 ;; from 60 ticks after it hits to 30 before its end, each in its turn of
-;; the rate plus up to 0.8 of it, anywhere on the island but its last 4%;
-;; ND_LROOF of the bolts on a house, crate or rock still standing, ND_LHILL
-;; on a hill's top or its first step down.
-(func $nd_strikes (param $j i32) (param $bolt i32)
+;; the rate plus up to 0.8 of it, anywhere on the island but its last 4%.
+;; The bolts have ND_LAIMR a second more for each of the nb balls in at the
+;; start (more each level), and as many of them in all are aimed
+;; (ND_EV_AIM): laid anywhere for now, $nd_aim moves them onto the balls
+;; ND_LAHEAD before they land. Of the rest, ND_LROOF on a house, crate or
+;; rock still standing, ND_LHILL on a hill's top or its first step down.
+(func $nd_strikes (param $j i32) (param $bolt i32) (param $nb i32)
   (local $a i32) (local $t0 i32) (local $t1 i32) (local $e i32) (local $k i32) (local $t i32) (local $key i32) (local $o i32) (local $n i32) (local $oa i32)
   (local $rad f32) (local $rate f32) (local $gap f32) (local $lv f32) (local $rr f32) (local $s f32) (local $c f32) (local $x f32) (local $z f32) (local $cx f32)
-  (local $hx f32) (local $hz f32) (local $u f32) (local $dd f32) (local $hill i32)
+  (local $hx f32) (local $hz f32) (local $u f32) (local $dd f32) (local $hill i32) (local $aim i32) (local $pa f32)
   (local.set $a (call $nd_dr (local.get $j)))
   (local.set $cx (f32.load (i32.const @PG_CX)))
   (local.set $t0 (i32.load offset=8 (local.get $a)))
@@ -361,7 +367,12 @@
   (if (f32.gt (local.get $lv) (f32.const @ND_LVMAX)) (then (local.set $lv (f32.const @ND_LVMAX))))
   (local.set $rate (f32.mul (f32.mul (local.get $rad) (local.get $rad)) (f32.const 3.1415927)))
   (if (local.get $bolt)
-    (then (local.set $rate (f32.mul (f32.max (f32.div (local.get $rate) (f32.const @ND_LPER)) (f32.const @ND_LMIN)) (!madd (local.get $lv) (f32.const @ND_LUP) (f32.const 1)))))
+    (then
+      (local.set $rate (f32.max (f32.div (local.get $rate) (f32.const @ND_LPER)) (f32.const @ND_LMIN)))
+      (local.set $pa (f32.mul (f32.convert_i32_u (local.get $nb)) (f32.const @ND_LAIMR)))
+      (local.set $rate (f32.add (local.get $rate) (local.get $pa)))
+      (local.set $pa (f32.div (local.get $pa) (local.get $rate)))
+      (local.set $rate (f32.mul (local.get $rate) (!madd (local.get $lv) (f32.const @ND_LUP) (f32.const 1)))))
     (else (local.set $rate (f32.mul (f32.max (f32.div (local.get $rate) (f32.const @ND_MPER)) (f32.const @ND_MMIN)) (!madd (local.get $lv) (f32.const @ND_MUP) (f32.const 1))))))
   (local.set $gap (f32.div (f32.const 125) (local.get $rate)))
   (local.set $e (i32.load (i32.const @(PG_H + ND_NE))))
@@ -376,6 +387,8 @@
       (br_if $done (i32.ge_u (local.get $t) (i32.sub (local.get $t1) (i32.const 30))))
       (local.set $o (i32.const -1))
       (local.set $u (call $nd_unit (i32.add (local.get $key) (i32.const 1))))
+      (local.set $aim (i32.and (i32.ne (local.get $bolt) (i32.const 0)) (f32.lt (call $nd_unit (i32.add (local.get $key) (i32.const 5))) (local.get $pa))))
+      (if (local.get $aim) (then (local.set $u (f32.const 1))))
       (local.set $hill (i32.and (i32.ne (local.get $bolt) (i32.const 0))
                                 (i32.and (f32.ge (local.get $u) (f32.const @ND_LROOF)) (f32.lt (local.get $u) (f32.const @(ND_LROOF + ND_LHILL))))))
       (if (i32.and (i32.ne (local.get $bolt) (i32.const 0)) (i32.ne (local.get $n) (i32.const 0)))
@@ -425,15 +438,16 @@
       (call $nd_strike (local.get $e) (local.get $t) (local.get $x) (local.get $z)
                        (if (result f32) (local.get $bolt) (then (f32.const @ND_LR))
                          (else (!madd (call $nd_unit (i32.add (local.get $key) (i32.const 1))) (f32.const @ND_MRK) (f32.const @ND_MR0))))
-                       (select (i32.const @ND_EV_BOLT) (i32.const @ND_EV_METEOR) (local.get $bolt)) (local.get $j))
+                       (select (select (i32.const @(ND_EV_BOLT | ND_EV_AIM)) (i32.const @ND_EV_BOLT) (local.get $aim)) (i32.const @ND_EV_METEOR) (local.get $bolt))
+                       (local.get $j))
       (!inc $e)
       (!inc $k)
       (br $more)))
   (i32.store offset=28 (local.get $a) (local.get $e))
   (i32.store (i32.const @(PG_H + ND_NE)) (local.get $e)))
 
-;; Each disaster's own numbers, by its kind and level, then the strikes' buckets.
-(func $nd_params
+;; Each disaster's own numbers, by its kind and level (and the nb balls in), then the strikes' buckets.
+(func $nd_params (param $nb i32)
   (local $j i32) (local $nd i32) (local $a i32) (local $kind i32) (local $key i32) (local $f i32) (local $fa i32) (local $nf i32) (local $nw i32)
   (local $b i32) (local $e i32) (local $ne i32) (local $lo i32) (local $hi i32) (local $w i32) (local $span i32) (local $gap i32)
   (local $lv f32) (local $rad f32) (local $s f32) (local $c f32) (local $rr f32) (local $cx f32) (local $u f32) (local $wc f32)
@@ -447,8 +461,8 @@
     (local.set $key (i32.add (i32.const 0x38000) (i32.shl (local.get $j) (i32.const 6))))
     (if (i32.eq (local.get $kind) (i32.const @ND_FLOOD))
       (then (f32.store offset=24 (local.get $a) (!madd (local.get $lv) (f32.const @ND_FDK) (f32.const @ND_FD0)))))
-    (if (i32.eq (local.get $kind) (i32.const @ND_METEOR)) (then (call $nd_strikes (local.get $j) (i32.const 0))))
-    (if (i32.eq (local.get $kind) (i32.const @ND_LIGHTNING)) (then (call $nd_strikes (local.get $j) (i32.const 1))))
+    (if (i32.eq (local.get $kind) (i32.const @ND_METEOR)) (then (call $nd_strikes (local.get $j) (i32.const 0) (local.get $nb))))
+    (if (i32.eq (local.get $kind) (i32.const @ND_LIGHTNING)) (then (call $nd_strikes (local.get $j) (i32.const 1) (local.get $nb))))
     (if (i32.eq (local.get $kind) (i32.const @ND_TORNADO))
       (then
         (call $sincos (call $nd_brg (local.get $key)))
@@ -575,7 +589,7 @@
   (call $nd_obstacles (local.get $rad))
   (call $nd_timeline)
   (call $nd_erode (local.get $rad))
-  (call $nd_params)
+  (call $nd_params (local.get $n))
   (call $nd_spawns (local.get $n) (local.get $rad)))
 
 ;; Ball i of n on its spot (past the spots laid, a spiral's), on the ground there.
@@ -596,6 +610,57 @@
 
 (func $nd_start)
 (func $nd_begin (param $p i32) (param $d i32))
+
+;; Aimed bolt e (record ea), landing on tick tp into play: at a ball in, the
+;; seed's pick, and the crowd round it, every ball in within ND_LCROWD of it
+;; where they'd be ND_LLEAD s on, give or take ND_LSCAT; in off the rim of
+;; its disaster's island. Confirmed and serial, ND_LAHEAD before it lands
+;; (the round's tick), so the record is fixed as far as the prediction runs.
+(func $nd_aim (param $e i32) (param $ea i32) (param $tp i32)
+  (local $p i32) (local $pb i32) (local $q i32) (local $qb i32) (local $n i32) (local $k i32) (local $m i32) (local $key i32)
+  (local $px f32) (local $pz f32) (local $dx f32) (local $dz f32) (local $sx f32) (local $sz f32) (local $x f32) (local $z f32) (local $rim f32) (local $dd f32) (local $cx f32)
+  (!for $p (i32.const 0) (i32.const @NPLAYER)
+    (if (call $p_in (i32.shl (local.get $p) (i32.const 6))) (then (!inc $n))))
+  (if (i32.eqz (local.get $n)) (then (return)))
+  (local.set $key (i32.add (i32.const 0x2000000) (i32.shl (local.get $e) (i32.const 2))))
+  (local.set $k (i32.rem_u (call $p_seed (local.get $key)) (local.get $n)))
+  (block $picked
+    (!for $p (i32.const 0) (i32.const @NPLAYER)
+      (if (call $p_in (i32.shl (local.get $p) (i32.const 6)))
+        (then
+          (br_if $picked (i32.eqz (local.get $k)))
+          (local.set $k (i32.sub (local.get $k) (i32.const 1)))))))
+  (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+  (local.set $px (!at f32 @(PLAYERS + P_PX) (local.get $pb)))
+  (local.set $pz (!at f32 @(PLAYERS + P_PZ) (local.get $pb)))
+  (!for $q (i32.const 0) (i32.const @NPLAYER)
+    (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
+    (if (call $p_in (local.get $qb))
+      (then
+        (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (local.get $px)))
+        (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $qb)) (local.get $pz)))
+        (if (f32.le (!madd (local.get $dx) (local.get $dx) (f32.mul (local.get $dz) (local.get $dz))) (f32.const @(ND_LCROWD * ND_LCROWD)))
+          (then
+            (local.set $sx (f32.add (local.get $sx) (!madd (!at f32 @(PLAYERS + P_VX) (local.get $qb)) (f32.const @ND_LLEAD) (!at f32 @(PLAYERS + P_PX) (local.get $qb)))))
+            (local.set $sz (f32.add (local.get $sz) (!madd (!at f32 @(PLAYERS + P_VZ) (local.get $qb)) (f32.const @ND_LLEAD) (!at f32 @(PLAYERS + P_PZ) (local.get $qb)))))
+            (!inc $m))))))
+  (local.set $x (!madd (f32.sub (call $nd_unit (i32.add (local.get $key) (i32.const 1))) (f32.const 0.5)) (f32.const @(2 * ND_LSCAT))
+                       (f32.div (local.get $sx) (f32.convert_i32_u (local.get $m)))))
+  (local.set $z (!madd (f32.sub (call $nd_unit (i32.add (local.get $key) (i32.const 2))) (f32.const 0.5)) (f32.const @(2 * ND_LSCAT))
+                       (f32.div (local.get $sz) (f32.convert_i32_u (local.get $m)))))
+  ;; in off the rim, as the bolts laid anywhere are
+  (local.set $cx (f32.load (i32.const @PG_CX)))
+  (local.set $rim (f32.mul (f32.load offset=20 (call $nd_dr (i32.load offset=24 (local.get $ea)))) (f32.const 0.96)))
+  (local.set $dx (f32.sub (local.get $x) (local.get $cx)))
+  (local.set $dz (f32.sub (local.get $z) (local.get $cx)))
+  (local.set $dd (f32.sqrt (!madd (local.get $dx) (local.get $dx) (f32.mul (local.get $dz) (local.get $dz)))))
+  (if (f32.gt (local.get $dd) (local.get $rim))
+    (then
+      (local.set $x (!madd (local.get $dx) (f32.div (local.get $rim) (local.get $dd)) (local.get $cx)))
+      (local.set $z (!madd (local.get $dz) (f32.div (local.get $rim) (local.get $dd)) (local.get $cx)))))
+  (!chk (local.get $x) 253 (local.get $e))
+  (!chk (local.get $z) 253 (local.get $e))
+  (call $nd_strike (local.get $e) (local.get $tp) (local.get $x) (local.get $z) (f32.const @ND_LR) (i32.const @(ND_EV_BOLT | ND_EV_AIM)) (i32.load offset=24 (local.get $ea))))
 
 ;; ---- the disasters, on either bank
 
@@ -812,7 +877,7 @@
 ;; The strikes landing on bank d's tick tp against ball p (record pb): a
 ;; meteor knocks a ball under it off its spot, harder nearer the middle, and
 ;; up; a bolt throws one at the spot (from just under its top to well over it)
-;; off and up.
+;; off, harder nearer the middle, and up.
 (func $nd_strike_on (param $p i32) (param $pb i32) (param $d i32) (param $tp i32)
   (local $b i32) (local $e i32) (local $e1 i32) (local $ea i32) (local $fl i32) (local $kind i32)
   (local $px f32) (local $py f32) (local $pz f32) (local $vx f32) (local $vy f32) (local $vz f32)
@@ -849,7 +914,7 @@
               (local.set $vz (!at f32 @(PLAYERS + P_VZ) (local.get $pb)))
               (if (i32.eq (local.get $kind) (i32.const @ND_EV_BOLT))
                 (then
-                  (local.set $k (f32.const @ND_LKICK))
+                  (local.set $k (f32.mul (f32.const @ND_LKICK) (f32.sub (f32.const 1) (f32.mul (f32.const @ND_LFALL) (f32.div (local.get $h) (local.get $rr))))))
                   (local.set $vy (f32.max (local.get $vy) (f32.const @ND_LUPV))))
                 (else
                   (local.set $k (f32.mul (f32.const @ND_MKICK) (f32.sub (f32.const 1) (f32.mul (f32.const @ND_MFALL) (f32.div (local.get $h) (local.get $rr))))))
@@ -1052,7 +1117,8 @@
             (i32.or (i32.and (!at i32 @(PLAYERS + PG_M) (local.get $pb)) (i32.const 0xfffff000)) (local.get $breath))))))
 
 ;; The confirmed world's calls, as FX: each disaster called, hitting and over;
-;; every strike landing; a quake's shoves and fissures opening.
+;; every strike landing; a quake's shoves and fissures opening. And the bolts
+;; landing ND_LAHEAD on aimed at the balls as they are now.
 (func $nd_tick
   (local $tp i32) (local $j i32) (local $nd i32) (local $a i32) (local $t i32) (local $b i32) (local $e i32) (local $e1 i32) (local $ea i32)
   (local $el i32) (local $per i32) (local $f i32) (local $fa i32) (local $cx f32)
@@ -1074,6 +1140,15 @@
         (if (i32.eq (i32.load (local.get $ea)) (local.get $tp))
           (then (call $fx (i32.const 0) (i32.const @ND_FX_STRIKE) (i32.const 255) (local.get $e)
                           (f32.load offset=4 (local.get $ea)) (f32.load offset=12 (local.get $ea)) (f32.load offset=8 (local.get $ea)) (f32.load offset=16 (local.get $ea))))))))
+  (local.set $t (i32.add (local.get $tp) (i32.const @ND_LAHEAD)))
+  (local.set $b (i32.div_u (local.get $t) (i32.const @ND_BUCKET)))
+  (if (i32.lt_u (local.get $b) (i32.const @ND_NB))
+    (then
+      (local.set $e1 (!ld u16 @(PG_BIG + ND_HI) (local.get $b)))
+      (!for $e (!ld u16 @(PG_BIG + ND_LO) (local.get $b)) (local.get $e1)
+        (local.set $ea (call $nd_ev (local.get $e)))
+        (if (i32.and (i32.eq (i32.load (local.get $ea)) (local.get $t)) (i32.ne (i32.and (i32.load offset=20 (local.get $ea)) (i32.const @ND_EV_AIM)) (i32.const 0)))
+          (then (call $nd_aim (local.get $e) (local.get $ea) (local.get $t)))))))
   (local.set $a (call $nd_now (local.get $tp)))
   (if (i32.ge_s (local.get $a) (i32.const 0))
     (then

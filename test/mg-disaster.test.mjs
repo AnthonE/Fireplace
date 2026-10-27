@@ -16,7 +16,7 @@ import { playParty } from '../tools/genparty.mjs';
 import { Partier } from '../client/party-bot.mjs';
 import * as L from '../src/layout.mjs';
 import * as MC from '../src/mg/disaster.mjs'; // ND_*: the minigame's own constants
-import disaster, { stage, cellOf, dropOf, holds, rimAt, waterAt, funnelAt, fissureW, onFissure, frontsAt, alongAcross, inLee, onOb, surfaceAt, isBolt, nowAt, calledAt, NAMES } from '../client/mg/disaster.mjs';
+import disaster, { stage, cellOf, dropOf, holds, rimAt, waterAt, funnelAt, fissureW, onFissure, frontsAt, alongAcross, inLee, onOb, surfaceAt, isBolt, nowAt, calledAt, NAMES, HORIZON } from '../client/mg/disaster.mjs';
 
 const C = L.B_CX;
 const S = MC.ND_S;
@@ -348,10 +348,11 @@ test('a flood: the water rises from under the rim over ND_FRISE to its depth and
   assert.deepEqual(vel(g.v, 0), [0, 0, 0]);
 });
 
-// A strike of disaster D on open turf (no house or rock within 4 m, flat round it), from the k-th on.
-function strikeIn(s, D, k = 0, roof = false) {
+// A strike of disaster D on open turf (no house or rock within 4 m, flat round
+// it), from the k-th on; not one aimed at the balls, unless asked for one.
+function strikeIn(s, D, k = 0, roof = false, aimed = false) {
   for (let e = D.e0 + k; e < D.e1; e++) {
-    if (!!s.eo[e] !== roof) continue;
+    if (!!s.eo[e] !== roof || !!(s.ek[e] & MC.ND_EV_AIM) !== aimed) continue;
     if (!roof && (s.obs.some((O) => Math.hypot(s.ex[e] - O.x, s.ez[e] - O.z) < Math.hypot(O.hx, O.hz) + 4) || Math.hypot(s.ex[e] - C, s.ez[e] - C) > D.rad - 4)) continue;
     // none other landing near on its tick
     if ([...Array(D.e1 - D.e0).keys()].some((i) => D.e0 + i !== e && Math.abs(s.et[D.e0 + i] - s.et[e]) < 3)) continue;
@@ -389,46 +390,103 @@ test('a meteor lands on its ring on its tick: a ball under it is knocked off the
   assert.ok(seeds[0] > seeds[1], 'harder nearer the middle');
 });
 
-test('lightning: a bolt on its spot throws a ball there off and up, one well over it not; it strikes roofs and rocks while they stand, ND_LROOF of the time', async () => {
+test('lightning: a bolt on its spot throws a ball there off, harder nearer the middle, and up, one well over it not; it strikes roofs and rocks while they stand, ND_LROOF of the rest; ND_LAIMR a second a ball are aimed ND_LAHEAD ahead at a ball and the crowd round it, and the prediction is exact through one as far as it runs', async () => {
   const { g, D } = await roomWith(MC.ND_LIGHTNING, 1);
   const s = stage(g.v);
   const e = strikeIn(s, D);
   assert.ok(e >= 0 && Math.abs(s.er[e] - MC.ND_LR) < 1e-5);
-  for (const [y, hit] of [[0, true], [MC.ND_LOVER + 0.5, false]]) {
+  const kicks = [];
+  for (const [off, y, hit] of [[0.3, 0, true], [0.8, 0, true], [0.3, MC.ND_LOVER + 0.5, false], [1.05, 0, false]]) {
     const h = (await roomWith(MC.ND_LIGHTNING, 1)).g;
+    const x = s.ex[e] + off * MC.ND_LR;
     at(h, s.et[e] - 3);
-    put(h, 0, s.ex[e] + 1, s.ez[e], { y: s.ey[e] + y, ground: !y });
-    if (y) h.dv.setFloat32(rec(0) + L.P_VY, 0, true);
+    put(h, 0, x, s.ez[e], { y: s.ey[e] + y, ground: !y });
     const seen = h.v.fxCount();
     for (let k = 0; k < 4; k++) {
-      if (y) put(h, 0, s.ex[e] + 1, s.ez[e], { y: s.ey[e] + y, ground: false });
+      if (y) put(h, 0, x, s.ez[e], { y: s.ey[e] + y, ground: false });
       h.step();
     }
     const v = vel(h.v, 0);
     const fh = fxs(h.v, MC.ND_FX_HIT, seen);
-    if (!hit) { assert.equal(fh.length, 0, 'over it'); continue; }
+    if (!hit) { assert.equal(fh.length, 0, y ? 'over it' : 'past its reach'); continue; }
     assert.ok(fh.length === 1 && fh[0].shot === MC.ND_HIT_BOLT);
-    assert.ok(v[0] >= MC.ND_LKICK - 0.2 && v[1] >= MC.ND_LUPV - 0.3, `thrown at ${v}`);
+    const k = MC.ND_LKICK * (1 - MC.ND_LFALL * off);
+    assert.ok(Math.abs(v[0] - k) < 0.05 && v[1] >= MC.ND_LUPV - 0.3, `thrown at ${v}, ${k} wanted`);
+    kicks.push(v[0]);
   }
+  assert.ok(kicks[0] > kicks[1], 'harder nearer the middle');
   // a bolt on a roof: a ball up there is thrown off it
   const er = strikeIn(s, D, 0, true);
   assert.ok(er >= 0, 'one on a roof or rock');
   const O = s.obs[s.eo[er] - 1];
   assert.ok(s.et[er] < O.drop && Math.abs(s.ey[er] - O.top) < 1e-5);
-  const h = (await roomWith(MC.ND_LIGHTNING, 1)).g;
-  at(h, s.et[er] - 3);
-  put(h, 0, s.ex[er], s.ez[er], { y: O.top });
-  const seen = h.v.fxCount();
-  for (let k = 0; k < 4; k++) h.step();
-  assert.ok(fxs(h.v, MC.ND_FX_HIT, seen).some((x) => x.shot === MC.ND_HIT_BOLT), 'struck on the roof');
-  // the share on roofs and rocks, over a few rounds
-  let on = 0, all = 0;
+  {
+    const h = (await roomWith(MC.ND_LIGHTNING, 1)).g;
+    at(h, s.et[er] - 3);
+    put(h, 0, s.ex[er], s.ez[er], { y: O.top });
+    const seen = h.v.fxCount();
+    for (let k = 0; k < 4; k++) h.step();
+    assert.ok(fxs(h.v, MC.ND_FX_HIT, seen).some((x) => x.shot === MC.ND_HIT_BOLT), 'struck on the roof');
+  }
+  // an aimed bolt: laid anywhere, it moves onto a ball sitting still on the tick ND_LAHEAD before it lands, not a tick sooner
+  const aimedIn = (E, t) => { for (let k = E.e0; k < E.e1; k++) if ((t.ek[k] & MC.ND_EV_AIM) && t.et[k] - 300 > E.t0) return k; return -1; };
+  const rd = (v, k) => { const a = L.PG_BIG + MC.ND_EVS + k * MC.ND_ESZ; return [v.dv.getFloat32(a + 4, true), v.dv.getFloat32(a + 8, true), v.dv.getUint32(a + 20, true)]; };
+  {
+    const { g: h, D: Da } = await roomWith(MC.ND_LIGHTNING, 1, { want: (E, t) => aimedIn(E, t) >= 0 });
+    const sa = stage(h.v), ea = aimedIn(Da, sa);
+    const P = open(h, C, C, { until: Da.t1, flat: false, clear: 4, ok: (T) => Math.hypot(T.x - sa.ex[ea], T.z - sa.ez[ea]) > 8 });
+    at(h, sa.et[ea] - 300);
+    put(h, 0, P.x, P.z);
+    const was = rd(h.v, ea);
+    for (let k = 0; k < 300 - MC.ND_LAHEAD; k++) h.step();
+    assert.deepEqual(rd(h.v, ea), was, 'not yet');
+    h.step();
+    const [x, z, kind] = rd(h.v, ea);
+    assert.ok(Math.abs(x - P.x) <= MC.ND_LSCAT + 1e-3 && Math.abs(z - P.z) <= MC.ND_LSCAT + 1e-3, `aimed at ${[x, z]}, the ball at ${[P.x, P.z]}`);
+    assert.equal(kind & 3, MC.ND_EV_BOLT);
+    assert.ok(kind & MC.ND_EV_AIM);
+    // from here the prediction runs as far as it ever does, PRED_MAX, through the bolt, bit for bit
+    assert.equal(MC.ND_LAHEAD, L.PRED_MAX);
+    const w = partyWord({ yaw: 0, move: 0, hop: 0 });
+    for (let i = 0; i < L.PRED_MAX; i++) h.dv.setUint32(L.PWORDS + 4 * i, w, true);
+    h.sim.x.predict(0, L.PRED_MAX);
+    const pred = h.sim.u8.slice(L.PLAYERS + L.PRED_D, L.PLAYERS + L.PRED_D + L.PSIZE);
+    const seen = h.v.fxCount();
+    for (let i = 0; i < L.PRED_MAX; i++) h.step([[L.EV_INPUT, 0, w]]);
+    assert.ok(fxs(h.v, MC.ND_FX_HIT, seen).some((f) => f.shot === MC.ND_HIT_BOLT), 'struck where it sat');
+    assert.deepEqual(pred, h.sim.u8.slice(L.PLAYERS, L.PLAYERS + L.PSIZE), 'predicted PRED_MAX ahead');
+  }
+  // at a crowd: two balls 2 m apart and one far off; the pick's crowd, so the pair's middle or the one alone
+  {
+    const { g: h, D: D3 } = await roomWith(MC.ND_LIGHTNING, 3, { want: (E, t) => aimedIn(E, t) >= 0 });
+    const s3 = stage(h.v), e3 = aimedIn(D3, s3);
+    const P = open(h, C, C, { until: D3.t1, flat: false, clear: 4 });
+    const Q = open(h, C, C, { until: D3.t1, flat: false, clear: 4, ok: (T) => Math.hypot(T.x - P.x, T.z - P.z) > 14 });
+    at(h, s3.et[e3] - MC.ND_LAHEAD - 1);
+    put(h, 0, P.x - 1, P.z); put(h, 1, P.x + 1, P.z); put(h, 2, Q.x, Q.z);
+    h.step(); h.step();
+    const [x, z] = rd(h.v, e3);
+    const near = (a, b) => Math.abs(x - a) <= MC.ND_LSCAT + 1e-3 && Math.abs(z - b) <= MC.ND_LSCAT + 1e-3;
+    assert.ok(near(P.x, P.z) || near(Q.x, Q.z), `aimed at ${[x, z]}: the pair at ${[P.x, P.z]}, the one at ${[Q.x, Q.z]}`);
+  }
+  // the shares, over a few rounds: ND_LROOF of those not aimed on roofs and rocks, and the aimed ones what ND_LAIMR makes of the crowd
+  let on = 0, rest = 0, aim = 0, all = 0, want = 0;
   for (let seed = 1; seed <= 16; seed++) {
     const r = await room(8, { play: false, seed });
     const t = stage(r.v, true);
-    for (const E of t.dis) if (E.kind === MC.ND_LIGHTNING) for (let k = E.e0; k < E.e1; k++) { all++; on += t.eo[k] ? 1 : 0; }
+    for (const E of t.dis) {
+      if (E.kind !== MC.ND_LIGHTNING) continue;
+      const ra = 8 * MC.ND_LAIMR;
+      want += (E.e1 - E.e0) * ra / (Math.max(Math.PI * E.rad * E.rad / MC.ND_LPER, MC.ND_LMIN) + ra);
+      for (let k = E.e0; k < E.e1; k++) {
+        all++;
+        if (t.ek[k] & MC.ND_EV_AIM) { aim++; continue; }
+        rest++; on += t.eo[k] ? 1 : 0;
+      }
+    }
   }
-  assert.ok(all > 50 && on / all > MC.ND_LROOF * 0.6 && on / all < MC.ND_LROOF * 1.2, `${on} of ${all} on roofs and rocks`);
+  assert.ok(rest > 50 && on / rest > MC.ND_LROOF * 0.6 && on / rest < MC.ND_LROOF * 1.2, `${on} of ${rest} on roofs and rocks`);
+  assert.ok(aim > want * 0.6 && aim < want * 1.4, `${aim} of ${all} aimed, about ${want.toFixed(0)} wanted`);
 });
 
 // A tick of tornado D whose funnel is out in the open (clear of the houses
@@ -816,7 +874,7 @@ for (const [balls, ticks] of [[8, 16500], [64, 16500]]) {
   });
 }
 
-test('the client module: draws the countdown and every disaster, frames the island as it stands, writes its HUD lines, banners and feed lines; its brain sees what a player does: the sea, a meteor\'s ring, a funnel, a fissure, a lee, and goes for high ground, a lee, away', async () => {
+test('the client module: draws the countdown and every disaster, frames the island as it stands, writes its HUD lines, banners and feed lines; its brain sees what a player does: the sea, a meteor\'s ring, a funnel, a fissure, a lee, and goes for high ground, a lee, away; and only what\'s shown: a funnel where it stands and how it\'s been going, a flood\'s water as it rises to its line, the waves in sight, a bolt where it\'s aimed', async () => {
   const { Scene } = await import('../client/party-render.mjs');
   const g = await room(3, { play: false, seed: 41 });
   const out = { scene: new Scene(24000), solid: [], glow: [], beams: [], decals: [], casters: [], paint: null };
@@ -968,6 +1026,62 @@ test('the client module: draws the countdown and every disaster, frames the isla
     at(g, F.open + 20);
     g.step();
     assert.ok(dz(g, F.x, F.z) >= 0.95, 'open');
+  }
+  // only what's on the stage. A funnel: where it hangs as it's called, then where it stands and on the way it's been going
+  {
+    const { g, D } = await roomWith(MC.ND_TORNADO, 1, { want: (E, s) => openFunnel(s, E, E.t0 + MC.ND_TRAMP + 30) > 0 });
+    const s = stage(g.v);
+    at(g, D.call + 20);
+    g.step();
+    const [hx, hz] = funnelAt(D, D.t0);
+    assert.ok(dz(g, hx + 1, hz, D.t0 + 10 - tp(g)) >= 0.9, 'under it as it touches down');
+    at(g, openFunnel(s, D, D.t0 + MC.ND_TRAMP + 30));
+    g.step();
+    const now = tp(g);
+    const [x1, z1] = funnelAt(D, now), [x0, z0] = funnelAt(D, now - 25);
+    const ex = x1 + (x1 - x0) * 4, ez = z1 + (z1 - z0) * 4;
+    assert.ok(dz(g, ex, ez, 100) >= 0.95, 'where it\'s going, from where it\'s been going');
+    const [tx, tz] = funnelAt(D, now + 100);
+    if (Math.hypot(tx - ex, tz - ez) > MC.ND_TCORE + 5.5) assert.ok(dz(g, tx, tz, 100) < 0.95, 'not its path ahead');
+  }
+  // a flood: nothing in the low ground till the water rises, but the line it will rise to drawn from its call; then the water as it rises
+  {
+    const { g, D } = await roomWith(MC.ND_FLOOD, 1);
+    const s = stage(g.v);
+    const low = s.cells.filter((T) => T.rho < D.rad - 5 && T.drop > D.t1 && !s.obs.some((O) => onOb(O, T.x, T.z, 2))).sort((a, b) => a.h - b.h || a.rho - b.rho)[0];
+    at(g, D.call + 10);
+    g.step();
+    assert.ok(dz(g, low.x, low.z, D.t0 + 200 - tp(g)) < 0.15, 'not up yet: unseen');
+    clear();
+    disaster.draw(g.v, { tick: g.v.tick, dt: 0, now: 0, slot: 0 }, out);
+    assert.ok(out.decals.some((x) => Math.abs(x.pos[1] - (PLAT_Y + D.depth)) < 1e-3), 'the line it will rise to');
+    at(g, D.t0 + 200);
+    g.step();
+    assert.ok(dz(g, low.x, low.z, 30) > 0.15, 'in the water rising');
+  }
+  // a tsunami: the waves in sight, from the horizon on, not those still to come
+  {
+    const { g, D } = await roomWith(MC.ND_TSUNAMI, 1, { want: (E) => E.nw >= 2 && E.gap * E.c * TICK > HORIZON + 5 });
+    void g;
+    const fr = frontsAt(D, D.t0 + 10);
+    assert.ok(fr.length >= 1 && fr.length < D.nw && fr.every(([x]) => x >= D.a0 - HORIZON), `${fr.length} of ${D.nw} in sight`);
+  }
+  // an aimed bolt: where it's aimed once it shows, not where it was laid
+  {
+    const aimedIn = (E, t) => { for (let k = E.e0; k < E.e1; k++) if ((t.ek[k] & MC.ND_EV_AIM) && t.et[k] - 300 > E.t0) return k; return -1; };
+    const { g, D } = await roomWith(MC.ND_LIGHTNING, 1, { want: (E, t) => aimedIn(E, t) >= 0 });
+    const s = stage(g.v), e = aimedIn(D, s);
+    const lx = s.ex[e], lz = s.ez[e];
+    const P = open(g, C, C, { until: D.t1, flat: false, clear: 4, ok: (T) => Math.hypot(T.x - lx, T.z - lz) > 10 });
+    at(g, s.et[e] - 300);
+    put(g, 0, P.x, P.z);
+    for (let k = 0; k < 300 - MC.ND_LWARN + 5; k++) g.step();
+    const a = L.PG_BIG + MC.ND_EVS + e * MC.ND_ESZ, ax = g.dv.getFloat32(a + 4, true), az = g.dv.getFloat32(a + 8, true);
+    assert.ok(Math.hypot(ax - P.x, az - P.z) < 3, 'aimed at the ball');
+    const dt = s.et[e] - tp(g);
+    assert.ok(dz(g, ax, az, dt) >= 0.95, 'its spot as it shows');
+    const others = [...Array(D.e1 - D.e0).keys()].map((i) => D.e0 + i).some((k) => k !== e && Math.abs(s.et[k] - s.et[e]) < 30 && Math.hypot(s.ex[k] - lx, s.ez[k] - lz) < 8);
+    if (!others) assert.ok(dz(g, lx, lz, dt) < 0.6, 'not where it was laid');
   }
 });
 

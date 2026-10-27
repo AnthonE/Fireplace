@@ -1,16 +1,18 @@
 // DISASTER ISLAND, as drawn and as the AI ball sees it. The island is square
 // turf, sand along its beach and greener up its terraced hills, standing on
 // a column of rock in the sea; turf the rim is about to take darkens and
-// shakes, then drops away. The houses are stone with a slate roof, a door
-// and lit windows, a wooden crate against one wall; the rocks are grey
-// boulders. Each disaster is read from the sim's own schedule (PG_BIG) and
-// drawn at the frame's tick on the prediction's clock, so you meet it where
-// your ball does: a flood is a sheet of water rising over the turf; a meteor
-// a fireball falling onto its red ring; a tornado a whirling grey funnel with
-// a ring of dust round it as far as it pulls; an earthquake shakes the turf
-// and its fissures glow along their lines before they gape; a tsunami's waves
-// roll in from the horizon, the lee behind each house and rock marked green;
-// a bolt's spot flickers white before it cracks down out of a dark sky.
+// shakes (a house or rock on it darkening too), then drops away. The houses
+// are stone with a slate roof, a door and lit windows, a wooden crate against
+// one wall; the rocks are grey boulders. Each disaster is read from the sim's
+// own schedule (PG_BIG) and drawn at the frame's tick on the prediction's
+// clock, so you meet it where your ball does: a flood is a sheet of water
+// rising over the turf to the line drawn faintly as it's called; a meteor a
+// fireball falling onto its red ring; a tornado a whirling grey funnel with a
+// ring of dust round it as far as it pulls; an earthquake shakes the turf and
+// its fissures glow along their lines, the turf scorched as wide as they'll
+// gape, before they do; a tsunami's waves roll in from the horizon, the lee
+// behind each house and rock marked green; a bolt's spot flickers white
+// before it cracks down out of a dark sky, some of them where balls are.
 import * as L from '../../src/layout.mjs';
 import * as MC from '../../src/mg/disaster.mjs'; // ND_*: the minigame's own constants
 import { PLAT_Y } from '../../src/party-view.mjs';
@@ -33,7 +35,7 @@ const TIPS = [
   'KEEP AWAY FROM THE FUNNEL',
   'HOP THE GLOWING CRACKS  KEEP OFF THE EDGE',
   'HIDE IN THE GREEN LEE OF A HOUSE OR ROCK',
-  'KEEP OFF THE FLICKERING SPOTS  ROOFS DRAW IT',
+  'KEEP MOVING  OFF THE FLICKERING SPOTS  ROOFS DRAW IT',
 ];
 const KIND_C = [C.CYAN, C.ORANGE, C.GREY, C.ORANGE, C.CYAN, C.YELLOW];
 const SAND = [0.86, 0.78, 0.56];
@@ -167,13 +169,16 @@ export function onFissure(F, x, z, w) {
   const dx = x - F.x, dz = z - F.z;
   return Math.abs(dx * F.lx + dz * F.lz) <= F.hl && Math.abs(dz * F.lx - dx * F.lz) < w;
 }
-// A tsunami's wave fronts on tp, metres along its way from the centre (each [front, k]), the waves out then.
+// A tsunami's wave fronts on tp, metres along its way from the centre (each
+// [front, k]): the waves in sight then, from HORIZON m out (where they're
+// first drawn) till they're past.
+export const HORIZON = 90;
 export function frontsAt(D, tp) {
   const out = [];
   for (let k = 0; k < D.nw; k++) {
     const el = tp - D.t0 - k * D.gap;
     const front = D.a0 + el * D.c * TICK;
-    if (front - MC.ND_WD < D.a1 + 30) out.push([front, k]);
+    if (front >= D.a0 - HORIZON && front - MC.ND_WD < D.a1 + 30) out.push([front, k]);
   }
   return out;
 }
@@ -210,6 +215,22 @@ export function span(s, ta, tb) {
   return [s.lo[b0], s.hi[b1]];
 }
 export const isBolt = (s, e) => (s.ek[e] & 3) === MC.ND_EV_BOLT;
+// The aimed bolts' spots near tp read again from their records: $nd_aim moves
+// each onto the balls ND_LAHEAD before it lands, long after the stage was
+// read, and well before its spot shows. Once a view, tick and tp.
+let freshView = null, freshTick = -1, freshTp = -1;
+export function refresh(view, s, tp) {
+  if (view === freshView && view.tick === freshTick && (tp | 0) === freshTp) return;
+  freshView = view; freshTick = view.tick; freshTp = tp | 0;
+  const [e0, e1] = span(s, tp - 64, tp + MC.ND_MWARN + 64);
+  const dv = view.dv, B = L.PG_BIG + (view.bank || 0);
+  for (let e = e0; e < e1; e++) {
+    if (!(s.ek[e] & MC.ND_EV_AIM)) continue;
+    const a = B + MC.ND_EVS + e * MC.ND_ESZ;
+    s.ex[e] = dv.getFloat32(a + 4, true); s.ez[e] = dv.getFloat32(a + 8, true); s.ey[e] = dv.getFloat32(a + 12, true);
+    s.ek[e] = dv.getUint32(a + 20, true); s.eo[e] = dv.getUint32(a + 28, true);
+  }
+}
 const warnOf = (s, e) => (isBolt(s, e) ? MC.ND_LWARN : MC.ND_MWARN);
 // The tick (HDR_TICK's count, fractional) to draw at, and ticks into play then; frozen where the round ended.
 function clock(view, ctx) {
@@ -232,11 +253,12 @@ function cellColour(s, T) {
   return T.h ? shade(g, HIGH, T.h / MC.ND_HK) : g;
 }
 
-// A house, a crate or a rock, at its place (dy: sunk by, alpha: fading out as it falls).
-function obstacle(sc, out, O, dy = 0, tilt = 0, alpha = 1) {
-  const y0 = O.base - BASE, h = O.top - y0;
+// A house, a crate or a rock, at its place (dy: sunk by, alpha: fading out as
+// it falls, doom: how far it has darkened with the cell it goes with).
+function obstacle(sc, out, O, dy = 0, tilt = 0, alpha = 1, doom = 0) {
+  const y0 = O.base - BASE, h = O.top - y0, dk = 0.6 * doom;
   if (O.kind === MC.ND_HOUSE) {
-    const w = WALLS[O.k & 3], rf = ROOF[(O.k >> 1) & 3];
+    const w = shade(WALLS[O.k & 3], DOOM, dk), rf = shade(ROOF[(O.k >> 1) & 3], DOOM, dk);
     sc.box(O.x, y0 + h / 2 - 0.15 - dy, O.z, O.hx, h / 2 - 0.15, O.hz, tilt, ...w, LOOK.MATTE, 0, 0, alpha, O.k * 97 & 4095);
     sc.box(O.x, O.top - 0.15 - dy, O.z, O.hx + 0.25, 0.15, O.hz + 0.25, tilt, ...rf, LOOK.MATTE, 0, 0, alpha, O.k * 31 & 4095);
     // a door on the side away from the crate, a lit window either side of it
@@ -248,17 +270,25 @@ function obstacle(sc, out, O, dy = 0, tilt = 0, alpha = 1) {
       sc.box(fx + sz * off, O.base + 1.4 - dy, fz + sx * off, sx ? 0.05 : 0.3, 0.3, sz ? 0.05 : 0.3, 0, 1, 0.85, 0.5, LOOK.GLOW, 0.5, 0.2, alpha);
     }
   } else if (O.kind === MC.ND_CRATE) {
-    sc.box(O.x, y0 + h / 2 - dy, O.z, O.hx, h / 2, O.hz, tilt, 0.62, 0.45, 0.26, LOOK.WOOD, 0, 0, alpha, O.k * 13 & 4095);
+    sc.box(O.x, y0 + h / 2 - dy, O.z, O.hx, h / 2, O.hz, tilt, ...shade([0.62, 0.45, 0.26], DOOM, dk), LOOK.WOOD, 0, 0, alpha, O.k * 13 & 4095);
   } else {
-    sc.hex(O.x, y0 + h / 2 - 0.2 - dy, O.z, O.hx * 1.03, h / 2 - 0.2, O.k * 0.7 + tilt, ...STONE, LOOK.MATTE, 0, 0, alpha, O.k * 7 & 4095);
-    sc.cyl(O.x, O.top - 0.2 - dy, O.z, O.hx * 0.92, 0.2, ...shade(STONE, [0.7, 0.7, 0.7], 0.2), LOOK.MATTE, 0, 0, alpha, O.k * 5 & 4095);
+    const st = shade(STONE, DOOM, dk);
+    sc.hex(O.x, y0 + h / 2 - 0.2 - dy, O.z, O.hx * 1.03, h / 2 - 0.2, O.k * 0.7 + tilt, ...st, LOOK.MATTE, 0, 0, alpha, O.k * 7 & 4095);
+    sc.cyl(O.x, O.top - 0.2 - dy, O.z, O.hx * 0.92, 0.2, ...shade(st, [0.7, 0.7, 0.7], 0.2), LOOK.MATTE, 0, 0, alpha, O.k * 5 & 4095);
   }
 }
 
-// A flood's water: a sheet over the island to its top, falling off the rim.
-function flood(sc, out, s, D, tp, rim) {
-  const top = waterAt(D, tp);
-  if (top <= PLAT_Y - 0.45) return;
+// A flood's water: a sheet over the island to its top, falling off the rim;
+// from its call till it's up, the line it will rise to, a faint flickering
+// sheet with a pale ring round it.
+function flood(sc, out, s, D, tp, rim, now) {
+  const top = waterAt(D, Math.max(tp, D.t0)), mark = PLAT_Y + D.depth;
+  if (tp < D.t0 + MC.ND_FRISE) {
+    const a = 0.1 + 0.06 * Math.sin(now * 0.01);
+    sc.cyl(s.cx, mark - 0.02, s.cx, rim + 0.8, 0.02, 0.7, 0.88, 1, LOOK.GLOW, 0.3, 0, a);
+    out.decals?.push({ pos: [s.cx, mark, s.cx], radius: rim + 0.8, width: 0.6, color: [0.8, 0.93, 1, 0.45], kind: DECAL.RING });
+  }
+  if (tp < D.t0 || top <= PLAT_Y - 0.45) return;
   const lo = PLAT_Y - BASE - 0.3;
   sc.cyl(s.cx, (top + lo) / 2, s.cx, rim + 0.8, (top - lo) / 2, ...WATER, LOOK.PLASTIC, 0, 0, 0.55);
   out.decals?.push({ pos: [s.cx, top + 0.02, s.cx], radius: rim + 0.8, width: 1, color: [0.9, 0.97, 1, 0.5], kind: DECAL.RING });
@@ -303,7 +333,8 @@ function tornado(sc, out, s, D, tp, now) {
   out.casters?.push([x, PLAT_Y + 4, z, -4 * k]);
 }
 
-// A quake's fissures: a glowing crack along each line as its time comes, then a gaping dark one.
+// A quake's fissures: a glowing crack along each line as its time comes, the
+// turf scorched as wide as it will gape, then a gaping dark one.
 function fissures(sc, out, view, s, D, tp, now) {
   for (const F of D.fis) {
     if (tp < F.open - MC.ND_QWARN || tp >= D.t1) continue;
@@ -323,6 +354,7 @@ function fissures(sc, out, view, s, D, tp, now) {
       } else {
         const pulse = 0.6 + 0.4 * Math.sin(now * 0.02 * (1 + 3 * u));
         sc.box(x, top + 0.03, z, F.hl / n + 0.05, 0.03, 0.08 + 0.25 * u, yaw, 1, 0.45, 0.1, LOOK.GLOW, (0.5 + u) * pulse, 0.3, 0.5 + 0.5 * u, i);
+        sc.box(x, top + 0.015, z, F.hl / n + 0.05, 0.015, D.w, yaw, 0.24, 0.12, 0.06, LOOK.MATTE, 0, 0, 0.2 + 0.3 * u, i + 64);
       }
     }
   }
@@ -334,7 +366,7 @@ function tsunami(sc, out, s, D, tp, rim) {
   const len = rim + 30;
   for (let k = 0; k < D.nw; k++) {
     const front = D.a0 + (tp - D.t0 - k * D.gap) * D.c * TICK;
-    if (front < D.a0 - 90 || front - MC.ND_WD > D.a1 + 20) continue;
+    if (front < D.a0 - HORIZON || front - MC.ND_WD > D.a1 + 20) continue;
     const mid = front - MC.ND_WD / 2;
     const x = s.cx + D.dx * mid, z = s.cx + D.dz * mid;
     const lo = PLAT_Y - 4;
@@ -400,16 +432,46 @@ function strikes(sc, out, s, tp, now) {
 const slotOf = (me) => (typeof me === 'number' ? me : me?.slot ?? -1);
 // the house, crate or rock each AI ball is climbing (its goal() sets it), not a wall in its way
 const CLIMB = [];
-// What every brain looking at one world tick shares: the stage, the tick into play, the disaster called and its ticks.
+// What every brain looking at one world tick shares: the stage, the tick into
+// play, the disaster called and its ticks, and the rim 1 s on (its cells
+// darken 3 s ahead). It reads only what the stage shows by now: of a funnel,
+// where it stands (where it hangs while it's called) and how it went over
+// the last SEEN ticks; of a flood, the water now and how it rose over them,
+// up to the line drawn from its call; strikes, fissures and waves as they show.
+const SEEN = 25;
 let seenTick = -1, seenBank = -1, seenView = null, seen = null;
 function world(view) {
   if (view === seenView && view.tick === seenTick && view.bank === seenBank && seen) return seen;
   const g = view.party();
   const s = stage(view);
   const tp = g.t;
-  seen = { g, s, tp, D: g.state === L.H_PLAY ? calledAt(s, tp) : null, rim: rimAt(s, tp + 125) };
+  const D = g.state === L.H_PLAY ? calledAt(s, tp) : null;
+  seen = { g, s, tp, D, rim: rimAt(s, tp + 125), fun: null, water: null };
+  if (D && D.kind === MC.ND_TORNADO) {
+    const t = Math.max(D.t0, tp), [x, z] = funnelAt(D, t);
+    let vx = 0, vz = 0;
+    if (tp - SEEN >= D.t0) { const [x0, z0] = funnelAt(D, tp - SEEN); vx = (x - x0) / SEEN; vz = (z - z0) / SEEN; }
+    seen.fun = { x, z, vx, vz, t };
+  }
+  if (D && D.kind === MC.ND_FLOOD) {
+    const y = tp >= D.t0 ? waterAt(D, tp) : PLAT_Y - 0.5;
+    seen.water = { y, rate: tp - SEEN >= D.t0 ? (y - waterAt(D, tp - SEEN)) / SEEN : 0, mark: PLAT_Y + D.depth };
+  }
+  if (D && (D.kind === MC.ND_METEOR || D.kind === MC.ND_LIGHTNING)) refresh(view, s, tp);
   seenTick = view.tick; seenBank = view.bank; seenView = view;
   return seen;
+}
+// The funnel on tp as the brain reckons it from what it's seen: where it
+// stands now, on as it's been going (no more than 1 s of it).
+function funnelSeen(w, tp) {
+  const F = w.fun, k = Math.max(0, Math.min(125, tp - F.t));
+  return [F.x + F.vx * k, F.z + F.vz * k];
+}
+// A flood's water on tp as the brain reckons it: the water now, rising or
+// falling as it has been, never past the line drawn.
+function waterSeen(w, tp) {
+  const W = w.water;
+  return Math.max(PLAT_Y - 0.5, Math.min(W.mark, W.y + W.rate * Math.max(0, tp - w.tp)));
 }
 // How bad being at (x, z) is on tick `tick`, as ball slot sees it from the view's tick.
 function danger(view, x, z, tick, slot, me) {
@@ -436,8 +498,7 @@ function danger(view, x, z, tick, slot, me) {
   if (!D) return d;
   switch (D.kind) {
     case MC.ND_FLOOD: {
-      if (tp < D.t0) break;
-      const deep = waterAt(D, tp) - surfaceAt(view, s, x, z, tp)[0];
+      const deep = waterSeen(w, tp) - surfaceAt(view, s, x, z, tp)[0];
       if (deep > 0) d = Math.max(d, Math.min(0.7, 0.15 + deep * 0.25), rho > w.rim - 6 ? 0.5 : 0);
       break;
     }
@@ -455,10 +516,10 @@ function danger(view, x, z, tick, slot, me) {
       break;
     }
     case MC.ND_TORNADO: {
-      // where it will be, worked from what it's been doing: a player sees it move
-      const [fx, fz] = funnelAt(D, Math.max(D.t0, Math.min(tp, now + 125)));
+      // where it will be, worked from where it's been going, wider the further on that's guessed
+      const [fx, fz] = funnelSeen(w, tp);
       const dd = Math.hypot(x - fx, z - fz);
-      if (dd < MC.ND_TCORE + 2.5) d = Math.max(d, 0.95);
+      if (dd < MC.ND_TCORE + 2.5 + 2 * Math.max(0, tp - now) * TICK) d = Math.max(d, 0.95);
       else if (dd < D.rp) d = Math.max(d, 0.6 * (1 - dd / D.rp) + 0.2);
       break;
     }
@@ -483,13 +544,15 @@ function danger(view, x, z, tick, slot, me) {
   return d;
 }
 // A refuge from a flood, for ball b at (x0, z0): the nearest turf standing
-// out of it (the cells it may take kept per flood in the stage), else the
-// nearest crate or rock whose top does, else a house (by its crate, when
-// below the crate's top).
+// out of it, by the line drawn from its call (kept per flood in the stage),
+// else the nearest crate or rock whose top does, else a house (by its
+// crate, when below the crate's top). What stands is what isn't darkening
+// as it's called: the rim takes nothing while a disaster's on, and what it
+// takes before the flood hits has darkened by its call.
 function refuge(view, s, D, b, x0, z0, slot) {
   const need = PLAT_Y + D.depth - MC.ND_FSUB + 0.15;
   s.dry ??= [];
-  const dry = s.dry[D.j] ??= s.cells.filter((T) => T.top >= need && T.drop > D.t1);
+  const dry = s.dry[D.j] ??= s.cells.filter((T) => T.top >= need && T.drop >= D.call + WARN);
   let best = null, bd = Infinity;
   for (const T of dry) {
     const dd = Math.hypot(T.x - x0, T.z - z0) + ((T.c * 7 + slot * 13) % 11) * 0.3;
@@ -497,7 +560,7 @@ function refuge(view, s, D, b, x0, z0, slot) {
   }
   if (best) return best;
   for (const O of s.obs) {
-    if (O.top < need || O.drop <= D.t1) continue;
+    if (O.top < need || O.drop < D.call + WARN) continue;
     const dd = Math.hypot(O.x - x0, O.z - z0) + (O.kind === MC.ND_HOUSE ? 12 : 0);
     if (dd < bd) { bd = dd; best = { x: O.x, z: O.z, O }; }
   }
@@ -593,16 +656,17 @@ export default {
         if (a < FALL) obstacle(sc, out, O, 15 * a * a, a * 0.4, 1 - a / FALL);
         continue;
       }
-      obstacle(sc, out, O);
+      obstacle(sc, out, O, 0, 0, 1, tp >= 0 && O.drop - tp < WARN ? 1 - (O.drop - tp) / WARN : 0);
     }
     if (tp < 0) return;
     const rim = rimAt(s, tp);
     if (D) {
-      if (D.kind === MC.ND_FLOOD && tp >= D.t0) flood(sc, out, s, D, tp, rim);
+      if (D.kind === MC.ND_FLOOD) flood(sc, out, s, D, tp, rim, now);
       if (D.kind === MC.ND_TORNADO) tornado(sc, out, s, D, tp, now);
       if (D.kind === MC.ND_QUAKE) fissures(sc, out, view, s, D, tp, now);
       if (D.kind === MC.ND_TSUNAMI) tsunami(sc, out, s, D, tp, rim);
     }
+    refresh(view, s, tp);
     strikes(sc, out, s, tp, now);
   },
 
@@ -683,6 +747,7 @@ export default {
       const left = Math.max(0, 1 - breath / MC.ND_BREATH), n = 12, k = Math.round(left * n);
       ctx.centre(row, `BREATH ${'#'.repeat(k)}${'-'.repeat(n - k)}`, left < 0.4 ? C.RED : C.CYAN);
     } else if (D.kind === MC.ND_METEOR || D.kind === MC.ND_LIGHTNING) {
+      refresh(view, s, tp);
       const [e0, e1] = span(s, tp, tp + MC.ND_MWARN);
       let soon = Infinity;
       for (let e = e0; e < e1; e++) if (s.et[e] >= tp && s.et[e] - warnOf(s, e) <= tp && Math.hypot(x - s.ex[e], z - s.ez[e]) < s.er[e] + RB) soon = Math.min(soon, (s.et[e] - tp) * TICK);
@@ -734,7 +799,7 @@ export default {
           return [R.x, R.z];
         }
         case MC.ND_TORNADO: {
-          const [fx, fz] = funnelAt(D, Math.max(D.t0, tp + 60));
+          const [fx, fz] = funnelSeen(w, tp + 60);
           const dx = s.cx - fx, dz = s.cx - fz, dd = Math.hypot(dx, dz) || 1;
           return inside(s, s.cx + (dx / dd) * rim * 0.45, s.cx + (dz / dd) * rim * 0.45, rim, 6);
         }
