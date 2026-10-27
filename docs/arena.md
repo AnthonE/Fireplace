@@ -128,17 +128,17 @@ node --test test/map.test.mjs
 
 ## Modes
 
-Each match plays one of fourteen modes, chosen as its countdown starts: match k
-of a room plays `ARENA_MODES[k % 14]` (`src/layout.mjs`), Fiesta, Team Slayer,
+Each match plays one of fifteen modes, chosen as its countdown starts: match k
+of a room plays `ARENA_MODES[k % 15]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
-Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, and round again: a
-free-for-all, then two [team modes](#teams), and the two kit modes without
-sides last. So a room
+Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, Escape, and round
+again: a free-for-all, then two [team modes](#teams), and the three kit modes
+without sides last. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it (see Fireplace). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
