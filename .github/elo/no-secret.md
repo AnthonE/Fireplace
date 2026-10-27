@@ -1,4 +1,8 @@
-To plan your game, Claude needs a key in this repo first. It runs on your own Claude usage; a plan costs about as much as a long chat.
+To plan your game, Claude needs a way to pay. Two ways:
+
+**Elo Pros credits, nothing to paste.** Sign in with GitHub at https://elopros.com/login.html (the account that owns this repo), add credits at https://elopros.com/dev-console.html#credits, then close this issue and reopen it. Claude is charged by the token, from your balance.
+
+**Your own Claude usage.** A plan costs about as much as a long chat.
 
 1. Get one of these:
    - an API key from https://console.anthropic.com (Settings > API keys), or
