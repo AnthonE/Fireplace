@@ -4,7 +4,7 @@
 // back to the room, and the TV shows the marshmallows and what's on next;
 // then it closes in again. One host (client/host.mjs) on Fireplace's sim,
 // every game's frontend mounted in turn on its own canvas (golf, the arena,
-// bumper balls, party); while the room is in view, the game draws into a
+// bumper balls, party, Dogfight); while the room is in view, the game draws into a
 // texture the TV shows. B and H, while the room is in view, change your ball
 // and hat (client/looks.mjs), which everyone in the room sees; L lists your
 // achievements (client/achievements.mjs). Both are kept in this browser.
@@ -18,6 +18,7 @@ import * as L from '../src/layout.mjs';
 import { unpackArena, modeName } from '../src/arena-view.mjs';
 import '../src/bumper-view.mjs';
 import '../src/party-view.mjs';
+import { modeName as flightMode } from '../src/flight-view.mjs';
 import { createHost, epoch, fitSize } from './host.mjs';
 import { createRoom, SCREEN, COUCH, cardText, cardFire } from './room-render.mjs';
 import { loadTheme, themeList, savedTheme, saveTheme, FALLBACK, DEFAULT } from './themes.mjs';
@@ -42,9 +43,9 @@ const LOOK_MS = 5000; // how long B or H keeps your look on the TV
 const LIST_MS = 12000; // and L your achievements
 const PER_PAGE = 6; // achievements a page, in type the TV can show from the couch
 // what each game's picture lights the room with, roughly: golf's grass, the
-// arena's grey, the cheese, party's sky
-const TV_LIGHT = [[0.45, 0.7, 0.45], [0.6, 0.65, 0.6], [1, 0.85, 0.5], [0.55, 0.75, 1]];
-const FRONTENDS = { [L.G_GOLF]: './golf-game.mjs', [L.G_ARENA]: './arena-game.mjs', [L.G_BUMPER]: './bumper-game.mjs', [L.G_PARTY]: './party-game.mjs' };
+// arena's grey, the cheese, party's sky, Dogfight's bluer sky
+const TV_LIGHT = [[0.45, 0.7, 0.45], [0.6, 0.65, 0.6], [1, 0.85, 0.5], [0.55, 0.75, 1], [0.5, 0.65, 0.95]];
+const FRONTENDS = { [L.G_GOLF]: './golf-game.mjs', [L.G_ARENA]: './arena-game.mjs', [L.G_BUMPER]: './bumper-game.mjs', [L.G_PARTY]: './party-game.mjs', [L.G_FLIGHT]: './flight-game.mjs' };
 const ease = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
 
@@ -52,9 +53,10 @@ async function main() {
   const [W, H] = fitSize(q, [1600, 1000]);
   roomCanvas.width = W;
   roomCanvas.height = H;
-  // golf and the arena are drawn at their 320 x 200, bumper balls and party at the window's size
+  // golf, the arena and Dogfight are drawn at their 320 x 200, bumper balls and party at the window's size
   [canvases[L.G_GOLF].width, canvases[L.G_GOLF].height] = [320, 200];
   [canvases[L.G_ARENA].width, canvases[L.G_ARENA].height] = [320, 200];
+  [canvases[L.G_FLIGHT].width, canvases[L.G_FLIGHT].height] = [320, 200];
   [canvases[L.G_BUMPER].width, canvases[L.G_BUMPER].height] = [W, H];
   [canvases[L.G_PARTY].width, canvases[L.G_PARTY].height] = [W, H];
   const clock = FILM ? filmClock() : null;
@@ -162,17 +164,18 @@ async function main() {
   function drive() {
     const slot = get(L.CL_SLOT);
     if (!guest || slot < 0 || get(L.CL_STATE) !== 2) return;
-    guest.slot = guest.golfer.slot = guest.fighter.slot = guest.roller.slot = guest.partier.slot = slot;
+    guest.slot = guest.golfer.slot = guest.fighter.slot = guest.roller.slot = guest.partier.slot = guest.pilot.slot = slot;
     const nowE = epoch();
     const lag = Math.round(readClock(i32, f64, L.CL_PRED, nowE) - readClock(i32, f64, L.CL_PLAY, nowE));
     const w = guest.think(view, view.tick, lag);
-    if (Guest.game(view) === L.G_ARENA) {
+    // the arena's word, for the arena and Dogfight alike
+    if (Guest.game(view) === L.G_ARENA || Guest.game(view) === L.G_FLIGHT) {
       const a = unpackArena(w), b = unpackArena(lastWord);
       set(L.CL_YAW, a.yaw); set(L.CL_PITCH, a.pitch); set(L.CL_MOVE, a.move | (a.jump << 4)); set(L.CL_WEAPON, a.slot);
       if (a.shot !== b.shot) press(L.CL_PRESSES);
       if (a.melee !== b.melee) press(L.CL_MELEE);
       if (a.gren !== b.gren) press(L.CL_GREN);
-      if (guest.fighter.wantUse) press(L.CL_USE);
+      if (Guest.game(view) === L.G_ARENA && guest.fighter.wantUse) press(L.CL_USE);
     } else {
       set(L.CL_YAW, w & 0x3fff); set(L.CL_PITCH, (w >>> 14) & 0x3ff); set(L.CL_MOVE, ((w >>> 24) & 15) | (((w >>> 28) & 1) << 4)); set(L.CL_WEAPON, w >>> 31);
       if (((w >>> 29) & 3) !== ((lastWord >>> 29) & 3)) press(L.CL_PRESSES);
@@ -289,8 +292,12 @@ async function main() {
 
   // the playlist goes by position: entry (games played) % length is next
   const nextGame = () => L.PLAYLIST[view.dv.getUint16(L.FP_COUNT + 2, true) % L.PLAYLIST.length];
-  // a game as the TV names it: the arena by the mode its seed forces
-  const gameName = (g, seed) => (g === L.G_ARENA && modeName(seed) !== null ? `ARENA ${modeName(seed)}` : L.GAMES[g]);
+  // a game as the TV names it: the arena and Dogfight by the mode its seed forces
+  const gameName = (g, seed) => {
+    if (g === L.G_ARENA && modeName(seed) !== null) return `ARENA ${modeName(seed)}`;
+    if (g === L.G_FLIGHT && modeName(seed) !== null) { const n = flightMode((seed >>> 16) & 0xff).name; return n.includes('DOGFIGHT') ? n : `DOGFIGHT ${n}`; }
+    return L.GAMES[g];
+  };
   const GAMES_LINE = L.PLAYLIST.map((g) => L.GAMES[g]).join(' . ');
 
   // ---- the frame

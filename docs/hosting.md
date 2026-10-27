@@ -39,7 +39,7 @@ half). Its flags, through `relay_args`:
 When a game ends, the referee reads the places it gave (`FP_LAST`) and the
 relay reports the players signed in at that tick, each at their place, to
 `POST /api/ratings/fireplace/report`, one ladder per game (golf, arena,
-bumper, party). A game with fewer than two signed in isn't reported. The
+bumper, party, dogfight). A game with fewer than two signed in isn't reported. The
 match's id names the room and the game, so a report sent twice, or sent again
 by a standby that took the room over, is rated once. `node net/run-elo.mjs` is
 the gate, against a stand-in for Elo Pros.

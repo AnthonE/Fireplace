@@ -26,6 +26,7 @@ export const ACHIEVEMENTS = [
   { id: 'playlist', name: 'THE WHOLE PLAYLIST', about: 'PLAY GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.played & ALL4) === ALL4, have: (t) => [bits(t.played & ALL4), 4] },
   { id: 'allround', name: 'ALL-ROUNDER', about: 'WIN GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.won & ALL4) === ALL4, have: (t) => [bits(t.won & ALL4), 4] },
   { id: 'crowd', name: 'A FULL HOUSE', about: 'PLAY A GAME WITH 32 OR MORE IN IT', test: (t) => t.crowd >= 32 },
+  { id: 'ace', name: 'ACE', about: 'WIN A DOGFIGHT', test: (t) => ((t.won >> L.G_FLIGHT) & 1) === 1 },
 ];
 export const byId = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
 

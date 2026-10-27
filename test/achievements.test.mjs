@@ -60,8 +60,10 @@ test('the long ones: every game played and won, every step, a full house, 25 and
   const many = play(Array.from({ length: 34 }, () => res({ place: 1, got: 3 })));
   assert.ok(many.opened.includes('bag') && many.opened.includes('campfire') && many.opened.includes('regular'));
   assert.equal(many.t.mallows, 102);
+  assert.ok(play([res({ game: L.G_FLIGHT, place: 1, got: 3 })]).opened.includes('ace'));
+  assert.ok(!play([res({ game: L.G_FLIGHT, place: 2, got: 2 })]).opened.includes('ace'));
   const all = ACHIEVEMENTS.map((a) => a.id);
-  assert.deepEqual(Object.keys(play([...four.map((game) => res({ game, place: 1, got: 3, field: 40 })), res({ place: 2 }), res({ place: 3 }), ...Array.from({ length: 34 }, () => res({ place: 1, got: 3 }))]).t.got).sort(), [...all].sort());
+  assert.deepEqual(Object.keys(play([...[...four, L.G_FLIGHT].map((game) => res({ game, place: 1, got: 3, field: 40 })), res({ place: 2 }), res({ place: 3 }), ...Array.from({ length: 34 }, () => res({ place: 1, got: 3 }))]).t.got).sort(), [...all].sort());
 });
 
 test('a result is read from the world as it is held: the game, the place, the marshmallows, who was in it', () => {

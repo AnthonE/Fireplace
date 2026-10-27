@@ -58,7 +58,7 @@ test('a result as a rated match: signed-in players only, at their places, one se
   assert.equal(Elo.matchOf({ seed: 1, roomStart: 0, result: { ...result, places: [[0, 1], [2, 2]] }, wallet: (p) => seat[p] ?? null }), null,
     'one signed-in player is not a match');
   assert.deepEqual(Elo.LADDERS.map((_, g) => Elo.matchOf({ seed: 1, roomStart: 0, result: { game: g, count: 1, places: [[0, 1], [1, 2]] }, wallet: (p) => seat[p] }).ladder),
-    ['golf', 'arena', 'bumper', 'party']);
+    ['golf', 'arena', 'bumper', 'party', 'dogfight']);
 });
 
 test("a report carries the game server's signature over the text Elo Pros checks (serverkeys.message)", async () => {
