@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-44 games, each gated online: golf, bumper balls, the arena's twelve modes
-(Grab Bag, Zombies, gun game, Juggernaut, and red against blue: Team
+57 games, each gated online: golf, bumper balls, the arena's fifteen modes
+(Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 30 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 40 minigames. Fireplace plays them in turn.
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
 on Fireplace's playlist between party and golf.
@@ -59,8 +59,8 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 30 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
-| Arena (the fighter) | 12 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Party (the ball) | 40 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War |
+| Arena (the fighter) | 15 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
@@ -83,8 +83,9 @@ only of your own body), physics sandboxes, open worlds.
    against blue as a kit of team modes (`src/am/<key>.wat`, four hooks; a
    carrier bit for flags and the skull; the map's objectives in `MAP_OBJ`),
    with Team Slayer, Capture the Flag, Oddball and King of the Hill on it, a
-   mode on the kit about an hour of one agent. Party's and the champion
-   kit's are next: the same side bit, scores and places.
+   mode on the kit about an hour of one agent. Party's is done too: the same
+   side bit, dealt from the round's seed, a score a side and the winners all
+   first (`PGF_TEAMS`), with Dodgeball on it. The champion kit's is next.
 2. The champion, grid and vehicle kits. The champion and vehicle kits draw
    with `client/party-render.mjs` (its decals are the telegraphs of a
    top-down game); the grid kit wants a small board renderer.
@@ -218,10 +219,15 @@ points, marshmallows).
 1. Teams; the champion kit and FFA ARAM; Team Slayer, CTF, Oddball and King of
    the Hill in the arena. The arena's half is done (its teams, the kit and the
    four modes: one session of about five and a half hours, up to four agents at once);
-   Party's teams and their games (Fall Ball, Egg Scramble, Tug o' War,
-   Volleyfall), the champion kit and FFA ARAM are left.
+   Party's teams are in, with Dodgeball, Volleyball and Soccer; their other games
+   (Fall Ball, Egg Scramble, Tug o' War), the champion kit and FFA ARAM are left.
 2. The grid kit: Tetris 99, Bomberman 128, Snake, Puyo 99.
-3. The vehicle kit and karts.
+3. The vehicle kit and karts. A kart's handling exists already, as one
+   Party minigame's push on the ball (Kart Grab, `src/mg/kart.wat`): a
+   heading, a drift's charge and a spin-out packed in the record's `PG_M`,
+   the gas, the grip and the drift worked along the heading, exact in the
+   prediction. The kit makes the kart a body of its own (a box on wheels, not
+   a ball) and puts a race, balloon battle and the rest of the list on it.
 4. Then waves of 12 to 16 Party and arena games.
 5. The Elo Pros wrapper, whenever: it depends on nothing above.
 

@@ -43,6 +43,14 @@ function put(g, p, x, y, z, yaw = 0, pitch = 0, speed = 0) {
 const fxs = (v, kind) => { const out = []; for (let k = 0; k < v.fxCount(); k++) { const f = v.fx(k); if (f.kind === kind) out.push(f); } return out; };
 const level = { yaw: 0, pitch: 512 };
 
+test('Ring Race sits past every arena mode, and its news past every kit mode\'s', () => {
+  // FLIGHT_TICKS is MODE_TICKS with the race's after: the race must be the next number
+  assert.equal(F.M_RACE, L.MODES.length);
+  assert.equal(L.FLIGHT_TICKS[F.M_RACE], F.RACE_TICKS);
+  assert.equal(L.KIT & (1 << F.M_RACE), 0);
+  assert.ok(F.MX_GATE >= L.MX_AM + 8 * L.AM.length && F.MX_LAP === F.MX_GATE + 1);
+});
+
 test('flight is its own sim, the arena\'s with ships, on its own map: the same exports, the ceiling in the map\'s head', async () => {
   const s = await newFlight();
   for (const name of ['init', 'step', 'step_mt', 'worker_run', 'predict', 'snapshot', 'restore', 'regrid', 'hash_region']) assert.equal(typeof s.x[name], 'function', name);

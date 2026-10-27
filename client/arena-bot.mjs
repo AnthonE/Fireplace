@@ -11,7 +11,9 @@
 // (client/am/<key>.mjs goal(): a flag, the skull, a hill, a hunt), as an
 // attacker or, every third of its side by slot, a defender, routed round the
 // map's buildings through their doors; carrying the flag or the skull it has
-// no gun, so it runs its goal and swings at whoever gets close in front.
+// no gun, so it runs its goal and swings at whoever gets close in front. A
+// goal with something to break (Lucky Blocks' blocks) it shoots or swings at
+// once it sees it, when nobody else is in sight.
 // Deterministic from its seed and what it sees, so a match of bots is an
 // ordinary event log. Walls it can't see through; one in its way it goes
 // round, sidling and jumping until it moves again.
@@ -22,6 +24,7 @@ import { AMC } from './am/index.mjs';
 
 const EYE = 1.6;
 const TURN = 16384;
+const STRIKE = 25; // m: an objective's strike (client/am/index.mjs) is fired at from this near
 
 // Sight (can an eye at a see b?) is arena-view.mjs's, shared with the kit's modules.
 export { sees };
@@ -355,7 +358,9 @@ export class Fighter {
     // the nearest enemy in sight, looked for every 16 ticks (each bot on its own
     // tick of the 16, so a room of them spreads the work); between looks the
     // one chosen is kept while it lives and, checked every 4 ticks, is in sight
-    const alive = (q) => q >= 0 && (view.u8[L.PLAYERS + q * L.PSIZE + L.P_FL] & (L.PF_LIVE | L.PF_DEAD)) === L.PF_LIVE && !view.ally(this.slot, q);
+    // (the downed, both PF_DOWN bits, are nobody's target: Escape's, and its stunned hunter)
+    const alive = (q) => q >= 0 && (view.u8[L.PLAYERS + q * L.PSIZE + L.P_FL] & (L.PF_LIVE | L.PF_DEAD)) === L.PF_LIVE
+      && (view.u8[L.PLAYERS + q * L.PSIZE + L.P_FL] & L.PF_DOWN) !== L.PF_DOWN && !view.ally(this.slot, q);
     const chest = (q) => { const b = L.PLAYERS + q * L.PSIZE; return [view.dv.getFloat32(b + L.P_PX, true), view.dv.getFloat32(b + L.P_PY, true) + 1.2, view.dv.getFloat32(b + L.P_PZ, true)]; };
     // a sword with legs (a zombie, the juggernaut) hunts; so does everyone after the juggernaut
     const hunter = me.zombie || me.jugg;
@@ -410,6 +415,8 @@ export class Fighter {
     // there: near enough across, and on the same floor (a roof over the flag isn't home)
     const there = obj && Math.hypot(obj.pos[0] - me.pos[0], obj.pos[2] - me.pos[2]) < (obj.r ?? 2) && Math.abs(obj.pos[1] - me.pos[1]) < 2;
     const going = obj && !(there && !obj.hold);
+    // a goal to hold still at: the keys let go as far short as the body slides (friction takes a quarter of the speed a metre)
+    const coast = !!obj?.still && Math.hypot(obj.pos[0] - me.pos[0], obj.pos[2] - me.pos[2]) < (obj.r ?? 2) + 0.25 * Math.hypot(me.vel[0], me.vel[2]);
 
     let move = 0, jump = 0;
     // a gun worth having underfoot: pick it up, in place of the worse one (a carrier has no hands)
@@ -460,6 +467,25 @@ export class Fighter {
       // an objective that won't wait: sidle on to it (or side to side on it), still shooting
       if (going && hurry >= 0.5) move = there ? this.aside(view, me, obj, toward) : toward(this.waypoint(view, me, obj, t));
       if (this.rand() < 0.01) jump = 1;
+    } else if (obj?.strike && !me.carry && Math.hypot(obj.strike[0] - me.pos[0], obj.strike[2] - me.pos[2]) < STRIKE && sees(view, eye, obj.strike)) {
+      // something of the objective's to break (Lucky Blocks' blocks), nobody in
+      // sight: faced and fired at, or swung at within 2 m (a rocket or the sword
+      // closes in to swing); on toward it by the route while it's further than 3 m
+      const at = obj.strike, d = Math.hypot(at[0] - me.pos[0], at[2] - me.pos[2]);
+      const aim = aimAt(eye, at);
+      this.turnTo(aim.yaw, aim.pitch, 0.3);
+      const off = Math.abs(((aim.yaw - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2);
+      const arm = L.ARMS[me.weapon] || L.ARMS[L.W_AR];
+      const close = me.weapon === L.W_ROCKET || me.weapon === L.W_SWORD;
+      if (off < 150) {
+        if (d < 2 && me.cool === 0) this.melee ^= 1;
+        else if (!close && d < (arm.type === 1 ? STRIKE : arm.range * 0.9)) {
+          if (arm.auto) this.shot = (this.shot + 1) & 3;
+          else if (t - this.lastFire > arm.refire + 2) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
+        }
+      }
+      move = d > (close ? 1.5 : 3) ? toward(this.waypoint(view, me, obj, t)) : 0;
+      if (me.mag[this.slotOut] === 0 && me.res[this.slotOut] > 0 && !me.reload) this.wantReload = true;
     } else if (going) {
       // the objective: by the route, facing the way, a hop where it climbs
       if (there) {
@@ -469,13 +495,14 @@ export class Fighter {
           this.strafe = this.rand() < 0.3 ? (this.rand() < 0.5 ? 4 : 8) : 0;
         }
         if (Math.abs(((this.look - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2) > 40) this.turnTo(this.look, 512, 0.1);
-        move = this.aside(view, me, obj, toward);
+        // (a goal to hold still at, as Evade's revive: no step aside, no hop)
+        move = obj.still ? 0 : this.aside(view, me, obj, toward);
         // there by the count but below its middle (at a rock's foot, under its top): a hop up onto it
-        if (obj.pos[1] - me.pos[1] > 0.5 && this.rand() < 0.15) jump = 1;
+        if (!obj.still && obj.pos[1] - me.pos[1] > 0.5 && this.rand() < 0.15) jump = 1;
       } else {
         const w = this.waypoint(view, me, obj, t);
         this.turnTo(aimAt(eye, [w[0], eye[1], w[2]]).yaw, 512, 0.25);
-        move = 1;
+        move = coast ? 0 : 1;
         // a hop where the way climbs, or where something low is in the way (a roof's parapet, a rock)
         if ((w[1] - me.pos[1] > 0.6 && Math.hypot(w[0] - me.pos[0], w[2] - me.pos[2]) < 4) || this.stuck > 8) { if (this.rand() < 0.15) jump = 1; }
         else if (this.rand() < 0.003) jump = 1;
@@ -517,8 +544,25 @@ export class Fighter {
       if (!me.carry && me.mag[this.slotOut] < (L.ARMS[me.weapon]?.mag || 0) / 2 && me.res[this.slotOut] > 0 && !me.reload) this.wantReload = true;
       if (this.rand() < 0.003) jump = 1;
     }
-    // carrying: no gun, but a swing that kills at an enemy close in front (within 2.4 m, about 40 degrees either side)
-    if (me.carry && me.cool === 0) {
+    // a goal that names a point to shoot (Evade's chasers, to stun): turned on
+    // it, firing when on it as at an enemy, still going the goal's way
+    if (obj?.shoot && !me.carry && !me.down) {
+      const aim = aimAt(eye, obj.shoot);
+      const d = Math.hypot(obj.shoot[0] - me.pos[0], obj.shoot[2] - me.pos[2]);
+      this.turnTo(aim.yaw + (this.rand() - 0.5) * (1 - this.skill) * 300, aim.pitch, 0.3 + 0.4 * this.skill);
+      if (going && !there) move = coast ? 0 : toward(this.waypoint(view, me, obj, t));
+      const off = Math.abs(((aim.yaw - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2);
+      const arm = L.ARMS[me.weapon] || L.ARMS[L.W_AR];
+      if ((arm.type === 1 || d < arm.range * 0.9) && off < 160 + 2000 / Math.max(d, 1)) {
+        if (arm.auto) this.shot = (this.shot + 1) & 3;
+        else if (t - this.lastFire > arm.refire + 2) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
+      }
+    }
+    // a goal to dodge to (Evade's step aside from a chaser): the keys for it as faced now, no turn first
+    if (obj?.dodge) move = toward(obj.pos);
+    // carrying: no gun, but a swing that kills at an enemy close in front (within 2.4 m, about 40 degrees either side);
+    // a goal's swing is the same without carrying (Escape's shove)
+    if ((me.carry || (obj?.swing && !me.down)) && me.cool === 0) {
       for (let q = 0; q < L.NPLAYER; q++) {
         if (q === this.slot || !alive(q)) continue;
         const c = chest(q), d = Math.hypot(c[0] - me.pos[0], c[2] - me.pos[2]);

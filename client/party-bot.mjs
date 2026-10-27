@@ -11,7 +11,10 @@
 // least danger, then the most ground made on the goal, then the most room from
 // the rivals near it. Deterministic from its seed and what it sees, so a round
 // of bots is an ordinary event log; its slot spreads the thinking out, so 255
-// of them cost a little over a quarter of that in thinks a tick.
+// of them cost a little over a quarter of that in thinks a tick. In a team
+// round (PGF_TEAMS) it knows its side (this.side): teammates that pass
+// through it (no PGF_MATES) aren't in its way, and it uses a power-up on the
+// other side only; team(view, slot) hands a brain its teammates and its foes.
 //
 // What it asks of a minigame's brain (client/mg/<key>.mjs, brain: {...}),
 // handed a view whose party() and hole() are read once a world tick, `me`
@@ -43,8 +46,9 @@ const SCRATCH = { coastX: new Float64Array(8), coastZ: new Float64Array(8), push
   rx: new Float64Array(8 * NEAR_MAX), rz: new Float64Array(8 * NEAR_MAX) };
 
 // What every bot looking at one world tick shares: the round, every ball in
-// (not out, not falling) in a grid of CELL m squares, and the view the brains
-// are handed: the same memory, with party() and hole() read once for the tick.
+// (not out, not falling) in a grid of CELL m squares (each with its side),
+// both sides' balls in a team round, and the view the brains are handed: the
+// same memory, with party() and hole() read once for the tick.
 function worldOf(view) {
   const t = view.tick;
   if (view._pbot?.tick === t) return view._pbot;
@@ -54,22 +58,39 @@ function worldOf(view) {
   bv.hole = () => g;
   const balls = [];
   const grid = new Map();
+  const sides = [[], []];
   for (let p = 0; p < L.NPLAYER; p++) {
     const a = L.PLAYERS + view.bank + p * L.PSIZE;
-    if ((view.u8[a + L.P_FL] & (L.PF_LIVE | L.PF_DEAD | L.PF_FALL)) !== L.PF_LIVE) continue;
-    const b = { slot: p, x: view.dv.getFloat32(a + L.P_PX, true), z: view.dv.getFloat32(a + L.P_PZ, true), vx: view.dv.getFloat32(a + L.P_VX, true), vz: view.dv.getFloat32(a + L.P_VZ, true) };
+    const fl = view.u8[a + L.P_FL];
+    if ((fl & (L.PF_LIVE | L.PF_DEAD | L.PF_FALL)) !== L.PF_LIVE) continue;
+    const b = { slot: p, x: view.dv.getFloat32(a + L.P_PX, true), z: view.dv.getFloat32(a + L.P_PZ, true), vx: view.dv.getFloat32(a + L.P_VX, true), vz: view.dv.getFloat32(a + L.P_VZ, true), side: fl & L.PF_BLUE ? 1 : 0 };
     balls.push(b);
+    if (g.teams) sides[b.side].push(b);
     const k = Math.floor(b.x / CELL) * 4096 + Math.floor(b.z / CELL);
     const list = grid.get(k);
     if (list) list.push(b); else grid.set(k, [b]);
   }
-  view._pbot = { tick: t, g, mg: MG[g.game] || MG[0], balls, grid, view: bv };
+  // teammates pass through each other in a team round without PGF_MATES: not in each other's way
+  const through = g.teams && !(g.flags & L.PGF_MATES);
+  view._pbot = { tick: t, g, mg: MG[g.game] || MG[0], balls, grid, sides, through, view: bv };
   return view._pbot;
 }
 
-// The balls within r of (x, z) but slot, nearest first (ties by slot), at
-// most max of them: [{ b, d }], kept by insertion so a crowd costs no sort.
-function near(w, x, z, r, slot, max = NEAR_MAX) {
+// A team round as slot sees it on the view's tick: its side (0 red, 1 blue;
+// -1 outside a team round or out of it), and the balls in ({ slot, x, z, vx,
+// vz, side }) on its side but itself and on the other.
+export function team(view, slot) {
+  const w = worldOf(view);
+  const a = L.PLAYERS + view.bank + slot * L.PSIZE;
+  if (!w.g.teams || !(view.u8[a + L.P_FL] & L.PF_LIVE)) return { side: -1, mates: [], foes: w.balls.filter((b) => b.slot !== slot) };
+  const side = view.u8[a + L.P_FL] & L.PF_BLUE ? 1 : 0;
+  return { side, mates: w.sides[side].filter((b) => b.slot !== slot), foes: w.sides[1 - side] };
+}
+
+// The balls within r of (x, z) but slot (and but side's, when side is 0 or
+// 1), nearest first (ties by slot), at most max of them: [{ b, d }], kept by
+// insertion so a crowd costs no sort.
+function near(w, x, z, r, slot, max = NEAR_MAX, side = -1) {
   const out = [];
   const x0 = Math.floor((x - r) / CELL), x1 = Math.floor((x + r) / CELL), z0 = Math.floor((z - r) / CELL), z1 = Math.floor((z + r) / CELL);
   let r2 = r * r;
@@ -77,7 +98,7 @@ function near(w, x, z, r, slot, max = NEAR_MAX) {
     const list = w.grid.get(i * 4096 + j);
     if (!list) continue;
     for (const b of list) {
-      if (b.slot === slot) continue;
+      if (b.slot === slot || b.side === side) continue;
       const dx = b.x - x, dz = b.z - z, d2 = dx * dx + dz * dz;
       if (d2 >= r2) continue;
       let k = out.length;
@@ -120,6 +141,7 @@ export class Partier {
     this.pos = [0, 0]; // where it reckons it is on the tick it thinks for
     this.vel = [0, 0];
     this.lag = 0;
+    this.side = -1; // a team round's: 0 red, 1 blue
   }
 
   rand() {
@@ -140,6 +162,9 @@ export class Partier {
     view = w.view;
     const me = view.partier(this.slot);
     if (g.round !== this.round) { this.round = g.round; this.mem = {}; this.goal = null; }
+    this.side = g.teams ? me.side : -1;
+    // the balls that don't count as in its way, or as targets: its teammates, in a team round
+    const own = g.teams ? me.side : -1;
     if (!me.live || me.out || g.state !== L.H_PLAY) {
       this.move = 0;
       this.hop = 0;
@@ -176,7 +201,7 @@ export class Partier {
       const H = 0.45 + 0.4 * this.skill;
       const ticks = [0.12, 0.25, 0.25 + (H - 0.25) / 3, 0.25 + 2 * (H - 0.25) / 3, H].map((s) => Math.round(s / DT));
       const reach = Math.hypot(vx, vz) * H + 12 * H * H + ROOM;
-      const rivals = near(w, px, pz, reach + ROOM, this.slot);
+      const rivals = near(w, px, pz, reach + ROOM, this.slot, NEAR_MAX, w.through ? own : -1);
       const danger = brain.danger || (() => 0);
       const yaw0 = this.yaw / TURN * 2 * Math.PI;
       // per sample: where the ball coasts to and how far a push takes it on from there
@@ -224,7 +249,7 @@ export class Partier {
 
     // a power-up, if the minigame hands any out: used when it pays, as bumper's balls do
     if (!over?.use && me.item && me.refire === 0) {
-      const close = near(w, px, pz, 8, this.slot);
+      const close = near(w, px, pz, 8, this.slot, NEAR_MAX, own);
       const ahead = (b, cone) => {
         const dx = b.x - px, dz = b.z - pz, d = Math.hypot(dx, dz) || 1;
         return (dx * Math.cos(yaw) + dz * Math.sin(yaw)) / d > cone;

@@ -46,6 +46,7 @@ import { newMemory, instantiate, Sim } from '../harness/core.mjs';
 import { View, modeName } from '../src/arena-view.mjs';
 import { BrainBot, GOLFER } from '../client/brain.mjs';
 import { Fighter } from '../client/arena-bot.mjs';
+import { AMC } from '../client/am/index.mjs';
 import { Pilot } from '../client/flight-bot.mjs';
 import { modeName as flightMode } from '../src/flight-view.mjs';
 import { Roller } from '../client/bumper-bot.mjs';
@@ -488,6 +489,8 @@ const summary = {
   results: fireplace ? world.results : undefined,
   // the arena's match as the run ended: its mode, and a team mode's scores, target, winner and sides' counts
   mode: arena ? world.view.mode() : undefined,
+  // and what its kit module shows the gates (Evade's catches)
+  kit: arena ? AMC[world.view.mode().mode]?.state?.(world.view) ?? null : undefined,
   watch, joined: per.filter((p) => p.joined).length, rejected: per.filter((p) => p.reject !== null).length,
   errors: per.filter((p) => p.error).map((p) => ({ k: p.k, error: p.error })),
   cpuPctOfOneCore: Number((100 * (cpu.user + cpu.system) / 1e6 / wall).toFixed(1)),

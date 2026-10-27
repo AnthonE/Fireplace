@@ -53,12 +53,12 @@ export const HIT_DEFLECT = 4; // FX_HIT's size for a laser a roll turned away
 // MAP_RACE) in order, LAPS times round; a ship's progress is the gates it
 // has passed (MODE_REC's MR_POINTS), which places it as the arena's modes
 // place by points. Its news codes sit past every team mode's MX codes.
-export const M_RACE = 12;
+export const M_RACE = 15;
 export const LAPS = 3;
 export const RACE_TICKS = 37500; // 5 min
 export const NGATE = 16; // gates a map may have at most
-export const MX_GATE = 96; // owner passed a gate, shot its count of gates passed
-export const MX_LAP = 97; // owner started lap shot + 1 (shot the laps done)
+export const MX_GATE = 104; // owner passed a gate, shot its count of gates passed
+export const MX_LAP = 105; // owner started lap shot + 1 (shot the laps done)
 
 // The f32 literals.
 export const FL_CRUISE = '34'; // m/s

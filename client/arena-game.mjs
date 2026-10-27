@@ -33,8 +33,10 @@ const SHORT = { [L.W_AR]: 'AR', [L.W_BR]: 'BR', [L.W_MAGNUM]: 'MAGNUM', [L.W_SNI
 const CROSS = { [L.W_AR]: 0, [L.W_BR]: 1, [L.W_MAGNUM]: 1, [L.W_SNIPER]: 1, [L.W_SHOTGUN]: 2, [L.W_ROCKET]: 3, [L.W_PLASMA]: 4, [L.W_NEEDLER]: 4, [L.W_SWORD]: 5 };
 const RUNGS = L.LADDER.length;
 // How a fighter stands under the match's mode, higher is better: the sim's $a_key, for the board while play goes on.
-// A team mode's: the winning side first (once it's over), then objective points, then kills.
+// A team mode's: the winning side first (once it's over), then objective points, then kills. A kit mode without
+// sides (Lucky Blocks) keeps no points: kills, as the sim's key, then deaths, as a Fiesta's board.
 function standing(m, o, teamWin = 0) {
+  if (AMC[m]?.standing) return AMC[m].standing(o);
   if (m < 32 && (1 << m) & L.TEAMED) return (teamWin && teamWin === o.team + 1 ? 2 ** 31 : 0) + Math.min(o.points, 0x7fff) * 65536 + Math.min(o.kills, 0xffff);
   if (m === L.M_INFECTION) return o.zombie ? Math.min(o.human, 0x7fff) * 65536 + o.points : 2 ** 31;
   if (m === L.M_GUNGAME) return o.rung * 65536 + o.kills;
@@ -504,6 +506,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (watched < 0 || !view.player(watched).live) watched = nextLive(watched, 1);
       tgt = watched >= 0 ? view.fighter(watched) : null;
     }
+    // out of a match (Evade's): the camera in one its kit module says may be watched, kept while it may
+    const kitNow = AMC[view.mode().mode];
+    const spect = !WATCH && st === 2 && me?.live && me.dead && kitNow?.watch && h.state === L.H_PLAY;
+    if (spect) {
+      if (watched < 0 || !kitNow.watch(view, watched)) { watched = -1; for (let q = 0; q < L.NPLAYER; q++) if (q !== slot && kitNow.watch(view, q)) { watched = q; break; } }
+      tgt = watched >= 0 ? view.fighter(watched) : null;
+    }
     // the bot drives the slots as the keys and mouse would
     if (external) { yaw = get(L.CL_YAW); pitch = get(L.CL_PITCH); swap(get(L.CL_WEAPON)); }
     if (bot && me?.live && st === 2) {
@@ -540,18 +549,19 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       dealt = false;
       const m = view.mode().mode;
       const arm = (w) => ARMS[w]?.name ?? '?';
-      const text = me.zombie ? 'ZOMBIE: THE SWORD' : me.jugg ? 'JUGGERNAUT: THE SWORD' : m === L.M_GUNGAME ? `RUNG ${Math.min(me.rung + 1, RUNGS)} OF ${RUNGS}: ${arm(me.gun[0])}`
+      const text = AMC[m]?.dealt ? AMC[m].dealt(me) : me.zombie ? 'ZOMBIE: THE SWORD' : me.jugg ? 'JUGGERNAUT: THE SWORD' : m === L.M_GUNGAME ? `RUNG ${Math.min(me.rung + 1, RUNGS)} OF ${RUNGS}: ${arm(me.gun[0])}`
         : `${me.team >= 0 ? `${SIDE[me.team]}: ` : ''}${arm(me.gun[0])} + ${arm(me.gun[1])}`;
       if (banner.until < now + 500) banner = { text, until: now + 2500, color: me.zombie ? C.GREEN : me.team >= 0 ? SIDE_C[me.team] : C.CYAN };
     }
     if (pme && (pme.hand !== lastSlot || pme.weapon !== lastWeapon)) { swapAt = now; lastSlot = pme.hand; lastWeapon = pme.weapon; }
     let cam;
-    if (pme) cam = [0, 1, 2].map((k) => pme.pos[k] + pme.vel[k] * dtPred + corr.off[k] + (k === 1 ? 1.6 : 0));
+    if (spect && tgt) cam = [tgt.pos[0] + tgt.vel[0] * dt, tgt.pos[1] + tgt.vel[1] * dt + 1.6, tgt.pos[2] + tgt.vel[2] * dt];
+    else if (pme) cam = [0, 1, 2].map((k) => pme.pos[k] + pme.vel[k] * dtPred + corr.off[k] + (k === 1 ? 1.6 : 0));
     else if (me?.live) cam = [me.pos[0] + me.vel[0] * dt, me.pos[1] + me.vel[1] * dt + 1.6, me.pos[2] + me.vel[2] * dt];
     else if (tgt) cam = [tgt.pos[0] + tgt.vel[0] * dt, tgt.pos[1] + tgt.vel[1] * dt + 1.6, tgt.pos[2] + tgt.vel[2] * dt];
     else cam = [512 - 140, view.height(372, 512) + 14, 512];
-    camYaw = me?.live && !WATCH ? yaw / TURN * 2 * Math.PI : tgt ? tgt.yaw : 0;
-    camPitch = me?.live && !WATCH ? (pitch - 512) / 1024 * Math.PI : tgt ? tgt.pitch : -0.15;
+    camYaw = me?.live && !WATCH && !(spect && tgt) ? yaw / TURN * 2 * Math.PI : tgt ? tgt.yaw : 0;
+    camPitch = me?.live && !WATCH && !(spect && tgt) ? (pitch - 512) / 1024 * Math.PI : tgt ? tgt.pitch : -0.15;
     // dead: the camera backs up and rises over where you fell, short of any wall or roof
     if (f?.dead) {
       const up = Math.min(1, (L.RESPAWN_TICKS - f.respawn) / 150);
@@ -630,7 +640,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (playing) {
       const moving = Math.hypot(f.vel[0], f.vel[2]) > 1 && f.ground;
       // a carrier's hands hold what its kit module carries (a flag in the colour of the side it was taken from)
-      if (!WATCH && !f.dead) rects = f.carry ? carryRects(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], now, moving) : gunRects(f.weapon, now, moving);
+      if (!WATCH && !f.dead && !f.down) rects = f.carry ? carryRects(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], now, moving) : gunRects(f.weapon, now, moving);
       if (!f.dead) { const hr = hudRects(f, now); rects.push(...hr.rects); blips = hr.blips; tracker = hr.tracker; }
     }
     const zoom = zoomed && f && !f.dead ? zoomOf() : 1;
@@ -650,7 +660,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const spread = ARMS[f?.weapon]?.spread || 0;
     last = {
       cam, yaw: camYaw, pitch: camPitch, zoom, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, slot: tgt ? watched : slot < 0 ? 999 : slot,
-      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES) !== 0 ? 1 : 0, zone: out.zone,
+      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone,
       crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, cam) ? 8 : 0), gap: spread / 30 + kick * 3,
       tints: tintsOf(host),
     };
@@ -762,12 +772,19 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (j && j.slot !== f.slot) put(t, COLS, 1, 1, `JUGGERNAUT P${j.slot + 1}  ${j.points} OF ${L.JUGG_POINTS}`, C.ORANGE);
     } else if (f?.live) {
       const leader = list[0];
-      put(t, COLS, 1, 0, `${who} ${f.kills}`, C.YELLOW);
-      if (leader && leader.slot !== f.slot) put(t, COLS, 1, 1, `P${leader.slot + 1} ${leader.kills}`, C.GREY);
-      else if (list[1]) put(t, COLS, 1, 1, `P${list[1].slot + 1} ${list[1].kills}`, C.GREY);
+      // (a kit module that has the top left to itself, kit.own, keeps no kills: Evade's)
+      if (!kit?.own) {
+        put(t, COLS, 1, 0, `${who} ${f.kills}`, C.YELLOW);
+        if (leader && leader.slot !== f.slot) put(t, COLS, 1, 1, `P${leader.slot + 1} ${leader.kills}`, C.GREY);
+        else if (list[1]) put(t, COLS, 1, 1, `P${list[1].slot + 1} ${list[1].kills}`, C.GREY);
+      }
+      // a kit mode without sides: its own lines under them (rows 2 to 4; with kit.own, 0 to 4)
+      const s = W / 320;
+      kit?.hud(view, { put: (x, y, str, c) => put(t, COLS, x, y, str, c), centre, right, rect: (x0, y0, x1, y1, r, g, b, a = 1) => kitRects.push([x0 * s, y0 * s, x1 * s, y1 * s, r, g, b, a]),
+        rows, C, slot, me: f, team: -1, now, t: playT, watching: WATCH || slot !== get(L.CL_SLOT), mine: WATCH ? -1 : get(L.CL_SLOT) });
     }
     if (f?.live) {
-      if (f.dead) centre(Math.floor(rows / 2) + 2, `RESPAWN IN ${Math.ceil(f.respawn / 125)}`, C.YELLOW);
+      if (f.dead) centre(Math.floor(rows / 2) + 2, kit?.dead?.(f) ?? `RESPAWN IN ${Math.ceil(f.respawn / 125)}`, C.YELLOW);
       else if (f.carry) {
         // a carrier has no guns or frags, only a swing that kills (a spectator's click turns to the next fighter)
         centre(rows - 3, `CARRYING THE ${(kit?.carry ?? 'flag').toUpperCase()}`, C.YELLOW);
@@ -782,7 +799,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
           const other = f.gun[f.hand ^ 1] !== f.weapon ? ARMS[f.gun[f.hand ^ 1]] : null;
           right(rows - 4, other ? `${f.hand ? 1 : 2} ${other.name}` : '', C.GREY);
         }
-        if (!f.zombie && !f.jugg) right(rows - 5, `FRAGS ${f.grens}`, C.ORANGE);
+        if (!f.zombie && !f.jugg && kit?.frags !== false) right(rows - 5, `FRAGS ${f.grens}`, C.ORANGE);
         // a gun on the pad underfoot
         const pad = view.pads().find((p) => !p.wait && Math.hypot(p.pos[0] - f.pos[0], p.pos[2] - f.pos[2]) < 1.5);
         if (pad && !WATCH && !f.gun.includes(pad.weapon) && ARMS[pad.weapon]) centre(Math.floor(rows / 2) + 5, `E: PICK UP ${ARMS[pad.weapon].name}`, C.WHITE);
@@ -795,7 +812,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (medal.until > now) centre(Math.floor(rows / 2) - 8, medal.text, C.ORANGE);
     if (st === 2 && !BOT && !WATCH && !locked) centre(Math.floor(rows / 2) + 7, 'CLICK TO PLAY', C.WHITE);
     // (a team mode's own lines have rows 2 to 4; in its countdown the watched one's side line says it)
-    if (WATCH && st === 2 && !(h.state === L.H_COUNT && team >= 0)) put(t, COLS, 1, md.teamed ? 5 : 3, f?.live ? `WATCHING P${slot + 1}  < >` : 'NOBODY TO WATCH', C.CYAN);
+    if (WATCH && st === 2 && !(h.state === L.H_COUNT && team >= 0)) put(t, COLS, 1, md.teamed || kit ? 5 : 3, f?.live ? `WATCHING P${slot + 1}  < >` : 'NOBODY TO WATCH', C.CYAN);
     if (showGraph) put(t, COLS, 1, rows - 1, `${fps} FPS  LEAD ${f32[L.CL_LEAD >> 2].toFixed(1)}  DELAY ${f32[L.CL_DELAY >> 2].toFixed(1)}  LAG ${f?.lag ?? 0}  REPAIRS ${get(L.CL_REPAIRS)}`, C.GREY);
     if (board && md.teamed) teamBoard(t, { list, slot, md, kit, over: h.state === L.H_OVER, rows, centre });
     else if (board) {
@@ -806,14 +823,16 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (over) {
         const won = top ? (top.slot === slot ? 'YOU WIN' : `P${top.slot + 1} WINS`) : '';
         const alive = list.filter((o) => !o.zombie).length;
-        title = m === L.M_INFECTION ? `GAME OVER  ${alive ? `${alive} HUMAN${alive === 1 ? '' : 'S'} SURVIVED` : 'THE ZOMBIES WIN'}` : `GAME OVER  ${won}`;
+        title = m === L.M_INFECTION ? `GAME OVER  ${alive ? `${alive} HUMAN${alive === 1 ? '' : 'S'} SURVIVED` : 'THE ZOMBIES WIN'}` : `GAME OVER  ${kit?.over?.(view) ?? won}`;
       }
       centre(y0, title, C.YELLOW);
-      // a mode's columns: what places it
-      const cols = m === L.M_INFECTION ? ['HUMAN FOR', 'INFECTED', 'SIDE'] : m === L.M_GUNGAME ? ['RUNG', 'GUN', 'KILLS'] : m === L.M_JUGGERNAUT ? ['POINTS', 'KILLS', 'DEATHS'] : ['KILLS', 'DEATHS'];
+      // a mode's columns: what places it (a kit mode's own, without sides, before the kills)
+      const kc = kit?.cols ?? [];
+      const cols = m === L.M_INFECTION ? ['HUMAN FOR', 'INFECTED', 'SIDE'] : m === L.M_GUNGAME ? ['RUNG', 'GUN', 'KILLS'] : m === L.M_JUGGERNAUT ? ['POINTS', 'KILLS', 'DEATHS']
+        : [...kc.map((c) => c.head), ...(kit?.kills === false ? [] : ['KILLS', 'DEATHS'])];
       const cells = (o) => m === L.M_INFECTION ? [o.zombie || over ? clock(o.human) : 'ALIVE', o.points, o.zombie ? 'ZOMBIE' : 'HUMAN']
         : m === L.M_GUNGAME ? [Math.min(o.rung + 1, RUNGS), o.rung >= RUNGS ? 'WON' : SHORT[L.LADDER[o.rung]], o.kills]
-        : m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths] : [o.kills, o.deaths];
+        : m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths] : [...kc.map((c) => c.get(o)), ...(kit?.kills === false ? [] : [o.kills, o.deaths])];
       const row = (rank, name, xs) => `${String(rank).padStart(4)}  ${String(name).padEnd(8)}${xs.map((x, k) => '  ' + String(x).padStart(Math.max(6, cols[k].length))).join('')}`;
       centre(y0 + 2, row('RANK', 'PLAYER', cols), C.GREY);
       const fit = rows - y0 - 6;
