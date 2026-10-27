@@ -200,7 +200,10 @@ across the middle, the ceiling 147 m (map.json's `ceiling`; a map without
 one gets 60 m over its highest ground inside the bounds). Heights are kept
 to an eighth of a metre so the image packs: flight's wasm is 400 KB,
 100 KB gzipped, 80 KB of that the map. Flight always builds on Skyways
-(`FLIGHT_MAP`); `--map` and `QG_MAP` still choose only the arena's.
+(`FLIGHT_MAP`) unless the build is given `--flight-map <name>`; `node
+net/play.mjs --flight --map <name>` builds Dogfight on that map and flies
+it. The map editor (`client/map-editor.html`, [arena.md](arena.md#making-a-map))
+places the race's gates in order, with their heights and radii.
 
 Dogfight is on Fireplace's playlist too ([docs/fireplace.md](fireplace.md)):
 a three-minute match of a mode drawn for it, between party and golf, in

@@ -90,7 +90,19 @@ only of your own body), physics sandboxes, open worlds.
    with `client/party-render.mjs` (its decals are the telegraphs of a
    top-down game); the grid kit wants a small board renderer.
 3. The arena: several maps in one build chosen at run time, boxes that move
-   (obbies), new maps.
+   (obbies), new maps. A map now comes from the map editor
+   (`client/map-editor.html`) as well as from code, so maps chosen at run time
+   are the step that lets players' maps into rooms. What that takes:
+   - the map's sizes and offsets read from its own head in memory, not
+     compiled in (`$arena_gen`'s `MAPIMG_*` and `MAPSEG_*`, flight's
+     `MAP_CEIL`), so its bytes can come from outside the build;
+   - the map as the room's choice: lockstep needs every machine on the same
+     bytes, so the room names a map by its sha256 and each client fetches and
+     checks it before the first tick;
+   - the bytes checked again before they reach memory, since the limits are
+     enforced only by `tools/map-compile.mjs` at build time today;
+   - a replay that names its map's sha256 beside the wasm's;
+   - a map cycle: a list of map hashes the room walks, beside `PLAYLIST`.
 4. Fireplace: a vote for the next game, then a board between games (dice,
    stars, coins) over the minigames.
 5. Pipelines compiled before a Fireplace switch: on SwiftShader the first

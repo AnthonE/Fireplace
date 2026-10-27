@@ -16,7 +16,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodePng } from './png.mjs';
-import { compileMap, SURFACES } from './map.mjs';
+import { compileMap, SURFACES, formatSpec } from './map.mjs';
 import { isMain } from './main.mjs';
 
 export const BOUNDS = [192, 832, 192, 832];
@@ -200,8 +200,7 @@ if (isMain(import.meta.url)) {
     if (x >= BOUNDS[0] && x <= BOUNDS[1] && z >= BOUNDS[2] && z <= BOUNDS[3]) top = Math.max(top, hgt[j * SIZE[0] + i] / 256);
   }
   spec.ceiling = Math.ceil(top) + 70;
-  const text = JSON.stringify(spec, null, 2).replace(/\[\s+(-?[\d.]+|"[^"]*"),\s+([^[\]{}]*?)\s+\]/g, (m) => m.replace(/\s+/g, ' ').replace('[ ', '[').replace(' ]', ']'));
-  writeFileSync(join(dir, 'map.json'), text + '\n');
+  writeFileSync(join(dir, 'map.json'), formatSpec(spec));
   const m = compileMap(dir);
   console.log(`${m.name}: ${m.boxes.length} boxes in ${m.groups.length} structures, ${m.spawns.length} spawns, ceiling ${m.ceiling} m (highest ground ${top.toFixed(1)}), ${m.bytes.length} B`);
 }

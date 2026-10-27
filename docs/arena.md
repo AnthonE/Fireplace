@@ -511,12 +511,20 @@ gzipped, almost all of it the height image.
 ### Making a map
 
 A map is a directory under `maps/`: `map.json`, `height.png` and, if you
-like, `surface.png`. Build the arena with it and play:
+like, `surface.png`. The map editor draws one in the browser
+(`node tools/serve.mjs`, then `/client/map-editor.html`): the ground from
+above, raised, lowered, flattened, smoothed and painted with a brush; boxes
+dragged out and sized; spawns, pads, teleporters, the flags, the skull, the
+hills and flight's race gates placed and dragged. It runs the build's own
+compiler (`tools/map-compile.mjs`, the part of `tools/map.mjs` with no Node
+in it) on every change and shows what it refuses, and saves the three files
+into a folder (Chrome writes them in place; elsewhere it downloads them).
+Then build the arena with it and play:
 
 ```sh
 node tools/map.mjs maps/mymap            # checks it and says what it holds
-QG_MAP=mymap npm run build                # or: node tools/asm.mjs --map mymap
-node net/play.mjs --arena
+node net/play.mjs --arena --map mymap     # builds with it, relay and bots; open the URL it prints
+QG_MAP=mymap npm run build                # or just build: node tools/asm.mjs --map mymap
 ```
 
 - `height.png`: grey, 8 or 16 bits, 2 m a pixel, placed at
@@ -546,8 +554,11 @@ node net/play.mjs --arena
   nearer its own flag) needs a spawn.
 
 `tools/canyon.mjs` is how Box Canyon was drawn: the ground painted by
-code into the two images, the rest written to `map.json`. Edit its output
-in any paint program and text editor, or edit it and run it again.
+code into the two images, the rest written to `map.json`. Open it in the
+map editor, edit its output in any paint program and text editor, or edit
+the script and run it again. The editor writes the ground as 16-bit at
+1/256 m and `map.json` as the scripts do, so a map that goes through it
+untouched builds to the same bytes (`test/map.test.mjs`).
 
 ## 256 in one room
 

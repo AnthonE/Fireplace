@@ -2,7 +2,7 @@
 // Play: the relay and the page server, until Ctrl-C. Open the printed URL in
 // two tabs (or more) of the newest Chrome; each tab is a player. Each room's
 // replay lands in replays/ when it ends, and plays at ?replay=../replays/<file>.
-//   node net/play.mjs [--seed 7] [--port 4433] [--web 8080] [--host 127.0.0.1] [--arena [--bots 7] [--mode k]] [--flight [--bots 7] [--mode k]] [--bumper [--bots 15]] [--party [--mg k] [--bots 15]] [--fireplace [--bots 15] [--start k]]
+//   node net/play.mjs [--seed 7] [--port 4433] [--web 8080] [--host 127.0.0.1] [--arena [--bots 7] [--mode k] [--map m]] [--flight [--bots 7] [--mode k] [--map m]] [--bumper [--bots 15]] [--party [--mg k] [--bots 15]] [--fireplace [--bots 15] [--start k]]
 // --arena runs the room on the arena's sim (build/arena/game.wasm), the
 // deathmatch, with --bots AI fighters in it (net/bot-host.mjs --arena); its
 // matches play the modes in turn, or with --mode k only mode k (layout.mjs, M_*:
@@ -49,7 +49,10 @@ const nbots = Number(opt('bots', arena || flight ? 5 : bumper || party || firepl
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 
 execFileSync('sh', ['tools/cert.sh'], { stdio: 'inherit' });
-execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
+// --map builds the arena (or with --flight, Dogfight) on a map of your own:
+// a name in maps/ or a directory, as client/map-editor.html saves it
+const map = opt('map', null);
+execFileSync(process.execPath, ['tools/asm.mjs', ...(map ? [flight ? '--flight-map' : '--map', map] : [])], { stdio: 'inherit' });
 const hash = readFileSync('certs/hash.txt', 'utf8').trim();
 const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', port, '--host', host, '--replays', 'replays', ...(seed ? ['--seed', seed] : []), ...(arena ? ['--wasm', 'build/arena/game.wasm'] : flight ? ['--wasm', 'build/flight/game.wasm'] : bumper ? ['--wasm', 'build/bumper/game.wasm'] : party ? ['--wasm', 'build/party/game.wasm'] : fireplace ? ['--wasm', 'build/fireplace/game.wasm'] : [])], { stdio: 'inherit' });
 relay.on('exit', (code) => { console.error(`relay exited (${code})`); process.exit(1); });

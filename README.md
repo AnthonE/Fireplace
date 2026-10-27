@@ -99,11 +99,11 @@ protocol, for writing a client in any language, and
 | | |
 | --- | --- |
 | `src/` | the sim: the engine and golf (`game.wat` and friends), the arena (`arena.wat`, its team modes in `am/`), flight (`flight.wat`), bumper balls (`bumper.wat`), Party (`party.wat`, a minigame a file in `mg/`), the playlist (`fireplace.wat`), and `layout.mjs`, the one memory map everything reads |
-| `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements |
+| `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, and the map editor (`map-editor.html`) |
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
 | `tools/` | the assembler, the map compiler, match recorders (`gen*.mjs`), a minigame generator, the trailer renderer |
-| `maps/canyon/` | Box Canyon: two images and a JSON file |
+| `maps/` | Box Canyon and Skyways: two images and a JSON file each |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, the roadmap |
 

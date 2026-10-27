@@ -21,7 +21,8 @@
 // instantiate) and mutable globals (per-thread state the region never sees).
 // A passive segment is only bytes until init copies it out with memory.init:
 // the arena's map (tools/map.mjs; QG_MAP=name or --map name picks one of
-// maps/, Box Canyon by default) goes in as one, through (!mapdata).
+// maps/, or a directory, Box Canyon by default; --flight-map likewise for
+// flight's, Skyways by default) goes in as one, through (!mapdata).
 
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -308,9 +309,9 @@ export function prefixed(wat, prefix) {
 
 export const GAMESETS = [['g', {}], ['a', { ARENA: true }], ['b', { BUMPER: true }], ['p', { BUMPER: true, PARTY: true }], ['f', { ARENA: true, FLIGHT: true }]];
 
-export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = makeMacros, map = compileMap(), src = join(ROOT, 'src') } = {}) {
+export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = makeMacros, map = compileMap(), flightMap = null, src = join(ROOT, 'src') } = {}) {
   // flight flies its own map, whatever the arena's
-  const flightMap = compileMap(mapDir(lay.FLIGHT_CONSTS.FLIGHT_MAP));
+  flightMap ??= compileMap(mapDir(lay.FLIGHT_CONSTS.FLIGHT_MAP));
   const games = GAMESETS.map(([prefix, flags]) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...flags, layout: lay, macros, map: flags.FLIGHT ? flightMap : flags.ARENA ? map : null }), prefix));
   const fp = expand(join(src, 'fireplace.wat'), { DEBUG, layout: lay, macros });
   const wat = `(module\n  (import "env" "mem" (memory ${lay.PAGES} ${lay.PAGES} shared))\n${games.join('\n')}\n${fp}\n)\n`;
@@ -329,14 +330,16 @@ export const SIMS = [
 
 async function buildSim({ name, src, out, flags = {}, fireplace = false, map: own = null }) {
   mkdirSync(out, { recursive: true });
-  // a sim with a map of its own (flight's) always flies it; --map picks the arena's
-  const map = flags.ARENA || fireplace ? compileMap(mapDir(own || MAP_ARG)) : null;
+  // a sim with a map of its own (flight's) flies it unless --flight-map names
+  // another; --map picks the arena's
+  const map = flags.ARENA || fireplace ? compileMap(mapDir((own && FLIGHT_MAP_ARG) || own || MAP_ARG)) : null;
+  const flightMap = fireplace && FLIGHT_MAP_ARG ? compileMap(mapDir(FLIGHT_MAP_ARG)) : null;
   const lay = await import(pathToFileURL(join(src, 'layout.mjs')).href);
   const { makeMacros: macros } = await import(pathToFileURL(join(src, 'macros.mjs')).href);
   const entry = join(src, 'game.wat');
   const manifest = {};
   for (const debug of [false, true]) {
-    const wat = fireplace ? fireplaceWat({ DEBUG: debug, layout: lay, macros, map, src }) : expand(entry, { DEBUG: debug, ...flags, layout: lay, macros, map });
+    const wat = fireplace ? fireplaceWat({ DEBUG: debug, layout: lay, macros, map, flightMap, src }) : expand(entry, { DEBUG: debug, ...flags, layout: lay, macros, map });
     const base = debug ? 'game.debug' : 'game';
     writeAtomic(join(out, `${base}.wat`), wat);
     const bin = await assemble(wat, `${base}.wat`, { debugNames: debug });
@@ -355,7 +358,8 @@ async function buildSim({ name, src, out, flags = {}, fireplace = false, map: ow
   if (manifest.binaryen.raw) console.log(`  binaryen -O3 would give ${manifest.binaryen.raw} B, ${manifest.binaryen.gzip} B gzip (measurement only)`);
 }
 
-const MAP_ARG = (() => { const i = process.argv.indexOf('--map'); return i >= 0 ? process.argv[i + 1] : undefined; })();
+const arg = (k) => { const i = process.argv.indexOf(k); return i >= 0 ? process.argv[i + 1] : undefined; };
+const MAP_ARG = arg('--map'), FLIGHT_MAP_ARG = arg('--flight-map');
 
 async function main() {
   buildThemes(); // Fireplace's room themes: data, checked and bundled; no sim reads them
