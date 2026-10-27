@@ -26,6 +26,24 @@ The relays' certificate is the 13-day one `tools/cert.sh` makes, its hash in
 the pool stops each room still on the old certificate once it is empty, and a
 fresh room takes its place.
 
+**Rated rooms.** A Fireplace relay can sign players in and report each game
+to Elo Pros's ratings (`net/elo.mjs`; [wire.md](wire.md) has the client's
+half). Its flags, through `relay_args`:
+- `--signin-domains game.elopros.com`: the page hosts a sign-in may be made
+  on; each is checked with `POST https://elopros.com/api/signin/check`.
+- `--elo-key server.key --elo-key-id fireplace/<id>`: the private half of a
+  server key (`openssl genpkey -algorithm ed25519 -out server.key`) whose public
+  half Fireplace's steward named on Elo Pros (`/api/store/serverkeys/fireplace`).
+- `--elo`: where Elo Pros is, `https://elopros.com` unless a test says otherwise.
+
+When a game ends, the referee reads the places it gave (`FP_LAST`) and the
+relay reports the players signed in at that tick, each at their place, to
+`POST /api/ratings/fireplace/report`, one ladder per game (golf, arena,
+bumper, party). A game with fewer than two signed in isn't reported. The
+match's id names the room and the game, so a report sent twice, or sent again
+by a standby that took the room over, is rated once. `node net/run-elo.mjs` is
+the gate, against a stand-in for Elo Pros.
+
 **Someone else's game.** The referee runs the room's wasm, so a pool can host
 a game we did not write. The relay gives that wasm its shared memory and
 nothing else, so it cannot open a file or a socket. It refuses at start

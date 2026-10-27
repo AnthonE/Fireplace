@@ -365,6 +365,7 @@ async function main() {
     },
   };
   note.remove();
+  if (!BOT && !WATCH) signinButton(host);
   if (FILM) {
     // tools/film.mjs: the replay paused, moved a tick at a time, a frame drawn at the film's time
     const pause = (async () => {
@@ -408,3 +409,35 @@ main().catch((e) => {
   note.textContent = String(e?.message || e);
   window.__qa = { error: String(e?.stack || e) };
 });
+
+// Sign in to be rated: once the relay offers a sign-in (net/elo.mjs), a button
+// loads the Elo Pros web SDK, the player's wallet signs the relay's nonce, and
+// the games they play from then on are rated on Elo Pros. Guests play the same.
+const ELO_SDK = 'https://elopros.com/sdk/elo-3.js';
+const ELO_SDK_SRI = 'sha384-pKOcdX/DZSGO11b/QS2tFdcm6YFqcVCl0xc6IHDJKFBYRJCvY2JBNjbaVA3jIih/';
+let sdk = null;
+const loadSdk = () => (sdk ??= new Promise((ok, no) => {
+  const s = document.createElement('script');
+  Object.assign(s, { src: ELO_SDK, integrity: ELO_SDK_SRI, crossOrigin: 'anonymous', onload: () => ok(window.Elo), onerror: () => { sdk = null; no(new Error('the sign-in kit did not load')); } });
+  document.head.append(s);
+}));
+function signinButton(host) {
+  const b = document.getElementById('signin');
+  const short = (a) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a).toUpperCase();
+  const said = { 1: () => `RATED AS ${short(host.signin.address)}`, 2: () => "SIGN-IN DIDN'T TAKE · TRY AGAIN", 3: () => "COULDN'T CHECK · TRY AGAIN", 5: () => 'THAT WALLET IS IN ANOTHER SEAT' };
+  let busy = false;
+  b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (busy || host.signin.status === 1) return;
+    busy = true;
+    b.textContent = 'SIGNING IN…';
+    try { await host.signIn(await loadSdk()); } catch (err) { b.textContent = String(err?.message || err).toUpperCase().slice(0, 48); }
+    busy = false;
+  });
+  setInterval(() => {
+    const { nonce, status } = host.signin;
+    b.classList.toggle('on', !!nonce && status !== 4);
+    b.disabled = status === 1;
+    if (!busy && said[status]) b.textContent = said[status]();
+  }, 500);
+}

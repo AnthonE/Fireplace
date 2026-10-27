@@ -1,8 +1,9 @@
 // The referee's Worker on the relay (net/relay.ts): closed ticks in, interval
 // hashes and packed keyframes out. Messages are handled in order; packing a
 // keyframe runs beside the ticks, from a copy taken when it was asked for.
-//   in:  { wasm, threads } once, { reset: { room, seed, region? } }, { room, ticks: [each tick's parts] }, { room, want: id }
-//   out: { room, intervals: [{ tick, hash, digests }], at }, { room, key: { id, tick, raw, packed } }
+//   in:  { wasm, threads, results } once, { reset: { room, seed, region? } }, { room, ticks: [each tick's parts] }, { room, want: id }
+//   out: { room, intervals: [{ tick, hash, digests }], at }, { room, key: { id, tick, raw, packed } },
+//        { room, results: [{ tick, game, count, places }] } (with results on: a game in the playlist ended)
 import { Referee } from './referee.mjs';
 import * as W from './wire.mjs';
 
@@ -15,20 +16,22 @@ self.onmessage = (e) => {
 };
 
 async function handle(m) {
-  if (m.wasm) ref = await Referee.create(m.wasm, m.threads);
+  if (m.wasm) ref = await Referee.create(m.wasm, m.threads, !!m.results);
   if (m.reset) {
     room = m.reset.room;
     ref.reset(m.reset.seed, m.reset.region);
     if (m.reset.region) base.seed(m.reset.region); else base.reset();
   }
   if (m.ticks && m.room === room) {
-    const intervals = [];
+    const intervals = [], results = [];
     for (const parts of m.ticks) {
       const { events, words } = base.apply(parts);
       const iv = ref.step({ ev: events, w: words });
       if (iv) intervals.push(iv);
+      if (ref.result) { results.push(ref.result); ref.result = null; }
     }
     if (intervals.length) self.postMessage({ room, intervals, at: ref.tick });
+    if (results.length) self.postMessage({ room, results });
   }
   if (m.want !== undefined && m.room === room) {
     const r = room;

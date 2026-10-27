@@ -40,6 +40,14 @@
 // --referee-lag seconds behind, which a sim that never returns would do.
 // With --replays, each room's record goes to a replay file (net/replay.mjs)
 // when it ends, with the referee's interval hashes.
+// Elo Pros (net/elo.mjs): with --signin-domains, a player whose hello asks
+// (W.HELLO_SIGNIN) gets a nonce, signs it with their wallet on a page of one
+// of those domains, and the relay asks --elo (https://elopros.com) whether the
+// signature is good; the slot is then that wallet's. With --elo-key (the
+// private half of the game's server key, PEM) and --elo-key-id (<slug>/<key
+// id>), Fireplace's build reports each game's result to --elo's ratings, the
+// signed-in players at the places the referee read: a rated match per game.
+//                  [--elo https://elopros.com] [--signin-domains host[,host...]] [--elo-key file --elo-key-id fireplace/<id>]
 // Clients are Chrome (net/run-m0.mjs hosts the bots there): Deno's WebTransport
 // client always binds an IPv6 socket, which hosts without IPv6 refuse. Native
 // clients (the bot host, tiny-client) come in on --native-port instead: the same session over a
@@ -48,6 +56,7 @@ import * as W from './wire.mjs';
 import * as L from '../src/layout.mjs';
 import { recordLog } from './inbox.mjs';
 import { encodeReplay } from './replay.mjs';
+import * as Elo from './elo.mjs';
 
 const argv = Deno.args;
 const opt = (k: string, d: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
@@ -115,6 +124,16 @@ const game = opt('game', ((d) => (d && d !== 'build' ? d : 'golf'))(wasmPath.spl
   if (missing.length) refuse(`does not export ${missing.join(', ')}`);
 }
 
+// Elo Pros: sign-in and rated results (net/elo.mjs).
+const eloOrigin = opt('elo', 'https://elopros.com').replace(/\/+$/, '');
+const signinDomains = opt('signin-domains', '') ? opt('signin-domains', '').split(',') : [];
+const eloWho = opt('elo-key-id', '');
+const eloKey = opt('elo-key', '') ? await Elo.loadKey(await Deno.readTextFile(opt('elo-key', ''))) : null;
+if (eloKey && !/^[a-z0-9-]+\/[a-z0-9-]+$/.test(eloWho)) { console.error('relay: --elo-key needs --elo-key-id <slug>/<key id>'); Deno.exit(2); }
+// only Fireplace's world says where each player came in a game (FP_LAST)
+const rated = !!eloKey && game === 'fireplace';
+if (eloKey && !rated) console.error(`relay: --elo-key: only Fireplace's build reports results, not ${game}'s`);
+
 type Slot = {
   slot: number; joinTick: number; leaveTick: number; writer: WritableStreamDefaultWriter<Uint8Array>; ctl: WritableStreamDefaultWriter<Uint8Array>;
   maxDatagram: number; last: number; missing: number; late: number; lastSlack: number; periodSlack: number; contig: number; lastRecv: number; pendingLate: number; close: () => void;
@@ -125,6 +144,9 @@ type Slot = {
   token: number; // a native session's, 0 for WebTransport
   watch: boolean; // a spectator: no slot (slot -1), no words
   looks?: boolean; // its hello asked for the room's looks (W.HELLO_LOOKS)
+  nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
+  wallet?: string; // the wallet signed in on this slot
+  signing?: boolean; // a sign-in is being checked
   ghost?: boolean; // a slot held for its player after a takeover, with no session
   leave?: (why: string) => void;
 };
@@ -156,6 +178,12 @@ const LOOKS_MS = 250;
 const lookTable = () => [...looks.keys()].filter((p) => looks[p]).map((p) => [p, looks[p]] as [number, number]);
 const sendLooks = (s: Slot, pairs: [number, number][]) => { if (s.looks && pairs.length) s.ctl.write(W.encodeLooks(pairs)).catch(() => {}); };
 const setLook = (p: number, look: number) => { if (looks[p] !== look >>> 0) { looks[p] = look >>> 0; lookDirty.add(p); } };
+// Who was signed in on each slot, and over which ticks (to is the leave's
+// tick): a result reads it at the tick its game ended, which the referee
+// reports a moment later. The newest SEATS are kept.
+const seats: { slot: number; wallet: string; from: number; to: number }[] = [];
+const SEATS = 4096;
+const walletAt = (slot: number, t: number) => seats.findLast((x) => x.slot === slot && x.from <= t && t < x.to)?.wallet ?? null;
 // every slot's word on the newest closed tick (0 for a slot nobody holds): what the next tick is coded against
 let prevWords = new Uint32Array(W.NP);
 let events: { slot: number; kind: number; tick: number }[] = [];
@@ -202,11 +230,12 @@ const stats = {
   refHashes: [] as [number, string][], reports: {} as Record<number, [number, string][]>,
   replays: [] as string[], watchSessions: 0, watchMax: 0, watchBytes: 0, watchSeconds: 0, watchCompared: 0, watchAgreed: 0,
   resumed: 0, takeover: null as null | Record<string, number>,
+  elo: { signins: 0, signed: 0, refused: 0, unchecked: 0, results: 0, unrated: 0, reported: 0, failed: 0, matches: [] as string[] },
 };
 
 // The referee: closed ticks go to it in batches; interval hashes and packed keyframes come back.
 const referee = new Worker(new URL('./referee-worker.mjs', import.meta.url).href, { type: 'module' });
-referee.postMessage({ wasm, threads: refereeThreads });
+referee.postMessage({ wasm, threads: refereeThreads, results: rated });
 let toReferee: Uint8Array[][] = [];
 let refRoom = 0; // the referee's generation: a room's start, or an edge's restart from a keyframe
 const refIntervals = new Map<number, { hash: bigint; digests: Uint8Array }>(); // sim tick -> the referee's
@@ -231,7 +260,73 @@ referee.onmessage = (e: MessageEvent) => {
     for (const t of refIntervals.keys()) if (t < m.at - 16 * 128) refIntervals.delete(t);
     stats.refLagMax = Math.max(stats.refLagMax, closed - roomStart - m.at);
   }
+  // an edge's referee sees the same ends; the room's own relay reports them
+  if (m.results && rated && !edge) for (const r of m.results) reportResult(r);
 };
+
+// A game's end, as the referee read it, to Elo Pros's ratings: the players
+// signed in on its slots at the tick it ended, at the places it gave them.
+function reportResult(result: { tick: number; game: number; count: number; places: [number, number][] }) {
+  stats.elo.results++;
+  const at = roomStart + result.tick;
+  const match = Elo.matchOf({ seed: roomSeed, roomStart, result, wallet: (slot: number) => walletAt(slot, at) });
+  if (!match) { stats.elo.unrated++; log(`game ${result.count} ended with fewer than two signed in: not rated`); return; }
+  stats.elo.matches.push(match.id);
+  postReport(match);
+}
+async function postReport(match: object) {
+  const path = `/api/ratings/${eloWho.split('/')[0]}/report`;
+  const body = new TextEncoder().encode(JSON.stringify({ matches: [match] }));
+  for (let k = 0; k < 4; k++) {
+    try {
+      const headers = await Elo.serverHeaders(eloKey!, eloWho, 'POST', path, body);
+      const r = await fetch(eloOrigin + path, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body });
+      const text = await r.text();
+      if (r.ok) { stats.elo.reported++; log(`rated: ${text.slice(0, 200)}`); return; }
+      // a refusal says why, and sending it again would get the same answer
+      if (r.status < 500 && r.status !== 429) { stats.elo.failed++; console.error(`relay: ratings refused the match (${r.status}): ${text.slice(0, 300)}`); return; }
+    } catch (e) { log(`ratings: ${e}`); }
+    await new Promise((ok) => setTimeout(ok, 2000 * 2 ** k));
+  }
+  stats.elo.failed++;
+  console.error('relay: ratings could not be reached; the match went unreported');
+}
+
+// A player's sign-in: the message their wallet signed, made on one of our
+// domains with the nonce this slot was handed, checked by Elo Pros. Every
+// answer comes with a fresh nonce, so a nonce is used once.
+async function signIn(s: Slot, message: string, signature: string) {
+  if (!signinDomains.length || s.watch) { s.ctl.write(W.encodeSigned(Elo.SIGNIN.OFF)).catch(() => {}); return; }
+  if (s.signing) return;
+  stats.elo.signins++;
+  const f = Elo.parseSignIn(message);
+  let status: number = Elo.SIGNIN.REFUSED, wallet = '';
+  if (f && signinDomains.includes(f.domain) && f.nonce === s.nonce && signature.length <= Elo.SIGNATURE_MAX) {
+    s.signing = true;
+    try {
+      const r = await fetch(`${eloOrigin}/api/signin/check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, signature, domain: f.domain, nonce: f.nonce }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok && typeof j.address === 'string') { status = Elo.SIGNIN.SIGNED; wallet = Elo.normWallet(j.address); }
+      else if (r.status >= 500 || r.status === 429) status = Elo.SIGNIN.UNCHECKED;
+    } catch { status = Elo.SIGNIN.UNCHECKED; }
+    s.signing = false;
+  }
+  if (gone(s)) return;
+  // one seat a wallet, so a room never ranks a wallet against itself
+  if (status === Elo.SIGNIN.SIGNED && slots.some((o) => o && o !== s && !o.ghost && o.wallet === wallet)) status = Elo.SIGNIN.ELSEWHERE;
+  if (status === Elo.SIGNIN.SIGNED) {
+    for (const x of seats) if (x.slot === s.slot && x.to === Infinity) x.to = closed + 1;
+    s.wallet = wallet;
+    seats.push({ slot: s.slot, wallet, from: closed + 1, to: Infinity });
+    if (seats.length > SEATS) seats.splice(0, seats.length - SEATS);
+    stats.elo.signed++;
+  } else if (status === Elo.SIGNIN.UNCHECKED) stats.elo.unchecked++;
+  else stats.elo.refused++;
+  log(`slot ${s.slot} sign-in: ${status}${wallet ? ' ' + wallet : ''}`);
+  s.nonce = Elo.newNonce();
+  s.ctl.write(W.encodeSigned(status, wallet)).catch(() => {});
+  s.ctl.write(W.encodeSigninNonce(s.nonce)).catch(() => {});
+}
 // The record and the referee from tick `start`: a room's first tick, or the
 // keyframe an edge begins from (its region; null at the room's start).
 function startRecord(start: number, region: Uint8Array | null = null) {
@@ -573,6 +668,10 @@ async function admit(d: Door) {
   await d.sw.write(W.encodeWelcome({ slot: p, maxDatagram, joinTick, seed: roomSeed, serverTick: Math.floor(serverNow()) + 1, roomStart, token: d.token, watch }));
   log(`${watch ? 'a spectator' : `slot ${p}`} joins at ${joinTick}, room ${roomStart}${d.token ? ' (native)' : ''}`);
   sendLooks(s, lookTable());
+  if (hello!.signin && !watch) {
+    if (signinDomains.length) { s.nonce = Elo.newNonce(); d.sw.write(W.encodeSigninNonce(s.nonce)).catch(() => {}); }
+    else d.sw.write(W.encodeSigned(Elo.SIGNIN.OFF)).catch(() => {});
+  }
   sendKey(s, W.SYNC.JOIN);
   const leave = (why: string) => {
     if (watch) {
@@ -585,6 +684,7 @@ async function admit(d: Door) {
     stats.leaves[why] = (stats.leaves[why] || 0) + 1;
     stats.leaveAt.push(Number(((performance.now() - E) / 1000).toFixed(2)));
     s.leaveTick = scheduleEvent(p, W.EV_LEAVE, Math.max(closed + 1, s.joinTick));
+    if (s.wallet) for (const x of seats) if (x.slot === p && x.to === Infinity) x.to = s.leaveTick;
     if (s.token) natives.delete(s.token);
     // the slot is gone at leaveTick, so end the session too rather than leave it open and silent
     try { s.close(); } catch { /* already closed */ }
@@ -594,6 +694,14 @@ async function admit(d: Door) {
       const buf = await d.sr.read(16);
       if (buf.length < 16) break;
       const m = W.decodeClient(buf);
+      if (m?.type === W.T_SIGNIN) {
+        const n = m.bytes ?? 0;
+        if (n > Elo.MESSAGE_MAX + Elo.SIGNATURE_MAX) break;
+        const body = await d.sr.read(n);
+        if (body.length < n) break;
+        const { message, signature } = W.decodeSigninBody(buf, body);
+        signIn(s, message, signature);
+      }
       if (m?.type === W.T_PING) { stats.pongs++; s.ctl.write(W.encodePong(m.nonce, serverNow())).catch(() => {}); }
       if (m?.type === W.T_SYNC && performance.now() - s.lastSync > 1000) sendKey(s, m.reason);
       if (m?.type === W.T_LOOK && !watch && !gone(s)) setLook(p, m.look ?? 0);
@@ -702,7 +810,7 @@ function summary() {
     watchers: { sessions: stats.watchSessions, max: stats.watchMax, compared: stats.watchCompared, agreed: stats.watchAgreed,
       downKBpsEach: stats.watchSeconds ? Number((stats.watchBytes / stats.watchSeconds / 1000).toFixed(2)) : 0 },
     upstream: upstreams.length ? { ...upStats, recordStart, rttMs: Number(up.bestRtt.toFixed(2)) } : null,
-    resumed: stats.resumed, takeover: stats.takeover,
+    resumed: stats.resumed, takeover: stats.takeover, elo: stats.elo,
     upKBpsPerSession: slotSecs ? Number((stats.recvBytes / slotSecs / 1000).toFixed(2)) : 0,
     serverMaxDatagram: { min: Math.min(...stats.serverMaxDatagram), max: Math.max(...stats.serverMaxDatagram) },
     clientMaxDatagram: { min: Math.min(...stats.clientMaxDatagram), max: Math.max(...stats.clientMaxDatagram) },
