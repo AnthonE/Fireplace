@@ -2,7 +2,7 @@
 
 ![Fruit Chute with 128 balls: the belt carrying everyone down, fruit rolling down the lanes](p1-chute-128.png)
 
-Bumper balls' ball, and every round a different minigame: forty of them,
+Bumper balls' ball, and every round a different minigame: forty-one of them,
 after Mario Party, Mario Kart's battle mode, Fall Guys, Squid Game and Roblox, up to 256 in a room.
 `src/` built with `BUMPER` and `PARTY` set (`build/party/game.wasm`), with the
 same lockstep, relays, keyframes, prediction, spectators and replays.
@@ -63,6 +63,7 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 37 | DODGEBALL | the last side in play | red against blue on a court in two halves (8.9 m deep for up to 8, 36 m² a ball of the bigger side past that), split by a centre line nobody crosses, with each side's jail behind the other's back line; a dodgeball for every 4 balls lies on the line at the start; roll over one to hold it, click to throw it the way you face at 18 m/s, slightly arcing; a throw that hits a foe before touching the floor or a wall sends it to jail, then it's loose; with nothing held, click as an enemy throw comes within reach (5.6 m, about 0.23 s) to catch it: the thrower goes to jail and your longest-jailed teammate comes back; a miss locks your catch 0.5 s; from jail you can throw what rolls in, and a hit brings you back; the jails' floors roll stray balls back out; at the 110 s clock the side with more in play wins, every ball of it 1st |
 | 38 | VOLLEYBALL | the first side to the target | red against blue on a court split by a net 3 m high that no ball crosses (7.5 m deep for up to 6 balls, 32 m² a ball past that, to 18 m deep and then wider), walled round; a volleyball for every 8 balls, 1.2 m in radius and falling 9 m/s², served in turn from each back line over the net; roll into one and it goes up 6 m/s and on the way you roll, faster the faster you roll (1.5 m/s standing, straight at the net, to 5); hop into one (the hop is 8 m/s here, your top clears the net) to spike it, 10 to 18 m/s, flatter but from up high, at least three quarters toward the net, unless it comes in faster than 6.5 m/s (then it's a dig, a bump); it comes off the net's face, its top edge and the walls at any height; down on a side's floor it's the other side's point, two of its own to the ball that sent it there, and the scorer serves again 2 s on; a side's fourth touch in a row is the other side's point; every touch is a point of your own, which places the losers; first to 15 (4 more for each volleyball past the first) or the most at 120 s; draws allowed |
 | 39 | SOCCER | the first side to the target | red against blue on a walled pitch half as long again as wide (600 m² and 100 more a ball to 16, 30 past that: 34.6 by 23.1 m for 2, 118.7 by 79.2 for 256), its corners cut at 45 degrees; at each end a goal, its mouth 0.44 of the width and 4 m high, with a net box 3 m deep you can roll into, and a penalty box in front; a football for every 16 balls, 1.8 m across, rolling far and bouncing off the walls, the frame, the nets and each other; roll into one and it goes on the way you roll, 1.5 times the speed you close at (a walk dribbles it, flat out sends it 15 m/s); hop into it and it's a chip, up to 8 m/s up; in your own box on your goal's side of it, a keeper's clear, at least 6 m/s and up, and a save on one coming at the mouth; all the way past the line is a goal, 5 of your own to your side's last toucher, or an own goal, nobody's; the football is gone 2 s, then back on its spot, held 1 s; with one football everyone is put back on their own half and held for that second; a touch is a point of your own, a save 3; first to 5 (one more for each football past the first) or the most at 120 s; draws allowed |
+| 40 | SUMO RING | last one in | a round ring over the sea sized for the crowd, bumps on; posts orbit it, swinging 12 s one way and then back, and knock any ball they meet away at 9 m/s and up; from 20 s the ring shrinks over 50 s to 35% of its size (6 m at least); balls that go off together share the win. Written in Rust (`rust/mg/sumo/`, [rust.md](rust.md)) |
 
 **How it fits on the engine.** `src/party.wat` is the framework: the rounds,
 the rotation, joins, the ball's roll over any stage, outs, places and points.
@@ -232,5 +233,11 @@ did: a rotation log of 60,000 ticks (six minigames) and forced logs of
 Slap Happy and Tag replay to the same hash on every tick before and after.
 `test/party-teams.test.mjs` (8 tests) covers it. Dodgeball (37),
 Volleyball (38) and Soccer (39) are on it.
+
+**In Rust.** SUMO RING (40) is written in Rust: `rust/mg/sumo/src/lib.rs`,
+built by `node tools/rust.mjs` into `src/mg/sumo.wat`, which is checked in and
+assembled like any other minigame's, so `npm run build` needs no Rust and
+the gates run the wasm. `node tools/new-mg.mjs <key> <prefix> "<NAME>" --rust`
+starts one; [rust.md](rust.md) is how, and what the sim refuses.
 
 Not done yet: power-ups in more of the minigames.

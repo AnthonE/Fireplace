@@ -13,6 +13,39 @@ go as you like.
 Fireplace is on the [Elo Pros](https://elopros.com) store. This repository is
 all of it, released into the public domain (CC0).
 
+## Make your own game from this
+
+Fireplace is also a starter kit: start your own multiplayer browser game from
+it, with a GitHub account and nothing installed. You get your own copy with
+its own web page, a plan for your game, and Claude to help build it.
+
+1. **Copy it.** Press **Use this template** at the top of this page, then
+   **Create a new repository**, named after your game.
+2. **Add Claude (optional).** In your new repo, **Settings > Secrets and
+   variables > Actions > New repository secret**: `ANTHROPIC_API_KEY` (a key
+   from [console.anthropic.com](https://console.anthropic.com)) or
+   `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, if you have a Claude
+   plan). Then **Settings > Actions > General**, tick "Allow GitHub Actions
+   to create and approve pull requests". It runs on your own Claude usage.
+3. **Plan your game.** **Issues > New issue > Plan my game**, and answer the
+   questions. Claude names your copy after your game, writes its design and a
+   step-by-step plan as a pull request, and opens your first steps as issues.
+   Comment `@claude` on one and Claude builds it as a pull request. Without
+   Claude: `node tools/kit.mjs init "My Game"` renames it, and
+   `node tools/new-mg.mjs` starts a minigame ([CONTRIBUTING.md](CONTRIBUTING.md)).
+4. **See it live.** **Settings > Pages > Source: GitHub Actions**, then
+   **Actions > pages > Run workflow**. When it finishes, your game is at
+   `https://<you>.github.io/<repo>/`: you and AI players, no server needed.
+   Every push updates it. To play with friends, press **play online with
+   friends** at the foot of the room: Elo Pros' room pool starts a room
+   running your game, the page moves into it, and its address is the
+   invite to send (**copy invite link**). An online room has no AI players;
+   if the pool can't give one, the page says why and you stay with the AI
+   players ([docs/hosting.md](docs/hosting.md)).
+5. **Put it on Elo Pros.** On the [dev console](https://elopros.com/dev-console.html),
+   list your game straight from your repo; no wallet needed. Later, a
+   `wallet` line in `elo.json` lets you sell copies, 100% of the price to you.
+
 ## The games
 
 The room plays a playlist, round and round: bumper balls (two rounds), Party
@@ -23,7 +56,7 @@ three-minute Dogfight, a hole of golf. The top three of each game get 3, 2 and
 | | |
 | --- | --- |
 | [**Bumper balls**](docs/bumper.md) | Every player a ball on a wheel of Swiss cheese. Bump the others into the holes and keep out yourself; the rim crumbles, the holes widen, power-ups drop from the sky. Last ball rolling wins. |
-| [**Party**](docs/party.md) | Bumper balls' ball and a different minigame every round, 40 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer. |
+| [**Party**](docs/party.md) | Bumper balls' ball and a different minigame every round, 41 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring. |
 | [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and fifteen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault. |
 | [**Dogfight**](docs/flight.md) | The arena with wings: every fighter a ship over Skyways, a valley with a river canyon, spires, arches and ring gates. Lasers, a homing charge shot, bombs, boost, brake and barrel rolls, in a free-for-all, red against blue, the juggernaut or Ring Race, three laps through the gates. |
 | [**Golf**](docs/golf.md) | One course for everyone, rockets and grenades for clubs: a blast just behind your ball drives it 200 m, and every ball ever hit stays in play. |
@@ -65,6 +98,12 @@ node net/play.mjs --fireplace --start 4  # Fireplace from the playlist's entry 4
 node net/play.mjs                        # golf, client/index.html
 ```
 
+With no relay, a page plays a local room: you and AI players (`?bots=`, 7 by
+default), nothing on the network. That is what a copy's GitHub Pages site
+plays until someone presses **play online with friends** or opens an invite
+(`?room=`), which take it to a room from the kit's room pool;
+`node tools/serve.mjs` and `client/fireplace.html?local=1` show it here.
+
 Every room is saved as a replay when it ends (`replays/`), a few kilobytes a
 minute, and plays back in the page with `?replay=../replays/<file>`.
 
@@ -102,7 +141,7 @@ protocol, for writing a client in any language, and
 | `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, and the map editor (`map-editor.html`) |
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
-| `tools/` | the assembler, the map compiler, match recorders (`gen*.mjs`), a minigame generator, the trailer renderer |
+| `tools/` | the assembler, the map compiler, match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
 | `maps/` | Box Canyon and Skyways: two images and a JSON file each |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, the roadmap |

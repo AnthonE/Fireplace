@@ -37,3 +37,12 @@ test('it refuses a key, a prefix or a name already taken, and names that break t
   refuse(['newone', 'zq', 'New one'], 'NAME:');
   refuse(['newone', 'fp', 'NEW'], 'names starting FP_ are taken');
 });
+
+test('--rust: the same sumo ring as a crate, rust/mg/<key>/, its required hooks exported under the prefix; src/mg/<key>.wat left to tools/rust.mjs', () => {
+  const { files, edits } = plan('zzsumo', 'zq', 'ZZ SUMO', { layout: L, rust: true });
+  assert.deepEqual(Object.keys(files).sort(), ['client/mg/zzsumo.mjs', 'rust/mg/zzsumo/Cargo.toml', 'rust/mg/zzsumo/src/lib.rs', 'src/mg/zzsumo.mjs', 'test/mg-zzsumo.test.mjs']);
+  assert.ok(edits.find((e) => e.file === 'src/party.wat').after.includes('#include "mg/zzsumo.wat"'));
+  assert.match(files['rust/mg/zzsumo/Cargo.toml'], /name = "zzsumo"[\s\S]*crate-type = \["cdylib"\][\s\S]*fp = \{ path = "\.\.\/\.\.\/fp" \}/);
+  for (const hook of ['setup', 'spawn', 'ground']) assert.match(files['rust/mg/zzsumo/src/lib.rs'], new RegExp(`#\\[no_mangle\\]\\npub extern "C" fn zq_${hook}\\(`), hook);
+  assert.match(files['rust/mg/zzsumo/src/lib.rs'], /^#!\[no_std\]$/m);
+});

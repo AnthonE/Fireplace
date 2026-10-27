@@ -1,0 +1,65 @@
+# The page, on GitHub Pages: every push to the default branch builds the sims
+# and publishes the static site (tools/site.mjs) at
+# https://<owner>.github.io/<repo>/, which opens Fireplace (or whatever this
+# copy is called). Pages cannot send the cross-origin isolation headers shared
+# memory needs, so coi.js's service worker adds them in the browser. With no
+# relay in client/kit.json the page plays a local room, you and AI players,
+# and offers play online with friends: a room from the kit's room pool
+# running this site's own wasm (net/kit-rooms.mjs), its address the invite.
+# net/run-pages.mjs and net/run-kit-rooms.mjs are this site's gates.
+#
+# Turn it on once: Settings > Pages > Build and deployment > Source: GitHub
+# Actions. Until then this workflow says so and skips, rather than failing.
+name: pages
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    outputs:
+      on: ${{ steps.pages.outputs.on }}
+    steps:
+      - name: Is Pages on, from Actions?
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          kind=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .build_type 2>/dev/null || true)
+          if [ "$kind" = "workflow" ]; then echo "on=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "on=0" >> "$GITHUB_OUTPUT"
+          echo "::notice title=GitHub Pages is not on yet::Settings > Pages > Build and deployment > Source: GitHub Actions, then run this workflow again (Actions > pages > Run workflow)."
+      - uses: actions/checkout@v4
+        if: steps.pages.outputs.on == '1'
+      - uses: actions/setup-node@v4
+        if: steps.pages.outputs.on == '1'
+        with:
+          node-version: 22
+      - name: Build the sims and the site
+        if: steps.pages.outputs.on == '1'
+        run: |
+          npm ci
+          npm run build
+          node tools/site.mjs _site
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.on == '1'
+        with:
+          path: _site
+  deploy:
+    needs: build
+    if: needs.build.outputs.on == '1'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}client/fireplace.html
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

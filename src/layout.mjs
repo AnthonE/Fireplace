@@ -29,6 +29,7 @@ export const INBOX = 0x1000; // u32 count, then records
 export const INBOX_REC = 0x1010;
 export const INBOX_MAX = 1024;
 export const FULLDIG = 0x6000; // u64[128] scratch for the full region hash
+export const RS_OUT = 0xf00; // 16 B: a Rust minigame's spawn writes its x, y, z here (serial, per call, never hashed; tools/rust.mjs)
 // FX ring: blasts, shots and sinks for the renderer and the sound. Written by
 // the sim, read by the main thread, never hashed. u32 count, then records:
 // u32 tick | u8 kind | u8 owner | u16 shot | f32 x | f32 y | f32 z | f32 size | 8 B zero
@@ -852,6 +853,7 @@ export const MINIGAMES = [
   { key: 'dodge', prefix: 'db', name: 'DODGEBALL' },
   { key: 'volley', prefix: 'vb', name: 'VOLLEYBALL' },
   { key: 'soccer', prefix: 'so', name: 'SOCCER' },
+  { key: 'sumo', prefix: 'su', name: 'SUMO RING' },
 ]; // index = MG_*
 export const MG_THINICE = 0;
 export const MG_COLOR = 1;
@@ -893,7 +895,8 @@ export const MG_HONEY = 36;
 export const MG_DODGE = 37;
 export const MG_VOLLEY = 38;
 export const MG_SOCCER = 39;
-export const NMG = 40;
+export const MG_SUMO = 40;
+export const NMG = 41;
 
 export const PK_OUT = 0; // out is out: the last ball in wins
 export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE at the end
@@ -988,7 +991,8 @@ import * as mg_honey from './mg/honey.mjs';
 import * as mg_dodge from './mg/dodge.mjs';
 import * as mg_volley from './mg/volley.mjs';
 import * as mg_soccer from './mg/soccer.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer));
+import * as mg_sumo from './mg/sumo.mjs';
+export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer, mg_sumo));
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come

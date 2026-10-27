@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-57 games, each gated online: golf, bumper balls, the arena's fifteen modes
+58 games, each gated online: golf, bumper balls, the arena's fifteen modes
 (Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 40 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 41 minigames. Fireplace plays them in turn.
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
 on Fireplace's playlist between party and golf.

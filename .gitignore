@@ -6,3 +6,5 @@ replays/
 certs/
 .tools/
 film/out/
+site/
+.elo-plan/

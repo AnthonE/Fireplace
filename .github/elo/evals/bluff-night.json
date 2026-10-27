@@ -1,0 +1,9 @@
+{
+  "title": "[plan] Bluff Night",
+  "number": 1,
+  "expect": {
+    "kit": "world",
+    "sells": false
+  },
+  "body": "### What is your game called?\n\nBluff Night\n\n### In one sentence, what do players do together?\n\nEach player holds secret cards and bluffs about them; get caught lying and you roll off the table.\n\n### How many people play at once?\n\n2 to 4\n\n### How long is one game?\n\n5 to 30 minutes\n\n### Does anyone gain by cheating?\n\nno, it's for fun\n\n### Does the world remember between games?\n\nno, every game starts fresh\n\n### Do players see different things?\n\nyes: fog of war, hidden cards\n\n### Where do people play?\n\nin a browser tab\n\n### May AI agents play it too?\n\nyes\n\n### Do you want to sell it?\n\nit's free\n\n### If you sell it, what does a copy cost, in dollars?\n\n_No response_\n\n### What do you have already?\n\n- [ ] nothing yet\n- [X] some code\n- [ ] art\n- [ ] a GitHub repo\n\n### Anything else Claude should know?\n\n_No response_"
+}

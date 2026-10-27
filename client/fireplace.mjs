@@ -12,6 +12,7 @@
 //   ?bot=1 sits a guest (client/fireplace-bot.mjs) at the controls, and sits down at once
 //   ?look=<word> wears that look (client/looks.mjs packLook) for this visit, earned or not, and keeps nothing
 //   ?watch=1 spectates; ?url=, ?hash=, ?impair=, ?sens=, ?res=, ?music=0 as the games'
+//   ?room=<id> joins the kit pool's room <id> (client/kit.mjs): where play online with friends goes, the link copy invite link copies
 //   ?replay=<url> plays a replay file (net/replay.mjs) as a spectator
 //   ?film=<seconds> with ?replay=: no clock of its own; tools/film.mjs steps it a frame at a time (window.__film)
 import * as L from '../src/layout.mjs';
@@ -28,6 +29,7 @@ import { readClock } from './clock.mjs';
 import { BALLS, HATS, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
 import { filmClock, filmSound, compose } from './film.mjs';
+import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 
 const q = new URLSearchParams(location.search);
 const stage = document.getElementById('stage');
@@ -46,6 +48,10 @@ const PER_PAGE = 6; // achievements a page, in type the TV can show from the cou
 // arena's grey, the cheese, party's sky, Dogfight's bluer sky
 const TV_LIGHT = [[0.45, 0.7, 0.45], [0.6, 0.65, 0.6], [1, 0.85, 0.5], [0.55, 0.75, 1], [0.5, 0.65, 0.95]];
 const FRONTENDS = { [L.G_GOLF]: './golf-game.mjs', [L.G_ARENA]: './arena-game.mjs', [L.G_BUMPER]: './bumper-game.mjs', [L.G_PARTY]: './party-game.mjs', [L.G_FLIGHT]: './flight-game.mjs' };
+const WASM = '../build/fireplace/game.wasm';
+// the title card's name and line, client/kit.json's (node tools/kit.mjs init writes them)
+const TITLE = String(kit.name || 'Fireplace').toUpperCase();
+const TAGLINE = String(kit.tagline ?? 'A roomful of games, come and go as you like').toUpperCase();
 const ease = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
 
@@ -60,7 +66,7 @@ async function main() {
   [canvases[L.G_BUMPER].width, canvases[L.G_BUMPER].height] = [W, H];
   [canvases[L.G_PARTY].width, canvases[L.G_PARTY].height] = [W, H];
   const clock = FILM ? filmClock() : null;
-  const host = await createHost({ wasm: '../build/fireplace/game.wasm', q, watch: WATCH, fireplace: true, connect: false });
+  const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;
   if (track) host.sound = track.sound;
   const { view, get, set, press, sound, i32, f64 } = host;
@@ -202,8 +208,8 @@ async function main() {
     if (kind === 'list') return listCard();
     if (kind === 'title' || kind === 'tuning') {
       pixelFire(320, 150, 9, t);
-      text('FIREPLACE', 320, 178, 11, '#ffcf6a', 'center');
-      text('A ROOMFUL OF GAMES, COME AND GO AS YOU LIKE', 320, 250, 3, '#c9b89a', 'center');
+      text(TITLE, 320, 178, Math.min(11, Math.floor(620 / (4 * TITLE.length - 1))), '#ffcf6a', 'center');
+      text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
       text(GAMES_LINE, 320, 275, 3, '#8ea0b8', 'center');
       if (KEEP) {
         drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t);
@@ -300,6 +306,42 @@ async function main() {
   };
   const GAMES_LINE = L.PLAYLIST.map((g) => L.GAMES[g]).join(' . ');
 
+  // ---- one quiet line under the room. In a local room, on a page with no
+  // relay of its own and a pool to ask: play online with friends, which asks
+  // the kit's pool for a room and reloads into it (the address is the invite).
+  // In the pool's room: its id, and copy invite link. Nothing otherwise.
+  const line = document.getElementById('line');
+  const [invite, online] = ['invite', 'online'].map((id) => document.getElementById(id));
+  const offer = !WATCH && !FILM && (await canGoOnline(q).catch(() => false));
+  let lineText = null;
+  invite.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const done = (ok) => { invite.textContent = ok ? 'copied' : pool.invite; setTimeout(() => { invite.textContent = 'copy invite link'; }, ok ? 2000 : 15000); };
+    navigator.clipboard?.writeText(pool.invite).then(() => done(true), () => done(false)) ?? done(false);
+  });
+  online.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (online.disabled) return;
+    online.disabled = true;
+    online.textContent = 'finding a room…';
+    goOnline(q, { wasm: WASM, bytes: host.bytes }).then((to) => { location.href = to; }, (err) => {
+      pool.why = String(err.message || err);
+      online.disabled = false;
+      online.textContent = 'play online with friends';
+    });
+  });
+  const showLine = (roomInView) => {
+    // local: as the room turned out, or before it opens, unless an invite will take it online
+    const local = host.connected ? host.local === true : !q.get('room');
+    const offering = !pool.id && offer && local;
+    const text = pool.id ? `online room ${pool.id}${pool.why ? ` (${pool.why})` : ''}`
+      : offering || pool.why ? `playing here with AI players${pool.why ? `: ${pool.why}` : ''}` : '';
+    if (text !== lineText) { lineText = text; line.firstElementChild.textContent = text; }
+    invite.hidden = !pool.id;
+    online.hidden = !offering;
+    line.hidden = !text || !roomInView;
+  };
+
   // ---- the frame
   let crackleAt = 0;
   let flick = 1;
@@ -311,6 +353,7 @@ async function main() {
     if (held) tallyUp();
     if (st >= 1 && g !== game && !mounting) mountGame(g);
     drive();
+    showLine(!(scene === 'in' && zoom >= 0.999));
     // where the scene goes next
     if (scene === 'tuning' && st === 2 && frontend && game === g) { scene = 'in'; zoomBy(1, now); cardTo = 0; }
     if (scene === 'in' && held) { scene = 'out'; zoomBy(0, now); }
@@ -356,6 +399,7 @@ async function main() {
       return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), state: view.hole().state, scene, zoom, games: gamesSeen,
         mallows: slot >= 0 ? view.dv.getUint16(L.FP_MALLOWS + 2 * slot, true) : 0, card, me: frontend?.state?.().me ?? null,
         look, achievements: Object.keys(tally.got), opened,
+        pool: { ...pool, local: !!host.local },
         // the room's looks as the relay last sent them (this slot's own included, once it has gone round)
         relayLooks: [...Array(L.NPLAYER).keys()].filter((p) => host.u32[(L.CL_LOOKS >> 2) + p]).map((p) => [p, host.u32[(L.CL_LOOKS >> 2) + p]]) };
     },

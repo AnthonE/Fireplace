@@ -73,3 +73,67 @@ stopped using the precise clock), a room of 4 guests 16%, about 115 MB
 resident either way. `node net/run-rooms.mjs` is the gate: the refusals, the
 stopped referee, and a pool opening, capping, listing and closing rooms with
 bots at its doors.
+
+## Rooms for the kit's copies
+
+A copy of this repo made from the template ("Use this template") has a page
+on GitHub Pages and no relay, so it plays a local room with AI players.
+`net/kit-rooms.mjs` gives it rooms: **play online with friends**, at the
+foot of the screen while the living room is in view, asks the pool
+(`relay.pool` in `client/kit.json`, `https://game.elopros.com/kit/` by
+default) for a room for its own site, and the pool fetches that copy's
+wasm from the site at the path `tools/site.mjs` publishes
+(`build/fireplace/game.wasm`, or another game's), checks it as the relay does
+(`net/sim-check.mjs`), and starts a relay on it, one room per sha256, as
+`net/rooms.mjs` starts them. The page then moves to the site's address with
+`?room=<id>`, which is the invite: a page opened with it asks the pool for
+that room, `{room, url, hash, hash_url}`, and joins (**copy invite link**
+copies it). A pool that can't be reached or refuses (every refusal has a
+`why`), or a room the page can't reach (UDP blocked, say), leaves the page in
+its local room, the reason on that line. Nobody lands in an empty online room
+without asking for one. A page on the pool's own host never offers, so
+Fireplace's own page keeps its relay; nor does a page off https (a dev
+server) unless its pool is set (`?pool=`, or a `relay.pool` other than the
+default), and `?pool=0` turns the offer off.
+
+```sh
+node net/kit-rooms.mjs net/kit-rooms.example.json   # on the game box, from the repo, beside rooms.mjs
+```
+
+```nginx
+location /kit/ {
+  proxy_pass http://127.0.0.1:61280;
+  proxy_set_header X-Real-IP $remote_addr;
+  client_max_body_size 4k;
+  proxy_read_timeout 40s;
+}
+```
+
+The relays are the same Deno relays on the same 13-day certificate
+(`tools/cert.sh` from cron): a room answers with the hash of the certificate
+it started on, `cert-hash?room=<id>` serves it, and an empty room on an old
+certificate is stopped. The relays listen on `ports` (61300-61315 in the
+example, UDP, open in the firewall); the API listens on `listen`, behind nginx.
+
+The wasm is someone else's. It is fetched with no redirects, at most
+`max_wasm_bytes` (2 MiB; Fireplace's is 291 KiB), within `fetch_timeout_s`,
+only from `fetch_from` (`https://*.github.io`), and written only to
+`wasm_dir/<sha256>.wasm` for the relay to read; it runs only in the referee,
+which gives it its shared memory and nothing else. No JavaScript from a copy
+runs on the box, so a pool room has no AI players; that is why a page
+starts in its local room, with bots, and goes online only when asked. The caps:
+`max_rooms` rooms in all (8), `per_site_rooms` for one copy (2),
+`max_players` a room (8), `per_ip_per_min` asks (30). A copy whose wasm
+matches an open room's joins that room whatever its site. A wasm whose rooms
+end `refuse_after` times (3) with a refusal or a referee behind (exit 2 or 3)
+within `refuse_s` (an hour) is refused by its sha256 until an hour after the
+last. A room with nobody in it and no seat held (`hold_s`, a seat for each
+answer until its player comes) stops after `idle_s` (120 s).
+
+What it costs, from the numbers above (Fireplace's wasm on a 4-core box): a
+room 115 MB resident, 5% of a core empty and 16% with 4 in, so the example's
+8 rooms full of 4 come to about 0.9 GB and 1.3 cores. A copy's own wasm may
+step slower; the referee watchdog ends a room whose sim falls 10 s behind.
+`node net/run-kit-rooms.mjs` is the gate: a fake Pages host, the pool, a
+page going online at the button, a second meeting it by invite, bots at the
+door, the refusals and the caps.

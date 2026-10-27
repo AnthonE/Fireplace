@@ -1,0 +1,32 @@
+[
+  {
+    "title": "Run the game once, unchanged",
+    "check": "npm ci && node tools/kit.mjs check",
+    "body": "Before changing anything, make sure the game builds and its quick tests pass on your copy.\n\nRun this in the repo folder:\n\n```sh\nnpm ci && node tools/kit.mjs check\n```\n\nIt worked if the last lines say `pass` and `fail 0`.\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Start the SNOW FORT minigame",
+    "check": "npm run build && node --test test/mg-fort.test.mjs test/party.test.mjs",
+    "body": "A minigame is one short round of Party. This tool writes a new one that already works (a sumo ring) and adds it to the game:\n\n```sh\nnode tools/new-mg.mjs fort ft \"SNOW FORT\"\n```\n\nThen check it:\n\n```sh\nnpm run build && node --test test/mg-fort.test.mjs test/party.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "The build phase: 20 seconds to push up walls",
+    "check": "npm run build && node --test test/mg-fort.test.mjs",
+    "body": "For the first 20 seconds of a round, rolling into the ground near your spot pushes up a snow wall. Nobody can throw yet.\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-fort.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "The snowball phase",
+    "check": "npm run build && node --test test/mg-fort.test.mjs",
+    "body": "After the build phase, everyone can throw. A snowball that hits a wall breaks it. A fort with no walls left is out, and the last one standing wins.\n\nCheck:\n\n```sh\nnpm run build && node --test test/mg-fort.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "Teach the bots to build, then throw",
+    "check": "node --test test/mg-fort.test.mjs",
+    "body": "The AI players need to know the new rules, or every test round looks the same. Their brain is in `client/mg/fort.mjs`.\n\nCheck:\n\n```sh\nnode --test test/mg-fort.test.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  },
+  {
+    "title": "See it on your page",
+    "check": "npm run build && node tools/site.mjs",
+    "body": "Your game has its own web page on GitHub Pages. Turn it on once: Settings > Pages > Source: GitHub Actions. Every push then updates it. Open `client/party.html?mg=30` on your page to play SNOW FORT straight away.\n\nCheck that the site builds:\n\n```sh\nnpm run build && node tools/site.mjs\n```\n\nWant Claude to do it? Comment `@claude please do this task` on this issue."
+  }
+]

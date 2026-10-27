@@ -26,6 +26,9 @@ node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --bumper | --party
 node net/run-arena.mjs / run-flight.mjs / run-bumper.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
+node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
+node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the kit's copies, each on its own wasm; node net/run-kit-rooms.mjs is its gate
+node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
 node net/play.mjs --arena --map <name>      # build the arena on it and play (--flight --map for Dogfight's)
 ```
@@ -84,9 +87,11 @@ shell whose own command line contains the name: it kills that shell.
   forces a minigame (`--mg k`). `node tools/new-mg.mjs <key> <prefix> NAME`
   writes a new one and appends it to every list that names them
   (`test/new-mg.test.mjs` holds its anchors); ids are append-only. A
-  minigame plays red against blue by setting `PGF_TEAMS` in setup: the
-  framework deals the sides (`PF_BLUE`), keeps `PG_TSCORE`, and places the
-  winning side first (Dodgeball, Volleyball, Soccer).
+  minigame may be Rust (`rust/mg/<key>/`, `--rust`, `docs/rust.md`):
+  `node tools/rust.mjs` writes its `src/mg/<key>.wat`, checked in; never edit
+  that file by hand. A minigame plays red against blue by setting `PGF_TEAMS`
+  in setup: the framework deals the sides (`PF_BLUE`), keeps `PG_TSCORE`, and
+  places the winning side first (Dodgeball, Volleyball, Soccer).
 - The arena's match modes (`M_*`: Fiesta, Infection, gun game, Juggernaut,
   and the team modes Team Slayer, Capture the Flag, Oddball, King of the
   Hill, Headhunter, Territories, VIP, Assault, and the kit modes without
@@ -161,6 +166,15 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
+- The room is a relay's (`client/net.mjs`): one named, or on a copy's
+  GitHub Pages site, once someone presses play online with friends or opens
+  an invite (`?room=`), one the kit's room pool starts on that copy's wasm
+  (`net/kit-rooms.mjs`, `relay.pool`). Otherwise (`client/kit.mjs`:
+  `?local=1`, or no relay and no invite) it is a local one: `client/local.mjs` in the net
+  worker's place closes every tick itself, the page's player in slot 0 and AI
+  players after. Both sample the input slots through `client/input.mjs`.
+  `coi.js` makes a page cross-origin isolated where the host can't send the
+  headers.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
 - The room's look is a theme (`client/themes/<id>.json`, `client/themes.mjs`):

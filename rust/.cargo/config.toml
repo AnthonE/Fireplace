@@ -1,0 +1,13 @@
+# Read when cargo runs from rust/ (node tools/rust.mjs runs it there).
+[build]
+target = "wasm32-unknown-unknown"
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+  # a match lowered to a lookup table would put the table in memory as a data
+  # segment, which the sim can't have: keep matches as branches
+  "-C", "llvm-args=-switch-to-lookup=false",
+  # so tools/rust.mjs can see any static data or variable (__data_end past __global_base) and refuse it
+  "-C", "link-arg=--export=__data_end",
+  "-C", "link-arg=--export=__global_base",
+]
