@@ -58,9 +58,9 @@ test('the layout: the header between golf\'s and Fireplace\'s, the state between
   assert.equal(L.PG_BIG + L.PG_BIG_SIZE, L.REGION + L.REGION_SIZE);
   assert.ok(L.PG_SCORE >= L.B_BUMPS + 2 && L.PG_M + 4 <= L.PSIZE);
   assert.equal(L.MINIGAMES.length, L.NMG);
-  const ids = [L.MG_THINICE, L.MG_COLOR, L.MG_SWEEP, L.MG_LIGHT, L.MG_BOMBS, L.MG_WALL, L.MG_PADS, L.MG_HILL, L.MG_POTATO, L.MG_COINS, L.MG_PAINT, L.MG_RACE, L.MG_CHUTE, L.MG_TAG, L.MG_SNOWBALL, L.MG_TILT, L.MG_LAVA, L.MG_GALE, L.MG_DRUMS, L.MG_HOOPS, L.MG_PINBALL, L.MG_TRAILS, L.MG_MAZE, L.MG_BULLSEYE, L.MG_CANNON, L.MG_ROPE, L.MG_GLASS, L.MG_GATES, L.MG_STOMP, L.MG_SEESAW, L.MG_DISASTER, L.MG_SLAP, L.MG_TRAP, L.MG_PARRY, L.MG_MINGLE, L.MG_HONEY, L.MG_DODGE, L.MG_VOLLEY];
+  const ids = [L.MG_THINICE, L.MG_COLOR, L.MG_SWEEP, L.MG_LIGHT, L.MG_BOMBS, L.MG_WALL, L.MG_PADS, L.MG_HILL, L.MG_POTATO, L.MG_COINS, L.MG_PAINT, L.MG_RACE, L.MG_CHUTE, L.MG_TAG, L.MG_SNOWBALL, L.MG_TILT, L.MG_LAVA, L.MG_GALE, L.MG_DRUMS, L.MG_HOOPS, L.MG_PINBALL, L.MG_TRAILS, L.MG_MAZE, L.MG_BULLSEYE, L.MG_CANNON, L.MG_ROPE, L.MG_GLASS, L.MG_GATES, L.MG_STOMP, L.MG_SEESAW, L.MG_DISASTER, L.MG_SLAP, L.MG_TRAP, L.MG_PARRY, L.MG_MINGLE, L.MG_HONEY, L.MG_DODGE, L.MG_VOLLEY, L.MG_SOCCER];
   assert.deepEqual(ids, [...Array(L.NMG).keys()]);
-  assert.deepEqual(L.MINIGAMES.map((m) => m.prefix), ['ti', 'cc', 'sw', 'rl', 'bo', 'wl', 'mp', 'kh', 'hp', 'cr', 'pp', 'rc', 'fc', 'tg', 'sb', 'tt', 'lv', 'gf', 'dr', 'ho', 'pn', 'lt', 'mz', 'be', 'cn', 'jr', 'gb', 'gc', 'sg', 'ss', 'nd', 'sl', 'tr', 'py', 'mi', 'hc', 'db', 'vb']);
+  assert.deepEqual(L.MINIGAMES.map((m) => m.prefix), ['ti', 'cc', 'sw', 'rl', 'bo', 'wl', 'mp', 'kh', 'hp', 'cr', 'pp', 'rc', 'fc', 'tg', 'sb', 'tt', 'lv', 'gf', 'dr', 'ho', 'pn', 'lt', 'mz', 'be', 'cn', 'jr', 'gb', 'gc', 'sg', 'ss', 'nd', 'sl', 'tr', 'py', 'mi', 'hc', 'db', 'vb', 'so']);
   assert.equal(MC.TI_FX_CRACK, L.FX_MG + 4 * L.MG_THINICE);
 });
 
@@ -388,11 +388,11 @@ test('the hex grid: hexAt and hexCentre mirror the sim\'s, each cell\'s centre i
 });
 
 test('a room of scripted balls into the rotation replays to the same hash on every tick, on 1 and 4 threads', async () => {
-  // seed 94's first round is Thin Ice (16 balls are through it in 7 s), then the rotation's next
+  // seed 157's first round is Thin Ice (16 balls are through it in 7 s), then the rotation's next
   const bytes = partyBytes();
   let rounds = 0, state = -1;
   const games = new Set();
-  const { log } = await scriptedParty({ bytes, seed: 94, balls: 16, ticks: 6000, leaveAt: 1500, onTick: (t, sim) => {
+  const { log } = await scriptedParty({ bytes, seed: 157, balls: 16, ticks: 6000, leaveAt: 1500, onTick: (t, sim) => {
     const v = new View(sim.memory.buffer);
     const s = v.hole().state;
     if (s === L.H_OVER && state !== L.H_OVER) rounds++;
