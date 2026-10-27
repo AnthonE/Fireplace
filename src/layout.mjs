@@ -570,6 +570,13 @@ export const M_LUCKY = 12;
 //   downs it (PF_DOWN), the still beside it revive it, downed ED_BLEED it's
 //   out; survive the clock. Its constants in src/am/evade.mjs.
 export const M_EVADE = 13;
+// Escape, on the kit with no sides too (one hunter against the room):
+//   M_ESCAPE: one fighter in ES_PER the hunter (PF_JUGG: the sword, a
+//   zombie's legs, no hurt), the rest survivors with no guns, a shove that
+//   stuns it. Its swing downs (PF_DOWN, Evade's), held still over the downed
+//   it finishes; hack the terminals, the exits open, escape. Its constants in
+//   src/am/escape.mjs.
+export const M_ESCAPE = 14;
 // name is what a player sees (the M_* and FIESTA names are only the code's)
 export const MODES = [
   { name: FIESTA ? 'GRAB BAG' : 'FREE FOR ALL', rules: FIESTA ? 'RANDOM GUNS  MOST KILLS IN 10 MIN' : `${FRAG_LIMIT} KILLS WIN`, ticks: MATCH_TICKS },
@@ -586,14 +593,15 @@ export const MODES = [
   { name: 'ASSAULT', rules: 'PLANT THE BOMB AT THEIR BASE  3 TO WIN', ticks: 60000, team: 1, pads: 1 },
   { name: 'LUCKY BLOCKS', rules: 'BREAK THE BLOCKS FOR LOOT  15 KILLS WIN', ticks: 37500, team: 0 },
   { name: 'EVADE', rules: 'RUN FROM THE CHASERS  REVIVE THE DOWNED  SURVIVE', ticks: 26250, team: 0 },
+  { name: 'ESCAPE', rules: 'HACK THE TERMINALS  REACH AN EXIT  OUTRUN THE HUNTER', ticks: 30000, team: 0 },
 ];
 export const MODE_TICKS = MODES.map((m) => m.ticks);
-// a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks and Evade before it comes round
-export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT, M_LUCKY, M_EVADE];
+// a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks, Evade and Escape before it comes round
+export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT, M_LUCKY, M_EVADE, M_ESCAPE];
 export const FORCE_MODE = 0xa8;
 export const TEAMED = MODES.reduce((b, m, k) => (m.team ? b | (1 << k) : b), 0); // red against blue
 export const PAD_MODES = MODES.reduce((b, m, k) => (m.pads ? b | (1 << k) : b), 0); // the FIESTA build lays the map's pads for these
-export const TEAM_MODES = (1 << M_INFECTION) | (1 << M_JUGGERNAUT) | TEAMED | (1 << M_EVADE); // modes with sides: no hurting your own (Evade's one side, everyone)
+export const TEAM_MODES = (1 << M_INFECTION) | (1 << M_JUGGERNAUT) | TEAMED | (1 << M_EVADE) | (1 << M_ESCAPE); // modes with sides: no hurting your own (Evade's one side, everyone; Escape's hunters and survivors)
 export const LADDER = [W_AR, W_BR, W_MAGNUM, W_SHOTGUN, W_PLASMA, W_NEEDLER, W_SNIPER, W_ROCKET, W_SWORD];
 export const JUGG_POINTS = 10;
 export const ZRESPAWN_TICKS = 250; // 2 s: a zombie comes back sooner
@@ -616,7 +624,7 @@ export const PF_JUGG = 32; // Juggernaut: the juggernaut
 export const PF_BLUE = 64; // a team mode: on blue (red without it)
 export const PF_CARRY = 128; // a team mode: carrying the flag or the skull (no guns, no frags, a swing that kills)
 export const PF_FAST = 4; // Lucky Blocks: a zombie's legs for a while (golf's PF_DONE, which the arena never sets)
-export const PF_DOWN = PF_CARRY | PF_FAST; // Evade: downed (a crawl, no jump, no guns, no swing), both bits, which no other mode sets together
+export const PF_DOWN = PF_CARRY | PF_FAST; // Evade, Escape: downed (a crawl, no jump, no guns, no swing), both bits, which no other mode sets together; Escape's hunter stunned
 // Per fighter, past the spawn points (hashed, in every keyframe, not in the
 // prediction's copy: only the confirmed world reads it), cleared as a mode is picked:
 export const MODE_REC = ARENA + 0x300; // 256 x 8 B
@@ -649,8 +657,9 @@ export const MX_AM = 16;
 // The arena's kit of team modes: mode AM[k].mode is src/am/<key>.wat, its
 // hooks $<prefix>_start, _tick, _kill and _bar called through (!am) while it
 // is on, and any of the optional ones named in its hooks: _strike (a shot's
-// line, a swing's reach or a blast, on the confirmed world in play) and
-// _spawn (a fighter armed as it comes into the fight).
+// line, a swing's reach or a blast, on the confirmed world in play),
+// _spawn (a fighter armed as it comes into the fight) and _hurt (damage
+// about to be dealt, which the mode may take in its place).
 export const AM = [
   { mode: M_SLAYER, key: 'slayer', prefix: 'ts' },
   { mode: M_CTF, key: 'ctf', prefix: 'cf' },
@@ -662,6 +671,7 @@ export const AM = [
   { mode: M_ASSAULT, key: 'assault', prefix: 'as' },
   { mode: M_LUCKY, key: 'lucky', prefix: 'lk', hooks: ['strike', 'spawn'] },
   { mode: M_EVADE, key: 'evade', prefix: 'ed', hooks: ['strike', 'spawn'] },
+  { mode: M_ESCAPE, key: 'escape', prefix: 'es', hooks: ['spawn', 'hurt'] },
 ];
 export const AM_HOOKS = ['start', 'tick', 'kill', 'bar']; // every mode on the kit has these
 export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on the kit, sides or none

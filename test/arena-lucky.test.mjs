@@ -174,7 +174,7 @@ function spots(v) {
 test('Lucky Blocks: on the kit with no sides; nothing of it in the countdown; as play starts a block over each of the map\'s spots, one to a spot; everyone with a magnum alone, no frags, nobody on a side', async () => {
   assert.ok((L.KIT >> L.M_LUCKY) & 1 && !((L.TEAMED >> L.M_LUCKY) & 1) && !((L.TEAM_MODES >> L.M_LUCKY) & 1));
   assert.equal(L.MODES[L.M_LUCKY].name, 'LUCKY BLOCKS');
-  assert.equal(L.ARENA_MODES.at(-2), L.M_LUCKY, 'last in the rotation but Evade, before it comes round to a Fiesta');
+  assert.equal(L.ARENA_MODES.at(-3), L.M_LUCKY, 'last in the rotation but Evade and Escape, before it comes round to a Fiesta');
   assert.equal(AC.LK_ODDS.reduce((a, b) => a + b), AC.LK_ODDS_SUM);
   assert.equal(AC.LK_ODDS.length, AC.LK_ROLLS.length);
   assert.equal(AMC[L.M_LUCKY], lk);

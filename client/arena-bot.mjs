@@ -358,7 +358,9 @@ export class Fighter {
     // the nearest enemy in sight, looked for every 16 ticks (each bot on its own
     // tick of the 16, so a room of them spreads the work); between looks the
     // one chosen is kept while it lives and, checked every 4 ticks, is in sight
-    const alive = (q) => q >= 0 && (view.u8[L.PLAYERS + q * L.PSIZE + L.P_FL] & (L.PF_LIVE | L.PF_DEAD)) === L.PF_LIVE && !view.ally(this.slot, q);
+    // (the downed, both PF_DOWN bits, are nobody's target: Escape's, and its stunned hunter)
+    const alive = (q) => q >= 0 && (view.u8[L.PLAYERS + q * L.PSIZE + L.P_FL] & (L.PF_LIVE | L.PF_DEAD)) === L.PF_LIVE
+      && (view.u8[L.PLAYERS + q * L.PSIZE + L.P_FL] & L.PF_DOWN) !== L.PF_DOWN && !view.ally(this.slot, q);
     const chest = (q) => { const b = L.PLAYERS + q * L.PSIZE; return [view.dv.getFloat32(b + L.P_PX, true), view.dv.getFloat32(b + L.P_PY, true) + 1.2, view.dv.getFloat32(b + L.P_PZ, true)]; };
     // a sword with legs (a zombie, the juggernaut) hunts; so does everyone after the juggernaut
     const hunter = me.zombie || me.jugg;
@@ -558,8 +560,9 @@ export class Fighter {
     }
     // a goal to dodge to (Evade's step aside from a chaser): the keys for it as faced now, no turn first
     if (obj?.dodge) move = toward(obj.pos);
-    // carrying: no gun, but a swing that kills at an enemy close in front (within 2.4 m, about 40 degrees either side)
-    if (me.carry && me.cool === 0) {
+    // carrying: no gun, but a swing that kills at an enemy close in front (within 2.4 m, about 40 degrees either side);
+    // a goal's swing is the same without carrying (Escape's shove)
+    if ((me.carry || (obj?.swing && !me.down)) && me.cool === 0) {
       for (let q = 0; q < L.NPLAYER; q++) {
         if (q === this.slot || !alive(q)) continue;
         const c = chest(q), d = Math.hypot(c[0] - me.pos[0], c[2] - me.pos[2]);

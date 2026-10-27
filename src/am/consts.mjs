@@ -11,3 +11,4 @@ export * from './vip.mjs';
 export * from './assault.mjs';
 export * from './lucky.mjs';
 export * from './evade.mjs';
+export * from './escape.mjs';

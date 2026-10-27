@@ -746,6 +746,8 @@
   (if (i32.ne (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE)) (then (return)))
   (if (i32.ne (i32.load (i32.const @HDR_STATE)) (i32.const @H_PLAY)) (then (return)))
   (if (call $a_ally (local.get $q) (local.get $a)) (then (return)))
+  ;; a mode on the kit that takes the blow in its place (Escape's downs and stuns)
+  (if (!am i32 hurt (local.get $q) (local.get $a) (local.get $cause)) (then (return)))
   ;; a zombie, with no shields to lose, isn't killed by a head shot that only
   ;; kills through them, and takes half of any gun's but the shotgun's
   (if (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (i32.const @PF_ZOMBIE))
@@ -807,10 +809,12 @@
     (then (!put u8 @(PLAYERS + A_GRENS) (local.get $ab) (i32.add (!at u8 @(PLAYERS + A_GRENS) (local.get $ab)) (i32.const 1))))))
 
 ;; The nearest live enemy of p within `reach` metres, inside a cone of the
-;; given cosine about its facing (s, c), where p saw them; and how far.
+;; given cosine about its facing (s, c), where p saw them; and how far. The
+;; downed (both PF_DOWN bits: Escape's, and its stunned hunter) are nobody's
+;; to reach.
 (func $a_reach (param $p i32) (param $d i32) (param $s f32) (param $c f32) (param $reach f32) (param $cone f32) (result i32 f32)
   (local $pb i32) (local $q i32) (local $rt i32) (local $px f32) (local $py f32) (local $pz f32)
-  (local $qx f32) (local $qy f32) (local $qz f32) (local $dx f32) (local $dz f32) (local $dist f32) (local $best f32) (local $who i32)
+  (local $qx f32) (local $qy f32) (local $qz f32) (local $dx f32) (local $dz f32) (local $dist f32) (local $best f32) (local $who i32) (local $fl i32)
   (local.set $pb (i32.add (i32.shl (local.get $p) (i32.const 6)) (local.get $d)))
   (local.set $px (!at f32 @(PLAYERS + P_PX) (local.get $pb)))
   (local.set $py (!at f32 @(PLAYERS + P_PY) (local.get $pb)))
@@ -819,7 +823,9 @@
   (local.set $best (local.get $reach))
   (local.set $who (i32.const -1))
   (!for $q (i32.const 0) (i32.const @NPLAYER)
-    (if (i32.and (i32.and (i32.eq (i32.and (i32.load8_u offset=@(PLAYERS + P_FL) (i32.shl (local.get $q) (i32.const 6))) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
+    (local.set $fl (i32.load8_u offset=@(PLAYERS + P_FL) (i32.shl (local.get $q) (i32.const 6))))
+    (if (i32.and (i32.and (i32.and (i32.eq (i32.and (local.get $fl) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
+                                   (i32.ne (i32.and (local.get $fl) (i32.const @PF_DOWN)) (i32.const @PF_DOWN)))
                           (i32.ne (local.get $q) (local.get $p)))
                  (i32.eqz (call $a_ally (local.get $p) (local.get $q))))
       (then
@@ -1390,6 +1396,7 @@
   (local.set $m (i32.load (i32.const @AH_MODE)))
   (local.set $r (i32.shl (local.get $p) (i32.const 3)))
   (if (i32.eq (local.get $m) (i32.const @M_EVADE)) (then (return (call $ed_key (local.get $p)))))
+  (if (i32.eq (local.get $m) (i32.const @M_ESCAPE)) (then (return (call $es_key (local.get $p)))))
   (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @TEAMED))
     (then
       (local.set $n (!at u16 @(MODE_REC + MR_POINTS) (local.get $r)))
@@ -1579,6 +1586,9 @@
 ;;   $<prefix>_strike (p, o xyz, d xyz, t, r f32): slot p's hitscan round,
 ;;     swing, blast or bolt took in the line o + s d, s in [0, t], grown by r.
 ;;   $<prefix>_spawn (p): p has just been armed as it spawns: arm it the mode's way.
+;;   $<prefix>_hurt (q a cause, result i32): a blow from a to q, on the
+;;     confirmed world in play, not between allies: 1 if the mode takes it
+;;     (no damage, no hit, no kill).
 ;; A mode on the kit may have no sides (MODES' team 0: Lucky Blocks): then
 ;; everything red against blue here (TEAMED) leaves it alone, and the
 ;; free-for-all's places ($a_key's last line) are its.
@@ -1678,3 +1688,4 @@
 #include "am/assault.wat"
 #include "am/lucky.wat"
 #include "am/evade.wat"
+#include "am/escape.wat"

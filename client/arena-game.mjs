@@ -549,7 +549,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       dealt = false;
       const m = view.mode().mode;
       const arm = (w) => ARMS[w]?.name ?? '?';
-      const text = me.zombie ? 'ZOMBIE: THE SWORD' : me.jugg ? 'JUGGERNAUT: THE SWORD' : m === L.M_GUNGAME ? `RUNG ${Math.min(me.rung + 1, RUNGS)} OF ${RUNGS}: ${arm(me.gun[0])}`
+      const text = AMC[m]?.dealt ? AMC[m].dealt(me) : me.zombie ? 'ZOMBIE: THE SWORD' : me.jugg ? 'JUGGERNAUT: THE SWORD' : m === L.M_GUNGAME ? `RUNG ${Math.min(me.rung + 1, RUNGS)} OF ${RUNGS}: ${arm(me.gun[0])}`
         : `${me.team >= 0 ? `${SIDE[me.team]}: ` : ''}${arm(me.gun[0])} + ${arm(me.gun[1])}`;
       if (banner.until < now + 500) banner = { text, until: now + 2500, color: me.zombie ? C.GREEN : me.team >= 0 ? SIDE_C[me.team] : C.CYAN };
     }
@@ -660,7 +660,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const spread = ARMS[f?.weapon]?.spread || 0;
     last = {
       cam, yaw: camYaw, pitch: camPitch, zoom, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, slot: tgt ? watched : slot < 0 ? 999 : slot,
-      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 ? 1 : 0, zone: out.zone,
+      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone,
       crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, cam) ? 8 : 0), gap: spread / 30 + kick * 3,
       tints: tintsOf(host),
     };
@@ -799,7 +799,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
           const other = f.gun[f.hand ^ 1] !== f.weapon ? ARMS[f.gun[f.hand ^ 1]] : null;
           right(rows - 4, other ? `${f.hand ? 1 : 2} ${other.name}` : '', C.GREY);
         }
-        if (!f.zombie && !f.jugg) right(rows - 5, `FRAGS ${f.grens}`, C.ORANGE);
+        if (!f.zombie && !f.jugg && kit?.frags !== false) right(rows - 5, `FRAGS ${f.grens}`, C.ORANGE);
         // a gun on the pad underfoot
         const pad = view.pads().find((p) => !p.wait && Math.hypot(p.pos[0] - f.pos[0], p.pos[2] - f.pos[2]) < 1.5);
         if (pad && !WATCH && !f.gun.includes(pad.weapon) && ARMS[pad.weapon]) centre(Math.floor(rows / 2) + 5, `E: PICK UP ${ARMS[pad.weapon].name}`, C.WHITE);

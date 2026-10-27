@@ -389,7 +389,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
 }
 
 // solid splats: 0 a ball, 1 a fighter, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block,
-// 12 an Evade chaser's face, 13 a downed fighter (the soldier on its side)
+// 12 an Evade chaser's face, 13 a downed fighter (the soldier on its side), 14 an Escape terminal
 @fragment fn fs_splat(s: SOut) -> @location(0) vec4f {
   let r2 = dot(s.uv, s.uv);
   var c = s.color.rgb;
@@ -506,6 +506,20 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
       if (pupil) { c = vec3f(0.04, 0.03, 0.03); }
       if (brow) { c = vec3f(0.1, 0.06, 0.05); }
       if (mouth) { c = select(vec3f(0.18, 0.02, 0.03), vec3f(0.98, 0.96, 0.88), teeth); }
+    }
+    case 14u: { // a terminal: a grey cabinet on a post, its screen in the sprite's colour with scan lines, a row of keys under it
+      let x = s.uv.x;
+      let y = s.uv.y;
+      let cab = abs(x) < 0.9 && y > -0.98 && y < 0.25;
+      let post = abs(x) < 0.22 && y >= 0.25;
+      let foot = abs(x) < 0.6 && y > 0.9;
+      if (!cab && !post && !foot) { discard; }
+      let screen = abs(x) < 0.72 && y > -0.84 && y < -0.2;
+      let keys = y > -0.08 && y < 0.1 && abs(x) < 0.72 && abs(fract(x * 3.5 + 0.5) - 0.5) < 0.36;
+      c = vec3f(0.3, 0.31, 0.34) * (0.75 + 0.25 * (1.0 - abs(x)));
+      if (screen) { c = s.color.rgb * (0.8 + 0.2 * step(0.5, fract(y * 9.0))); }
+      else if (keys) { c = vec3f(0.55, 0.56, 0.6); }
+      else if (post || foot) { c = vec3f(0.2, 0.2, 0.22); }
     }
     default: {}
   }
