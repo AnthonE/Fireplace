@@ -6,8 +6,8 @@ not measured yet, it says so.
 
 ## Where it is
 
-52 games, each gated online: golf, bumper balls, the arena's thirteen modes
-(Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, and red against blue: Team
+53 games, each gated online: golf, bumper balls, the arena's fourteen modes
+(Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
 Territories, VIP, Assault) and Party's 37 minigames. Fireplace plays them in turn.
 
@@ -57,7 +57,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
 | Party (the ball) | 37 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
-| Arena (the fighter) | 13 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Arena (the fighter) | 14 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |

@@ -128,16 +128,17 @@ node --test test/map.test.mjs
 
 ## Modes
 
-Each match plays one of thirteen modes, chosen as its countdown starts: match k
-of a room plays `ARENA_MODES[k % 13]` (`src/layout.mjs`), Fiesta, Team Slayer,
+Each match plays one of fourteen modes, chosen as its countdown starts: match k
+of a room plays `ARENA_MODES[k % 14]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
-Juggernaut, King of the Hill, Assault, Lucky Blocks, and round again: a
-free-for-all, then two [team modes](#teams), and Lucky Blocks last. So a room
+Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, and round again: a
+free-for-all, then two [team modes](#teams), and the two kit modes without
+sides last. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it (see Fireplace). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
@@ -245,6 +246,24 @@ hooks, the payout is drawn serially in the tick hook, and the legs are P_FL's
 PF_FAST, which the prediction runs. The AI fighter goes for the nearest block
 while it holds only the magnum and fights once armed.
 `test/arena-lucky.test.mjs` (13 tests).
+
+Evade (mode 13) is everyone against the chasers: flat faces the sim moves over
+Box Canyon, 2 to 6 of them, more as the clock runs and the room fills, each
+after its nearest standing fighter at 11.5 m/s, a fighter's 10 on the flat,
+but slowed to 0.4 of that up stairs and slopes and to 2.5 m/s up a ledge,
+which it climbs only when its prey is up there (out of a base first, if its
+prey is on the roof over it). A chaser that reaches you downs you: you crawl
+at 2 m/s, with no gun and no jump. A friend holding still within 2 m of you
+for 3 s gets you up, and your 30 s of bleeding stop while they do; bleed out
+and you watch the others for the rest of the match. A hit stuns a chaser for
+1.2 s, then it ignores hits for 2 s. Survive 3:30 and whoever stands wins;
+nobody standing, the chasers do. Places go standing at the end, then time
+standing, then revives. The chasers are records in `AO`, 48 B each, moved
+serially on the confirmed world after every fighter's own tick; downed is both
+`PF_CARRY` and `PF_FAST` in `P_FL`, so the prediction runs the crawl. Sixteen
+AI fighters are usually caught to the last in 150 to 200 s; online with 64, 46
+stood at 90 s (5,623 hashes, all equal). `test/arena-evade.test.mjs` (13
+tests).
 
 ## Teams
 
