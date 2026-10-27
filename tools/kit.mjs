@@ -29,6 +29,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const HOME = /^(anthone)\/(fireplace|quake-golf)$/i; // Fireplace's own repo, by either name
 export const HOME_SLUG = 'fireplace';
 export const ENGINE = { name: 'Fireplace', license: 'CC0-1.0' };
+// the store shows a community game on its shelves once it has a capsule (616x353): a copy starts with
+// the kit's, a frame of bumper balls, and the README says to draw its own
+export const CAPSULE = 'elo/capsule.png';
 // the tests a copy's first run passes in seconds; npm test runs them all (about 10 min)
 export const FAST = ['asm', 'themes', 'looks', 'new-mg', 'wire', 'achievements', 'kit', 'plan'];
 
@@ -75,8 +78,9 @@ export function plan(name, { root = ROOT, slug, repo, blurb, tagline, force = fa
   listing.made_with ??= { parts: [] };
   listing.engine ??= ENGINE;
   if (repo && !HOME.test(repo)) listing.play_url = pagesUrl(repo);
+  const art = existsSync(join(root, CAPSULE)) ? { art: { capsule: CAPSULE } } : {};
   const elo = was.game === HOME_SLUG
-    ? { elo: 1, game: slug, multiplayer: 'match', listing }
+    ? { elo: 1, game: slug, multiplayer: 'match', listing, ...art }
     : { ...was, game: slug, listing };
   const themes = readThemes(join(root, 'client', 'themes'));
   out['elo.json'] = JSON.stringify(withThemes(elo, themes), null, 2) + '\n';

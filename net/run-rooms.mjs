@@ -113,13 +113,17 @@ const servers = () => readJson(list)?.servers || [];
 check('the pool opens one free room', await until(() => servers().length === 1, 15000), JSON.stringify(readJson(list)));
 const first = servers()[0] || {};
 check('a row names the room the way a store reads it', first.addr === 'play.example.com:4660' && first.max_players === 2 && first.name === 'Room 1'
-  && first.status_url === 'https://play.example.com/golf/rooms/4660.json', JSON.stringify(first));
+  && first.status_url === 'https://play.example.com/golf/rooms/4660.json'
+  && first.online_url === 'https://play.example.com/golf/rooms/4660.online.json', JSON.stringify(first));
 
 // three bots at the first room: two get in, one is turned away
 const bots = botHost(`${dir}/bots.json`, ['--relay', '127.0.0.1:4760', '--bots', '3', '--seconds', '10']);
 check('the first room fills to its cap', await until(() => readJson(`${statusDir}/4660.json`)?.players === 2, 15000), JSON.stringify(readJson(`${statusDir}/4660.json`)));
 const st = readJson(`${statusDir}/4660.json`) || {};
 check('its status says what a store shows', st.max_players === 2 && st.tick_hz === 125 && st.tick > 0 && st.game === 'golf', JSON.stringify(st));
+const roster = readJson(`${statusDir}/4660.online.json`) || {};
+check('its roster is the shape a store counts as play, empty while nobody signs in', Array.isArray(roster.online) && roster.online.length === 0
+  && Math.abs(roster.at - Date.now() / 1000) < 10, JSON.stringify(roster));
 check('the players\' worlds match the referee\'s', await until(() => (readJson(`${statusDir}/4660.json`)?.hashes_checked || 0) >= 4, 15000)
   && readJson(`${statusDir}/4660.json`)?.hashes_differed === 0, JSON.stringify(readJson(`${statusDir}/4660.json`)));
 check('a full room opens another', await until(() => servers().length === 2, 10000), JSON.stringify(servers()));
@@ -129,7 +133,8 @@ check('two bots got in and the third was refused, not squeezed in', b.joined ===
 
 check('the empty extra room stops after idle_s', await until(() => servers().length === 1, 30000), JSON.stringify(servers()));
 await pool.close();
-check('a closed pool lists no rooms, and leaves no status behind', servers().length === 0 && !existsSync(`${statusDir}/4660.json`));
+check('a closed pool lists no rooms, and leaves no status behind', servers().length === 0 && !existsSync(`${statusDir}/4660.json`)
+  && !existsSync(`${statusDir}/4660.online.json`));
 
 console.log(failed.length ? `\nFAILED: ${failed.length}` : '\nPASS');
 process.exit(failed.length ? 1 : 0);

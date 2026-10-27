@@ -38,8 +38,10 @@ function poolBase(q) {
 }
 
 // Where this page's room is, in order: ?local=1 none; ?url= (with ?hash=, or
-// the kit's hash); the kit's relay; the page's own host on 4433 with
-// certs/hash.txt beside it (node net/play.mjs); with ?room=<id> (an invite),
+// the kit's hash); the kit's relay; with certs/hash.txt beside the page, the
+// first room with a seat in the room pool's list beside it (rooms/servers.json,
+// net/rooms.mjs: game.elopros.com's rooms), else the page's own host on 4433
+// (node net/play.mjs); with ?room=<id> (an invite),
 // that room from the pool, for this page's wasm (opts.wasm, its bytes
 // opts.bytes). None of those, or a pool that can't give the room: null, and
 // the page plays a local room with AI players, room.why saying why. A relay
@@ -57,7 +59,7 @@ export async function relayFor(q, opts = {}) {
     return { url, hash };
   }
   hash = hash || (await certs());
-  if (isHash(hash)) return { url: `https://${location.hostname}:4433/`, hash };
+  if (isHash(hash)) return { url: (!q.get('room') && (await seatIn(await roomList()))) || `https://${location.hostname}:4433/`, hash };
   const base = poolBase(q);
   if (!q.get('room') || !base || !opts.wasm) return null;
   try {
@@ -65,6 +67,22 @@ export async function relayFor(q, opts = {}) {
     Object.assign(room, { id: a.room, invite: inviteTo(a.room, q).href, why: a.why || '' });
     return { url: a.url, hash: a.hash, pool: true };
   } catch (e) { room.why = String(e.message || e); return null; }
+}
+
+// The room pool's server list beside this page (rows in port order), or [].
+const roomList = () => fetch(new URL('../rooms/servers.json', import.meta.url), { cache: 'no-store' })
+  .then((r) => (r.ok ? r.json() : {})).then((d) => (Array.isArray(d.servers) ? d.servers : [])).catch(() => []);
+
+// The first room with a seat, as the relay's address, so friends who open the
+// page land together until it fills; a room whose status can't be read is
+// taken on trust. null for an empty list.
+export async function seatIn(rows) {
+  const ok = rows.filter((r) => typeof r?.addr === 'string' && /^[\w.-]+:\d+$/.test(r.addr));
+  for (const r of ok) {
+    const st = r.status_url ? await fetch(r.status_url, { cache: 'no-store' }).then((x) => (x.ok ? x.json() : null)).catch(() => null) : null;
+    if (!st || !(st.players >= (st.max_players ?? r.max_players ?? Infinity))) return `https://${r.addr}/`;
+  }
+  return ok.length ? `https://${ok[0].addr}/` : null;
 }
 
 // Can this page offer to go online: no relay of its own, and a pool to ask?

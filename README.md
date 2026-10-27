@@ -47,8 +47,11 @@ its own web page, a plan for your game, and Claude to help build it.
    if the pool can't give one, the page says why and you stay with the AI
    players ([docs/hosting.md](docs/hosting.md)).
 5. **Put it on Elo Pros.** On the [dev console](https://elopros.com/dev-console.html),
-   list your game straight from your repo; no wallet needed. Later, a
-   `wallet` line in `elo.json` lets you sell copies, 100% of the price to you.
+   list your game straight from your repo; no wallet needed. A `sell` line
+   in `elo.json` sells copies, 100% of the price to you; we hold the money
+   until a `wallet` line says where to send it. The store's shelves show a
+   game by its capsule, `elo/capsule.png` (616×353): a copy starts with a
+   frame of bumper balls, so draw your own.
 
 ## The games
 
