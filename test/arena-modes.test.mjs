@@ -97,14 +97,14 @@ function predicted(g, p, inputs) {
 
 test('modes: a room plays the rotation from a Fiesta, a free-for-all and two team matches in turn; a seed can force one mode every match', async () => {
   const g = await room(null, 2);
-  assert.equal(L.ARENA_MODES.length, 13);
+  assert.equal(L.ARENA_MODES.length, 14);
   for (let k = 0; k <= L.ARENA_MODES.length; k++) {
     const want = L.ARENA_MODES[k % L.ARENA_MODES.length];
     const h = g.v.hole();
     assert.deepEqual([h.hole, h.state, g.v.mode().mode], [k, L.H_PLAY, want], `match ${k}`);
     assert.equal(h.until - h.start, L.MODE_TICKS[want], `${L.MODES[want].name}'s clock`);
     const i = k % L.ARENA_MODES.length;
-    assert.equal(((1 << want) & L.TEAMED) !== 0, i < 12 && i % 3 !== 0, 'two team matches to every free-for-all, then Lucky Blocks');
+    assert.equal(((1 << want) & L.TEAMED) !== 0, i < 12 && i % 3 !== 0, 'two team matches to every free-for-all, then Lucky Blocks and Evade');
     if (want === L.M_FIESTA) {
       // a Fiesta's region is what it was before modes, the first and the one
       // after a team match alike: every mode field 0, the team header and the

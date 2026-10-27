@@ -61,9 +61,18 @@
 //     from 0.9 it doesn't stop to shoot at all), hold (stay within r once
 //     there, looking round), strike (optional [x, y, z]: something to break
 //     there; with nobody in sight and it in sight within 25 m, the bot faces
-//     it and fires, or swings within 2 m) }. me is fighter() of the confirmed world. Called
-//     every 8 ticks, staggered by slot.
+//     it and fires, or swings within 2 m), shoot (optional [x, y, z]: fired at
+//     as at an enemy, turned on, while it goes on its way: Evade's chasers),
+//     still (hold with the keys let go: Evade's revive), dodge (the keys for
+//     pos as faced now, no turn first) }. me is fighter() of the confirmed
+//     world. Called every 8 ticks, staggered by slot.
 //   state(view) (optional): what the gates (net/run-arena.mjs) should see, JSON.
+//   And for a mode without sides, optionally: own (its hud has rows 0 to 4,
+//   no kills line over them), kills (false: no KILLS or DEATHS on the board),
+//   standing(o) (the board's order in play, higher first), over(view) (the
+//   board's title once it's over, after GAME OVER), dead(f) (a dead
+//   fighter's line in place of RESPAWN IN), watch(view, p) (a dead fighter's
+//   camera goes to the first slot p this says may be watched).
 import * as L from '../../src/layout.mjs';
 import slayer from './slayer.mjs';
 import ctf from './ctf.mjs';
@@ -74,9 +83,10 @@ import territories from './territories.mjs';
 import vip from './vip.mjs';
 import assault from './assault.mjs';
 import lucky from './lucky.mjs';
+import evade from './evade.mjs';
 
 export const AMC = [];
-for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault, lucky]) AMC[m.mode] = m;
+for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault, lucky, evade]) AMC[m.mode] = m;
 // the module whose MX codes a news item's size falls in (MX_AM + 8k for AM[k]), or undefined
 export const newsOf = (size) => (size >= L.MX_AM ? AMC[L.AM[(size - L.MX_AM) >> 3]?.mode] : undefined);
 export { SIDE, SIDE_C, SIDE_RGB, sideOf } from './sides.mjs';

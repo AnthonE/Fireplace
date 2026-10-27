@@ -265,20 +265,24 @@
   (local $pb i32) (local $k i32) (local $i i32) (local $q i32) (local $qb i32) (local $in i32)
   (local $best i32) (local $bestd f32) (local $md f32) (local $sx f32) (local $sz f32) (local $dx f32) (local $dz f32) (local $h f32)
   (local $g0 i32) (local $g1 i32) (local $mode i32) (local $zed i32) (local $fl i32) (local $team i32) (local $side i32) (local $n i32) (local $j i32)
-  (local $strict i32)
+  (local $strict i32) (local $kit i32) (local $filt i32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
   (local.set $mode (i32.load (i32.const @AH_MODE)))
   (local.set $team (i32.and (i32.shl (i32.const 1) (local.get $mode)) (i32.const @TEAMED)))
+  (local.set $kit (i32.and (i32.shl (i32.const 1) (local.get $mode)) (i32.const @KIT)))
   ;; a zombie stays one; a juggernaut that died is anyone again
   (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
   (local.set $zed (i32.and (local.get $fl) (i32.const @PF_ZOMBIE)))
   (local.set $bestd (select (f32.const -1e30) (f32.const -1) (i32.or (local.get $zed) (local.get $team))))
-  ;; a team mode's fighter starts on its own half, where its mode lets it: n spawns to draw from, side -1 for all of them
+  ;; a team mode's fighter starts on its own half, where its mode lets it (a
+  ;; kit mode with no sides: anywhere it lets it): n spawns to draw from,
+  ;; side -1 for either half
   (local.set $n (i32.load (i32.const @MAP_NSPAWN)))
   (local.set $side (i32.const -1))
-  (if (local.get $team)
+  (if (local.get $kit)
     (then
-      (local.set $side (call $a_team (local.get $p)))
+      (local.set $filt (i32.const 1))
+      (if (local.get $team) (then (local.set $side (call $a_team (local.get $p)))))
       ;; where the mode lets it; if it bars the whole half (a map whose every spawn
       ;; on one side stands by a hill), anywhere on the half
       (local.set $strict (i32.const 2))
@@ -291,10 +295,10 @@
           (br_if $some (local.get $n))
           (br_if $again (local.get $strict))))
       ;; tools/map.mjs sees each half has one; a map that somehow hasn't draws from all
-      (if (i32.eqz (local.get $n)) (then (local.set $side (i32.const -1)) (local.set $n (i32.load (i32.const @MAP_NSPAWN)))))))
+      (if (i32.eqz (local.get $n)) (then (local.set $filt (i32.const 0)) (local.set $n (i32.load (i32.const @MAP_NSPAWN)))))))
   (!for $k (i32.const 0) (i32.const 4)
     (local.set $i (i32.rem_u (call $rand) (local.get $n)))
-    (if (i32.ge_s (local.get $side) (i32.const 0))
+    (if (local.get $filt)
       (then
         ;; the i-th of the side's own, in order
         (block $found
@@ -435,6 +439,7 @@
   (local $carry i32) (local $go i32) (local $moved i32)
   (local.set $pb (i32.add (i32.shl (local.get $p) (i32.const 6)) (local.get $d)))
   (call $a_frame (local.get $pb) (local.get $d) (local.get $in))
+  ;; (Evade's downed, PF_DOWN, carry nothing, but have the carrier's bit: no hands for them either, and no swing)
   (local.set $carry (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_CARRY)))
   ;; a carrier's reload (a frame may just have asked for one) and burst stop
   (if (local.get $carry)
@@ -494,7 +499,7 @@
       (local.set $go (i32.or (local.get $go) (i32.and (local.get $moved) (i32.eqz (i32.and (local.get $act) (i32.const @AB_HELD))))))
       (local.set $act (select (i32.or (local.get $act) (i32.const @AB_HELD)) (i32.and (local.get $act) (i32.const @(255 ^ AB_HELD))) (local.get $moved)))
       (!put u8 @(PLAYERS + P_FIRED) (local.get $pb) (local.get $ctr))))
-  (if (i32.and (local.get $go) (i32.eqz (local.get $cool)))
+  (if (i32.and (i32.and (local.get $go) (i32.eqz (local.get $cool))) (i32.ne (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_DOWN)) (i32.const @PF_DOWN)))
     (then
       (!put u16 @(PLAYERS + P_SHOTS) (local.get $pb) (i32.add (!at u16 @(PLAYERS + P_SHOTS) (local.get $pb)) (i32.const 1)))
       (call $a_melee (local.get $p) (local.get $d) (local.get $s) (local.get $c)
@@ -1384,6 +1389,7 @@
   (local $m i32) (local $r i32) (local $n i32)
   (local.set $m (i32.load (i32.const @AH_MODE)))
   (local.set $r (i32.shl (local.get $p) (i32.const 3)))
+  (if (i32.eq (local.get $m) (i32.const @M_EVADE)) (then (return (call $ed_key (local.get $p)))))
   (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @TEAMED))
     (then
       (local.set $n (!at u16 @(MODE_REC + MR_POINTS) (local.get $r)))
@@ -1658,7 +1664,7 @@
 (func $a_spawn_ok (param $i i32) (param $side i32) (param $strict i32) (result i32)
   (local $a i32)
   (local.set $a (i32.add (i32.const @SPAWNS) (i32.shl (local.get $i) (i32.const 4))))
-  (if (i32.ne (call $a_spawn_half (local.get $i)) (local.get $side)) (then (return (i32.const 0))))
+  (if (i32.and (i32.ge_s (local.get $side) (i32.const 0)) (i32.ne (call $a_spawn_half (local.get $i)) (local.get $side))) (then (return (i32.const 0))))
   (if (i32.eqz (local.get $strict)) (then (return (i32.const 1))))
   (i32.eqz (!am i32 bar (f32.load (local.get $a)) (f32.load offset=4 (local.get $a)) (f32.load offset=8 (local.get $a)))))
 
@@ -1671,3 +1677,4 @@
 #include "am/vip.wat"
 #include "am/assault.wat"
 #include "am/lucky.wat"
+#include "am/evade.wat"

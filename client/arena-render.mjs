@@ -344,6 +344,13 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     if ((fl & ${L.PF_JUGG}u) != 0u) { color = vec4f(1.0, 0.72, 0.15, 1.0); }
     kind = 1u;
     minpx = 1.0;
+    // Evade's downed (both PF_DOWN bits): lying on the ground, pulsing
+    if ((fl & ${L.PF_DOWN}u) == ${L.PF_DOWN}u) {
+      center = center + vec3f(0.0, -0.5, 0.0);
+      half = vec2f(0.92, 0.42);
+      color = vec4f(color.rgb * (0.7 + 0.3 * sin(u.view.w * 6.0)), 1.0);
+      kind = 13u;
+    }
   } else if (i < ${L.NPLAYER + L.NPROJ}u) {
     let j = i - ${L.NPLAYER}u;
     let b = j * ${L.JSIZE}u;
@@ -381,26 +388,30 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   return o;
 }
 
-// solid splats: 0 a ball, 1 a fighter, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block
+// solid splats: 0 a ball, 1 a fighter, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block,
+// 12 an Evade chaser's face, 13 a downed fighter (the soldier on its side)
 @fragment fn fs_splat(s: SOut) -> @location(0) vec4f {
   let r2 = dot(s.uv, s.uv);
   var c = s.color.rgb;
-  switch s.kind {
+  var uv = s.uv;
+  var kind = s.kind;
+  if (kind == 13u) { uv = vec2f(s.uv.y, s.uv.x); kind = 1u; }
+  switch kind {
     case 0u: {
       if (r2 > 1.0) { discard; }
       let n = vec3f(s.uv.x, -s.uv.y, sqrt(1.0 - r2));
       c *= 0.45 + 0.6 * max(dot(n, normalize(vec3f(0.3, 0.8, 0.5))), 0.0);
     }
     case 1u: { // a soldier: helmet with a gold visor, armoured body, legs
-      let y = s.uv.y;
-      let head = length(vec2f(s.uv.x * 1.15, (y + 0.78) * 2.0)) < 0.42;
-      let visor = head && y > -0.86 && y < -0.72 && abs(s.uv.x) < 0.3;
-      let body = abs(s.uv.x) < 0.78 - 0.18 * max(y, 0.0) && y > -0.58 && y < 0.25;
-      let legs = y >= 0.25 && abs(abs(s.uv.x) - 0.3) < 0.2;
+      let y = uv.y;
+      let head = length(vec2f(uv.x * 1.15, (y + 0.78) * 2.0)) < 0.42;
+      let visor = head && y > -0.86 && y < -0.72 && abs(uv.x) < 0.3;
+      let body = abs(uv.x) < 0.78 - 0.18 * max(y, 0.0) && y > -0.58 && y < 0.25;
+      let legs = y >= 0.25 && abs(abs(uv.x) - 0.3) < 0.2;
       if (!head && !body && !legs) { discard; }
       if (visor) { c = vec3f(0.95, 0.72, 0.25); }
       else if (legs) { c *= 0.65; }
-      c *= 0.7 + 0.3 * (1.0 - abs(s.uv.x));
+      c *= 0.7 + 0.3 * (1.0 - abs(uv.x));
     }
     case 2u: {
       if (r2 > 1.0) { discard; }
@@ -467,6 +478,34 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
       let stem = abs(x) < 0.11 && y > -0.02 && y < 0.3;
       let spot = length(vec2f(x, y - 0.55)) < 0.13;
       if (hook || stem || spot) { c = vec3f(0.98, 0.96, 0.86); }
+    }
+    case 12u: { // a chaser's face, flat on its card: the card in the sprite's colour, a dark rim, and one of four faces by its alpha
+      let x = s.uv.x;
+      let y = s.uv.y;
+      let v = u32(s.color.a * 4.0);
+      if (length(max(abs(s.uv) - vec2f(0.82), vec2f(0.0))) > 0.16) { discard; }
+      c *= 0.85 + 0.2 * (0.5 - 0.5 * y);
+      if (max(abs(x), abs(y)) > 0.9) { c *= 0.35; }
+      // the eyes: whites (small and close-set on face 2) round pupils that stare a little in, brows on face 3
+      let ex = abs(x) - select(0.36, 0.24, v == 2u);
+      let er = select(0.25, 0.15, v == 2u);
+      let eye = length(vec2f(ex, (y + 0.3) * 0.85)) < er;
+      let pupil = length(vec2f(ex + 0.05, y + 0.27)) < er * 0.42;
+      let brow = v == 3u && abs(y + 0.62 - (0.36 - abs(x)) * 0.5) < 0.06 && abs(x) < 0.62 && abs(x) > 0.1;
+      // the mouth: a grin with teeth (0, 2), a scream (1), a wide frown (3)
+      var mouth = false;
+      var teeth = false;
+      if (v == 1u) { mouth = length(vec2f(x * 1.3, (y - 0.38) * 0.9)) < 0.32; }
+      else if (v == 3u) { mouth = abs(y - 0.5 + 0.45 * x * x) < 0.07 && abs(x) < 0.62; }
+      else {
+        let w = select(0.62, 0.74, v == 2u);
+        mouth = abs(x) < w && y > 0.18 + 0.12 * x * x && y < 0.32 + 0.55 * (1.0 - x * x / (w * w)) * 0.5;
+        teeth = mouth && y < 0.34 + 0.05 * x * x && abs(fract(x * 4.0) - 0.5) > 0.08;
+      }
+      if (eye) { c = vec3f(0.97, 0.96, 0.92); }
+      if (pupil) { c = vec3f(0.04, 0.03, 0.03); }
+      if (brow) { c = vec3f(0.1, 0.06, 0.05); }
+      if (mouth) { c = select(vec3f(0.18, 0.02, 0.03), vec3f(0.98, 0.96, 0.88), teeth); }
     }
     default: {}
   }

@@ -413,6 +413,8 @@ export class Fighter {
     // there: near enough across, and on the same floor (a roof over the flag isn't home)
     const there = obj && Math.hypot(obj.pos[0] - me.pos[0], obj.pos[2] - me.pos[2]) < (obj.r ?? 2) && Math.abs(obj.pos[1] - me.pos[1]) < 2;
     const going = obj && !(there && !obj.hold);
+    // a goal to hold still at: the keys let go as far short as the body slides (friction takes a quarter of the speed a metre)
+    const coast = !!obj?.still && Math.hypot(obj.pos[0] - me.pos[0], obj.pos[2] - me.pos[2]) < (obj.r ?? 2) + 0.25 * Math.hypot(me.vel[0], me.vel[2]);
 
     let move = 0, jump = 0;
     // a gun worth having underfoot: pick it up, in place of the worse one (a carrier has no hands)
@@ -491,13 +493,14 @@ export class Fighter {
           this.strafe = this.rand() < 0.3 ? (this.rand() < 0.5 ? 4 : 8) : 0;
         }
         if (Math.abs(((this.look - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2) > 40) this.turnTo(this.look, 512, 0.1);
-        move = this.aside(view, me, obj, toward);
+        // (a goal to hold still at, as Evade's revive: no step aside, no hop)
+        move = obj.still ? 0 : this.aside(view, me, obj, toward);
         // there by the count but below its middle (at a rock's foot, under its top): a hop up onto it
-        if (obj.pos[1] - me.pos[1] > 0.5 && this.rand() < 0.15) jump = 1;
+        if (!obj.still && obj.pos[1] - me.pos[1] > 0.5 && this.rand() < 0.15) jump = 1;
       } else {
         const w = this.waypoint(view, me, obj, t);
         this.turnTo(aimAt(eye, [w[0], eye[1], w[2]]).yaw, 512, 0.25);
-        move = 1;
+        move = coast ? 0 : 1;
         // a hop where the way climbs, or where something low is in the way (a roof's parapet, a rock)
         if ((w[1] - me.pos[1] > 0.6 && Math.hypot(w[0] - me.pos[0], w[2] - me.pos[2]) < 4) || this.stuck > 8) { if (this.rand() < 0.15) jump = 1; }
         else if (this.rand() < 0.003) jump = 1;
@@ -539,6 +542,22 @@ export class Fighter {
       if (!me.carry && me.mag[this.slotOut] < (L.ARMS[me.weapon]?.mag || 0) / 2 && me.res[this.slotOut] > 0 && !me.reload) this.wantReload = true;
       if (this.rand() < 0.003) jump = 1;
     }
+    // a goal that names a point to shoot (Evade's chasers, to stun): turned on
+    // it, firing when on it as at an enemy, still going the goal's way
+    if (obj?.shoot && !me.carry && !me.down) {
+      const aim = aimAt(eye, obj.shoot);
+      const d = Math.hypot(obj.shoot[0] - me.pos[0], obj.shoot[2] - me.pos[2]);
+      this.turnTo(aim.yaw + (this.rand() - 0.5) * (1 - this.skill) * 300, aim.pitch, 0.3 + 0.4 * this.skill);
+      if (going && !there) move = coast ? 0 : toward(this.waypoint(view, me, obj, t));
+      const off = Math.abs(((aim.yaw - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2);
+      const arm = L.ARMS[me.weapon] || L.ARMS[L.W_AR];
+      if ((arm.type === 1 || d < arm.range * 0.9) && off < 160 + 2000 / Math.max(d, 1)) {
+        if (arm.auto) this.shot = (this.shot + 1) & 3;
+        else if (t - this.lastFire > arm.refire + 2) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
+      }
+    }
+    // a goal to dodge to (Evade's step aside from a chaser): the keys for it as faced now, no turn first
+    if (obj?.dodge) move = toward(obj.pos);
     // carrying: no gun, but a swing that kills at an enemy close in front (within 2.4 m, about 40 degrees either side)
     if (me.carry && me.cool === 0) {
       for (let q = 0; q < L.NPLAYER; q++) {

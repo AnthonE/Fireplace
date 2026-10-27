@@ -97,7 +97,7 @@ report.relay = r && { sessions: r.sessions, compared: r.compared, agreed: r.agre
 const b = existsSync(botsPath) ? JSON.parse(readFileSync(botsPath, 'utf8')) : null;
 report.botHost = b && { joined: b.joined, rejected: b.rejected, errors: b.errors, cpuPctOfOneCore: b.cpuPctOfOneCore, meanStepMs: b.world.meanStepMs, worstStepMs: b.world.worstStepMs,
   kills: b.world.players.reduce((n, p) => n + p.kills, 0), downKBpsEach: b.sessions.length ? Number((b.sessions.reduce((n, x) => n + x.downKB, 0) / b.sessions.length / seconds).toFixed(1)) : 0,
-  mode: b.mode && { mode: b.mode.mode, name: b.mode.name, teamed: b.mode.teamed, score: b.mode.score, target: b.mode.target, teamWin: b.mode.teamWin, teamN: b.mode.teamN },
+  kit: b.kit ?? null, mode: b.mode && { mode: b.mode.mode, name: b.mode.name, teamed: b.mode.teamed, score: b.mode.score, target: b.mode.target, teamWin: b.mode.teamWin, teamN: b.mode.teamN },
   matches: b.games, sides: b.mode?.teamed ? [0, 1].map((k) => b.world.players.filter((p) => p.team === k).length) : null };
 // a forced team mode: both sides were dealt fighters, counted over the whole
 // room (the bot host's own and every page's), and every page has a side and
@@ -111,7 +111,8 @@ const gate = {
   everyBotIn: !nbots || (!!b && b.joined === nbots && !b.errors.length),
   refereeChecked: !!r && r.compared >= 4 * (nbots + chrome),
   hashesAgree: !!r && (r.mismatches?.length ?? r.mismatches) === 0 && r.agreed === r.compared,
-  someoneDied: (report.chromeState || []).some((s) => s.kills + s.deaths > 0) || (report.botHost?.kills ?? 0) > 0,
+  // (or, in Evade, where nobody kills anybody, someone was caught)
+  someoneDied: (report.chromeState || []).some((s) => s.kills + s.deaths > 0 || s.kit?.caught > 0) || (report.botHost?.kills ?? 0) > 0 || report.botHost?.kit?.caught > 0,
   chromeKeptUp: (report.chromeState || []).every((s) => !s.behind),
   modePlayed: mode === null || ((!nbots || report.botHost?.mode?.mode === mode) && (report.chromeState || []).every((s) => s.mode === mode)),
   sidesDealt: !teamed || ((!two || both(report.sides)) && (report.chromeState || []).every((s) => (s.team === 0 || s.team === 1) && (!two || both(s.teamN)))),
