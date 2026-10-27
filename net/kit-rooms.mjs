@@ -11,7 +11,7 @@
 // HTTP, under public_base's path (/kit/), CORS for allow_origins:
 //   POST rooms {site, game?, sha256?, room?}  (or GET rooms?site=...)
 //     site: the copy's page, https://owner.github.io/repo/; game: fireplace
-//     (default), party, arena, bumper or golf; sha256: the page's own wasm's,
+//     (default), party, arena, flight, bumper or golf; sha256: the page's own wasm's,
 //     so a page with a stale or newer build is told rather than refused by the
 //     relay; room: an invite's room, joined if it is open, has a seat and runs
 //     the same wasm. -> {room, url, hash, hash_url, game, game_sha256, players,
@@ -41,7 +41,7 @@ import { isMain } from '../tools/main.mjs';
 // where each game's wasm is on a site (tools/site.mjs copies build/ as it is)
 export const GAMES = {
   fireplace: 'build/fireplace/game.wasm', party: 'build/party/game.wasm', arena: 'build/arena/game.wasm',
-  bumper: 'build/bumper/game.wasm', golf: 'build/game.wasm',
+  flight: 'build/flight/game.wasm', bumper: 'build/bumper/game.wasm', golf: 'build/game.wasm',
 };
 
 const DEFAULTS = {

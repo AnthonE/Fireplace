@@ -11,7 +11,7 @@ relaxed SIMD. That file is checked in, so `npm run build` needs no Rust and
 every build stays what it was; CI rebuilds the crate and fails if the two
 differ. The gates test the built wasm, never the Rust.
 
-SUMO RING (minigame 30) is the first: `rust/mg/sumo/src/lib.rs`, 226 lines
+SUMO RING (minigame 40) is the first: `rust/mg/sumo/src/lib.rs`, 226 lines
 of Rust for six hooks (start, begin and out are left empty). A round ring
 over the sea, bumps on; posts orbit it, swinging 12 s one way and then back,
 and knock away any ball they meet at 9 m/s; from 20 s the ring shrinks over
@@ -128,3 +128,11 @@ or an index out of bounds traps the sim.
   rebuild, the generated constants, the converter, and every refusal above.
 - `node tools/new-mg.mjs zring zr "Z RING" --rust` on a copy: the scaffold
   builds and its two tests pass.
+- Merged with main's ten minigames (30 to 39), SUMO RING moved from 30 to 40
+  and its FX kinds to its own block (192 to 194); `node tools/rust.mjs`
+  rewrote only those three literals (the rest of the layout it bakes in had
+  not moved), and `--check` agrees. Golf, the arena, flight and bumper balls
+  build to main's bytes, release and debug; Party's wasm grows 188,355 B to
+  190,883 B. Its log of 16 AI balls (`--mg 40`) equal in all 27
+  configurations; forced online, Chrome and 15 AI balls, 944 hashes, all
+  equal; `npm test`, 949 tests, all pass.
