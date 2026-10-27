@@ -8,7 +8,7 @@ sit down: the camera closes in on the TV until its glass fills the screen, and
 you're in whatever the room is playing. When a game ends it pulls back to the
 room, and the TV shows the marshmallows and what's on next; then it closes in
 again. The room plays the playlist through: bumper balls (two rounds), party
-(three minigames), the arena (one three-minute match of any of its fourteen
+(three minigames), the arena (one three-minute match of any of its fifteen
 modes, drawn for it), party again, a hole of golf, and round
 again; the top three of each game get 3, 2 and 1 marshmallows. Join any time,
 into whatever is on (or the next round of it); leave any time.

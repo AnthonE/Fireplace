@@ -265,6 +265,27 @@ AI fighters are usually caught to the last in 150 to 200 s; online with 64, 46
 stood at 90 s (5,623 hashes, all equal). `test/arena-evade.test.mjs` (13
 tests).
 
+Escape (mode 14) is one hunter against the room: one fighter in 14 (at least
+one) is drawn the hunter as play starts, in the juggernaut's gold, with its
+sword and its 12.5 m/s legs, at the spawn point farthest from everyone. The
+rest have no guns; their melee is a shove that knocks the hunter down for 1.5
+s, once in 40 s each, and it shrugs shoves off for 2 s after. The hunter's
+swing downs you (Evade's crawl); a friend holding still by you for 3 s gets
+you up, the hunter holding still over you for 2 s finishes you, and 30 s down
+you bleed out. Terminals stand on the map's objective spots and pads, one for
+every three survivors (three at least). Hold still within 2 m of one to hack
+it: 50 s alone, faster with friends. While it's hacked its screen flickers and
+the hunter's HUD marks the noise. Once two in three are hacked, or with a
+minute left, two exits open on the ground, and reaching one gets you out. It's
+over when nobody is left in it, or at 4:00 (3:00 in Fireplace, the exits open
+at 2:00). The escaped place first by order, then the hunter by survivors
+finished, then the rest. Nothing hurts anybody: the kit's optional hurt hook
+takes every blow. The terminals live in `AO`, and both the downed and the
+stunned hunter are `PF_DOWN`, so the prediction runs every crawl. Matches of 8
+or 16 AI fighters run 57 to 144 s, 2 of 7 to 13 of 15 survivors escaping;
+online with 64, 28 escaped in 90 s (5,623 hashes, all equal).
+`test/arena-escape.test.mjs` (13 tests).
+
 ## Teams
 
 Red against blue, in eight more modes on the same build: Team Slayer, Capture
