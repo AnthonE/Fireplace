@@ -84,7 +84,7 @@ export const HC_DIST = 0; // byte offset in PG_S, HC_GG f32
 export const HC_PTS = 0xd40; // byte offset in PG_S, HC_KMAX x 2 f32
 export const HC_VERT = 0x1140; // byte offset in PG_S, HC_VMAX x 2 f32
 export const HC_CELLS = 0; // byte offset in PG_BIG, 256 x HC_GG u16 (420.5 KiB)
-// Its FX kinds are FX_MG + 4 * MG_HONEY + k, 172 to 175.
-export const HC_FX_STROKE = 172; // the prediction's own ring only: its ball cracked candy; owner the ball, shot 1 if the line too, at its centre, size the stroke's radius
-export const HC_FX_CRACK = 173; // candy cracks under a ball (the confirmed world, every 16th tick of it): owner, the cells as shot, size the radius
-export const HC_FX_HOME = 174; // a ball traced it all: its order from 1 as shot, at the start mark, seconds into play as size
+// Its FX kinds are FX_MG + 4 * MG_HONEY + k, 176 to 179.
+export const HC_FX_STROKE = 176; // the prediction's own ring only: its ball cracked candy; owner the ball, shot 1 if the line too, at its centre, size the stroke's radius
+export const HC_FX_CRACK = 177; // candy cracks under a ball (the confirmed world, every 16th tick of it): owner, the cells as shot, size the radius
+export const HC_FX_HOME = 178; // a ball traced it all: its order from 1 as shot, at the start mark, seconds into play as size

@@ -67,6 +67,6 @@ export const SL_REC = 128; // 8 B a slot: u8 the last to slap it + 1 (0 none), u
 // the tick into play of its last swing's press + 1 (0 none).
 export const SL_M_IN = 4;
 // FX kinds, FX_MG + 4 * MG_SLAP + k.
-export const SL_FX_SLAP = 156; // a slap lands: owner the slapper, shot the ball slapped (255 a miss), at it (a miss: the glove), size the fling (m/s)
-export const SL_FX_SCORE = 157; // a knock-off scores: owner the scorer, shot the fallen, at the fallen, size the points
-export const SL_FX_CALL = 158; // the last 15 s: double points; owner 255, at the middle
+export const SL_FX_SLAP = 160; // a slap lands: owner the slapper, shot the ball slapped (255 a miss), at it (a miss: the glove), size the fling (m/s)
+export const SL_FX_SCORE = 161; // a knock-off scores: owner the scorer, shot the fallen, at the fallen, size the points
+export const SL_FX_CALL = 162; // the last 15 s: double points; owner 255, at the middle

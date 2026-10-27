@@ -95,7 +95,7 @@ export const MI_LIST = 1088; // u8 x 64: the live rooms, a rollover's scratch
 export const MI_U = 1152; // f32 a slot: how far into its room it was at the last slam, out from the middle
 export const MI_TRIM = 2176; // u8 a slot: trimmed from a room over the number at the last slam
 // FX kinds, FX_MG + 4 * MG_MINGLE + k: owner 255, at the middle (but a bonk).
-export const MI_FX_MUSIC = 168; // the music starts: shot the cycle, size the rooms it will open
-export const MI_FX_CALL = 169; // the music stops, the doors open: shot the number, size the scramble in ticks
-export const MI_FX_SLAM = 170; // the doors slam: shot the balls safe (0: nobody made it, nobody is out), size the balls out
-export const MI_FX_BONK = 171; // owner into a wall (its bank's ring), shot the room, at the ball, size m/s into it
+export const MI_FX_MUSIC = 172; // the music starts: shot the cycle, size the rooms it will open
+export const MI_FX_CALL = 173; // the music stops, the doors open: shot the number, size the scramble in ticks
+export const MI_FX_SLAM = 174; // the doors slam: shot the balls safe (0: nobody made it, nobody is out), size the balls out
+export const MI_FX_BONK = 175; // owner into a wall (its bank's ring), shot the room, at the ball, size m/s into it
