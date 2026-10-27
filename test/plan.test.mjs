@@ -89,6 +89,10 @@ test('the prompt, the workflow and the template agree on the first run and on Ru
   assert.match(prompt, /node tools\/new-mg\.mjs <key> <prefix> "<NAME>" --rust/, 'the Rust minigame paragraph');
   assert.match(prompt, /node tools\/rust\.mjs/);
   assert.match(flow, /rustup toolchain install 1\.97\.0/, 'the build job has the rustc the checked-in WAT names');
+  assert.equal((flow.match(/sh \.github\/elo\/claude-key\.sh/g) || []).length, 2, 'both jobs pick a key or credits');
+  assert.equal((flow.match(/steps\.secret\.outputs\.key \|\| secrets\.ANTHROPIC_API_KEY/g) || []).length, 2,
+    'a credits run key is handed to Claude Code in both jobs');
+  assert.match(flow, /id-token: write/, 'the OIDC token credits are paid with');
   assert.match(prompt, /node tools\/new-mg\.mjs/);
   assert.match(prompt, /node \.github\/elo\/plan\.mjs check \. --answers \.elo-plan\/answers\.json/);
   assert.match(flow, /anthropics\/claude-code-action@v\d+\.\d+\.\d+/, 'the action pinned to a release');

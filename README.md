@@ -21,12 +21,16 @@ its own web page, a plan for your game, and Claude to help build it.
 
 1. **Copy it.** Press **Use this template** at the top of this page, then
    **Create a new repository**, named after your game.
-2. **Add Claude (optional).** In your new repo, **Settings > Secrets and
-   variables > Actions > New repository secret**: `ANTHROPIC_API_KEY` (a key
-   from [console.anthropic.com](https://console.anthropic.com)) or
+2. **Add Claude (optional).** Either sign in with GitHub on
+   [Elo Pros](https://elopros.com/login.html) and add credits on the
+   [dev console](https://elopros.com/dev-console.html#credits): Claude is
+   paid by the token from your balance, with nothing to paste here. Or use
+   your own Claude: in your new repo, **Settings > Secrets and variables >
+   Actions > New repository secret**: `ANTHROPIC_API_KEY` (a key from
+   [console.anthropic.com](https://console.anthropic.com)) or
    `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, if you have a Claude
-   plan). Then **Settings > Actions > General**, tick "Allow GitHub Actions
-   to create and approve pull requests". It runs on your own Claude usage.
+   plan). Either way, **Settings > Actions > General**, tick "Allow GitHub
+   Actions to create and approve pull requests".
 3. **Plan your game.** **Issues > New issue > Plan my game**, and answer the
    questions. Claude names your copy after your game, writes its design and a
    step-by-step plan as a pull request, and opens your first steps as issues.
