@@ -2,7 +2,7 @@
 
 ![Fruit Chute with 128 balls: the belt carrying everyone down, fruit rolling down the lanes](p1-chute-128.png)
 
-Bumper balls' ball, and every round a different minigame: thirty-seven of them,
+Bumper balls' ball, and every round a different minigame: thirty-eight of them,
 after Mario Party, Fall Guys, Squid Game and Roblox, up to 256 in a room.
 `src/` built with `BUMPER` and `PARTY` set (`build/party/game.wasm`), with the
 same lockstep, relays, keyframes, prediction, spectators and replays.
@@ -60,6 +60,7 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 34 | MINGLE | last one in | a carousel in the middle of a hall of rooms, one behind each side through a 3.2 m door; it turns while the music plays (4 to 8 s, 4 m/s at its rim) and carries everyone round, and the hall's floor sweeps anyone off it back on; the music stops, a number is called, 2 to 6 and under half the balls left (1 under five), and doors open on rooms for half the balls at most, never a place for everyone; 10 s later, 0.75 s less a song down to 5 s, they slam: every ball not in a room holding exactly the number is out; if no room holds it, a room over it keeps its deepest; the rooms then shove everyone out at 7 m/s, and rooms close for good as the crowd thins; the last two play for the back of one room for one; bumps on |
 | 35 | HONEYCOMB | finishing order | a disc of honeycomb candy over the void for every ball, 12.8 m across in a grid with 3.15 m gaps, and pressed into each the round's shape, turned the seed's way: a circle, a triangle, a star or an umbrella (29 to 43 m round); trace its outline by rolling along it in order from a start mark and back; candy under your ball cracks off the line (within 0.2 m plus 0.09 s of your speed), and the line too above 1.8 m/s (3.5 flat out), holds 0.56 s (0.22 s by 60 s) and drops for good, and over a hole you fall through; the line thins from 1.5 m wide to 0.7 m by 40 s; the umbrella's handle is traced down and back up, so rushing it breaks the way back; the first all the way round wins, the rest place by how much they traced, the fallen by where they fell; 75 s; no bumps, no hop |
 | 36 | DODGEBALL | the last side in play | red against blue on a court in two halves (8.9 m deep for up to 8, 36 m² a ball of the bigger side past that), split by a centre line nobody crosses, with each side's jail behind the other's back line; a dodgeball for every 4 balls lies on the line at the start; roll over one to hold it, click to throw it the way you face at 18 m/s, slightly arcing; a throw that hits a foe before touching the floor or a wall sends it to jail, then it's loose; with nothing held, click as an enemy throw comes within reach (5.6 m, about 0.23 s) to catch it: the thrower goes to jail and your longest-jailed teammate comes back; a miss locks your catch 0.5 s; from jail you can throw what rolls in, and a hit brings you back; the jails' floors roll stray balls back out; at the 110 s clock the side with more in play wins, every ball of it 1st |
+| 37 | VOLLEYBALL | the first side to the target | red against blue on a court split by a net 3 m high that no ball crosses (7.5 m deep for up to 6 balls, 32 m² a ball past that, to 18 m deep and then wider), walled round; a volleyball for every 8 balls, 1.2 m in radius and falling 9 m/s², served in turn from each back line over the net; roll into one and it goes up 6 m/s and on the way you roll, faster the faster you roll (1.5 m/s standing, straight at the net, to 5); hop into one (the hop is 8 m/s here, your top clears the net) to spike it, 10 to 18 m/s, flatter but from up high, at least three quarters toward the net, unless it comes in faster than 6.5 m/s (then it's a dig, a bump); it comes off the net's face, its top edge and the walls at any height; down on a side's floor it's the other side's point, two of its own to the ball that sent it there, and the scorer serves again 2 s on; a side's fourth touch in a row is the other side's point; every touch is a point of your own, which places the losers; first to 15 (4 more for each volleyball past the first) or the most at 120 s; draws allowed |
 
 **How it fits on the engine.** `src/party.wat` is the framework: the rounds,
 the rotation, joins, the ball's roll over any stage, outs, places and points.
@@ -117,7 +118,7 @@ danger, its goal and the room from rivals, and lets a minigame steer outright
 builds' bytes unchanged, rounds laid out for 1 to 256 balls, the rotation, a
 forced minigame, both kinds of end, places and points, late joiners, the
 prediction, and rounds of AI balls equal on every tick on 1 and 4 threads.
-Each minigame has its own file (`test/mg-<key>.test.mjs`, 455 tests in all):
+Each minigame has its own file (`test/mg-<key>.test.mjs`, 468 tests in all):
 its stage for 1, 8, 64 and 256 balls, each rule, the prediction through its
 hazards, and rounds of 8 and 64 AI balls on the debug build, equal on 1 and 4
 threads. Every minigame's recorded log, 20,000 ticks of 16 AI balls, replays
@@ -205,7 +206,7 @@ title card, the board and the result; `client/party-bot.mjs`'s `team()` hands
 a brain its teammates and its foes. Every other minigame steps the bits it
 did: a rotation log of 60,000 ticks (six minigames) and forced logs of
 Slap Happy and Tag replay to the same hash on every tick before and after.
-`test/party-teams.test.mjs` (8 tests) covers it. Dodgeball (36) is the first
-minigame on it.
+`test/party-teams.test.mjs` (8 tests) covers it. Dodgeball (36) and
+Volleyball (37) are on it.
 
 Not done yet: power-ups in more of the minigames.

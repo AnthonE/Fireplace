@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-53 games, each gated online: golf, bumper balls, the arena's fourteen modes
+54 games, each gated online: golf, bumper balls, the arena's fourteen modes
 (Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 37 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 38 minigames. Fireplace plays them in turn.
 
 What a page downloads, gzipped, everything it imports included:
 
@@ -56,7 +56,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 37 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War, Volleyfall |
+| Party (the ball) | 38 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War |
 | Arena (the fighter) | 14 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
@@ -201,8 +201,8 @@ marshmallows).
 1. Teams; the champion kit and FFA ARAM; Team Slayer, CTF, Oddball and King of
    the Hill in the arena. The arena's half is done (its teams, the kit and the
    four modes: one session of about five and a half hours, up to four agents at once);
-   Party's teams are in, with Dodgeball; their other games (Fall Ball, Egg
-   Scramble, Tug o' War, Volleyfall), the champion kit and FFA ARAM are left.
+   Party's teams are in, with Dodgeball and Volleyball; their other games
+   (Fall Ball, Egg Scramble, Tug o' War), the champion kit and FFA ARAM are left.
 2. The grid kit: Tetris 99, Bomberman 128, Snake, Puyo 99.
 3. The vehicle kit and karts.
 4. Then waves of 12 to 16 Party and arena games.
