@@ -25,6 +25,14 @@
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
       "check": "machine"
+    },
+    {
+      "id": "fireplace-map",
+      "title": "a map for the arena or Dogfight",
+      "what": "A new place to fight: a folder in maps/ (map.json, height.png, surface.png), drawn in the browser with client/map-editor.html: shape and paint the ground, drag out walls and roofs, place spawns, weapon pads, teleporters, flags, hills and race gates. node net/play.mjs --arena --map <folder> plays it with bots.",
+      "deliverable": "PR: accepted into AnthonE/Fireplace",
+      "read_first": "CONTRIBUTING.md",
+      "check": "review"
     }
   ],
   "mods": [

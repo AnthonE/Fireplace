@@ -26,6 +26,8 @@ node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --bumper | --party
 node net/run-arena.mjs / run-flight.mjs / run-bumper.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
+node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
+node net/play.mjs --arena --map <name>      # build the arena on it and play (--flight --map for Dogfight's)
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -100,7 +102,11 @@ shell whose own command line contains the name: it kills that shell.
   `MG_CONSTS` is, and read in JS from `src/am/consts.mjs`), its
   client module `client/am/<key>.mjs` (drawing, HUD, news, board, the AI
   fighter's goal), its tests `test/arena-<key>.test.mjs`. The map's
-  objectives (flags, skull, hills) are `MAP_OBJ`, from `map.json`.
+  objectives (flags, skull, hills) are `MAP_OBJ`, from `map.json`. The
+  map compiler's core (`tools/map-compile.mjs`, with `tools/png-codec.mjs`)
+  imports nothing from Node, because the map editor
+  (`client/map-editor.html`) runs it in the page to check a map as it is
+  drawn; `tools/map.mjs` and `tools/png.mjs` give it the disk and zlib.
 - Flight (`src/flight.wat`) is the arena build with `#if FLIGHT` where a
   ship differs: `$move` hands its tick to `$f_move`, charge shots and bombs
   fly in `$f_proj`, `$a_spawn` ends in `$f_spawn`, no pads, the match picks
@@ -108,8 +114,8 @@ shell whose own command line contains the name: it kills that shell.
   to the assembler, as `MG_CONSTS`); a ship's own fields (`F_*`) sit over
   the arena's gun bytes in the record, so arena code that arms a fighter
   (`$a_arm`, pickups) must stay off a ship. A ship's position is its
-  centre. It always builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
-  drawn by `tools/skyways.mjs`); `MAP_CEILING` holds its ceiling. Its own
+  centre. It builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
+  drawn by `tools/skyways.mjs`; `--flight-map` gives it another); `MAP_CEILING` holds its ceiling. Its own
   mode, Ring Race (`M_RACE`, 12), sits past the arena's `MODES` so the
   arena's build never sees it: its clock is `FLIGHT_TICKS`, its course the
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships

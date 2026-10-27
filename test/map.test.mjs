@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { encodePng, decodePng } from '../tools/png.mjs';
-import { compileMap, dataSegment, half } from '../tools/map.mjs';
+import { compileMap, compileSpec, dataSegment, half, formatSpec, mapDir, SURFACES, SURFACE_RGB } from '../tools/map.mjs';
+import { decode } from '../tools/png-codec.mjs';
 import { expand, assemble } from '../tools/asm.mjs';
 import { newMemory, instantiate, Sim } from '../harness/core.mjs';
 import { View, arenaWord } from '../src/arena-view.mjs';
@@ -169,4 +171,28 @@ test('a map that leaves its objectives out gets them: flags an eighth in from th
   // the halves as the sim reckons them, in f32: strictly nearer red's flag is red's, strictly nearer blue's blue's, a tie nobody's
   const fl = [[491, 512], [533, 512]];
   assert.deepEqual([half(511.9, 0, fl), half(512, 0, fl), half(512.1, 900, fl), half(400, 512, fl), half(600, 512, fl)], [0, 2, 1, 0, 1]);
+});
+
+// The map editor (client/map-editor.html) runs the compiler and the PNG codec
+// in the page, and holds a map as 16-bit ground at 1/256 m and a surface by
+// index, which is what it saves.
+test('the map editor\'s half: no Node in it, and what it holds and saves builds the same map', async () => {
+  for (const f of ['tools/map-compile.mjs', 'tools/png-codec.mjs']) assert.doesNotMatch(readFileSync(f, 'utf8'), /from 'node:/, `${f} must load in a page`);
+  for (const name of ['canyon', 'skyways']) {
+    const dir = mapDir(name), text = readFileSync(join(dir, 'map.json'), 'utf8');
+    assert.equal(formatSpec(JSON.parse(text)), text, `${name}: map.json as the editor writes it`);
+    const m = compileMap(dir);
+    // decoded with an inflate that answers later, as the browser's does
+    const later = async (z) => inflateSync(z);
+    const img = await decode(readFileSync(join(dir, 'height.png')), later);
+    assert.deepEqual([...img.data.slice(0, 64)], [...decodePng(readFileSync(join(dir, 'height.png'))).data.slice(0, 64)]);
+    // the editor's copy: ground at 1/256 m (m.heights), surface colours from indices (m.surf)
+    const spec = JSON.parse(text), pal = SURFACES.map((n) => SURFACE_RGB[n]);
+    Object.assign(spec.terrain, { height: 'height.png', scale: 1 / 256, base: 0, surface: 'surface.png' });
+    const [W, H] = m.size, rgb = new Uint8Array(W * H * 3);
+    for (let i = 0; i < W * H; i++) rgb.set(pal[m.surf[i]], 3 * i);
+    const again = compileSpec(spec, { height: { width: W, height: H, channels: 1, depth: 16, data: m.heights }, surface: { width: W, height: H, channels: 3, depth: 8, data: rgb } });
+    assert.deepEqual(again.bytes, m.bytes, `${name}: the same segment`);
+    assert.deepEqual(again.consts, m.consts);
+  }
 });

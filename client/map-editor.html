@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map Editor</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #0b0d14; --panel: #131722; --line: #262c3b; --ink: #cfd3e0; --dim: #7d8499; --hot: #ffcf5a; --bad: #ff7a6b; --ok: #8fd18a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-monospace, monospace; overflow: hidden; }
+  body { display: grid; grid-template: "top top" auto "map side" 1fr "foot side" auto / 1fr 340px; }
+  header { grid-area: top; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+  header b { color: var(--hot); margin-right: 6px; }
+  #wrap { grid-area: map; position: relative; min-width: 0; min-height: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  aside { grid-area: side; overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); padding: 8px 10px 24px; }
+  footer { grid-area: foot; padding: 4px 8px; border-top: 1px solid var(--line); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button, select, input { font: inherit; color: var(--ink); background: #1b2030; border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px; }
+  button { cursor: pointer; }
+  button:hover { border-color: #3a4258; }
+  button.on { background: #3b3220; border-color: var(--hot); color: var(--hot); }
+  input[type=number] { width: 74px; }
+  input[type=text] { width: 100%; }
+  input[type=range] { width: 90px; padding: 0; vertical-align: middle; }
+  h3 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  h3:first-child { margin-top: 2px; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 4px 0; }
+  .row > label, .row > span > label { color: var(--dim); }
+  .row > label { min-width: 40px; }
+  .hint { color: var(--dim); margin: 4px 0; }
+  .bad { color: var(--bad); white-space: pre-wrap; }
+  .ok { color: var(--ok); }
+  code { color: var(--hot); user-select: all; word-break: break-all; }
+  .tools { display: flex; gap: 3px; }
+  @media (max-width: 760px) {
+    body { grid-template: "top" auto "map" 1fr "foot" auto "side" 40vh / 1fr; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+<header>
+  <b>Map Editor</b>
+  <select id="open" title="open a map">
+    <option value="">open…</option>
+    <option value="canyon">Box Canyon</option>
+    <option value="skyways">Skyways</option>
+    <option value="new">a new map</option>
+    <option value="folder">a folder…</option>
+  </select>
+  <button id="save" title="write map.json, height.png and surface.png (Ctrl+S)">save</button>
+  <span class="sep"></span>
+  <span class="tools" id="tools"></span>
+  <span class="sep"></span>
+  <span id="brush">
+    <label>size <input id="radius" type="range" min="2" max="60" value="12"></label>
+    <label>strength <input id="strength" type="range" min="1" max="100" value="30"></label>
+    <select id="surface"></select>
+  </span>
+  <span id="placing">
+    <select id="material" title="a new box's material"></select>
+    <select id="weapon" title="a new pad's weapon"></select>
+  </span>
+  <span class="sep"></span>
+  <label>snap <select id="snap"><option>0.1</option><option selected>0.5</option><option>1</option><option>2</option></select> m</label>
+  <button id="undo" title="Ctrl+Z">undo</button>
+  <button id="redo" title="Ctrl+Shift+Z">redo</button>
+</header>
+<div id="wrap"><canvas id="view"></canvas></div>
+<aside id="side"></aside>
+<footer id="foot">loading…</footer>
+<script type="module" src="./map-editor.mjs"></script>
