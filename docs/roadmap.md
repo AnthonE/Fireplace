@@ -194,9 +194,12 @@ The wrapper, ours first:
 2. Sign-in: built. The page's button calls `Elo.signIn({nonce})` with a
    nonce the relay hands out, and `net/relay.ts` has Elo Pros check it and
    keeps the wallet as the slot's player ([wire.md](wire.md)). Guests still play.
-3. Names, faces and skins: the relay reads `/api/face/{wallet}` and
-   `/api/items/of/{wallet}` and sends them beside the sim, never in it, so the
-   hashed world is the same with or without them. Skins on chain become ball
+3. Names, faces and skins. Names are built: the relay reads
+   `/api/face/{wallet}` at each sign-in and sends the name beside the sim,
+   never in it ([wire.md](wire.md), hello flag 16), and every game's labels
+   use it. Faces (the picture) and skins on chain are next: the relay reads
+   `/api/items/of/{wallet}?game=fireplace` once `EloItem:FIREPLACE` exists
+   and refuses an owned look a slot doesn't hold, and skins become ball
    stripes and riders' hats.
 4. Presence: the relay serves `online.json` (and the operator a
    `servers.json`), so playtime and friends' join links work.

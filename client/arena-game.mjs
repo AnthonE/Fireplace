@@ -219,7 +219,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         break;
       }
       case L.FX_KILL: {
-        const name = (p) => (p === slot ? 'YOU' : `P${p + 1}`);
+        const name = (p) => (p === slot ? 'YOU' : host.label(p));
         const md = view.mode();
         // what a carrier carries (its kit module's carry: a flag, the skull, the bomb) swung by it, or the bomb going off
         const cause = f.size === L.KILL_CARRY ? (AMC[md.mode]?.carry ?? 'flag').toUpperCase() : SHORT[f.size] || '?';
@@ -242,7 +242,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       }
       case L.FX_MODE: {
         // the mode's news: sides changed, rungs climbed, a winner
-        const name = (p) => (p === slot ? 'YOU' : `P${p + 1}`);
+        const name = (p) => (p === slot ? 'YOU' : host.label(p));
         const own = f.owner === slot;
         const big = (text, color) => { if (own) banner = { text, until: now + 2500, color }; };
         // a team mode's own news, to its kit module
@@ -732,7 +732,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (team >= 0) centre(7, WATCH ? `WATCHING P${slot + 1} ON ${SIDE[team]}  < >` : `YOU ARE ON ${SIDE[team]}`, SIDE_C[team]);
     }
     if (h.state === L.H_PLAY) centre(0, clock(left), left < 30 * 125 ? C.RED : C.WHITE);
-    const who = WATCH ? 'P' + (slot + 1) : 'YOU';
+    const who = WATCH ? host.label(slot) : 'YOU';
     const board = h.state === L.H_OVER || (held.has('Tab') && h.live);
     // the team score bar under the shields: RED 12  50  9 BLUE over two bars meeting in the middle, your side's framed
     if (md.teamed && h.state === L.H_PLAY && !board) {
@@ -765,7 +765,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       put(t, COLS, 1, 0, `${who}: RUNG ${r + 1} OF ${RUNGS}  ${SHORT[L.LADDER[r]]}`, C.YELLOW);
       put(t, COLS, 1, 1, r + 1 < RUNGS ? `NEXT ${SHORT[L.LADDER[r + 1]]}` : 'A SWORD KILL WINS', C.GREY);
       const lead = md.leader >= 0 ? view.fighter(md.leader) : null;
-      if (lead) put(t, COLS, 1, 2, lead.slot === f.slot ? 'IN THE LEAD' : `P${lead.slot + 1} LEADS ON ${Math.min(lead.rung + 1, RUNGS)}`, C.GREY);
+      if (lead) put(t, COLS, 1, 2, lead.slot === f.slot ? 'IN THE LEAD' : `${host.label(lead.slot)} LEADS ON ${Math.min(lead.rung + 1, RUNGS)}`, C.GREY);
     } else if (f?.live && m === L.M_JUGGERNAUT) {
       put(t, COLS, 1, 0, `${who} ${f.points} POINT${f.points === 1 ? '' : 'S'}${f.jugg ? '  JUGGERNAUT' : ''}`, f.jugg ? C.ORANGE : C.YELLOW);
       const j = md.leader >= 0 ? view.fighter(md.leader) : null;
@@ -775,8 +775,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       // (a kit module that has the top left to itself, kit.own, keeps no kills: Evade's)
       if (!kit?.own) {
         put(t, COLS, 1, 0, `${who} ${f.kills}`, C.YELLOW);
-        if (leader && leader.slot !== f.slot) put(t, COLS, 1, 1, `P${leader.slot + 1} ${leader.kills}`, C.GREY);
-        else if (list[1]) put(t, COLS, 1, 1, `P${list[1].slot + 1} ${list[1].kills}`, C.GREY);
+        if (leader && leader.slot !== f.slot) put(t, COLS, 1, 1, `${host.label(leader.slot)} ${leader.kills}`, C.GREY);
+        else if (list[1]) put(t, COLS, 1, 1, `${host.label(list[1].slot)} ${list[1].kills}`, C.GREY);
       }
       // a kit mode without sides: its own lines under them (rows 2 to 4; with kit.own, 0 to 4)
       const s = W / 320;
@@ -821,7 +821,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       const over = h.state === L.H_OVER;
       let title = `${md.name}  ${list.length} PLAYERS`;
       if (over) {
-        const won = top ? (top.slot === slot ? 'YOU WIN' : `P${top.slot + 1} WINS`) : '';
+        const won = top ? (top.slot === slot ? 'YOU WIN' : `${host.label(top.slot)} WINS`) : '';
         const alive = list.filter((o) => !o.zombie).length;
         title = m === L.M_INFECTION ? `GAME OVER  ${alive ? `${alive} HUMAN${alive === 1 ? '' : 'S'} SURVIVED` : 'THE ZOMBIES WIN'}` : `GAME OVER  ${kit?.over?.(view) ?? won}`;
       }

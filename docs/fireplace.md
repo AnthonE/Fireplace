@@ -239,5 +239,9 @@ Juggernaut from 423 s, party from 612 s, golf from 846 s). On SwiftShader at
 the build of `game.wasm` it was recorded on: after a sim change, record again,
 plan it and move the shots.
 
-Not done yet: a vote for what's next, names, and a way to lean back from the
-TV mid-game.
+A signed-in player goes by the name their wallet has on Elo Pros, in every
+game's labels and the marshmallow board; the relay looks it up and sends it
+beside the sim ([wire.md](wire.md)). A guest is P1, P2, ...
+
+Not done yet: a vote for what's next, and a way to lean back from the TV
+mid-game.

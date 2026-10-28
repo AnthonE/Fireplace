@@ -92,7 +92,7 @@ export const CELLOF = 0x1f8000; // u16[BALL_CAP], the ball's bucket, 0xffff for 
 // are awake, never hashed: bucket b's balls are SI[SBOUND[b], SBOUND[b + 1]),
 // in ascending index, with their positions copied beside them. Buckets number
 // x fastest, so a row of three cells is one run of the arrays. It sits past
-// the client's slots at NET, which use its first 2 KiB.
+// the client's slots at NET, which use its first 12 KiB.
 export const SBOUND = 0x300000; // u16[NCELL + 2]
 export const SX = 0x320000; // f32[BALL_CAP] each, by sorted position
 export const SY = 0x330000;
@@ -157,6 +157,9 @@ export const CL_HEARD = NET + 208; // u32 closed ticks heard, by any of them
 // Looks (client/looks.mjs), drawing only: the relay carries them beside the ticks.
 export const CL_LOOK = NET + 212; // u32 this player's look, written by the page; the net worker sends it when it changes
 export const CL_LOOKS = NET + 2048; // u32[256] every slot's look as the relay last sent it (0: the house look)
+// Names, drawing only too: each signed-in slot's, as the relay last sent it (net/wire.mjs T_NAMES)
+export const NAME_BYTES = 16; // net/wire.mjs NAME_MAX: the font's characters, 0 after the last
+export const CL_NAMES = NET + 8192; // u8[256 * NAME_BYTES], every slot's name ('' for none: P1, P2, ...)
 // Input words by server tick (& 255), written by the net worker as it samples them:
 export const CL_WORDS = NET + 1024;
 export const PLAY_BASE = 2; // ticks of playout delay past the earliest arrival, before jitter

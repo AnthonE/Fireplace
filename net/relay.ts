@@ -144,6 +144,7 @@ type Slot = {
   token: number; // a native session's, 0 for WebTransport
   watch: boolean; // a spectator: no slot (slot -1), no words
   looks?: boolean; // its hello asked for the room's looks (W.HELLO_LOOKS)
+  names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
   wallet?: string; // the wallet signed in on this slot
   since?: number; // when it signed in, unix seconds
@@ -179,6 +180,22 @@ const LOOKS_MS = 250;
 const lookTable = () => [...looks.keys()].filter((p) => looks[p]).map((p) => [p, looks[p]] as [number, number]);
 const sendLooks = (s: Slot, pairs: [number, number][]) => { if (s.looks && pairs.length) s.ctl.write(W.encodeLooks(pairs)).catch(() => {}); };
 const setLook = (p: number, look: number) => { if (looks[p] !== look >>> 0) { looks[p] = look >>> 0; lookDirty.add(p); } };
+// Each signed-in slot's name, as the wallet's face on Elo Pros has it (GET
+// /api/face/<wallet>): drawing only like a look, sent to the sessions that
+// asked (W.HELLO_NAMES), '' for a guest or a wallet with no name.
+const names: string[] = Array(W.NP).fill('');
+const nameDirty = new Set<number>();
+const nameTable = () => names.map((n, p) => [p, n] as [number, string]).filter(([, n]) => n);
+const sendNames = (s: Slot, pairs: [number, string][]) => { if (s.names && pairs.length) s.ctl.write(W.encodeNames(pairs)).catch(() => {}); };
+const setName = (p: number, name: string) => { const n = W.cleanName(name); if (names[p] !== n) { names[p] = n; nameDirty.add(p); } };
+async function nameOf(s: Slot, wallet: string) {
+  try {
+    const r = await fetch(`${eloOrigin}/api/face/${wallet}`, { signal: AbortSignal.timeout(8000) });
+    const j = r.ok ? await r.json() : null;
+    // the slot may have emptied, or signed in as another wallet, while Elo Pros answered
+    if (!gone(s) && s.wallet === wallet && typeof j?.name === 'string') setName(s.slot, j.name);
+  } catch (e) { log(`face: ${wallet}: ${e}`); }
+}
 // Who was signed in on each slot, and over which ticks (to is the leave's
 // tick): a result reads it at the tick its game ended, which the referee
 // reports a moment later. The newest SEATS are kept.
@@ -372,6 +389,8 @@ async function signIn(s: Slot, message: string, signature: string) {
     s.wallet = wallet;
     s.since = Math.floor(Date.now() / 1000);
     seats.push({ slot: s.slot, wallet, from: closed + 1, to: Infinity });
+    setName(s.slot, '');
+    nameOf(s, wallet);
     if (seats.length > SEATS) seats.splice(0, seats.length - SEATS);
     stats.elo.signed++;
   } else if (status === Elo.SIGNIN.UNCHECKED) stats.elo.unchecked++;
@@ -575,7 +594,7 @@ function closeTick(T: number, now: number) {
   for (let p = 0; p < W.NP; p++) {
     const s = slots[p];
     if (!s || T < s.joinTick) continue;
-    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); continue; }
+    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setName(p, ''); continue; }
     if (s.leaveTick === Infinity && now - Math.max(s.lastRecv, stallEnd) > SILENT_MS) {
       stats.leaves.silent = (stats.leaves.silent || 0) + 1;
       stats.leaveAt.push(Number(((now - E) / 1000).toFixed(2)));
@@ -708,7 +727,7 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, names: hello!.names });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
@@ -722,6 +741,7 @@ async function admit(d: Door) {
   await d.sw.write(W.encodeWelcome({ slot: p, maxDatagram, joinTick, seed: roomSeed, serverTick: Math.floor(serverNow()) + 1, roomStart, token: d.token, watch }));
   log(`${watch ? 'a spectator' : `slot ${p}`} joins at ${joinTick}, room ${roomStart}${d.token ? ' (native)' : ''}`);
   sendLooks(s, lookTable());
+  sendNames(s, nameTable());
   if (hello!.signin && !watch) {
     if (signinDomains.length) { s.nonce = Elo.newNonce(); d.sw.write(W.encodeSigninNonce(s.nonce)).catch(() => {}); }
     else d.sw.write(W.encodeSigned(Elo.SIGNIN.OFF)).catch(() => {});
@@ -1063,17 +1083,29 @@ function writeOnline() {
   const online = slots.filter((s) => s && !s.ghost && s.wallet).map((s) => ({ wallet: s!.wallet, since: s!.since }));
   return writeWhole(onlinePath, { at: Math.floor(Date.now() / 1000), online }, 'online');
 }
+// the writes in flight, so finish() can let them land before it removes the files
+const writing = new Set<Promise<void>>();
 function writeWhole(path: string, doc: unknown, what: string) {
   const tmp = `${path}.tmp`;
-  return Deno.writeTextFile(tmp, JSON.stringify(doc) + '\n').then(() => Deno.rename(tmp, path)).catch((e) => console.error(`relay: ${what}: ${e}`));
+  const w = Deno.writeTextFile(tmp, JSON.stringify(doc) + '\n').then(() => Deno.rename(tmp, path)).catch((e) => console.error(`relay: ${what}: ${e}`));
+  writing.add(w);
+  w.finally(() => writing.delete(w));
+  return w;
 }
-if (statusPath) { writeStatus(); setInterval(writeStatus, STATUS_MS); }
-if (onlinePath) { writeOnline(); setInterval(writeOnline, STATUS_MS); }
+const fileTimers: ReturnType<typeof setInterval>[] = [];
+if (statusPath) { writeStatus(); fileTimers.push(setInterval(writeStatus, STATUS_MS)); }
+if (onlinePath) { writeOnline(); fileTimers.push(setInterval(writeOnline, STATUS_MS)); }
 setInterval(() => {
   if (!lookDirty.size) return;
   const pairs = [...lookDirty].map((p) => [p, looks[p]] as [number, number]);
   lookDirty.clear();
   for (const s of everyone()) sendLooks(s, pairs);
+}, LOOKS_MS);
+setInterval(() => {
+  if (!nameDirty.size) return;
+  const pairs = [...nameDirty].map((p) => [p, names[p]] as [number, string]);
+  nameDirty.clear();
+  for (const s of everyone()) sendNames(s, pairs);
 }, LOOKS_MS);
 setInterval(() => {
   if (edge || roomStart < 0) return;
@@ -1102,6 +1134,9 @@ async function finish(code = 0) {
   const text = JSON.stringify(summary());
   if (summaryPath) await Deno.writeTextFile(summaryPath, text + '\n');
   else console.log(text);
+  // a write landing after the remove would put the file back: none starts now, and those under way finish first
+  for (const t of fileTimers) clearInterval(t);
+  await Promise.all(writing);
   if (statusPath) await Deno.remove(statusPath).catch(() => {});
   if (onlinePath) await Deno.remove(onlinePath).catch(() => {});
   Deno.exit(code);

@@ -17,6 +17,7 @@ import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
 import { wasmPrefix } from '../net/wire.mjs';
 import { createSound } from './sound.mjs';
+import { slotLabel } from './looks.mjs';
 import { parseImpair } from '../net/impair.js';
 import { relayFor, room } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
@@ -61,6 +62,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   h.set(L.CL_PITCH, 512);
   // a slot's look word (client/looks.mjs): this player's own as picked, the rest as the relay sent them
   h.look = (p) => (p === h.get(L.CL_SLOT) ? h.get(L.CL_LOOK) : h.u32[(L.CL_LOOKS >> 2) + p]) >>> 0;
+  // what a label calls a slot: the name its wallet goes by on Elo Pros, as the relay sent it, or P<n>
+  h.label = (p) => slotLabel(h.u8, p);
   // the prediction's own instance: it writes only PRED
   h.px = (await WebAssembly.instantiate(module, { env: { mem: memory } })).exports;
   const adapter = await navigator.gpu?.requestAdapter();
@@ -104,7 +107,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
       else if (relay) {
         const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
-        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, signin: fireplace }, [ch.port1]);
+        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, names: true, signin: fireplace }, [ch.port1]);
       } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
       h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     };

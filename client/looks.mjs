@@ -11,6 +11,8 @@
 // A look with `unlock` is earned: it opens when that achievement does
 // (client/achievements.mjs), kept in this browser like the achievements.
 
+import * as L from '../src/layout.mjs';
+
 // The ball's patterns, as the bumper and party renderers draw them (case 0)
 export const PATTERN = { BEACH: 0, STRIPES: 1, RIBS: 2, SOLID: 3, METAL: 4, EIGHT: 5 };
 // The hat's styles, as the head is drawn (case 8)
@@ -44,6 +46,22 @@ export const HATS = [
 
 // what a card calls one: THE EIGHT BALL, THE CANDY BALL, THE CROWN
 export const lookName = (x) => `THE ${x.pattern === undefined || /BALL$/.test(x.name) ? x.name : `${x.name} BALL`}`;
+
+// A slot's name, as the relay sent it (net/wire.mjs T_NAMES) into the client's
+// CL_NAMES: '' for a guest, who goes by P1, P2, ... Drawing only, like a look.
+export function writeName(u8, p, name) {
+  const at = L.CL_NAMES + p * L.NAME_BYTES;
+  u8.fill(0, at, at + L.NAME_BYTES);
+  u8.set(new TextEncoder().encode(name).subarray(0, L.NAME_BYTES), at);
+}
+export function nameAt(u8, p) {
+  const at = L.CL_NAMES + p * L.NAME_BYTES;
+  let n = 0;
+  while (n < L.NAME_BYTES && u8[at + n]) n++;
+  return n ? String.fromCharCode(...u8.subarray(at, at + n)) : '';
+}
+// what a label calls slot p: its name, or P<n>
+export const slotLabel = (u8, p) => nameAt(u8, p) || `P${p + 1}`;
 
 // The look word: the ball in the low byte, the hat in the next. 0 is the house look.
 export const packLook = (ball, hat) => ((ball & 255) | ((hat & 255) << 8)) >>> 0;

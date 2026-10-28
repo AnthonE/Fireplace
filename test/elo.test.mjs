@@ -35,6 +35,17 @@ test('the sign-in messages: a hello asks, the relay hands a nonce, the client se
   assert.deepEqual(await W.readControl(sr), { type: W.T_SIGNED, status: Elo.SIGNIN.OFF, address: '' });
 });
 
+test("the names message: a hello asks, the relay sends slot and name pairs, cleaned to what the font draws; '' clears one", async () => {
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: new Uint8Array(8), names: true })).names, true);
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: new Uint8Array(8), looks: true })).names, false);
+  assert.equal(W.cleanName('  ana ü  #3 — a very long name indeed'), 'ANA #3 A VERY LO');
+  assert.equal(W.cleanName('{x}|~'), 'X', 'past the font: braces, bar, tilde dropped');
+  assert.equal(W.cleanName(null), '');
+  assert.ok(W.cleanName('x'.repeat(40)).length <= W.NAME_MAX);
+  const sr = reader(W.encodeNames([[3, 'Lucky 7'], [200, ''], [9, 'a\u0000b']]));
+  assert.deepEqual(await W.readControl(sr), { type: W.T_NAMES, names: [[3, 'LUCKY 7'], [200, ''], [9, 'AB']] });
+});
+
 test("a sign-in's domain and nonce, read off the message the SDK writes; anything else isn't one", () => {
   assert.deepEqual(Elo.parseSignIn(siwe('game.elopros.com', 'abcDEF123456')),
     { domain: 'game.elopros.com', chain: 'evm', address: '0x' + 'ab'.repeat(20), nonce: 'abcDEF123456' });

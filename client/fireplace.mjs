@@ -240,7 +240,7 @@ async function main() {
       const you = x.p === slot;
       if (you) { g2.fillStyle = '#3a2c14'; g2.fillRect(70, y - 6, 500, 28); }
       text(`${list.indexOf(x) + 1}`, 110, y, 4, you ? '#ffcf6a' : '#c9b89a', 'right');
-      text(you ? 'YOU' : `P${x.p + 1}`, 130, y, 4, you ? '#ffcf6a' : '#ffffff');
+      text(you ? 'YOU' : host.label(x.p).slice(0, 9), 130, y, 4, you ? '#ffcf6a' : '#ffffff'); // 9 of the font's 16 px reach the marshmallows at 290
       for (let i = 0; i < Math.min(x.m, 12); i++) { g2.fillStyle = '#f4ecdc'; g2.fillRect(290 + i * 18, y, 12, 14); g2.fillStyle = '#d9cbb0'; g2.fillRect(290 + i * 18, y + 10, 12, 4); }
       if (x.m > 12) text(`+${x.m - 12}`, 290 + 12 * 18 + 4, y, 3, '#c9b89a');
       if (x.got) text(`+${x.got}`, 560, y, 4, '#7fdf7f', 'right');

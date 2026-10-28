@@ -191,7 +191,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   };
   const wingtips = (sh) => [-1, 1].map((k) => [0, 1, 2].map((i) => sh.pos[i] + sh.right[i] * 1.9 * k + sh.nose[i] * 0.4));
   const say = (t, color, now) => { feed.push({ text: t, color, born: now }); if (feed.length > 5) feed.shift(); };
-  const name = (p, slot) => (p === slot ? 'YOU' : `P${p + 1}`);
+  const name = (p, slot) => (p === slot ? 'YOU' : host.label(p));
 
   function show(f, slot, cam, now, mine, dt) {
     const d = Math.hypot(f.pos[0] - cam[0], f.pos[1] - cam[1], f.pos[2] - cam[2]);
@@ -649,7 +649,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (!WATCH && !BOT) centre(9, 'MOUSE AIMS  CLICK LASERS  HOLD RIGHT TO CHARGE  W BOOST  S BRAKE  Q E ROLL  G BOMB', C.GREY);
     }
     if (h.state === L.H_PLAY) centre(0, clock(left), left < 30 * 125 ? C.RED : C.WHITE);
-    const who = WATCH ? 'P' + (slot + 1) : 'YOU';
+    const who = WATCH ? host.label(slot) : 'YOU';
     const board = h.state === L.H_OVER || (held.has('Tab') && h.live);
     if (md.teamed && h.state === L.H_PLAY && !board) {
       const [rs, bs] = md.score;
@@ -666,7 +666,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         const rc = view.racer(f.slot, n);
         put(t, COLS, 1, 0, rc.done ? `${who}: FINISHED` : `${who}: GATE ${rc.next + 1} OF ${n}  LAP ${rc.lap + 1} OF ${F.LAPS}`, C.YELLOW);
         const lead = list[0];
-        if (lead && lead.slot !== f.slot) { const lr = view.racer(lead.slot, n); put(t, COLS, 1, 1, `P${lead.slot + 1} ${lr.done ? 'FINISHED' : `LAP ${lr.lap + 1} GATE ${lr.next + 1}`}`, C.GREY); }
+        if (lead && lead.slot !== f.slot) { const lr = view.racer(lead.slot, n); put(t, COLS, 1, 1, `${host.label(lead.slot)} ${lr.done ? 'FINISHED' : `LAP ${lr.lap + 1} GATE ${lr.next + 1}`}`, C.GREY); }
         if (gateAt && !f.dead) {
           const col = Math.max(0, Math.min(COLS - 6, Math.round(gateAt[0] * S / 4) - 2)), row = Math.round(gateAt[1] * S / 6);
           put(t, COLS, col, Math.min(rows - 1, row + 2), `${gateAt[2]}M`, C.YELLOW);
@@ -678,8 +678,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       } else {
         const leader = list[0];
         put(t, COLS, 1, 0, `${who} ${f.kills}`, C.YELLOW);
-        if (leader && leader.slot !== f.slot) put(t, COLS, 1, 1, `P${leader.slot + 1} ${leader.kills}`, C.GREY);
-        else if (list[1]) put(t, COLS, 1, 1, `P${list[1].slot + 1} ${list[1].kills}`, C.GREY);
+        if (leader && leader.slot !== f.slot) put(t, COLS, 1, 1, `${host.label(leader.slot)} ${leader.kills}`, C.GREY);
+        else if (list[1]) put(t, COLS, 1, 1, `${host.label(list[1].slot)} ${list[1].kills}`, C.GREY);
       }
       if (f.dead) centre(Math.floor(rows / 2) + 2, `BACK IN ${Math.ceil(f.respawn / 125)}`, C.YELLOW);
       else {
@@ -730,7 +730,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       return;
     }
     const top = list[0];
-    centre(y0, over ? `GAME OVER  ${top ? (top.slot === slot ? 'YOU WIN' : `P${top.slot + 1} WINS`) : ''}` : `${mn.name}  ${list.length} PILOTS`, C.YELLOW);
+    centre(y0, over ? `GAME OVER  ${top ? (top.slot === slot ? 'YOU WIN' : `${host.label(top.slot)} WINS`) : ''}` : `${mn.name}  ${list.length} PILOTS`, C.YELLOW);
     centre(y0 + 2, row('RANK', 'PILOT', cols), C.GREY);
     const fit = rows - y0 - 6;
     const at = list.findIndex((o) => o.slot === slot);

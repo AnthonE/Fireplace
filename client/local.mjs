@@ -72,6 +72,7 @@ async function run({ local: { kind = '', bots = 0, seed }, memory, simPort, watc
   f32[L.CL_LEAD >> 2] = LEAD;
   f32[L.CL_DELAY >> 2] = DELAY;
   u32.fill(0, L.CL_LOOKS >> 2, (L.CL_LOOKS >> 2) + L.NPLAYER);
+  new Uint8Array(memory.buffer).fill(0, L.CL_NAMES, L.CL_NAMES + L.NPLAYER * L.NAME_BYTES);
   simPort.onmessage = () => {}; // its hash reports and resync asks have nobody to go to
   simPort.postMessage({ welcome });
   simPort.postMessage({ key: { tick: 0, reason: W.SYNC.JOIN, region: null } });

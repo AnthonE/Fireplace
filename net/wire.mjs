@@ -93,12 +93,14 @@ export const T_WATCHING = 0x17;
 export const T_LOOK = 0x18;
 export const T_SIGNIN = 0x19;
 export const T_SIGNED = 0x1a;
+export const T_NAMES = 0x1b;
 export const T_REJECT = 0x1f;
 export const REJECT = { WASM: 1, FULL: 2, PROTO: 3, WATCH_ONLY: 4, EMPTY: 5 };
 export const HELLO_WATCH = 1;
 export const HELLO_RESUME = 2;
 export const HELLO_LOOKS = 4;
 export const HELLO_SIGNIN = 8;
+export const HELLO_NAMES = 16;
 // why a keyframe is sent: a join, or a resync for an old hole, a client far behind, or a hash mismatch
 export const SYNC = { JOIN: 0, HOLE: 1, BEHIND: 2, DESYNC: 3 };
 export const EV_JOIN = 1;
@@ -409,7 +411,7 @@ export function stampTrailer(buf, { inAck, slack, late, flags = 0 }) {
   return buf;
 }
 
-export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watch = false, resume = -1, looks = false, signin = false }) {
+export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watch = false, resume = -1, looks = false, signin = false, names = false }) {
   const buf = new Uint8Array(24);
   const dv = new DataView(buf.buffer);
   dv.setUint8(0, T_HELLO);
@@ -418,7 +420,7 @@ export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watc
   buf.set(wasmPrefix.subarray(0, 8), 4);
   dv.setUint32(12, room, true);
   dv.setUint32(16, nonce >>> 0, true);
-  buf[20] = (watch ? HELLO_WATCH : 0) | (resume >= 0 ? HELLO_RESUME : 0) | (looks ? HELLO_LOOKS : 0) | (signin ? HELLO_SIGNIN : 0);
+  buf[20] = (watch ? HELLO_WATCH : 0) | (resume >= 0 ? HELLO_RESUME : 0) | (looks ? HELLO_LOOKS : 0) | (signin ? HELLO_SIGNIN : 0) | (names ? HELLO_NAMES : 0);
   buf[21] = resume >= 0 ? resume : 0;
   return buf;
 }
@@ -426,7 +428,7 @@ export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watc
 export function decodeHello(buf) {
   if (buf.length < 24 || buf[0] !== T_HELLO) return null;
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  return { proto: dv.getUint8(1), maxDatagram: dv.getUint16(2, true), wasmPrefix: buf.slice(4, 12), room: dv.getUint32(12, true), nonce: dv.getUint32(16, true), watch: !!(buf[20] & HELLO_WATCH), resume: buf[20] & HELLO_RESUME ? buf[21] : -1, looks: !!(buf[20] & HELLO_LOOKS), signin: !!(buf[20] & HELLO_SIGNIN) };
+  return { proto: dv.getUint8(1), maxDatagram: dv.getUint16(2, true), wasmPrefix: buf.slice(4, 12), room: dv.getUint32(12, true), nonce: dv.getUint32(16, true), watch: !!(buf[20] & HELLO_WATCH), resume: buf[20] & HELLO_RESUME ? buf[21] : -1, looks: !!(buf[20] & HELLO_LOOKS), signin: !!(buf[20] & HELLO_SIGNIN), names: !!(buf[20] & HELLO_NAMES) };
 }
 
 export function encodeWelcome({ slot, maxDatagram, joinTick, seed, serverTick, roomStart = 0, token = 0, watch = false }) {
@@ -529,6 +531,32 @@ const decodeLooks = (body) => {
   return Array.from({ length: body.length >> 3 }, (_, k) => [dv.getUint16(8 * k, true), dv.getUint32(8 * k + 4, true)]);
 };
 
+// The relay's names: [slot, name] pairs, one message; '' clears a slot's.
+// A name is what the 3x5 font draws (codes 32 to 95, so upper case), at most
+// NAME_MAX, cut and cleaned here on both ends: it is a label, never an id.
+export const NAME_MAX = 16;
+export const cleanName = (s) => String(s || '').toUpperCase().replace(/[^\x20-\x5f]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX).trim();
+export function encodeNames(pairs) {
+  const buf = new Uint8Array(16 + (4 + NAME_MAX) * pairs.length);
+  const dv = new DataView(buf.buffer);
+  dv.setUint8(0, T_NAMES);
+  dv.setUint16(2, pairs.length, true);
+  pairs.forEach(([slot, name], k) => {
+    const at = 16 + (4 + NAME_MAX) * k;
+    dv.setUint16(at, slot, true);
+    buf.set(new TextEncoder().encode(cleanName(name)), at + 4);
+  });
+  return buf;
+}
+export const decodeNames = (body) => {
+  const dv = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  const n = Math.floor(body.length / (4 + NAME_MAX));
+  return Array.from({ length: n }, (_, k) => {
+    const at = (4 + NAME_MAX) * k;
+    return [dv.getUint16(at, true), cleanName(new TextDecoder().decode(body.subarray(at + 4, at + 4 + NAME_MAX)).replace(/\0[\s\S]*$/, ''))];
+  });
+};
+
 // The relay's sign-in messages: a nonce to sign (12 letters and digits), and
 // the answer to a sign-in, with the wallet it signed in (net/elo.mjs SIGNIN).
 export function encodeSigninNonce(nonce) {
@@ -598,6 +626,7 @@ export async function readControl(sr) {
   if (head[0] === T_LOOK) return { type: T_LOOK, looks: decodeLooks(await sr.read(8 * dv.getUint16(2, true))) };
   if (head[0] === T_SIGNIN) return { type: T_SIGNIN, nonce: new TextDecoder().decode(head.subarray(4, 16)).replace(/\0+$/, '') };
   if (head[0] === T_SIGNED) return { type: T_SIGNED, status: head[1], address: new TextDecoder().decode(await sr.read(head[2])) };
+  if (head[0] === T_NAMES) return { type: T_NAMES, names: decodeNames(await sr.read((4 + NAME_MAX) * dv.getUint16(2, true))) };
   throw new Error(`unknown control message 0x${head[0].toString(16)}`);
 }
 
