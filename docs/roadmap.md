@@ -161,9 +161,10 @@ crediting who made what (every theme is one). Next, in order:
    `/api/items/of/{wallet}?title=fireplace` once a slot has a wallet (below)
    and refusing an owned look a slot doesn't hold. A theme is free, a look is
    free or earned, an item is owned.
-3. The playlist as a list (`GAMESETS`, `!pick` and `fireplace.mjs` reading N
-   games), so a whole new game joins Fireplace as one entry once the kits
-   below exist.
+3. ~~The playlist as a list.~~ Built: `FP_SETS` in `src/layout.mjs`, the
+   `fp` macros and `client/fireplace.mjs`'s `PAGES` read it, so a whole new
+   game joins Fireplace as one entry (and its page row) once the kits below
+   exist ([fireplace.md](fireplace.md)).
 
 ## Accounts and persistence through Elo Pros
 

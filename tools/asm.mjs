@@ -307,12 +307,14 @@ export function prefixed(wat, prefix) {
   return out.replace(/\(func (\$[\w.]+) \(export "\w+"\)/g, '(func $1');
 }
 
-export const GAMESETS = [['g', {}], ['a', { ARENA: true }], ['b', { BUMPER: true }], ['p', { BUMPER: true, PARTY: true }], ['f', { ARENA: true, FLIGHT: true }]];
+// Fireplace's games (layout.mjs FP_SETS): each a build under its prefix, with its flags and map
+export const GAMESETS = layout.FP_SETS.map((g) => [g.prefix, g.flags, g.map ?? null]);
 
 export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = makeMacros, map = compileMap(), flightMap = null, src = join(ROOT, 'src') } = {}) {
   // flight flies its own map, whatever the arena's
   flightMap ??= compileMap(mapDir(lay.FLIGHT_CONSTS.FLIGHT_MAP));
-  const games = GAMESETS.map(([prefix, flags]) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...flags, layout: lay, macros, map: flags.FLIGHT ? flightMap : flags.ARENA ? map : null }), prefix));
+  const maps = { arena: map, flight: flightMap };
+  const games = lay.FP_SETS.map((g) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...g.flags, layout: lay, macros, map: g.map ? maps[g.map] : null }), g.prefix));
   const fp = expand(join(src, 'fireplace.wat'), { DEBUG, layout: lay, macros });
   const wat = `(module\n  (import "env" "mem" (memory ${lay.PAGES} ${lay.PAGES} shared))\n${games.join('\n')}\n${fp}\n)\n`;
   forbid(wat);

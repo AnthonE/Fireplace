@@ -32,7 +32,15 @@ expands each exactly as its own build is (the arena on Box Canyon, flight on
 Skyways, each its own passive segment), puts its every identifier under a
 prefix (`$g.`, `$a.`, `$b.`, `$p.`, `$f.`) and makes its exports internal, and appends `src/fireplace.wat`.
 That sends every export to the game on now (the header's `FP_GAME`) and runs
-the playlist at the end of each tick. The ball phases and the barrier are the
+the playlist at the end of each tick. The games are a list, `FP_SETS` in
+`src/layout.mjs`: each entry names its prefix and build flags, its world's
+generators, how players join it (one by one, or a round laid out at once),
+whose input word it reads, its matches and longest match, how it scores and
+what its next seed forces, and the `fp` macros (`src/macros.mjs`) write the
+playlist's game-by-game code from it. A new game is an entry there and its
+row in `client/fireplace.mjs`'s `PAGES` (its frontend, its size, its light).
+Moving the five games onto the list left every tick's region hash equal over
+a 152,091-tick log through all six playlist entries and back to the first. The ball phases and the barrier are the
 same code in every game, so the worker threads never change games. The
 playlist goes by position, not by game (`PLAYLIST` in `src/layout.mjs`): the
 count of games played (`FP_COUNT`'s high half) mod its length picks the next
