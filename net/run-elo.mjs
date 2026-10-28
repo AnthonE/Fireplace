@@ -7,7 +7,8 @@
 // the room's first game ended and the relay reported it once, signed with the
 // game's server key over the text Elo Pros checks, as a match of the signed-in
 // guests at the places every client saw (the bot host's shared world), with
-// the refused guest left out.
+// the refused guest left out; and every guest heard the avatar the stand-in's
+// face gives each signed-in wallet (client/avatar.mjs), on its slot.
 //   node net/run-elo.mjs [--bots 6] [--seconds 150] [--port 4441: the relay's, its native door the next, the stand-in the one after]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -40,6 +41,7 @@ writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }), { mo
 // asked about (the wallet is the message's own; the signature goes unchecked),
 // except REFUSED's; a report is good when its signature is.
 const signins = [], reports = [];
+const avatarOf = (w) => (w === walletOf(0) ? null : (0x80000000 | (parseInt(w.slice(-6), 16) & 0x3fffffff)) >>> 0);
 const stub = createServer((req, res) => {
   let body = '';
   req.on('data', (d) => { body += d; });
@@ -53,6 +55,9 @@ const stub = createServer((req, res) => {
       if (f.address === REFUSED) return answer(401, { ok: false, code: 'signature' });
       return answer(200, { ok: true, address: f.address, chain: 'evm' });
     }
+    // a face: every wallet's avatar but the first signed-in guest's, which has none
+    const face = /^\/api\/face\/(0x[0-9a-f]{40})$/.exec(req.url);
+    if (face) return answer(200, { wallet: face[1], name: null, avatar: avatarOf(face[1]) });
     if (req.url === '/api/ratings/fireplace/report') {
       const h = req.headers;
       const text = serverText('POST', req.url, h['x-elo-server'], h['x-elo-time'], h['x-elo-nonce'], createHash('sha256').update(body).digest('hex'));
@@ -100,6 +105,10 @@ const lc = (ws) => ws.map((w) => String(w).toLowerCase()).sort().join();
 must(lc(roster.map((r) => r.wallet)) === lc(signed.map((s) => s.wallet)) && roster.every((r) => Number.isInteger(r.since)),
   `the room's roster names every signed-in guest and nobody else (${roster.length})`);
 must(!existsSync(onlinePath), 'a relay that ends removes its roster');
+const heard = signed.filter((s) => avatarOf(s.wallet) !== null);
+must(heard.length >= 1 && joined.every((o) => heard.every((s) => o.avatars?.[s.slot] === avatarOf(s.wallet)))
+  && joined.every((o) => !o.avatars?.[signed.find((s) => avatarOf(s.wallet) === null)?.slot ?? -1]),
+  `every guest heard each signed-in guest's avatar on its slot, and none for the one with none (${heard.length})`);
 must(bs.results?.length >= 1, `the room's first game ended (${bs.results?.length ?? 0} results seen)`);
 must(reports.length >= 1 && reports.every((r) => r.ok), `the relay reported it, signed with the game's server key (${reports.length} reports)`);
 const first = bs.results?.[0], match = reports[0]?.body?.matches?.[0];

@@ -17,8 +17,9 @@
 // frame into a small texture with every caster as a dot. Nothing loops over
 // solids per pixel. Nothing here is hashed.
 import * as L from '../src/layout.mjs';
-import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
+import { BLOCK, BLOCK_WGSL } from './rider.mjs';
+import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 4096;
@@ -37,8 +38,8 @@ const MASK_N = 512;
 const FLAKES = 4000;
 
 // sprite kinds: solid 0 a ball, 1 a rider's body, 2 an orb, 6 the arrow over you, 7 a rocket, 8 a rider's head, 9 a crumb,
-// 10 a spinning coin, 11 a bomb; glowing 3 a flash, 4 a ring, 5 a spark
-export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11 };
+// 10 a spinning coin, 11 a bomb, 12 a box (client/rider.mjs); glowing 3 a flash, 4 a ring, 5 a spark
+export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11, BLOCK };
 export const SHAPE = { BOX: 0, CYL: 1, HEX: 2, SPHERE: 3 };
 // The looks, and what their two parameters a and b do (0 takes the default):
 //   MATTE    paint with a little grain
@@ -976,6 +977,7 @@ fn lookHat(style: u32, n: vec3f, f: vec3f, side: vec3f, c: vec3f, skin: vec3f) -
   return o;
 }
 
+${BLOCK_WGSL}
 // glossy, as the balls are: the sun's highlight and the sky in it, more at a grazing angle
 fn gloss(c: vec3f, n: vec3f, power: f32, k: f32) -> vec3f {
   let v = -u.fwd.xyz;
@@ -1058,6 +1060,14 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     }
     case 9u: { // a crumb, in its colour
       c = shade(c, n, 1.0, 1.0) * ink;
+    }
+    case 12u: { // a box: a blocky rider's limb, head or hat (client/rider.mjs)
+      let b = blockAt(s.pos.xy, s.ctr, s.vel, s.info.w, s.info.z, u32(s.color.a + 0.5), c);
+      if (!b.hit) { discard; }
+      cover = b.cover;
+      z = b.z;
+      let sh = shadowAt(b.p, b.n);
+      c = (gloss(shade(b.alb, b.n, sh, 0.85 + 0.15 * b.n.y), b.n, 40.0, 0.25 * b.shine * (0.35 + 0.65 * sh)) + b.glow) * b.ink;
     }
     case 10u: { // a coin: gold, spinning about the up axis, a raised rim and a star
       let spin = u.fwd.w * 3.2 + s.info.z * 1.7 + s.info.w;
@@ -1205,6 +1215,26 @@ fn graphPx(p: vec2i) -> vec4f {
 // Big text (s.big): up to ${MAX_BIG} lines of the same font, each pixel of it scale HUD pixels a side, kept in the
 // hud buffer after the cells: x, y (HUD px, the line's top left), scale, colour | length << 8, then four characters
 // a word. The palette colour of the line lit at p, or -1; shadow 1 asks for its drop shadow instead.
+${HUD_FONT_WGSL}
+// the big lines in the rounder font: their colour and alpha at hp, or alpha 0
+fn roundBig(hp: vec2f) -> vec4f {
+  let base = u32(u.hud.x) * ${COLS}u;
+  for (var k = 0u; k < ${MAX_BIG}u; k++) {
+    let o = base + k * ${BIG_WORDS}u;
+    let s = f32(bitcast<i32>(hud[o + 2u]));
+    if (s <= 0.0) { continue; }
+    let l = hp - vec2f(f32(bitcast<i32>(hud[o])), f32(bitcast<i32>(hud[o + 1u])));
+    let n = f32(hud[o + 3u] >> 8u);
+    if (l.x < 0.0 || l.y < 0.0 || l.x >= n * 4.0 * s || l.y >= 6.0 * s) { continue; }
+    let c = l / vec2f(4.0 * s, 6.0 * s);
+    let i = u32(c.x);
+    let ch = (hud[o + 4u + i / 4u] >> (8u * (i & 3u))) & 255u;
+    if (ch <= 32u || ch > 95u) { continue; }
+    let t = glyphColor(glyphSample(ch - 32u, fract(c)), hud[o + 3u] & 7u);
+    if (t.a > 0.0) { return t; }
+  }
+  return vec4f(0.0);
+}
 fn bigAt(p: vec2i, shadow: i32) -> i32 {
   let base = u32(u.hud.x) * ${COLS}u;
   for (var k = 0u; k < ${MAX_BIG}u; k++) {
@@ -1242,16 +1272,25 @@ fn miniPx(q: vec2f) -> vec4f {
 }
 
 @fragment fn fs_hud(@builtin(position) q: vec4f) -> @location(0) vec4f {
-  let p = vec2i(floor((q.xy - vec2f(u.misc.z, 0.0)) / u.hud.w));
-  if (lit(p)) {
-    let cell = vec2i(p.x / 4, p.y / 6);
-    let k = (hud[u32(cell.y) * ${COLS}u + u32(cell.x)] >> 8u) & 7u;
-    return vec4f(PALETTE[k], 1.0);
+  let hp = (q.xy - vec2f(u.misc.z, 0.0)) / u.hud.w;
+  let p = vec2i(floor(hp));
+  // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
+  if (font[64u] != 0u) {
+    let t = roundText(hp, ${COLS}u, u32(u.hud.x));
+    if (t.a > 0.0) { return t; }
+    let tb = roundBig(hp);
+    if (tb.a > 0.0) { return tb; }
+  } else {
+    if (lit(p)) {
+      let cell = vec2i(p.x / 4, p.y / 6);
+      let k = (hud[u32(cell.y) * ${COLS}u + u32(cell.x)] >> 8u) & 7u;
+      return vec4f(PALETTE[k], 1.0);
+    }
+    let b = bigAt(p, 0);
+    if (b >= 0) { return vec4f(PALETTE[b], 1.0); }
+    if (lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.75); }
+    if (bigAt(p, 1) >= 0) { return vec4f(0.0, 0.0, 0.0, 0.75); }
   }
-  let b = bigAt(p, 0);
-  if (b >= 0) { return vec4f(PALETTE[b], 1.0); }
-  if (lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.75); }
-  if (bigAt(p, 1) >= 0) { return vec4f(0.0, 0.0, 0.0, 0.75); }
   let g = graphPx(p);
   if (g.a > 0.0) { return g; }
   for (var k = i32(u.counts.w) - 1; k >= 0; k--) {
@@ -1303,11 +1342,12 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
   const beamBuf = storage(MAX_BEAM * 48);
   const rectBuf = storage(MAX_RECT * 32);
   const hudBuf = storage((COLS * rows + MAX_BIG * BIG_WORDS) * 4);
-  const fontBuf = storage(FONT.length * 4);
+  const fontAll = fontData({ round: roundWanted() });
+  const fontBuf = storage(fontAll.length * 4);
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const decalBuf = storage(MAX_DECAL * 48);
   const paletteBuf = storage(256 * 16);
-  device.queue.writeBuffer(fontBuf, 0, FONT);
+  device.queue.writeBuffer(fontBuf, 0, fontAll);
   const vbuf = device.createBuffer({ size: MESH.vertices.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   const ibuf = device.createBuffer({ size: MESH.indices.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
   device.queue.writeBuffer(vbuf, 0, MESH.vertices);

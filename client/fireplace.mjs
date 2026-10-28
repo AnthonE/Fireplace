@@ -26,12 +26,14 @@ import { loadTheme, themeList, savedTheme, saveTheme, FALLBACK, DEFAULT } from '
 import { Guest } from './fireplace-bot.mjs';
 import { GOLFER } from './brain.mjs';
 import { readClock } from './clock.mjs';
-import { BALLS, HATS, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
 import { filmClock, filmSound, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
+import { touchWanted } from './touch.mjs';
 
 const q = new URLSearchParams(location.search);
+const TOUCH = touchWanted(q); // a phone: no pointer lock, buttons for the couch's keys (client/touch.mjs)
 const stage = document.getElementById('stage');
 const note = document.getElementById('note');
 const roomCanvas = document.getElementById('room');
@@ -82,11 +84,11 @@ async function main() {
   let got = gotSet(tally);
   let look = q.has('look') ? Number(q.get('look')) >>> 0 : KEEP ? wearable(savedLook(), got) : 0;
   set(L.CL_LOOK, look);
-  let lookAt = -1e9, listAt = -1e9, listPage = 0; // when B or H, and L, last put their card on the TV; the list's page
+  let lookAt = -1e9, listAt = -1e9, listPage = 0; // when B, H or P, and L, last put their card on the TV; the list's page
   let heldKey = '', opened = []; // the game held now, and what its end opened
   const wear = (w) => { look = w; set(L.CL_LOOK, w); saveLook(w); lookAt = performance.now(); listAt = -1e9; };
   // the looks an achievement opens
-  const opens = (id) => [...BALLS, ...HATS].filter((x) => x.unlock === id).map(lookName);
+  const opens = (id) => [...BALLS, ...HATS, ...BODIES].filter((x) => x.unlock === id).map(lookName);
   // what this slot did in the game just held, counted once
   function tallyUp() {
     const slot = get(L.CL_SLOT);
@@ -117,18 +119,19 @@ async function main() {
     if (scene !== 'couch') return;
     sound.wake();
     scene = 'tuning';
-    if (!BOT && !WATCH) stage.requestPointerLock?.({ unadjustedMovement: true })?.catch?.(() => stage.requestPointerLock());
+    if (!BOT && !WATCH && !TOUCH) stage.requestPointerLock?.({ unadjustedMovement: true })?.catch?.(() => stage.requestPointerLock());
     host.connect();
   };
-  stage.addEventListener('click', () => { if (scene === 'couch') sitDown(); else if (!document.pointerLockElement && !BOT && !WATCH) stage.requestPointerLock(); });
+  stage.addEventListener('click', () => { if (scene === 'couch') sitDown(); else if (!document.pointerLockElement && !BOT && !WATCH && !TOUCH) stage.requestPointerLock(); });
   addEventListener('keydown', (e) => {
     if (scene === 'couch' && (e.code === 'Enter' || e.code === 'Space')) sitDown();
     const roomInView = !(scene === 'in' && zoom >= 0.999);
     if (e.code === 'KeyT' && !e.repeat && roomInView) nextTheme();
     if (KEEP && roomInView && !e.repeat) {
-      const { ball, hat } = unpackLook(look);
-      if (e.code === 'KeyB') wear(packLook(nextOpen(BALLS, ball, got), hat));
-      if (e.code === 'KeyH') wear(packLook(ball, nextOpen(HATS, hat, got)));
+      const { ball, hat, body } = unpackLook(look);
+      if (e.code === 'KeyB') wear(packLook(nextOpen(BALLS, ball, got), hat, body));
+      if (e.code === 'KeyH') wear(packLook(ball, nextOpen(HATS, hat, got), body));
+      if (e.code === 'KeyP') wear(packLook(ball, hat, nextOpen(BODIES, body, got)));
       // L: the list's first page, then its next, then away
       if (e.code === 'KeyL') {
         const open = performance.now() - listAt < LIST_MS;
@@ -142,6 +145,19 @@ async function main() {
       else document.documentElement.requestFullscreen().then(() => navigator.keyboard?.lock?.()).catch(() => {});
     }
   });
+  // on a phone, the couch's keys as buttons: the look, the theme, the list, fullscreen (client/touch.mjs)
+  if (KEEP && TOUCH) {
+    const bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:30;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:70vw';
+    for (const [label, code] of [['BALL', 'KeyB'], ['HAT', 'KeyH'], ['BODY', 'KeyP'], ['ROOM', 'KeyT'], ['LIST', 'KeyL'], ['FULL', 'KeyF']]) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'min-width:56px;min-height:40px;border-radius:20px;border:2px solid rgba(255,255,255,.45);background:rgba(20,22,30,.55);color:#fff;font:800 12px system-ui,sans-serif';
+      b.addEventListener('click', (e) => { e.stopPropagation(); dispatchEvent(new KeyboardEvent('keydown', { code })); });
+      bar.appendChild(b);
+    }
+    document.body.appendChild(bar);
+  }
 
   // T, while the room is in view: the next theme the build bundled, kept for next time
   let themeAt = -1e9;
@@ -212,9 +228,9 @@ async function main() {
       text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
       text(GAMES_LINE, 320, 275, 3, '#8ea0b8', 'center');
       if (KEEP) {
-        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t);
-        const { ball, hat } = unpackLook(look);
-        const s = `B: ${BALLS[ball].name}  H: ${HATS[hat].name}  L: ACHIEVEMENTS ${Object.keys(tally.got).length}/${ACHIEVEMENTS.length}`;
+        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
+        const { ball, hat, body } = unpackLook(look);
+        const s = `B: ${BALLS[ball].name}  H: ${HATS[hat].name}  P: ${BODIES[body].name}  L: ACHIEVEMENTS ${Object.keys(tally.got).length}/${ACHIEVEMENTS.length}`;
         text(s, 320, 300, s.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
       }
       if (kind === 'tuning') text(host.error ? 'NO SIGNAL' : 'TUNING IN...', 320, 330, 5, host.error ? '#ff6a5a' : '#ffffff', 'center');
@@ -258,19 +274,23 @@ async function main() {
     const next = `NEXT: ${gameName(nextGame(), view.dv.getUint32(L.FP_NEXT, true))}${left ? `  IN ${left}` : ''}`;
     text(next, 320, 340, next.length * 20 <= 620 ? 5 : 4, '#ffffff', 'center');
   }
-  // your look, as B and H left it, and the next one to earn
+  // your look, as B, H and P left it, and the next one to earn
   function lookCard(t) {
-    const { ball, hat } = unpackLook(look);
+    const { ball, hat, body } = unpackLook(look);
     text('YOUR LOOK', 320, 26, 5, '#ffcf6a', 'center');
-    drawLook(g2, 170, 250, 62, Math.max(0, get(L.CL_SLOT)), look, t);
-    text('BALL', 330, 100, 3, '#8ea0b8');
-    text(BALLS[ball].name, 330, 120, 5, '#ffffff');
-    text('B FOR ANOTHER', 330, 150, 3, '#c9b89a');
-    text('HAT', 330, 200, 3, '#8ea0b8');
-    text(HATS[hat].name, 330, 220, 5, '#ffffff');
-    text('H FOR ANOTHER', 330, 250, 3, '#c9b89a');
-    text('EVERYONE IN THE ROOM SEES IT', 320, 324, 3, '#8ea0b8', 'center');
-    const shut = [...BALLS, ...HATS].find((x) => !isOpen(x, got));
+    drawLook(g2, 170, 246, 50, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
+    text('BALL', 330, 80, 3, '#8ea0b8');
+    text(BALLS[ball].name, 330, 98, 5, '#ffffff');
+    text('B FOR ANOTHER', 330, 126, 3, '#c9b89a');
+    text('HAT', 330, 160, 3, '#8ea0b8');
+    text(HATS[hat].name, 330, 178, 5, '#ffffff');
+    text('H FOR ANOTHER', 330, 206, 3, '#c9b89a');
+    text('BODY', 330, 240, 3, '#8ea0b8');
+    text(BODIES[body].name, 330, 258, 5, '#ffffff');
+    text('P FOR ANOTHER', 330, 286, 3, '#c9b89a');
+    text('EVERYONE IN THE ROOM SEES IT', 320, 310, 3, '#8ea0b8', 'center');
+    text('IN A GAME, 1 TO 4: WAVE, CHEER, DANCE, SPIN', 320, 331, 3, '#8ea0b8', 'center');
+    const shut = [...BALLS, ...HATS, ...BODIES].find((x) => !isOpen(x, got));
     if (shut) {
       const s = `EARN ${lookName(shut)}: ${ACHIEVEMENTS.find((a) => a.id === shut.unlock).about}`;
       text(s, 320, 352, s.length * 12 <= 620 ? 3 : 2, '#7fdf7f', 'center');

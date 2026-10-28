@@ -11,6 +11,7 @@ import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { epoch, predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf } from './looks.mjs';
+import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
 export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, sens: SENS = 3, present = true, external = false } = {}) {
   const { u8, i32, f32, f64, view, pview, set, get, sound } = host;
@@ -29,6 +30,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const aim = () => { set(L.CL_YAW, Math.round(yaw) & 0x3fff); set(L.CL_PITCH, Math.round(pitch)); };
   const setWeapon = (w) => { if (w !== weapon) sound.weapon(); weapon = w; set(L.CL_WEAPON, w); };
   let locked = document.pointerLockElement === lockTarget;
+  let touch = null; // the touch controls, on a phone
   let watched = -1;
   const nextLive = (from, step) => {
     for (let k = 1; k <= L.NPLAYER; k++) {
@@ -42,11 +44,14 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     on(document, 'keydown', (e) => { if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); } });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
+    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+    const TOUCH = touchWanted(host.q);
+    if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
       if (!locked) lockTarget.requestPointerLock({ unadjustedMovement: true }).catch(() => lockTarget.requestPointerLock());
     });
-    on(document, 'pointerlockchange', () => { locked = document.pointerLockElement === lockTarget; if (!locked) { held.clear(); writeKeys(); } });
+    on(document, 'pointerlockchange', () => { if (TOUCH) return; locked = document.pointerLockElement === lockTarget; if (!locked) { held.clear(); writeKeys(); } });
     on(document, 'onpointerrawupdate' in window ? 'pointerrawupdate' : 'pointermove', (e) => {
       if (!locked) return;
       yaw += e.movementX * SENS;
@@ -70,6 +75,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); });
+    if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
+      look: (dx, dy) => { yaw += dx * touchScale(SENS) * SENS; pitch = Math.max(16, Math.min(1008, pitch - dy * touchScale(SENS) * SENS / 8)); aim(); },
+      buttons: [
+        { label: 'FIRE', tap: () => set(L.CL_PRESSES, get(L.CL_PRESSES) + 1) },
+        { label: 'JUMP', code: 'Space' },
+        { label: 'SWAP', tap: () => setWeapon(weapon ^ 1) },
+      ] });
   }
 
   const text = new Uint32Array(COLS * renderer.rows);
@@ -241,7 +253,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
   return {
     frame,
-    unmount() { off(); held.clear(); set(L.CL_MOVE, 0); sound.music(null, false); },
+    unmount() { off(); touch?.remove(); held.clear(); set(L.CL_MOVE, 0); sound.music(null, false); },
     capture: (scale = 2) => (last ? capturePng(renderer, u8, last, scale) : null),
     state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, error: host.error, hole: view.hole() }),
     get locked() { return locked; },

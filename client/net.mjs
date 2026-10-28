@@ -62,7 +62,7 @@ const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.mi
 const SILENT_MS = 1500;
 // arena: the arena's input words (src/layout.mjs), with its frames; fireplace:
 // the arena's while it or Dogfight is the game on (FP_GAME in the confirmed world), else golf's
-// looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK)
+// looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK), and for its avatars (W.HELLO_AVATARS: CL_AVATARS)
 // signin: ask the relay for a sign-in nonce (W.HELLO_SIGNIN); the page hears it, and the answer, as { signinNonce } and { signed }
 async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false, signin: wantSignin = false }) {
   const imp = createImpair({ ...impair, seed: (Math.random() * 2 ** 32) >>> 0 });
@@ -82,7 +82,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   const sw = bidi.writable.getWriter();
   const tHello = epoch();
   const resume = back && !watch ? back.slot : -1;
-  await sw.write(W.encodeHello({ maxDatagram: wt.datagrams.maxDatagramSize, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch }));
+  await sw.write(W.encodeHello({ maxDatagram: wt.datagrams.maxDatagramSize, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks }));
   const sr = W.bufferedReader(bidi.readable.getReader());
   const head = await sr.read(4);
   if (head[0] === W.T_REJECT) throw new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected');
@@ -108,6 +108,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   self.postMessage({ welcome });
   // a new session's room: no looks until the relay sends its table; ours goes now and on each change
   u32.fill(0, L.CL_LOOKS >> 2, (L.CL_LOOKS >> 2) + L.NPLAYER);
+  u32.fill(0, L.CL_AVATARS >> 2, (L.CL_AVATARS >> 2) + L.NPLAYER);
   let lookSent = -1;
   const sendLook = () => {
     const w = rd(L.CL_LOOK) >>> 0;
@@ -163,6 +164,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
       if (!m) break;
       if (m.type === W.T_PONG) { seen.pongs++; onPong(m); }
       if (m.type === W.T_LOOK) for (const [p, w] of m.looks) if (p < L.NPLAYER) u32[(L.CL_LOOKS >> 2) + p] = w;
+      if (m.type === W.T_AVATAR) for (const [p, w] of m.avatars) if (p < L.NPLAYER) u32[(L.CL_AVATARS >> 2) + p] = w;
       if (m.type === W.T_SIGNIN) self.postMessage({ signinNonce: m.nonce });
       if (m.type === W.T_SIGNED) self.postMessage({ signed: { status: m.status, address: m.address } });
       if (m.type === W.T_KEY) {

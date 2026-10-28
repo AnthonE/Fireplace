@@ -93,12 +93,14 @@ export const T_WATCHING = 0x17;
 export const T_LOOK = 0x18;
 export const T_SIGNIN = 0x19;
 export const T_SIGNED = 0x1a;
+export const T_AVATAR = 0x1b;
 export const T_REJECT = 0x1f;
 export const REJECT = { WASM: 1, FULL: 2, PROTO: 3, WATCH_ONLY: 4, EMPTY: 5 };
 export const HELLO_WATCH = 1;
 export const HELLO_RESUME = 2;
 export const HELLO_LOOKS = 4;
 export const HELLO_SIGNIN = 8;
+export const HELLO_AVATARS = 16;
 // why a keyframe is sent: a join, or a resync for an old hole, a client far behind, or a hash mismatch
 export const SYNC = { JOIN: 0, HOLE: 1, BEHIND: 2, DESYNC: 3 };
 export const EV_JOIN = 1;
@@ -409,7 +411,7 @@ export function stampTrailer(buf, { inAck, slack, late, flags = 0 }) {
   return buf;
 }
 
-export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watch = false, resume = -1, looks = false, signin = false }) {
+export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watch = false, resume = -1, looks = false, signin = false, avatars = false }) {
   const buf = new Uint8Array(24);
   const dv = new DataView(buf.buffer);
   dv.setUint8(0, T_HELLO);
@@ -418,7 +420,7 @@ export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watc
   buf.set(wasmPrefix.subarray(0, 8), 4);
   dv.setUint32(12, room, true);
   dv.setUint32(16, nonce >>> 0, true);
-  buf[20] = (watch ? HELLO_WATCH : 0) | (resume >= 0 ? HELLO_RESUME : 0) | (looks ? HELLO_LOOKS : 0) | (signin ? HELLO_SIGNIN : 0);
+  buf[20] = (watch ? HELLO_WATCH : 0) | (resume >= 0 ? HELLO_RESUME : 0) | (looks ? HELLO_LOOKS : 0) | (signin ? HELLO_SIGNIN : 0) | (avatars ? HELLO_AVATARS : 0);
   buf[21] = resume >= 0 ? resume : 0;
   return buf;
 }
@@ -426,7 +428,7 @@ export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watc
 export function decodeHello(buf) {
   if (buf.length < 24 || buf[0] !== T_HELLO) return null;
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  return { proto: dv.getUint8(1), maxDatagram: dv.getUint16(2, true), wasmPrefix: buf.slice(4, 12), room: dv.getUint32(12, true), nonce: dv.getUint32(16, true), watch: !!(buf[20] & HELLO_WATCH), resume: buf[20] & HELLO_RESUME ? buf[21] : -1, looks: !!(buf[20] & HELLO_LOOKS), signin: !!(buf[20] & HELLO_SIGNIN) };
+  return { proto: dv.getUint8(1), maxDatagram: dv.getUint16(2, true), wasmPrefix: buf.slice(4, 12), room: dv.getUint32(12, true), nonce: dv.getUint32(16, true), watch: !!(buf[20] & HELLO_WATCH), resume: buf[20] & HELLO_RESUME ? buf[21] : -1, looks: !!(buf[20] & HELLO_LOOKS), signin: !!(buf[20] & HELLO_SIGNIN), avatars: !!(buf[20] & HELLO_AVATARS) };
 }
 
 export function encodeWelcome({ slot, maxDatagram, joinTick, seed, serverTick, roomStart = 0, token = 0, watch = false }) {
@@ -515,11 +517,12 @@ export function decodeClient(buf) {
   return null;
 }
 
-// The relay's looks: [slot, look word] pairs, one message.
-export function encodeLooks(pairs) {
+// The relay's looks: [slot, look word] pairs, one message; its avatars
+// (Elo Pros's word for a signed-in slot) the same with T_AVATAR.
+export function encodeLooks(pairs, type = T_LOOK) {
   const buf = new Uint8Array(16 + 8 * pairs.length);
   const dv = new DataView(buf.buffer);
-  dv.setUint8(0, T_LOOK);
+  dv.setUint8(0, type);
   dv.setUint16(2, pairs.length, true);
   pairs.forEach(([slot, look], k) => { dv.setUint16(16 + 8 * k, slot, true); dv.setUint32(20 + 8 * k, look >>> 0, true); });
   return buf;
@@ -574,7 +577,7 @@ export function encodeKeyHead({ reason, tick, raw, packed, interval = 0, digests
 
 // The server's stream messages after the welcome, read whole:
 // { type, from, n, body } for a fill; { type, reason, tick, raw, interval, digests, packed } for a key; { type, nonce, serverTick } for a pong;
-// { type, looks: [[slot, look], ...] } for looks; { type, nonce } for a sign-in's
+// { type, looks: [[slot, look], ...] } for looks, { type, avatars: [[slot, word], ...] } for avatars; { type, nonce } for a sign-in's
 // nonce; { type, status, address } for a sign-in's answer.
 export async function readControl(sr) {
   const head = await sr.read(16);
@@ -596,6 +599,7 @@ export async function readControl(sr) {
   }
   if (head[0] === T_PONG) return { type: T_PONG, nonce: dv.getUint32(4, true), serverTick: dv.getFloat64(8, true) };
   if (head[0] === T_LOOK) return { type: T_LOOK, looks: decodeLooks(await sr.read(8 * dv.getUint16(2, true))) };
+  if (head[0] === T_AVATAR) return { type: T_AVATAR, avatars: decodeLooks(await sr.read(8 * dv.getUint16(2, true))) };
   if (head[0] === T_SIGNIN) return { type: T_SIGNIN, nonce: new TextDecoder().decode(head.subarray(4, 16)).replace(/\0+$/, '') };
   if (head[0] === T_SIGNED) return { type: T_SIGNED, status: head[1], address: new TextDecoder().decode(await sr.read(head[2])) };
   throw new Error(`unknown control message 0x${head[0].toString(16)}`);
