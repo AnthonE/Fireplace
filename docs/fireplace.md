@@ -174,6 +174,16 @@ for a visit. `?scene=avatars` on the party demo shows a row.
 
 ![Elo Pros avatars on blocky riders](p4-avatars.png)
 
+**On a phone.** With a coarse pointer (or `?touch=1`; `?touch=0` never)
+every game puts touch controls over its screen (`client/touch.mjs`): a stick
+wherever the left thumb lands, which holds W, A, S and D in the game's own
+keys; a drag anywhere else to look, through the game's own mouse look as if
+the pointer were locked; and round buttons on the right, the first and
+biggest in the corner (jump in bumper balls and party, fire in the arena,
+golf and Dogfight). The couch gets a bar for B, H, P, T, L and F.
+
+![Party on a phone: the stick, the drag, the buttons](p5-phone.png)
+
 **The font.** Bumper balls', party's and the TV's text is a bold sans with a
 dark outline (`client/hudfont.mjs`): the 3x5 font's 64 characters drawn again
 at startup from the system's own sans, a rounded one where there is one, into

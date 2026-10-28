@@ -20,6 +20,7 @@ import { NetGraph } from './netgraph.mjs';
 import { Fighter } from './arena-bot.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
+import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
 const TURN = 16384;
 const ARMS = L.ARMS;
@@ -92,6 +93,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const aim = () => { set(L.CL_YAW, Math.round(yaw) & 0x3fff); set(L.CL_PITCH, Math.round(pitch)); };
   const swap = (s) => { if (s !== slotOut) { sound.weapon(); zoomed = false; } slotOut = s; set(L.CL_WEAPON, s); };
   let locked = document.pointerLockElement === lockTarget;
+  let touch = null; // the touch controls, on a phone
   let watched = -1;
   let showGraph = graphOn;
   let bot = null;
@@ -120,11 +122,15 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
+    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+    const TOUCH = touchWanted(host.q);
+    if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
       if (!locked) lockTarget.requestPointerLock({ unadjustedMovement: true }).catch(() => lockTarget.requestPointerLock());
     });
     on(document, 'pointerlockchange', () => {
+      if (TOUCH) return;
       locked = document.pointerLockElement === lockTarget;
       if (!locked) { held.clear(); writeKeys(); trigger = false; set(L.CL_AUTO, 0); }
     });
@@ -163,6 +169,18 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); trigger = false; set(L.CL_AUTO, 0); });
+    if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
+      look: (dx, dy) => look({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
+      buttons: [
+        { label: 'FIRE', hold: (on) => { if (on) press(L.CL_PRESSES); trigger = on; if (!on) set(L.CL_AUTO, 0); } },
+        { label: 'JUMP', code: 'Space' },
+        { label: 'GREN', tap: () => { press(L.CL_GREN); zoomed = false; } },
+        { label: 'MELEE', tap: () => { press(L.CL_MELEE); zoomed = false; } },
+        { label: 'RELOAD', tap: () => { press(L.CL_RELOAD); zoomed = false; } },
+        { label: 'SWAP', tap: () => swap(slotOut ^ 1) },
+        { label: 'USE', tap: () => press(L.CL_USE) },
+        { label: 'SCOPE', tap: () => { if (zoomOf() > 1) { zoomed = !zoomed; sound.weapon(); } } },
+      ] });
   }
 
   // ---- the prediction (as golf's), with the arena's word in progress
@@ -882,7 +900,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
   return {
     frame,
-    unmount() { off(); held.clear(); set(L.CL_MOVE, 0); set(L.CL_AUTO, 0); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
+    unmount() { off(); touch?.remove(); held.clear(); set(L.CL_MOVE, 0); set(L.CL_AUTO, 0); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
     capture: (scale = 2) => (last ? capturePng(renderer, u8, last, scale) : null),
     // for the gates: in a team mode, mode carries the scores, me its team and carry, and kit what the kit module shows them
     state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((f) => f.text),

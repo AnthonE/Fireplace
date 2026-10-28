@@ -17,6 +17,7 @@ import { epoch, predict, corrector, follower, capturePng, listeners } from './ho
 import { riderSprites } from './looks.mjs';
 import { rider, emoteOf, withEmote, EMOTE_KEYS } from './rider.mjs';
 import { createJuice } from './juice.mjs';
+import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
 const TURN = 16384;
 // the power-ups' colours, and what the HUD says about each
@@ -43,6 +44,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
   const writeKeys = () => { let m = 0; for (const k of held) m |= MOVES[k] || 0; set(L.CL_MOVE, m); };
   const aim = () => set(L.CL_YAW, Math.round(yaw) & (TURN - 1));
   let locked = document.pointerLockElement === lockTarget;
+  let touch = null; // the touch controls, on a phone
   let watched = -1;
   let showGraph = graphOn;
   let bot = null;
@@ -69,11 +71,15 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
+    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+    const TOUCH = touchWanted(h.q);
+    if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
       if (!locked) lockTarget.requestPointerLock({ unadjustedMovement: true }).catch(() => lockTarget.requestPointerLock());
     });
     on(document, 'pointerlockchange', () => {
+      if (TOUCH) return;
       locked = document.pointerLockElement === lockTarget;
       if (!locked) { held.clear(); writeKeys(); }
     });
@@ -100,6 +106,15 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     });
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); });
+    let emoteK = 0;
+    if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
+      look: (dx, dy) => mouse({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
+      buttons: [
+        { label: 'JUMP', code: 'Space' },
+        { label: 'USE', tap: () => press(L.CL_PRESSES) },
+        { label: 'EMOTE', tap: () => { emoteK = (emoteK % 4) + 1; h.set(L.CL_LOOK, withEmote(h.get(L.CL_LOOK) >>> 0, emoteK)); } },
+        { label: 'BOARD', hold: (on) => { if (on) held.add('Tab'); else held.delete('Tab'); } },
+      ] });
   }
 
   // ---- the prediction (as golf's): the sampled words, then the word in progress
@@ -415,7 +430,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
 
   return {
     frame,
-    unmount() { off(); held.clear(); set(L.CL_MOVE, 0); sound.music(null, false); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
+    unmount() { off(); touch?.remove(); held.clear(); set(L.CL_MOVE, 0); sound.music(null, false); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
     capture: (scale = W > 640 ? 1 : 2) => (last ? capturePng(renderer, u8, last, scale) : null),
     state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, error: h.error, welcome: h.welcome, round: view.wheel(), feed: feed.map((f) => f.text), fps }),
     get locked() { return locked; },

@@ -30,8 +30,10 @@ import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpe
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
 import { filmClock, filmSound, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
+import { touchWanted } from './touch.mjs';
 
 const q = new URLSearchParams(location.search);
+const TOUCH = touchWanted(q); // a phone: no pointer lock, buttons for the couch's keys (client/touch.mjs)
 const stage = document.getElementById('stage');
 const note = document.getElementById('note');
 const roomCanvas = document.getElementById('room');
@@ -117,10 +119,10 @@ async function main() {
     if (scene !== 'couch') return;
     sound.wake();
     scene = 'tuning';
-    if (!BOT && !WATCH) stage.requestPointerLock?.({ unadjustedMovement: true })?.catch?.(() => stage.requestPointerLock());
+    if (!BOT && !WATCH && !TOUCH) stage.requestPointerLock?.({ unadjustedMovement: true })?.catch?.(() => stage.requestPointerLock());
     host.connect();
   };
-  stage.addEventListener('click', () => { if (scene === 'couch') sitDown(); else if (!document.pointerLockElement && !BOT && !WATCH) stage.requestPointerLock(); });
+  stage.addEventListener('click', () => { if (scene === 'couch') sitDown(); else if (!document.pointerLockElement && !BOT && !WATCH && !TOUCH) stage.requestPointerLock(); });
   addEventListener('keydown', (e) => {
     if (scene === 'couch' && (e.code === 'Enter' || e.code === 'Space')) sitDown();
     const roomInView = !(scene === 'in' && zoom >= 0.999);
@@ -143,6 +145,19 @@ async function main() {
       else document.documentElement.requestFullscreen().then(() => navigator.keyboard?.lock?.()).catch(() => {});
     }
   });
+  // on a phone, the couch's keys as buttons: the look, the theme, the list, fullscreen (client/touch.mjs)
+  if (KEEP && TOUCH) {
+    const bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:30;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:70vw';
+    for (const [label, code] of [['BALL', 'KeyB'], ['HAT', 'KeyH'], ['BODY', 'KeyP'], ['ROOM', 'KeyT'], ['LIST', 'KeyL'], ['FULL', 'KeyF']]) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'min-width:56px;min-height:40px;border-radius:20px;border:2px solid rgba(255,255,255,.45);background:rgba(20,22,30,.55);color:#fff;font:800 12px system-ui,sans-serif';
+      b.addEventListener('click', (e) => { e.stopPropagation(); dispatchEvent(new KeyboardEvent('keydown', { code })); });
+      bar.appendChild(b);
+    }
+    document.body.appendChild(bar);
+  }
 
   // T, while the room is in view: the next theme the build bundled, kept for next time
   let themeAt = -1e9;

@@ -31,6 +31,7 @@ import { NetGraph } from './netgraph.mjs';
 import { Pilot } from './flight-bot.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf } from './looks.mjs';
+import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
 const TURN = 16384;
 const AIM_MAX = Math.round(F.PITCH_MAX / TURN * 2 * 1024); // the aim's pitch either side of level, word units
@@ -81,6 +82,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (left) setTimeout(writeKeys, 170);
   };
   let locked = document.pointerLockElement === lockTarget;
+  let touch = null; // the touch controls, on a phone
   let watched = -1;
   let showGraph = graphOn;
   let bot = null;
@@ -109,11 +111,15 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
+    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+    const TOUCH = touchWanted(host.q);
+    if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
       if (!locked) lockTarget.requestPointerLock({ unadjustedMovement: true }).catch(() => lockTarget.requestPointerLock());
     });
     on(document, 'pointerlockchange', () => {
+      if (TOUCH) return;
       locked = document.pointerLockElement === lockTarget;
       if (!locked) { held.clear(); trigger = false; charging = false; writeKeys(); set(L.CL_AUTO, 0); }
     });
@@ -154,6 +160,16 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); if (e.code === 'Space') charging = false; writeKeys(); });
     on(window, 'blur', () => { held.clear(); trigger = false; charging = false; writeKeys(); set(L.CL_AUTO, 0); });
+    if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
+      look: (dx, dy) => look({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
+      buttons: [
+        { label: 'FIRE', hold: (on) => { if (on) press(L.CL_PRESSES); trigger = on; if (!on) set(L.CL_AUTO, 0); } },
+        { label: 'CHARGE', hold: (on) => { charging = on; writeKeys(); } },
+        { label: 'BOMB', tap: () => press(L.CL_GREN) },
+        { label: 'BOOST', code: 'ShiftLeft' },
+        { label: 'ROLL L', tap: () => roll(true) },
+        { label: 'ROLL R', tap: () => roll(false) },
+      ] });
   }
 
   // ---- the prediction, with the word in progress
@@ -743,7 +759,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
   return {
     frame,
-    unmount() { off(); held.clear(); set(L.CL_MOVE, 0); set(L.CL_AUTO, 0); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
+    unmount() { off(); touch?.remove(); held.clear(); set(L.CL_MOVE, 0); set(L.CL_AUTO, 0); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
     capture: (scale = 2) => (last ? capturePng(renderer, u8, last, scale) : null),
     state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, aim: [get(L.CL_YAW), get(L.CL_PITCH)], keys: get(L.CL_MOVE), rolls: get(L.CL_MELEE), error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((x) => x.text), team: me?.team ?? -1 }),
     get locked() { return locked; },
