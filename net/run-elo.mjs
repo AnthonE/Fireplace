@@ -65,17 +65,23 @@ const stub = createServer((req, res) => {
 });
 await new Promise((ok) => stub.listen(port + 2, '127.0.0.1', ok));
 
-const summaryPath = 'traces/elo.relay.json', botsPath = 'traces/elo.bots.json';
+const summaryPath = 'traces/elo.relay.json', botsPath = 'traces/elo.bots.json', onlinePath = 'traces/elo.online.json';
 rmSync(summaryPath, { force: true });
 rmSync(botsPath, { force: true });
 const t0 = performance.now();
 const relay = spawn(DENO, ['run', '--unstable-net', '-A', 'net/relay.ts', '--port', String(port), '--native-port', String(port + 1), '--seed', '7',
-  '--wasm', 'build/fireplace/game.wasm', '--duration', String(seconds + 20), '--summary', summaryPath, '--quiet',
+  '--wasm', 'build/fireplace/game.wasm', '--duration', String(seconds + 20), '--summary', summaryPath, '--online', onlinePath, '--quiet',
   '--elo', `http://127.0.0.1:${port + 2}`, '--signin-domains', `other.test,${DOMAIN}`, '--elo-key', keyPath, '--elo-key-id', WHO], { stdio: ['ignore', 'inherit', 'inherit'] });
 await new Promise((ok) => setTimeout(ok, 1500));
 const bots = spawn(process.execPath, ['net/bot-host.mjs', '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--fireplace', '--signin', DOMAIN,
   '--seconds', String(seconds), '--out', botsPath, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
+// the fullest roster the relay wrote while the guests played (the online_url Elo Pros counts as play)
+let roster = [];
+const watch = setInterval(() => {
+  try { const r = JSON.parse(readFileSync(onlinePath, 'utf8')); if (r.online.length > roster.length) roster = r.online; } catch { /* not written yet */ }
+}, 250);
 await Promise.all([new Promise((ok) => bots.on('exit', ok)), new Promise((ok) => relay.on('exit', ok))]);
+clearInterval(watch);
 stub.close();
 rmSync(keyPath, { force: true });
 
@@ -90,6 +96,10 @@ must(signed.length === nbots - 1 && signed.every((s) => s.signed.address === s.w
 must(joined.find((s) => s.wallet === REFUSED)?.signed?.status === Elo.SIGNIN.REFUSED, 'the guest Elo Pros refused was told so');
 must(rs.elo.signed === nbots - 1 && rs.elo.refused >= 1, `the relay counts ${rs.elo.signed} signed in, ${rs.elo.refused} refused`);
 must(signins.every((x) => x.domain === DOMAIN), 'the relay asked about sign-ins made on its own domains only');
+const lc = (ws) => ws.map((w) => String(w).toLowerCase()).sort().join();
+must(lc(roster.map((r) => r.wallet)) === lc(signed.map((s) => s.wallet)) && roster.every((r) => Number.isInteger(r.since)),
+  `the room's roster names every signed-in guest and nobody else (${roster.length})`);
+must(!existsSync(onlinePath), 'a relay that ends removes its roster');
 must(bs.results?.length >= 1, `the room's first game ended (${bs.results?.length ?? 0} results seen)`);
 must(reports.length >= 1 && reports.every((r) => r.ok), `the relay reported it, signed with the game's server key (${reports.length} reports)`);
 const first = bs.results?.[0], match = reports[0]?.body?.matches?.[0];

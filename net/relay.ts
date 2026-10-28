@@ -29,11 +29,13 @@
 //
 //   .tools/deno run --unstable-net -A net/relay.ts [--port 4433] [--native-port 4434] [--duration 70] [--cc low-latency|default] [--seed N] [--host 127.0.0.1]
 //                  [--upstream host:native-port[,host:native-port...]] [--standby] [--watchers 4096] [--replays dir]
-//                  [--max-players 256] [--status file] [--game name] [--tap-mask 0x10000000] [--hold-mask 0x0f000000] [--referee-lag 10]
+//                  [--max-players 256] [--status file] [--online file] [--game name] [--tap-mask 0x10000000] [--hold-mask 0x0f000000] [--referee-lag 10]
 // With --status, the room's state goes to a JSON file every STATUS_MS, for a
 // page host to serve as the room's status_url: players, max_players,
 // spectators, the sim tick and its rate. The file is written whole (a temp
-// file renamed over it), so a reader never sees half of one.
+// file renamed over it), so a reader never sees half of one. --online writes
+// who is signed in the same way, for the row's online_url: {at, online:
+// [{wallet, since}]}, the roster Elo Pros counts as play.
 // A wasm from someone else is run here too, by the referee: it is refused at
 // start unless its only import is the shared memory and it exports what the
 // referee calls, and the relay ends (exit 3) if the referee falls more than
@@ -91,6 +93,7 @@ const refereeThreads = Number(opt('referee-threads', '2'));
 // the most players a room holds (spectators aside); a joiner past it is refused FULL
 const maxPlayers = Math.max(1, Math.min(W.NP, Number(opt('max-players', String(W.NP)))));
 const statusPath = opt('status', '');
+const onlinePath = opt('online', '');
 // A missing player's word: the tap bits clear on every tick it's missing (so
 // a jump or a press fires once), the held bits after HOLD_TICKS of them (so a
 // player who drops stops walking). Golf's layout, which arena and bumper keep;
@@ -140,6 +143,7 @@ type Slot = {
   looks?: boolean; // its hello asked for the room's looks (W.HELLO_LOOKS)
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
   wallet?: string; // the wallet signed in on this slot
+  since?: number; // when it signed in, unix seconds
   signing?: boolean; // a sign-in is being checked
   ghost?: boolean; // a slot held for its player after a takeover, with no session
   leave?: (why: string) => void;
@@ -311,6 +315,7 @@ async function signIn(s: Slot, message: string, signature: string) {
   if (status === Elo.SIGNIN.SIGNED) {
     for (const x of seats) if (x.slot === s.slot && x.to === Infinity) x.to = closed + 1;
     s.wallet = wallet;
+    s.since = Math.floor(Date.now() / 1000);
     seats.push({ slot: s.slot, wallet, from: closed + 1, to: Infinity });
     if (seats.length > SEATS) seats.splice(0, seats.length - SEATS);
     stats.elo.signed++;
@@ -997,10 +1002,18 @@ function writeStatus() {
     hashes_checked: stats.compared, hashes_differed: stats.compared - stats.agreed,
     up_s: Math.round((performance.now() - E) / 1000),
   };
-  const tmp = `${statusPath}.tmp`;
-  return Deno.writeTextFile(tmp, JSON.stringify(st) + '\n').then(() => Deno.rename(tmp, statusPath)).catch((e) => console.error('relay: status: ' + e));
+  return writeWhole(statusPath, st, 'status');
+}
+function writeOnline() {
+  const online = slots.filter((s) => s && !s.ghost && s.wallet).map((s) => ({ wallet: s!.wallet, since: s!.since }));
+  return writeWhole(onlinePath, { at: Math.floor(Date.now() / 1000), online }, 'online');
+}
+function writeWhole(path: string, doc: unknown, what: string) {
+  const tmp = `${path}.tmp`;
+  return Deno.writeTextFile(tmp, JSON.stringify(doc) + '\n').then(() => Deno.rename(tmp, path)).catch((e) => console.error(`relay: ${what}: ${e}`));
 }
 if (statusPath) { writeStatus(); setInterval(writeStatus, STATUS_MS); }
+if (onlinePath) { writeOnline(); setInterval(writeOnline, STATUS_MS); }
 setInterval(() => {
   if (!lookDirty.size) return;
   const pairs = [...lookDirty].map((p) => [p, looks[p]] as [number, number]);
@@ -1035,11 +1048,12 @@ async function finish(code = 0) {
   if (summaryPath) await Deno.writeTextFile(summaryPath, text + '\n');
   else console.log(text);
   if (statusPath) await Deno.remove(statusPath).catch(() => {});
+  if (onlinePath) await Deno.remove(onlinePath).catch(() => {});
   Deno.exit(code);
 }
 // a runner that stops the relay early still gets the summary (and a pool's
 // room its status file removed, so a stopped room never reads as up)
-if (summaryPath || statusPath) Deno.addSignalListener('SIGTERM', () => finish());
+if (summaryPath || statusPath || onlinePath) Deno.addSignalListener('SIGTERM', () => finish());
 if (durationS > 0) {
   await new Promise((ok) => setTimeout(ok, durationS * 1000));
   await finish();

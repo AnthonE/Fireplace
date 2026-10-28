@@ -8,7 +8,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { init, plan, slugOf, repoOf, pagesUrl } from '../tools/kit.mjs';
+import { init, plan, slugOf, repoOf, pagesUrl, CAPSULE } from '../tools/kit.mjs';
 import { withThemes } from '../tools/elo.mjs';
 import { readThemes } from '../tools/themes.mjs';
 
@@ -19,7 +19,7 @@ const FILES = ['elo.json', 'package.json', 'README.md', 'CONTRIBUTING.md', 'clie
 // this repo is called by now: in a copy, init has already run here)
 function copy() {
   const dir = mkdtempSync(join(tmpdir(), 'kit-'));
-  for (const f of FILES) cpSync(join(ROOT, f), join(dir, f), { recursive: true });
+  for (const f of [...FILES, CAPSULE]) cpSync(join(ROOT, f), join(dir, f), { recursive: true });
   const put = (f, text) => writeFileSync(join(dir, f), text);
   const json = (f, edit) => put(f, JSON.stringify(edit(JSON.parse(readFileSync(join(dir, f), 'utf8'))), null, 2) + '\n');
   json('elo.json', () => ({ elo: 1, game: 'fireplace', jobs: [{ id: 'fireplace-theme', deliverable: 'PR: accepted into AnthonE/Fireplace' }], mods: [] }));
@@ -69,6 +69,7 @@ test("init gives a copy its own game's name and manifest, and a second run chang
     assert.equal(elo.listing.play_url, 'https://kiddev.github.io/snow-fort/');
     assert.deepEqual(elo.listing.engine, { name: 'Fireplace', license: 'CC0-1.0' });
     for (const k of ['wallet', 'jobs', 'sell', 'terms', 'servers']) assert.equal(elo[k], undefined, `no ${k} by default`);
+    assert.deepEqual(elo.art, { capsule: CAPSULE }, 'the kit\'s capsule, so the store can show the copy');
     // the themes are still credited as mods, as test/themes.test.mjs wants
     assert.deepEqual(elo, withThemes(elo, readThemes(join(dir, 'client/themes'))));
     assert.doesNotMatch(read('elo.json'), /AnthonE\/Fireplace|fireplace-/);

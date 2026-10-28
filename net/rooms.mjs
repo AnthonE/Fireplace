@@ -3,10 +3,11 @@
 // It keeps min_free rooms with nobody in them, so a newcomer always has one to
 // join; starts another when the free ones fill, up to max_rooms; and stops an
 // extra empty room once it has sat idle for idle_s. Each room writes its status
-// (relay --status) to status_dir/<port>.json, and the pool writes the game's
-// server list (elo-shardlist-v1: id, name, addr, max_players, status_url) to
-// `list`, rows in port order. A page host serves both: status_url is
-// status_base + <port>.json.
+// (relay --status) to status_dir/<port>.json and who is signed in (relay
+// --online) to <port>.online.json, and the pool writes the game's server list
+// (elo-shardlist-v1: id, name, addr, max_players, status_url, online_url) to
+// `list`, rows in port order. A page host serves all three: status_url is
+// status_base + <port>.json, online_url status_base + <port>.online.json.
 //
 // A room whose relay ends is dropped and replaced by the rule above; a room
 // that ends with a refusal (exit 2: the wasm is not a sim it will run) or a
@@ -38,7 +39,7 @@ export const certAge = () => { try { return statSync('certs/cert.pem').mtimeMs; 
 const writeWhole = (path, text) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
 
 // One room: a relay (net/relay.ts) on port for c.wasm, its status in
-// c.status_dir/<port>.json, its native door at port + c.native_offset (none
+// c.status_dir/<port>.json and its roster in <port>.online.json, its native door at port + c.native_offset (none
 // at 0). onEnd(code, why) once it has ended and its status is gone: why is
 // what made it a failure (a refusal, exit 2; a referee behind, exit 3; a room
 // that died within 10 s of starting, a port in use say), else null. Returns
@@ -47,13 +48,14 @@ export function startRoom(c, port, onEnd) {
   const args = ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts',
     '--port', String(port), '--host', c.bind, '--native-port', String(c.native_offset ? port + c.native_offset : 0),
     '--wasm', c.wasm, '--game', c.game, '--max-players', String(c.max_players),
-    '--status', `${c.status_dir}/${port}.json`, '--quiet', ...c.relay_args];
+    '--status', `${c.status_dir}/${port}.json`, '--online', `${c.status_dir}/${port}.online.json`, '--quiet', ...c.relay_args];
   const p = spawn(DENO, args, { stdio: ['ignore', 'ignore', 'inherit'] });
   const r = { p, port, cert: certAge(), started: Date.now(), emptySince: Date.now(), stopping: false, exited: false };
   p.on('exit', (code) => {
     r.exited = true;
     // a relay that crashed never removed its status: a stale file must not read as a room
     rmSync(`${c.status_dir}/${port}.json`, { force: true });
+    rmSync(`${c.status_dir}/${port}.online.json`, { force: true });
     const early = Date.now() - r.started < 10000;
     const why = code === 2 ? `the relay refused ${c.wasm} (exit 2)` : code === 3 ? 'a room\'s referee fell behind (exit 3)'
       : early && !r.stopping ? `room ${port} ended within 10 s of starting (exit ${code})` : null;
@@ -140,7 +142,7 @@ export function startPool(config, { log = (m) => console.error(`[rooms] ${m}`) }
       .map((r) => ({
         // named by its port, so a room keeps its name while others come and go
         id: `${c.game}-${r.port}`, name: `Room ${r.port - c.ports[0] + 1}`, addr: `${c.host}:${r.port}`, max_players: c.max_players,
-        ...(c.status_base ? { status_url: `${c.status_base}${r.port}.json` } : {}),
+        ...(c.status_base ? { status_url: `${c.status_base}${r.port}.json`, online_url: `${c.status_base}${r.port}.online.json` } : {}),
       }));
     const why = failures >= MAX_FAILURES ? `stopped starting rooms after ${failures} failures: ${lastWhy}` : null;
     writeWhole(c.list, JSON.stringify({ servers: rows, ...(why ? { why } : {}) }, null, 1) + '\n');
