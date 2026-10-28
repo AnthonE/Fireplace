@@ -25,6 +25,7 @@
 // 1.8 m and jumps 1.2 m; a Roblox character is about 5 studs (1.4 m) and
 // jumps 7.2 (2 m), so a ledge built to be jumped to may need a step.
 import { ancestor, path, readRoblox } from './rbx-file.mjs';
+import { weaponOf } from './rbx-brief.mjs';
 import { SURFACES, SURFACE_RGB } from './map-compile.mjs';
 import * as L from '../src/layout.mjs';
 
@@ -575,6 +576,16 @@ export function robloxToMap(doc, opts = {}) {
     spawns,
   };
   if (flags) spec.flags = flags;
+  // a weapon lying in the map (a Tool in the Workspace, by its handle) is a pad with the arena's nearest gun
+  const pads = [];
+  for (const t of doc.instances) {
+    if (t.class !== 'Tool' || !under(t) || pads.length >= L.NPAD) continue;
+    const w = weaponOf(t.name), h = t.children.find((k) => k.name === 'Handle' && k.props.CFrame);
+    if (!w || !h) continue;
+    const [x, y, z] = h.props.CFrame.p.map((v) => v * s);
+    if (inside(x + ox, z + oz)) pads.push({ weapon: w, at: [tidy(x + ox), tidy(z + oz), tidy(y + oy + 1)] });
+  }
+  if (pads.length) { spec.pads = pads; notes.push(`${pads.length} weapons lying in the map are weapon pads: ${pads.map((p) => p.weapon).join(', ')}`); }
   if (voidY !== null) spec.void = voidY;
   const surface = new Uint8Array(W * H * 3);
   for (let k = 0; k < W * H; k++) surface.set(SURFACE_RGB[SURFACES[surf[k]]], 3 * k);

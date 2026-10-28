@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readRoblox, lz4, basicRotation, path } from '../tools/rbx-file.mjs';
 import { robloxToMap, terrainColumns, fit } from '../tools/rbx-map.mjs';
+import { robloxBrief, weaponOf } from '../tools/rbx-brief.mjs';
+import { zip, crc32 } from '../tools/zip.mjs';
 import { compileSpec, materialWord, materialOf } from '../tools/map-compile.mjs';
 import { compileMap } from '../tools/map.mjs';
 import { expand, assemble } from '../tools/asm.mjs';
@@ -223,6 +225,40 @@ test('a box\'s own colour: a material word the sim never reads, the renderer\'s 
   assert.equal(materialWord('#12345'), -1);
 });
 
+test('the port brief: the scripts as files, and port.md on what they lean on; a weapon lying in the map is a pad', () => {
+  const src = (t) => `<ProtectedString name="Source"><![CDATA[${t}]]></ProtectedString>`;
+  const xml = new TextDecoder().decode(place(baseplate,
+    { cls: 'Tool', name: 'RocketLauncher', kids: [{ name: 'Handle', size: [1, 1, 4], at: [10, 3, 10] }] },
+    { cls: 'Script', name: 'Game', props: src('local ds = game:GetService("DataStoreService"):GetDataStore("Wins")\ngame.ReplicatedStorage.Hit.OnServerEvent:Connect(print)\nlocal ls = Instance.new("Folder") ls.Name = "leaderstats" local k = Instance.new("IntValue") k.Name = "KOs"') },
+    { cls: 'LocalScript', name: 'Input', props: src('script.Parent.Hit:FireServer()\n-- HitBox is another word') }))
+    .replace('</roblox>', `<Item class="ReplicatedStorage" referent="RS"><Properties><string name="Name">ReplicatedStorage</string></Properties>${item({ cls: 'RemoteEvent', name: 'Hit' })}</Item>`
+      + `<Item class="StarterPack" referent="SP"><Properties><string name="Name">StarterPack</string></Properties>${item({ cls: 'Tool', name: 'ClassicSword' })}</Item></roblox>`);
+  const doc = readRoblox(new TextEncoder().encode(xml));
+  const map = robloxToMap(doc);
+  assert.deepEqual(map.spec.pads.map((p) => p.weapon), ['rocket'], 'the launcher lying in the map');
+  const b = robloxBrief(doc, { map, name: 'Test Place' });
+  assert.deepEqual(Object.keys(b.files).sort(), ['assets.json', 'port.md', 'scripts/Workspace/Game.server.luau', 'scripts/Workspace/Input.client.luau']);
+  const md = b.files['port.md'];
+  assert.match(md, /everyone spawns with: ClassicSword \(the arena's sword\)/);
+  assert.match(md, /lying in the map to pick up: RocketLauncher \(the arena's rocket\)/);
+  assert.match(md, /`Hit` \(RemoteEvent, ReplicatedStorage\.Hit\): `scripts\/Workspace\/Game\.server\.luau`, `scripts\/Workspace\/Input\.client\.luau`/);
+  assert.match(md, /data store `Wins`/);
+  assert.match(md, /leaderstats\): KOs/);
+  assert.match(md, /DataStoreService \(1 script\): saved data/);
+  assert.deepEqual([weaponOf('Pitchfork'), weaponOf('Paintball Gun'), weaponOf('Trowel')], ['sword', 'ar', null]);
+});
+
+test('a zip of the brief: stored files a zip reader takes', () => {
+  assert.equal(crc32(new TextEncoder().encode('hello')), 0x3610a686);
+  const z = zip({ 'a/b.txt': 'hello', 'c.md': 'ü' });
+  const dv = new DataView(z.buffer);
+  assert.equal(dv.getUint32(0, true), 0x04034b50);
+  const end = z.length - 22;
+  assert.equal(dv.getUint32(end, true), 0x06054b50);
+  assert.equal(dv.getUint16(end + 10, true), 2, 'two files in the directory');
+  assert.equal(new TextDecoder().decode(z.subarray(30 + 7, 30 + 7 + 5)), 'hello');
+});
+
 test('maps/crossroads, Roblox\'s Crossroads made by the converter, builds', () => {
   const m = compileMap('maps/crossroads');
   assert.equal(m.name, 'Crossroads');
@@ -233,7 +269,7 @@ test('maps/crossroads, Roblox\'s Crossroads made by the converter, builds', () =
 });
 
 test('the converter is the page\'s too: no Node in its modules', () => {
-  for (const f of ['rbx-file.mjs', 'rbx-map.mjs']) {
+  for (const f of ['rbx-file.mjs', 'rbx-map.mjs', 'rbx-brief.mjs', 'zip.mjs']) {
     const src = readFileSync(new URL(`../tools/${f}`, import.meta.url), 'utf8');
     assert.ok(!/from 'node:|require\(/.test(src), `${f} imports Node`);
   }

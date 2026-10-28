@@ -30,7 +30,7 @@ node net/run-pages.mjs                      # the GitHub Pages site (tools/site.
 node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the kit's copies, each on its own wasm; node net/run-kit-rooms.mjs is its gate
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
-node tools/roblox.mjs place.rbxl [maps/<name>]   # a Roblox place (.rbxl/.rbxlx) as a map (docs/roblox.md); the editor opens one too
+node tools/roblox.mjs place.rbxl [maps/<name>] [--brief]   # a Roblox place (.rbxl/.rbxlx) as a map, --brief its scripts and port.md (docs/roblox.md); the editor opens one too
 node net/play.mjs --arena --map <name>      # build the arena on it and play (--flight --map for Dogfight's)
 ```
 

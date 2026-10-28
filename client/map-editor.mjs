@@ -17,6 +17,9 @@ import {
 import { decode, encode } from '../tools/png-codec.mjs';
 import { readRoblox } from '../tools/rbx-file.mjs';
 import { robloxToMap } from '../tools/rbx-map.mjs';
+import { robloxBrief } from '../tools/rbx-brief.mjs';
+import { zip } from '../tools/zip.mjs';
+import { createMapView } from './map-view.mjs';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view'), ctx = canvas.getContext('2d');
@@ -68,7 +71,7 @@ function adopt(spec, images, folder, dir = null) {
   }
   // from here on the images are what this page writes
   spec.terrain = Object.assign(t, { height: 'height.png', scale: 0.00390625, base: 0, surface: 'surface.png' });
-  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, rev: ++revs, report: null });
+  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, rev: ++revs, report: null, brief: null });
   undo.length = 0; redo.length = 0;
   paintTerrain();
   fit();
@@ -250,7 +253,9 @@ function changed() {
 function check() {
   try { st.result = compileSpec(st.spec, images(), 'map.json'); st.error = null; }
   catch (e) { st.result = null; st.error = String(e.message || e).replace(/^map\.json: /, ''); }
+  if (st.result) map3 = true;
   renderCheck();
+  draw3();
 }
 
 // ---- the draft, kept in this browser
@@ -324,6 +329,7 @@ async function openRoblox(file) {
   const out = robloxToMap(doc, { name });
   adopt(out.spec, out.images, slug(name));
   st.report = out.report;
+  st.brief = { name: slug(name), ...robloxBrief(doc, { map: out, name }) };
   st.dirty = true;
   renderSide();
   say(`made ${name} from a Roblox place: ${out.report[0]}`);
@@ -399,6 +405,7 @@ const terr = document.createElement('canvas'), tctx = terr.getContext('2d');
 // The ground from above: its surface's colour, lit from the north-west, a
 // line every 5 m of height.
 function paintTerrain() {
+  ground3 = true;
   const { W, H, hgt, srf } = st;
   terr.width = W; terr.height = H;
   const im = tctx.createImageData(W, H), d = im.data, pal = palette(st.spec.terrain);
@@ -418,6 +425,7 @@ function paintTerrain() {
 
 let drawQueued = false;
 function draw() {
+  draw3();
   if (drawQueued) return;
   drawQueued = true;
   requestAnimationFrame(() => { drawQueued = false; frame(); });
@@ -560,10 +568,107 @@ function drawTele(from, to, mine, i) {
   ctx.beginPath(); ctx.moveTo(x1, y1 - 6); ctx.lineTo(x1 + 6, y1); ctx.lineTo(x1, y1 + 6); ctx.lineTo(x1 - 6, y1); ctx.fill();
 }
 
+// ---- the 3D view (client/map-view.mjs): the arena's own renderer on the map
+// being edited, from a camera orbiting the 2D view's middle, so panning
+// either moves both. Drag turns it, right-drag (or Shift-drag) moves it, the
+// wheel zooms. Nothing is picked in it yet: picking is the 2D view's.
+const canvas3 = $('view3d');
+const cam3 = { yaw: -Math.PI / 2, pitch: -0.55, dist: 140 };
+let view3 = null, view3Failed = false, ground3 = true, map3 = true, draw3Queued = false, drawing3 = false, again3 = false;
+const MODE = 'fireplace-map-editor-view';
+function setMode(m) {
+  st.mode = m;
+  $('wrap').className = m;
+  for (const b of $('modes').children) b.classList.toggle('on', b.dataset.mode === m);
+  try { localStorage.setItem(MODE, m); } catch { /* the page works without it */ }
+  if (m !== '2d' && !view3 && !view3Failed) {
+    createMapView(canvas3, { present: new URLSearchParams(location.search).get('present') !== '0' }).then((v) => { view3 = v; ground3 = map3 = true; draw3(); }).catch((e) => {
+      view3Failed = true;
+      say(`no 3D view: ${e.message || e}`);
+      setMode('2d');
+    });
+  }
+  draw();
+}
+// what can be placed, as sprites and zones the renderer draws: spawns a disc
+// in their side's colour, pads, flags and the skull standing, hills as the
+// game paints them, teleporters and race gates glowing, the pick bright
+function marks3() {
+  const sp = st.spec, solid = [], glow = [], zone = [];
+  const flags = flagsNow();
+  const side = [[0.9, 0.3, 0.25], [0.3, 0.5, 0.95], [0.85, 0.85, 0.85]];
+  for (const s of sp.spawns || []) glow.push({ pos: [s[0], stand(s[0], s[1], s[2] ?? GROUND) + 0.1, s[1]], size: 0.6, color: [...side[half(s[0], s[1], flags)], 0.9], kind: 3, minpx: 2 });
+  for (const p of sp.pads || []) solid.push({ pos: [p.at[0], stand(p.at[0], p.at[1], p.at[2] ?? GROUND) + 0.7, p.at[1]], size: 0.55, aspect: 0.8, color: [0.9, 0.6, 0.2, 1], kind: 4, minpx: 2 });
+  flags.forEach((f, k) => solid.push({ pos: [f[0], stand(f[0], f[1], f[2]) + 1.2, f[1]], size: 0.8, aspect: 0.5, color: [...side[k], 1], kind: 4, minpx: 3 }));
+  const b = ballNow();
+  solid.push({ pos: [b[0], stand(b[0], b[1], b[2]) + 0.6, b[1]], size: 0.4, color: [0.95, 0.95, 0.9, 1], kind: 4, minpx: 2 });
+  for (const h of hillsNow().slice(0, 8)) zone.push({ x: h[0], z: h[1], r: h[3], y: stand(h[0], h[1], h[2]), h: 3, color: [0.9, 0.85, 0.3], pulse: 0 });
+  for (const t of sp.teleporters || []) {
+    glow.push({ pos: [t.from[0], t.from[1] + 1.1, t.from[2]], size: (t.radius ?? 1.2) * 1.3, color: [0.35, 0.85, 1, 0.7], kind: 6, minpx: 1 });
+    glow.push({ pos: [t.to[0], t.to[1] + 0.15, t.to[2]], size: 0.8, color: [0.5, 0.9, 1, 0.35], kind: 3, minpx: 1 });
+  }
+  for (const g of sp.race || []) glow.push({ pos: [g[0], g[1], g[2]], size: g[3], color: [1, 0.8, 0.3, 0.6], kind: 6, minpx: 2 });
+  if (st.sel && st.sel.kind !== 'box') {
+    const [x, z] = posOf(st.sel);
+    glow.push({ pos: [x, stand(x, z, 1e9) + 1, z], size: 1.4, color: [1, 0.85, 0.35, 0.9], kind: 3, minpx: 4 });
+  }
+  return { solid, glow, zone: zone.length ? zone : null };
+}
+function draw3() {
+  if (!view3 || st.mode === '2d' || draw3Queued || !st.spec) return;
+  draw3Queued = true;
+  requestAnimationFrame(async () => {
+    draw3Queued = false;
+    // one frame at a time (the first makes the renderer, which takes a while): a change meanwhile draws again after
+    if (drawing3) { again3 = true; return; }
+    drawing3 = true;
+    try {
+      if (ground3) { view3.ground(st); ground3 = false; }
+      if (map3 && st.result) { view3.map(st.result); map3 = false; }
+      view3.marks(marks3());
+      await view3.draw({ target: [view.cx, ground(view.cx, view.cz), view.cz], ...cam3 });
+    } finally { drawing3 = false; }
+    if (again3) { again3 = false; draw3(); }
+  });
+}
+let drag3 = null;
+canvas3.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas3.addEventListener('pointerdown', (e) => {
+  drag3 = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey };
+  canvas3.setPointerCapture(e.pointerId);
+});
+canvas3.addEventListener('pointermove', (e) => {
+  if (!drag3) return;
+  const dx = e.clientX - drag3.x, dy = e.clientY - drag3.y;
+  drag3.x = e.clientX; drag3.y = e.clientY;
+  if (drag3.pan) {
+    // the ground under the cursor follows it: across the screen is the camera's right, up it its forward
+    const k = cam3.dist / (canvas3.clientWidth * 0.62);
+    const c = Math.cos(cam3.yaw), s = Math.sin(cam3.yaw);
+    const f = 1 / Math.max(0.3, -Math.sin(cam3.pitch)); // the ground foreshortened along the view
+    view.cx += (s * dx + c * dy * f) * k;
+    view.cz += (-c * dx + s * dy * f) * k;
+  } else {
+    cam3.yaw += dx * 0.008;
+    cam3.pitch = clamp(cam3.pitch + dy * 0.005, -1.3, -0.03);
+  }
+  draw();
+});
+const end3 = () => { drag3 = null; };
+canvas3.addEventListener('pointerup', end3);
+canvas3.addEventListener('pointercancel', end3);
+canvas3.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  cam3.dist = clamp(cam3.dist * Math.exp(e.deltaY * 0.0012), 4, 1200);
+  draw3();
+}, { passive: false });
+new ResizeObserver(() => draw()).observe($('wrap'));
+
 function fit() {
   const b = bounds(), cw = canvas.clientWidth || 800, ch = canvas.clientHeight || 600;
   view.cx = (b[0] + b[1]) / 2; view.cz = (b[2] + b[3]) / 2;
   view.zoom = Math.min(cw / (b[1] - b[0] + 40), ch / (b[3] - b[2] + 40));
+  cam3.dist = clamp(Math.max(b[1] - b[0], b[3] - b[2]) * 0.9, 20, 1200);
   draw();
 }
 
@@ -1083,6 +1188,14 @@ function renderCheck() {
       ...(m.void !== null ? [`a fighter below ${m.void} m dies by falling`] : []),
     ].join(' · ')),
     ...(st.report ? [el('p', { className: 'hint', textContent: 'From the Roblox place:' }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
+    ...(st.brief ? [
+      el('p', { className: 'hint', textContent: `Its game is ${st.brief.summary.scripts} scripts (${st.brief.summary.lines.toLocaleString('en')} lines). The port brief is them as files and port.md, what they do and lean on: hand it to an agent to write the rules here.` }),
+      el('div', { className: 'row' }, btn('download the port brief', () => {
+        const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([zip(Object.fromEntries(Object.entries(st.brief.files).map(([f, t]) => [`${st.brief.name}-port/${f}`, t])))])), download: `${st.brief.name}-port.zip` });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      })),
+    ] : []),
   );
 }
 
@@ -1108,6 +1221,7 @@ function buildHeader() {
     } catch (err) { if (err.name !== 'AbortError') say(`could not open it: ${err.message || err}`); }
   };
   $('save').onclick = save;
+  for (const b of $('modes').children) b.onclick = () => setMode(b.dataset.mode);
   $('undo').onclick = () => restore(undo, redo);
   $('redo').onclick = () => restore(redo, undo);
 }
@@ -1142,6 +1256,11 @@ addEventListener('drop', (e) => {
 
 buildHeader();
 setTool('select');
+{
+  let m = null;
+  try { m = localStorage.getItem(MODE); } catch { /* none kept */ }
+  setMode(m || (navigator.gpu && innerWidth > 1100 ? 'split' : '2d'));
+}
 const q = new URLSearchParams(location.search);
 (async () => {
   try {

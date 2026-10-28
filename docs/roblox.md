@@ -8,15 +8,20 @@ everything it left out or changed.
 
 ```sh
 node tools/roblox.mjs place.rbxl              # writes maps/place/, checked by the build's compiler
+node tools/roblox.mjs place.rbxl --brief      # and port/place/: the game's scripts and port.md (below)
 node net/play.mjs --arena --map place         # play it with bots
 ```
 
 Or open `/client/map-editor.html` (`node tools/serve.mjs`), pick **open… >
-a Roblox place…** or drop the file on the page, look it over, change what
-you like, and save it into `maps/`. The editor runs the same converter in
-the page. `maps/crossroads/` is Roblox's own Crossroads, made this way.
+a Roblox place…** or drop the file on the page, look it over in 2D and in
+3D (the arena's own renderer, so what it shows is what a fighter sees),
+change what you like, and save it into `maps/`; the check panel offers the
+port brief as a zip. The editor runs the same converter in the page.
+`maps/crossroads/` is Roblox's own Crossroads, made this way.
 
 ![Crossroads from above: the crossroads, the trees, the houses, in their own colours](r1-crossroads.png)
+
+![The map editor on Crossroads: the 2D view, and the 3D view beside it, the arena's own renderer at ground level](r2-editor-3d.png)
 
 ## What comes over
 
@@ -37,6 +42,7 @@ line). `tools/rbx-map.mjs` makes the map:
 | smooth terrain | the ground: the top of each column of solid voxels, its material the surface (grass, rock or sand); water drained, caves and overhangs filled |
 | a part's colour (Color3, or a BrickColor in a place from before 2016) | the box's own colour; metal, stone and neon keep a look (`metal#808080`, `rock#...`, `light#...`) |
 | a spawn location | a spawn on its top; the two commonest teams are red's and blue's, their flags among their spawns |
+| a tool lying in the Workspace (a gear giver) | a weapon pad with the arena's nearest gun, by its name: a sword, a rocket launcher, a sniper rifle |
 | sky under the place | a pit, and `"void"`: a fighter below 3 m under the lowest ground dies by falling |
 | unanchored parts | kept: a classic place's bricks are held by joints, not anchors (`--anchored` leaves them out) |
 
@@ -114,6 +120,51 @@ In the sim, 64 AI fighters on Crossroads (1,764 boxes) step in 0.21 ms a
 tick at the median and 0.88 ms at p99, on Eagles Castle (2,048) in 0.30 and
 1.4 ms, against Box Canyon's (83 boxes) 0.10 and 0.20, of the tick's 8 ms.
 
+## The game: a port brief
+
+The map comes over by itself; the game's rules can't, because a script is
+Luau on Roblox's API. What can be done without a prompt is the brief an
+agent ports from, so the port is one prompt on everything rather than one
+per question. `--brief` (or the editor's **download the port brief**)
+writes, from the same file:
+
+- `scripts/`, every script as a file where it sat, server, client or
+  module as Rojo names them (`Workspace/Tower/Bouncer.server.luau`);
+- `port.md`: the players (walk speed, jump, health, respawn, what everyone
+  spawns with, what lies in the map, what scripts hand out, each with the
+  arena's nearest gun), the teams, the leaderboard's stats, every remote
+  with the scripts that fire or hear it (in lockstep each becomes a field
+  of the input word or nothing), data stores, game passes and developer
+  products (a sold edge does not come over), and the Roblox services each
+  script leans on, with what stands for each here;
+- `assets.json`: every asset id the place names and where, for the
+  licence check: sounds, meshes and images are on Roblox's servers, and its
+  licensed audio is only for Roblox.
+
+Crossroads' brief: 48 scripts (1,376 lines), everyone spawning with a
+sword, slingshot, rocket launcher, trowel, timebomb and superball, KOs and
+Wipeouts on the board, no remotes. Miner's Haven's: 710 scripts (54,844
+lines), 95 remotes, 10 data stores, three developer products, 1,711 assets.
+`port/` is in `.gitignore`: a brief is the place owner's code.
+
+What porting a game takes beyond the brief:
+
+1. **Its rules, written fresh** on a kit here (the arena's modes, Party's
+   minigames), by an agent from the brief. The part that can't be
+   mechanical.
+2. **Maps chosen at run time**, so a converted map plays in a browser and
+   in an online room without a build: today it is built into the wasm
+   (`--map`). The sim reads the map's sizes from its own head instead of
+   compiled constants, the room names a map by its sha256, every client
+   fetches and checks it before the first tick (docs/roadmap.md, Engine
+   work 3). The step that lets a player drop a place and play it with
+   friends the same minute.
+3. **Moving parts** (doors, lifts, obbies' platforms): boxes are static.
+   A moving box is gameplay state in the region, stepped by the sim.
+4. **Meshes**, for a place built of them: their shapes are on Roblox's
+   servers, so the owner exports them from Studio (as `.obj`), and a mesh
+   reader turns them into boxes the way a turned part is.
+
 ## Limits
 
 - Meshes come over as their bounds: a tree of meshes is a block. A mesh's
@@ -138,8 +189,11 @@ Only bring a place that is yours, or that its owner has licensed for reuse
 | --- | --- |
 | `tools/rbx-file.mjs` | a Roblox file into instances: binary (LZ4, zstd given a decoder) and XML, no Node |
 | `tools/rbx-map.mjs` | instances into `map.json` and the two images, the report, no Node |
-| `tools/roblox.mjs` | the command line: a file in, `maps/<name>/` out, compiled by `tools/map.mjs` |
-| `client/map-editor.mjs` | the editor's **a Roblox place…** and drop |
+| `tools/rbx-brief.mjs` | the port brief: the scripts as files, port.md, assets.json, no Node |
+| `tools/zip.mjs` | the brief as one stored zip, for the editor, no Node |
+| `tools/roblox.mjs` | the command line: a file in, `maps/<name>/` out, compiled by `tools/map.mjs`; `--brief` writes `port/<name>/` |
+| `client/map-view.mjs` | the editor's 3D view: the arena's renderer on the map being edited |
+| `client/map-editor.mjs` | the editor's **a Roblox place…**, drop, and the brief's download |
 | `test/roblox.test.mjs` | the reader on Studio's own baseplate (binary and XML agree) and unions, LZ4, terrain, each rule above on a place written in the test, the fit, and the void in the sim |
 
 Box colours are drawing only: the low byte of a box's material word is its

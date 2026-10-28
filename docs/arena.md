@@ -557,6 +557,11 @@ QG_MAP=mymap npm run build                # or just build: node tools/asm.mjs --
   spawns, 12 pads and 8 hills (radius up to 30 m), and each side's half
   (the spawns strictly nearer its own flag) needs a spawn.
 
+The editor shows the map in 3D beside the 2D view (**2D / 3D / both**):
+the arena's own renderer (`client/map-view.mjs`) on what is being edited,
+from a camera that orbits the 2D view's middle; drag turns it, right-drag
+moves it, the wheel zooms. Picking is the 2D view's.
+
 A Roblox place makes a map too: `node tools/roblox.mjs place.rbxl`, or
 open it in the map editor ([docs/roblox.md](roblox.md)).
 
