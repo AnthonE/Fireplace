@@ -179,8 +179,8 @@ jobs:
         run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 240
       - name: Fireplace online from Dogfight (the playlist started at its entry 4, 64 guests, the room moved on into golf, every hash checked)
         run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 220 --start 4
-      - name: Elo Pros online (guests sign in through the relay, one refused; the first game's places reported once, signed with the server key)
-        run: node net/run-elo.mjs --bots 6 --seconds 150
+      - name: Elo Pros online (guests sign in through the relay, one refused; the first game's places and each guest's achievements reported once, signed with the server key)
+        run: node net/run-elo.mjs --bots 6 --seconds 240
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

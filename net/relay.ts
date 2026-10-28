@@ -48,7 +48,9 @@
 // signature is good; the slot is then that wallet's. With --elo-key (the
 // private half of the game's server key, PEM) and --elo-key-id (<slug>/<key
 // id>), Fireplace's build reports each game's result to --elo's ratings, the
-// signed-in players at the places the referee read: a rated match per game.
+// signed-in players at the places the referee read: a rated match per game,
+// and each signed-in wallet's achievements (client/achievements.mjs) to its
+// game stats there.
 //                  [--elo https://elopros.com] [--signin-domains host[,host...]] [--elo-key file --elo-key-id fireplace/<id>]
 // Clients are Chrome (net/run-m0.mjs hosts the bots there): Deno's WebTransport
 // client always binds an IPv6 socket, which hosts without IPv6 refuse. Native
@@ -60,6 +62,7 @@ import { recordLog } from './inbox.mjs';
 import { encodeReplay } from './replay.mjs';
 import { simRefusal } from './sim-check.mjs';
 import * as Elo from './elo.mjs';
+import * as A from '../client/achievements.mjs';
 
 const argv = Deno.args;
 const opt = (k: string, d: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
@@ -228,7 +231,8 @@ const stats = {
   refHashes: [] as [number, string][], reports: {} as Record<number, [number, string][]>,
   replays: [] as string[], watchSessions: 0, watchMax: 0, watchBytes: 0, watchSeconds: 0, watchCompared: 0, watchAgreed: 0,
   resumed: 0, takeover: null as null | Record<string, number>,
-  elo: { signins: 0, signed: 0, refused: 0, unchecked: 0, results: 0, unrated: 0, reported: 0, failed: 0, matches: [] as string[] },
+  elo: { signins: 0, signed: 0, refused: 0, unchecked: 0, results: 0, unrated: 0, reported: 0, failed: 0, matches: [] as string[],
+    achievements: { reports: 0, players: 0, unlocked: 0, failed: 0, seeded: 0, short: 0 } },
 };
 
 // The referee: closed ticks go to it in batches; interval hashes and packed keyframes come back.
@@ -259,12 +263,13 @@ referee.onmessage = (e: MessageEvent) => {
     stats.refLagMax = Math.max(stats.refLagMax, closed - roomStart - m.at);
   }
   // an edge's referee sees the same ends; the room's own relay reports them
-  if (m.results && rated && !edge) for (const r of m.results) reportResult(r);
+  if (m.results && rated && !edge) for (const r of m.results) { reportResult(r); reportAchievements(r); }
 };
 
 // A game's end, as the referee read it, to Elo Pros's ratings: the players
 // signed in on its slots at the tick it ended, at the places it gave them.
-function reportResult(result: { tick: number; game: number; count: number; places: [number, number][] }) {
+type Result = { tick: number; game: number; count: number; places: [number, number][]; got: number[] };
+function reportResult(result: Result) {
   stats.elo.results++;
   const at = roomStart + result.tick;
   const match = Elo.matchOf({ seed: roomSeed, roomStart, result, wallet: (slot: number) => walletAt(slot, at) });
@@ -272,22 +277,72 @@ function reportResult(result: { tick: number; game: number; count: number; place
   stats.elo.matches.push(match.id);
   postReport(match);
 }
-async function postReport(match: object) {
-  const path = `/api/ratings/${eloWho.split('/')[0]}/report`;
-  const body = new TextEncoder().encode(JSON.stringify({ matches: [match] }));
+function postReport(match: { id: string }) {
+  postSigned('ratings', { matches: [match] }, (text) => { stats.elo.reported++; log(`rated: ${text.slice(0, 200)}`); }, () => { stats.elo.failed++; });
+}
+// A signed call to one of --elo's report routes (/api/<what>/<slug>/report),
+// tried again while Elo Pros is down; a refusal is final.
+async function postSigned(what: string, payload: object, ok: (text: string) => void, failed: () => void) {
+  const path = `/api/${what}/${eloWho.split('/')[0]}/report`;
+  const body = new TextEncoder().encode(JSON.stringify(payload));
   for (let k = 0; k < 4; k++) {
     try {
       const headers = await Elo.serverHeaders(eloKey!, eloWho, 'POST', path, body);
       const r = await fetch(eloOrigin + path, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body });
       const text = await r.text();
-      if (r.ok) { stats.elo.reported++; log(`rated: ${text.slice(0, 200)}`); return; }
+      if (r.ok) { ok(text); return; }
       // a refusal says why, and sending it again would get the same answer
-      if (r.status < 500 && r.status !== 429) { stats.elo.failed++; console.error(`relay: ratings refused the match (${r.status}): ${text.slice(0, 300)}`); return; }
-    } catch (e) { log(`ratings: ${e}`); }
+      if (r.status < 500 && r.status !== 429) { failed(); console.error(`relay: ${what} refused the report (${r.status}): ${text.slice(0, 300)}`); return; }
+    } catch (e) { log(`${what}: ${e}`); }
     await new Promise((ok) => setTimeout(ok, 2000 * 2 ** k));
   }
-  stats.elo.failed++;
-  console.error('relay: ratings could not be reached; the match went unreported');
+  failed();
+  console.error(`relay: ${what} could not be reached; the report went unsent`);
+}
+
+// Achievements on Elo Pros: each signed-in wallet's tally, rebuilt at its
+// first game here from what Elo Pros holds for it (its game stats), then kept
+// for the relay's life, one game at a time per wallet. A tally Elo Pros
+// couldn't give back counts that one game from nothing (it opens fewer, never
+// a wrong one) and is asked for again at the wallet's next game. One game's
+// reports go in one signed call.
+type Tally = ReturnType<typeof A.emptyTally> & { short?: boolean };
+const TALLIES = 4096;
+const tallies = new Map<string, Promise<Tally>>();
+async function seedTally(wallet: string): Promise<Tally> {
+  try {
+    const r = await fetch(`${eloOrigin}/api/gamestats/${eloWho.split('/')[0]}/of/${wallet}`, { signal: AbortSignal.timeout(8000) });
+    // 404: the game declares no stats yet, or none for this wallet: a first game
+    if (r.ok || r.status === 404) { stats.elo.achievements.seeded++; return A.tallyOfStats(r.ok ? await r.json() : null); }
+    log(`gamestats: ${wallet}'s stats answered ${r.status}`);
+  } catch (e) { log(`gamestats: ${wallet}'s stats: ${e}`); }
+  stats.elo.achievements.short++;
+  return { ...A.emptyTally(), short: true };
+}
+function reportAchievements(result: Result) {
+  const at = roomStart + result.tick;
+  const steps = Elo.walletResults({ seed: roomSeed, roomStart, result, wallet: (slot: number) => walletAt(slot, at) }).map(({ wallet, r }) => {
+    const step = (tallies.get(wallet) ?? seedTally(wallet)).then((t) => {
+      const x = A.record(t, r);
+      return { wallet, t: { ...x.tally, short: t.short } as Tally, rep: A.statsReport(wallet, t, x.tally, r, x.opened) };
+    });
+    const kept = step.then((s) => s.t);
+    tallies.delete(wallet);
+    tallies.set(wallet, kept);
+    if (tallies.size > TALLIES) tallies.delete(tallies.keys().next().value!);
+    step.then((s) => { if (s.t.short && tallies.get(wallet) === kept) tallies.delete(wallet); });
+    return step;
+  });
+  if (!steps.length) return;
+  Promise.all(steps).then((done) => {
+    const reports = done.map((s) => s.rep).filter(Boolean);
+    if (!reports.length) return;
+    const unlocked = reports.reduce((n, x) => n + x!.unlock.length, 0);
+    postSigned('gamestats', { reports }, () => {
+      Object.assign(stats.elo.achievements, { reports: stats.elo.achievements.reports + 1, players: stats.elo.achievements.players + reports.length, unlocked: stats.elo.achievements.unlocked + unlocked });
+      log(`achievements: ${reports.length} players, ${unlocked} unlocked`);
+    }, () => { stats.elo.achievements.failed++; });
+  });
 }
 
 // A player's sign-in: the message their wallet signed, made on one of our

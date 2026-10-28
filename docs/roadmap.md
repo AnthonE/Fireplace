@@ -204,12 +204,11 @@ The wrapper, ours first:
    interval hashes are the room's truth, not any client's: the "replay"
    evidence tier of `docs/store/ACHIEVEMENTS.md`. Ratings are built: each
    game's places go to Elo Pros as a rated match ([hosting.md](hosting.md)).
-   The page's achievements are
-   already tests over those standings as the world holds them
-   (`client/achievements.mjs` `readResult`, `record`), so the relay can run the
-   same ones for each signed-in slot and publish them per wallet, the shape
-   Gates' shards serve (`/achievements.json`), and they follow the player
-   off one browser.
+   Achievements are built too: the relay runs the page's tests
+   (`client/achievements.mjs`) for each signed-in slot on a tally it reads
+   back from Elo Pros's game stats, and reports each game's counts and
+   unlocks there, so they follow the wallet off one browser. They show on
+   Elo Pros once `elo.json`'s `stats` block lands on the row.
 
 Then, in scry-forge: a key-value store per wallet for what lasts (party
 points, marshmallows).

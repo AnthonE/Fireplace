@@ -61,6 +61,28 @@ test('a result as a rated match: signed-in players only, at their places, one se
     ['golf', 'arena', 'bumper', 'party', 'dogfight']);
 });
 
+test("a result for each signed-in wallet's achievements: Ethereum wallets, a wallet's better seat, keyed as the match", () => {
+  const W1 = '0x' + '11'.repeat(20), W2 = '0x' + '22'.repeat(20), SOL = '4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T';
+  const seat = { 0: W1, 1: W2, 2: null, 3: SOL, 4: W1 };
+  const result = { game: L.G_PARTY, count: 3, places: [[0, 2], [1, 1], [2, 3], [3, 4], [4, 5]], got: [2, 3, 1, 0, 0] };
+  const rs = Elo.walletResults({ seed: 0xdeadbeef, roomStart: 1200, result, wallet: (p) => seat[p] ?? null });
+  assert.deepEqual(rs, [
+    { wallet: W1, r: { key: 'fp-deadbeef-1200-3', game: L.G_PARTY, place: 2, got: 2, field: 5 } },
+    { wallet: W2, r: { key: 'fp-deadbeef-1200-3', game: L.G_PARTY, place: 1, got: 3, field: 5 } },
+  ], 'the guest and the Solana wallet left out, W1 at its better seat with that seat\'s marshmallows');
+  assert.equal(rs[0].r.key, Elo.matchOf({ seed: 0xdeadbeef, roomStart: 1200, result, wallet: (p) => seat[p] ?? null }).id);
+  assert.deepEqual(Elo.walletResults({ seed: 1, roomStart: 0, result: { ...result, places: [[2, 1]], got: [3] }, wallet: (p) => seat[p] ?? null }), []);
+});
+
+test("a server key's public half in elo.json: a new id added, an old one rotated in place, a bad id refused", async () => {
+  const { withServerKey } = await import('../tools/elo.mjs');
+  const m = { elo: 1, game: 'fireplace', server_keys: [{ id: 'a', pub: 'A' }, { id: 'b', pub: 'B' }] };
+  assert.deepEqual(withServerKey(m, 'a', 'A2').server_keys, [{ id: 'a', pub: 'A2' }, { id: 'b', pub: 'B' }]);
+  assert.deepEqual(withServerKey(m, 'c', 'C').server_keys.map((k) => k.id), ['a', 'b', 'c']);
+  assert.deepEqual(withServerKey({ elo: 1 }, 'room-1', 'P').server_keys, [{ id: 'room-1', pub: 'P' }]);
+  assert.throws(() => withServerKey(m, 'Room 1', 'P'));
+});
+
 test("a report carries the game server's signature over the text Elo Pros checks (serverkeys.message)", async () => {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   const key = await Elo.loadKey(privateKey.export({ type: 'pkcs8', format: 'pem' }));
@@ -105,6 +127,8 @@ test("the referee says when a game ends, with the places the room shows, once; w
   assert.equal(r.count, 0, "the room's first game: none played before it");
   assert.deepEqual(r.places, [[0, 1], [1, 3], [2, 2]]);
   assert.deepEqual(r.places, [0, 1, 2].map((p) => [p, ref.u8[L.FP_LAST + p]]), 'the places FP_LAST holds');
+  assert.deepEqual(r.got, [0, 1, 2].map((p) => ref.u8[L.FP_GOT + p]), 'the marshmallows FP_GOT holds');
+  assert.equal(r.got[0], 3, 'the winner got three');
   assert.equal(Elo.matchOf({ seed: 7, roomStart: 0, result: r, wallet: (p) => `0x${String(p).repeat(40)}` }).ladder, 'bumper');
   assert.deepEqual((await run(false)).got, []);
 });

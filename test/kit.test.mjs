@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { init, plan, slugOf, repoOf, pagesUrl, CAPSULE } from '../tools/kit.mjs';
-import { withThemes } from '../tools/elo.mjs';
+import { withGenerated } from '../tools/elo.mjs';
 import { readThemes } from '../tools/themes.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -71,7 +71,7 @@ test("init gives a copy its own game's name and manifest, and a second run chang
     for (const k of ['wallet', 'jobs', 'sell', 'terms', 'servers']) assert.equal(elo[k], undefined, `no ${k} by default`);
     assert.deepEqual(elo.art, { capsule: CAPSULE }, 'the kit\'s capsule, so the store can show the copy');
     // the themes are still credited as mods, as test/themes.test.mjs wants
-    assert.deepEqual(elo, withThemes(elo, readThemes(join(dir, 'client/themes'))));
+    assert.deepEqual(elo, withGenerated(elo, readThemes(join(dir, 'client/themes'))));
     assert.doesNotMatch(read('elo.json'), /AnthonE\/Fireplace|fireplace-/);
     assert.equal(JSON.parse(read('package.json')).name, 'snow-fort-party');
     assert.equal(JSON.parse(read('client/kit.json')).name, 'Snow Fort Party');

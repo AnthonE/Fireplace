@@ -31,9 +31,12 @@ to Elo Pros's ratings (`net/elo.mjs`; [wire.md](wire.md) has the client's
 half). Its flags, through `relay_args`:
 - `--signin-domains game.elopros.com`: the page hosts a sign-in may be made
   on; each is checked with `POST https://elopros.com/api/signin/check`.
-- `--elo-key server.key --elo-key-id fireplace/<id>`: the private half of a
-  server key (`openssl genpkey -algorithm ed25519 -out server.key`) whose public
-  half Fireplace's steward named on Elo Pros (`/api/store/serverkeys/fireplace`).
+- `--elo-key certs/elo-<id>.key --elo-key-id fireplace/<id>`: the private
+  half of a server key whose public half Elo Pros holds for Fireplace
+  (`/api/store/serverkeys/fireplace`). `node tools/elo.mjs --server-key <id>`
+  makes one: the private half to `certs/` (git ignores it), the public half
+  into `elo.json`'s `server_keys`, which Elo Pros takes with the manifest once
+  it is committed. Until Elo Pros holds a key, it refuses every report.
 - `--elo`: where Elo Pros is, `https://elopros.com` unless a test says otherwise.
 
 When a game ends, the referee reads the places it gave (`FP_LAST`) and the
@@ -41,8 +44,20 @@ relay reports the players signed in at that tick, each at their place, to
 `POST /api/ratings/fireplace/report`, one ladder per game (golf, arena,
 bumper, party, dogfight). A game with fewer than two signed in isn't reported. The
 match's id names the room and the game, so a report sent twice, or sent again
-by a standby that took the room over, is rated once. `node net/run-elo.mjs` is
-the gate, against a stand-in for Elo Pros.
+by a standby that took the room over, is rated once.
+
+The same relay keeps each signed-in wallet's achievements on Elo Pros's game
+stats (`/api/gamestats/fireplace`). At a wallet's first game in the room it
+reads back what Elo Pros holds for it (`GET .../of/<wallet>`), rebuilds the
+page's tally from that (`client/achievements.mjs` `tallyOfStats`), runs the
+page's own tests on each game it plays, and reports what the game added (the
+counts, the unlocks, the marshmallow board) in one signed call per game to
+`POST /api/gamestats/fireplace/report`. Elo Pros takes the stats `elo.json`
+declares in its `stats` block, which `node tools/elo.mjs` writes from the
+achievements. Ethereum wallets only, which is what Elo Pros keeps stats for.
+If Elo Pros can't be read, that game counts from nothing (it opens fewer
+achievements, never a wrong one) and the wallet is read again at its next.
+`node net/run-elo.mjs` is the gate for both, against a stand-in for Elo Pros.
 
 **Someone else's game.** The referee runs the room's wasm, so a pool can host
 a game we did not write. The relay gives that wasm its shared memory and

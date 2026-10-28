@@ -68,5 +68,191 @@
       "about": "Blue stripes, light oak, nothing on the mantel and rain on the window.",
       "path": "client/themes/summer-rain.json"
     }
-  ]
+  ],
+  "stats": {
+    "stats": [
+      {
+        "id": "games",
+        "name": "Games played",
+        "agg": "sum"
+      },
+      {
+        "id": "mallows",
+        "name": "Marshmallows",
+        "agg": "sum"
+      },
+      {
+        "id": "wins",
+        "name": "Wins",
+        "agg": "sum"
+      },
+      {
+        "id": "streak",
+        "name": "Wins in a row now",
+        "agg": "latest"
+      },
+      {
+        "id": "best_streak",
+        "name": "Most wins in a row",
+        "agg": "max"
+      },
+      {
+        "id": "place.1",
+        "name": "Firsts",
+        "agg": "sum"
+      },
+      {
+        "id": "place.2",
+        "name": "Seconds",
+        "agg": "sum"
+      },
+      {
+        "id": "place.3",
+        "name": "Thirds",
+        "agg": "sum"
+      },
+      {
+        "id": "crowd",
+        "name": "Most in one game",
+        "agg": "max"
+      },
+      {
+        "id": "played.golf",
+        "name": "Played Golf",
+        "agg": "sum"
+      },
+      {
+        "id": "played.arena",
+        "name": "Played Arena",
+        "agg": "sum"
+      },
+      {
+        "id": "played.bumper",
+        "name": "Played Bumper balls",
+        "agg": "sum"
+      },
+      {
+        "id": "played.party",
+        "name": "Played Party",
+        "agg": "sum"
+      },
+      {
+        "id": "played.dogfight",
+        "name": "Played Dogfight",
+        "agg": "sum"
+      },
+      {
+        "id": "won.golf",
+        "name": "Won Golf",
+        "agg": "sum"
+      },
+      {
+        "id": "won.arena",
+        "name": "Won Arena",
+        "agg": "sum"
+      },
+      {
+        "id": "won.bumper",
+        "name": "Won Bumper balls",
+        "agg": "sum"
+      },
+      {
+        "id": "won.party",
+        "name": "Won Party",
+        "agg": "sum"
+      },
+      {
+        "id": "won.dogfight",
+        "name": "Won Dogfight",
+        "agg": "sum"
+      }
+    ],
+    "achievements": [
+      {
+        "id": "CHAIR",
+        "name": "Pull up a chair",
+        "desc": "Play a game in the room"
+      },
+      {
+        "id": "TOASTED",
+        "name": "Toasted",
+        "desc": "Finish in the top three"
+      },
+      {
+        "id": "GOLDEN",
+        "name": "Golden brown",
+        "desc": "Win a game"
+      },
+      {
+        "id": "ROLL",
+        "name": "On a roll",
+        "desc": "Win two games in a row"
+      },
+      {
+        "id": "HATTRICK",
+        "name": "Hat trick",
+        "desc": "Win three games in a row"
+      },
+      {
+        "id": "PODIUM",
+        "name": "Every step",
+        "desc": "Finish first, second and third"
+      },
+      {
+        "id": "BAG",
+        "name": "A bag of them",
+        "desc": "25 marshmallows in all",
+        "progress": {
+          "stat": "mallows",
+          "max": 25
+        }
+      },
+      {
+        "id": "CAMPFIRE",
+        "name": "Campfire",
+        "desc": "100 marshmallows in all",
+        "progress": {
+          "stat": "mallows",
+          "max": 100
+        }
+      },
+      {
+        "id": "REGULAR",
+        "name": "A regular",
+        "desc": "Play 25 games",
+        "progress": {
+          "stat": "games",
+          "max": 25
+        }
+      },
+      {
+        "id": "PLAYLIST",
+        "name": "The whole playlist",
+        "desc": "Play golf, the arena, bumper balls and party"
+      },
+      {
+        "id": "ALLROUND",
+        "name": "All-rounder",
+        "desc": "Win golf, the arena, bumper balls and party"
+      },
+      {
+        "id": "CROWD",
+        "name": "A full house",
+        "desc": "Play a game with 32 or more in it"
+      },
+      {
+        "id": "ACE",
+        "name": "Ace",
+        "desc": "Win a Dogfight"
+      }
+    ],
+    "boards": [
+      {
+        "id": "mallows",
+        "name": "Marshmallows",
+        "sort": "desc",
+        "keep": "best"
+      }
+    ]
+  }
 }

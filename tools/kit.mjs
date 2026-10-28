@@ -22,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './main.mjs';
-import { withThemes } from './elo.mjs';
+import { withGenerated } from './elo.mjs';
 import { readThemes } from './themes.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -83,7 +83,7 @@ export function plan(name, { root = ROOT, slug, repo, blurb, tagline, force = fa
     ? { elo: 1, game: slug, multiplayer: 'match', listing, ...art }
     : { ...was, game: slug, listing };
   const themes = readThemes(join(root, 'client', 'themes'));
-  out['elo.json'] = JSON.stringify(withThemes(elo, themes), null, 2) + '\n';
+  out['elo.json'] = JSON.stringify(withGenerated(elo, themes), null, 2) + '\n';
 
   const pkg = JSON.parse(read('package.json'));
   out['package.json'] = JSON.stringify({ ...pkg, name: slug }, null, 2) + '\n';

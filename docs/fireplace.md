@@ -147,7 +147,10 @@ game's end is on screen (`FP_STAGE` 1): the game, this slot's place
 (`FP_LAST`) and marshmallows (`FP_GOT`), and how many were in it. So every
 machine reads the same bits for it; the page counts its own slot's, once per
 game (a key of the room, the games played and the game, so a keyframe that
-shows the same end again counts nothing). Four open a look: the pumpkin head,
+shows the same end again counts nothing). A signed-in player's are kept on
+Elo Pros too, where they follow the wallet: the room's relay runs the same
+tests for each signed-in slot and reports them ([hosting.md](hosting.md)).
+Four open a look: the pumpkin head,
 the eight ball, the gold ball and the crown (the marshmallow ball takes 100
 marshmallows). What one opened shows under the standings, and L lists them on
 the TV, six a page. They are this browser's record, not the room's: signing in
@@ -236,5 +239,5 @@ Juggernaut from 423 s, party from 612 s, golf from 846 s). On SwiftShader at
 the build of `game.wasm` it was recorded on: after a sim change, record again,
 plan it and move the shots.
 
-Not done yet: a vote for what's next, names, achievements that follow a
-player off this browser, and a way to lean back from the TV mid-game.
+Not done yet: a vote for what's next, names, and a way to lean back from the
+TV mid-game.
