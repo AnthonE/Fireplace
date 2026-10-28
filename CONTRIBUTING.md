@@ -221,11 +221,20 @@ there. Then play it with bots:
 
 ```sh
 node net/play.mjs --arena --map <folder>                # open the URL it prints
-node net/play.mjs --flight --mode 12 --map <folder>     # Dogfight's Ring Race, on a map with gates
+node net/play.mjs --flight --mode 15 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
 
 Send it as a pull request with the folder in `maps/`, and say which game
-it is for. A map is part of the game's build, not just a look, so it
+it is for. The editor's **send it in** does that without git: it downloads
+the three files and opens GitHub's upload page for `maps/<folder>/`; drop
+them there and propose the change (GitHub makes a fork for you if you need
+one). CI checks every map in `maps/` the way you can here:
+
+```sh
+node tools/map-check.mjs maps/<folder>   # compiles, builds into the debug sim, plays three modes with AI fighters
+```
+
+A map is part of the game's build, not just a look, so it
 reaches everyone when it is merged and a game is built on it. Each game
 builds one map today; several in one build is on the roadmap.
 `docs/arena.md`'s "Making a map" has the format, for editing `map.json` by

@@ -6,7 +6,10 @@
 // the built wasm and themes (run npm run build first), coi.js at the root (the
 // service worker that makes the pages cross-origin isolated where the host
 // cannot send the headers), and an index.html that opens Fireplace's page,
-// its query kept. No sources the browser never reads: WAT, the relay, tests.
+// its query kept. The map editor's half too: the map compiler and the PNG
+// codec it runs in the page (tools/map-compile.mjs, tools/png-codec.mjs) and
+// the maps it opens (maps/). No sources the browser never reads: WAT, the
+// relay, tests.
 //   node tools/site.mjs [out]   (default site/)
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -22,6 +25,8 @@ const PARTS = [
   ['net', (f) => /\.m?js$/.test(f), false],
   ['harness', (f) => f === 'core.mjs' || f === 'worker.mjs', false],
   ['build', (f) => f === 'game.wasm' || f === 'themes.json' || f === 'manifest.json', true],
+  ['tools', (f) => f === 'map-compile.mjs' || f === 'png-codec.mjs', false],
+  ['maps', (f) => f === 'map.json' || f.endsWith('.png'), true],
 ];
 
 const INDEX = `<!doctype html>

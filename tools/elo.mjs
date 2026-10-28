@@ -4,16 +4,17 @@
 // from this repo. Its "mods" credit what people made for the game; every room
 // theme is one, written here from client/themes/ so the store's list and the
 // themes never disagree. Other mods (a minigame someone sent, say) are added
-// by hand and kept. Its "stats" block declares the room's achievements, the
+// by hand and kept. So is every map in maps/ whose map.json names who made
+// it ("by", a GitHub login, which the map editor asks for). Its "stats" block declares the room's achievements, the
 // stats they are counted from and the marshmallow board, written here from
 // client/achievements.mjs, the list the page and the relay both test against.
-//   node tools/elo.mjs           rewrite the themes in elo.json's mods, and its stats
+//   node tools/elo.mjs           rewrite the themes and maps in elo.json's mods, and its stats
 //   node tools/elo.mjs --check   exit 1 if they're out of date (test/themes.test.mjs runs this)
 //   node tools/elo.mjs --server-key <id>   a new key for the relay's reports
 //     (net/relay.ts --elo-key): the private half to certs/elo-<id>.key, which
 //     git ignores, and the public half into elo.json's server_keys under <id>
 //     (a new row, or the old one rotated), which Elo Pros takes from the repo
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { generateKeyPairSync } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,15 +25,30 @@ import { eloStats } from '../client/achievements.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const FILE = join(ROOT, 'elo.json');
 
+// The maps in maps/ a mod each: those whose map.json names a GitHub login as "by".
+export function readMaps(dir = join(ROOT, 'maps')) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && existsSync(join(dir, d.name, 'map.json')))
+    .map((d) => ({ folder: d.name, spec: JSON.parse(readFileSync(join(dir, d.name, 'map.json'), 'utf8')) }))
+    .filter(({ spec }) => typeof spec.by === 'string' && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(spec.by))
+    .sort((a, b) => (a.folder < b.folder ? -1 : 1));
+}
+const mapMod = ({ folder, spec }) => ({
+  id: `map-${folder}`.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 32), kind: 'map', name: String(spec.name || folder).slice(0, 40), by: spec.by,
+  ...(typeof spec.about === 'string' && spec.about.trim() ? { about: spec.about.trim().slice(0, 200) } : {}), path: `maps/${folder}`,
+});
+
 const themeMod = (t) => ({ id: t.id, kind: 'theme', name: t.name, by: t.by, ...(t.about ? { about: t.about } : {}), path: `client/themes/${t.id}.json` });
 
-// elo.json as it should be: its theme mods from the themes (a theme's own pr
-// link, added when it was merged, kept), its stats from the achievements,
+// elo.json as it should be: its theme mods from the themes and its map mods
+// from the maps (a mod's own pr link, added when it was merged, kept), its stats from the achievements,
 // everything else as it is.
-export function withGenerated(manifest = JSON.parse(readFileSync(FILE, 'utf8')), themes = readThemes()) {
-  const old = new Map((manifest.mods || []).filter((m) => m.kind === 'theme').map((m) => [m.id, m]));
-  const others = (manifest.mods || []).filter((m) => m.kind !== 'theme');
-  const mods = [...themes.map((t) => ({ ...themeMod(t), ...(old.get(t.id)?.pr ? { pr: old.get(t.id).pr } : {}) })), ...others];
+export function withGenerated(manifest = JSON.parse(readFileSync(FILE, 'utf8')), themes = readThemes(), maps = readMaps()) {
+  const made = (m) => m.kind === 'theme' || (m.kind === 'map' && String(m.path || '').startsWith('maps/'));
+  const old = new Map((manifest.mods || []).filter(made).map((m) => [m.id, m]));
+  const others = (manifest.mods || []).filter((m) => !made(m));
+  const keepPr = (m) => ({ ...m, ...(old.get(m.id)?.pr ? { pr: old.get(m.id).pr } : {}) });
+  const mods = [...themes.map((t) => keepPr(themeMod(t))), ...maps.map((m) => keepPr(mapMod(m))), ...others];
   return { ...manifest, mods, stats: eloStats() };
 }
 
@@ -61,10 +77,10 @@ if (isMain(import.meta.url) && process.argv.includes('--server-key')) {
   const now = readFileSync(FILE, 'utf8');
   const want = JSON.stringify(withGenerated(JSON.parse(now)), null, 2) + '\n';
   if (process.argv.includes('--check')) {
-    if (now !== want) { console.error('elo.json\'s mods are not the themes in client/themes/, or its stats not the achievements: run node tools/elo.mjs'); process.exit(1); }
-    console.log('elo.json: its mods are the themes, its stats the achievements');
+    if (now !== want) { console.error('elo.json\'s mods are not the themes in client/themes/ and the maps in maps/, or its stats not the achievements: run node tools/elo.mjs'); process.exit(1); }
+    console.log('elo.json: its mods are the themes and maps, its stats the achievements');
   } else {
     writeFileSync(FILE, want);
-    console.log(now === want ? 'elo.json: no change' : 'elo.json: its themes and stats rewritten');
+    console.log(now === want ? 'elo.json: no change' : 'elo.json: its themes, maps and stats rewritten');
   }
 }

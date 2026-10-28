@@ -143,7 +143,7 @@ export function skyways() {
     structures.push({ name: `tower at ${x}, ${z}`, boxes: [[x - 3, y, z - 3, x + 3, y + 50, z + 3, 'metal'], [x - 4, y + 50, z - 4, x + 4, y + 52, z + 4, 'dark'], [x - 1, y + 52, z - 1, x + 1, y + 57, z + 1, 'light']].map((b) => b.map(tidy)) });
   }
   // spawns: red's half, open air 25 m over the ground clear of everything, mirrored for blue
-  const spec = { name: 'Skyways', bounds: BOUNDS };
+  const spec = { name: 'Skyways', by: 'AnthonE', about: "Dogfight's sky over open ground, with a ring race through its gates.", bounds: BOUNDS };
   const red = [[300, 512], [300, 470], [300, 554], [330, 440], [330, 584], [260, 470], [250, 584], [380, 470],
     [380, 560], [230, 300], [230, 724], [300, 260], [300, 764], [440, 230], [430, 760], [460, 440]];
   const spawns = [];

@@ -5,7 +5,8 @@
 // page cross-origin isolated, the site's index opened Fireplace, the room is
 // local (client/local.mjs) with its AI guests in, the sim kept stepping
 // (interval hashes every 128 ticks) through a switch of games, and Party's own
-// page played a local room on the minigame it was asked for. Screenshots go
+// page played a local room on the minigame it was asked for, and the map
+// editor opened Box Canyon from the site and its compiler took it. Screenshots go
 // to traces/pages-*.png.
 //   node net/run-pages.mjs [--seconds 200] [--bots 5] [--mg 0]
 import { createServer } from 'node:http';
@@ -89,6 +90,14 @@ try {
   const ps = await party.evaluate(() => ({ ...window.__qa.state(), hashes: window.__qa.hashes.length }));
   await shoot(party, 'party');
   report.party = { isolated: await party.evaluate(() => window.crossOriginIsolated), hashes: ps.hashes, state: { slot: ps.slot, clState: ps.clState, game: ps.game, name: ps.name } };
+  // the map editor from the same site: it opens Box Canyon from maps/ and the build's compiler, in the page, takes it
+  const editor = await ctx.newPage();
+  watch(editor, 'editor');
+  await editor.goto(`${base}/client/map-editor.html`);
+  await editor.waitForFunction(() => document.querySelector('#foot')?.textContent !== 'loading…', null, { timeout: 30000 });
+  await editor.selectOption('#open', 'canyon');
+  await editor.waitForFunction(() => /The build takes it/.test(document.querySelector('#side')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
+  report.editor = { checked: await editor.evaluate(() => /The build takes it/.test(document.querySelector('#side')?.textContent || '')), foot: await editor.textContent('#foot') };
 } catch (e) {
   report.errors.push(String(e?.stack || e));
 } finally {
@@ -105,10 +114,11 @@ const gate = {
   switchedGames: seconds < 200 || (f?.games.length ?? 0) >= 2,
   partyLocal: !!report.party?.isolated && report.party.hashes > 0,
   partyOnItsMinigame: ps.game === mg,
+  editorOpensAMap: !!report.editor?.checked,
   noErrors: report.errors.length === 0,
 };
 report.gate = { ...gate, pass: Object.values(gate).every(Boolean) };
 writeFileSync('traces/pages.json', JSON.stringify(report, null, 2) + '\n');
-console.log(JSON.stringify({ fireplace: report.fireplace, party: report.party, errors: report.errors, gate: report.gate }, null, 2));
+console.log(JSON.stringify({ fireplace: report.fireplace, party: report.party, editor: report.editor, errors: report.errors, gate: report.gate }, null, 2));
 console.log(`PAGES gate: ${report.gate.pass ? 'PASS' : 'FAIL'}`);
 process.exit(report.gate.pass ? 0 : 1);

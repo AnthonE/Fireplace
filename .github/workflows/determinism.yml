@@ -124,6 +124,8 @@ jobs:
         run: |
           node tools/genparty.mjs --mg 40 --bots 16 --ticks 20000 --out logs/sumo.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/sumo.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: Every map in maps/ compiles, builds into the debug sim and plays with AI fighters
+        run: node tools/map-check.mjs --all
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

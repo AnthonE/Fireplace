@@ -29,10 +29,10 @@
     {
       "id": "fireplace-map",
       "title": "a map for the arena or Dogfight",
-      "what": "A new place to fight: a folder in maps/ (map.json, height.png, surface.png), drawn in the browser with client/map-editor.html: shape and paint the ground, drag out walls and roofs, place spawns, weapon pads, teleporters, flags, hills and race gates. node net/play.mjs --arena --map <folder> plays it with bots.",
+      "what": "A new place to fight: a folder in maps/ (map.json, height.png, surface.png), drawn in the browser with client/map-editor.html: shape and paint the ground, drag out walls and roofs, place spawns, weapon pads, teleporters, flags, hills and race gates. Put your GitHub login in its by field. node net/play.mjs --arena --map <folder> plays it with bots; send it in from the editor. CI compiles it and plays it with AI fighters (node tools/map-check.mjs).",
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
-      "check": "review"
+      "check": "machine"
     }
   ],
   "mods": [
@@ -67,6 +67,31 @@
       "by": "AnthonE",
       "about": "Blue stripes, light oak, nothing on the mantel and rain on the window.",
       "path": "client/themes/summer-rain.json"
+    },
+    {
+      "id": "map-canyon",
+      "kind": "map",
+      "name": "Box Canyon",
+      "by": "AnthonE",
+      "about": "Two bases at either end of a canyon, a cave between them, teleporters out to the rocks.",
+      "path": "maps/canyon"
+    },
+    {
+      "id": "map-skyways",
+      "kind": "map",
+      "name": "Skyways",
+      "by": "AnthonE",
+      "about": "Dogfight's sky over open ground, with a ring race through its gates.",
+      "path": "maps/skyways"
+    }
+  ],
+  "tools": [
+    {
+      "id": "map-editor",
+      "name": "Map editor",
+      "makes": "map",
+      "url": "https://game.elopros.com/fireplace/client/map-editor.html",
+      "about": "Draw a map for the arena or Dogfight in the browser, play it with bots, and send it in."
     }
   ],
   "stats": {
