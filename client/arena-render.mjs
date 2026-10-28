@@ -14,6 +14,7 @@ import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { BODIES } from './looks.mjs';
+import { PALETTE as AV_PALETTE } from './avatar.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 256;
@@ -23,6 +24,7 @@ export const MAX_ZONE = 8;
 const FAR = 700;
 const NO_TINTS = new Uint32Array(L.NPLAYER); // a page with no looks: every seat its own colour
 const NO_LOOKS = new Uint32Array(L.NPLAYER).fill(0x10000); // nor bodies: everyone blocky
+const NO_AVATARS = new Uint32Array(L.NPLAYER); // nor avatars
 // a body's skin and face (client/looks.mjs BODIES) for the fighters' figures; the round rider's body is a peach blocky one here
 const SKINS = BODIES.map((b) => b.skin || [1.0, 0.8, 0.66]);
 const FACES = BODIES.map((b) => b.face || 1);
@@ -302,10 +304,14 @@ struct SOut {
   @location(3) @interpolate(flat) feet: vec3f, // a fighter's: where it stands
   @location(4) @interpolate(flat) pose: vec4f, // its heading, its aim (rad, up), its stride's phase and length (0..1)
   @location(5) @interpolate(flat) skin: vec4f, // its skin, and its face (client/rider.mjs PART) + 16 x its flags (PF_*)
+  @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
 };
 ${BLOCK_RAY_WGSL}
 const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
 const FACES = array<u32, ${FACES.length}>(${FACES.map((f) => `${f}u`).join(', ')});
+const AV_PALETTE = array<vec3f, 32>(${AV_PALETTE.map(vec3).join(', ')});
+// part k's colour in avatar word a
+fn avc(a: u32, k: u32) -> vec3f { return AV_PALETTE[(a >> (5u * k)) & 31u]; }
 
 // A fighter as a blocky figure (client/rider.mjs's, a size up to 1.83 m): its
 // legs stepping with its speed, its arms out holding its gun level with its
@@ -321,6 +327,9 @@ fn figure(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
   let zombie = (flags & ${L.PF_ZOMBIE}u) != 0u;
   let c = s.color.rgb;
   let skin = select(s.skin.rgb, c, zombie);
+  // an avatar dresses it, but a side's or a role's colour stays on the shirt, and a zombie is all green
+  let av = select(0u, s.av, (s.av >> 31u) == 1u && !zombie);
+  let sided = u.map.z > 0.5 || (flags & ${L.PF_JUGG}u) != 0u;
   var best: Block;
   best.hit = false;
   best.t = 1e9;
@@ -336,22 +345,23 @@ fn figure(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
       pitch = sin(s.pose.z) * 0.7 * s.pose.w * k;
       let ay = up * cos(pitch) - f * sin(pitch);
       ctr = s.feet + up * 0.5 * S + side * 0.125 * S * k - ay * 0.25 * S;
-      col = c * 0.5;
+      col = select(c * 0.5, avc(av, select(4u, 5u, k > 0.0)), av != 0u);
     } else if (i < 4u) { // an arm
       pitch = select(1.5 + s.pose.y, 1.55, zombie);
       splay = select(-0.22 * k, 0.0, zombie);
       let u0 = up * cos(pitch) - f * sin(pitch);
       let ay = u0 * cos(splay) - side * sin(splay);
       ctr = s.feet + up * 0.92 * S + side * 0.375 * S * k - ay * 0.17 * S;
-      col = skin;
+      col = select(skin, avc(av, select(2u, 3u, k > 0.0)), av != 0u);
     } else if (i == 4u) { // the torso
       ctr = s.feet + up * 0.75 * S;
       h = vec3f(0.25, 0.25, 0.125) * S;
+      if (av != 0u && !sided) { col = avc(av, 1u); }
     } else if (i == 5u) { // the head
       ctr = s.feet + up * 1.1825 * S;
       h = vec3f(0.16, 0.15, 0.15) * 1.15 * S;
-      col = skin;
-      part = u32(s.skin.w + 0.5) & 15u;
+      col = select(skin, avc(av, 0u), av != 0u);
+      part = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
     } else { // the gun, in both hands, along the aim
       if (zombie) { continue; }
       let g = f * cos(s.pose.y) + up * sin(s.pose.y);
@@ -415,6 +425,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     o.pose = vec4f(f32(w & 0x7ffu) / 2048.0 * 6.2832, (f32((w >> ${L.AW_PITCH}u) & 0x3ffu) - 512.0) / 1024.0 * 3.1416, u.view.w * (3.0 + speed * 0.9), min(speed / 6.0, 1.0));
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + i] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body] + 16u * fl));
+    o.av = players[${L.NPLAYER * L.PSIZE / 4 + 2 * L.NPLAYER}u + i];
     color = vec4f(tintOf(i, slotColor(i)), 1.0);
     // the match's sides: red and blue by PF_BLUE; Infection's zombies green, the juggernaut gold, everyone else one blue
     if (u.map.z > 1.5) { color = select(vec4f(0.92, 0.22, 0.16, 1.0), vec4f(0.22, 0.42, 1.0, 1.0), (fl & ${L.PF_BLUE}u) != 0u); }
@@ -789,7 +800,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
 
   const ubuf = device.createBuffer({ size: 4 * (36 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 8); // the records, then each slot's tint, then its look word
+  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, its look word, its avatar
   const projBuf = storage(L.NPROJ * L.JSIZE);
   const spriteBuf = storage(MAX_SPRITE * 48);
   const beamBuf = storage(MAX_BEAM * 48);
@@ -890,6 +901,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE, s.tints ?? NO_TINTS);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 4, s.looks ?? NO_LOOKS);
+      device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 8, s.avatars ?? NO_AVATARS);
       device.queue.writeBuffer(projBuf, 0, u8, s.proj ?? L.PROJ, L.NPROJ * L.JSIZE);
       sprites.forEach((p, k) => {
         const c = p.color;

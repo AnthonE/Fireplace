@@ -16,10 +16,10 @@
 // The HUD's 3x5 font and minimap are scaled up to the screen. Nothing here
 // is hashed.
 import * as L from '../src/layout.mjs';
-import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { PLAT_Y, PLAT_T } from '../src/bumper-view.mjs';
 import { BLOCK, BLOCK_WGSL } from './rider.mjs';
+import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 4096; // a blocky rider is six boxes and its hat's
@@ -616,14 +616,20 @@ fn miniPx(q: vec2f) -> vec4f {
   return vec4f(0.05, 0.25, 0.4, 0.6);
 }
 
+${HUD_FONT_WGSL}
 @fragment fn fs_hud(@builtin(position) q: vec4f) -> @location(0) vec4f {
-  let p = vec2i(floor((q.xy - vec2f(u.misc.z, 0.0)) / u.hud.w));
-  if (lit(p)) {
+  let hp = (q.xy - vec2f(u.misc.z, 0.0)) / u.hud.w;
+  let p = vec2i(floor(hp));
+  // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
+  let roundOn = font[64u] != 0u;
+  let t = roundText(hp, ${COLS}u, u32(u.hud.x));
+  if (t.a > 0.0) { return t; }
+  if (!roundOn && lit(p)) {
     let cell = vec2i(p.x / 4, p.y / 6);
     let k = (hud[u32(cell.y) * ${COLS}u + u32(cell.x)] >> 8u) & 7u;
     return vec4f(PALETTE[k], 1.0);
   }
-  if (lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.75); }
+  if (!roundOn && lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.75); }
   let g = graphPx(p);
   if (g.a > 0.0) { return g; }
   for (var k = i32(u.counts.w) - 1; k >= 0; k--) {
@@ -674,9 +680,10 @@ export async function createRenderer(canvas, { present = true, hudScale = 1, dev
   const beamBuf = storage(MAX_BEAM * 48);
   const rectBuf = storage(MAX_RECT * 32);
   const hudBuf = storage(COLS * rows * 4);
-  const fontBuf = storage(FONT.length * 4);
+  const fontAll = fontData({ round: roundWanted() });
+  const fontBuf = storage(fontAll.length * 4);
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
-  device.queue.writeBuffer(fontBuf, 0, FONT);
+  device.queue.writeBuffer(fontBuf, 0, fontAll);
   const maskTex = device.createTexture({ size: [MASK_N, MASK_N], format: 'rg8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
   const colorMs = device.createTexture({ size: [W, H], format, sampleCount: MSAA, usage: GPUTextureUsage.RENDER_ATTACHMENT });

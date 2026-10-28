@@ -157,11 +157,11 @@ crediting who made what (every theme is one). Next, in order:
    rider, three blocky, a robot: `client/rider.mjs`, the arena's fighters the
    same figure), four of them earned with the page's achievements
    (`client/achievements.mjs`), and four emotes in the word's top byte.
-   Next, an avatar any game can draw: a 32-colour palette and the figure's
-   six parts (head, torso, two arms, two legs) at 5 bits each, 30 bits, one
-   more word a slot beside the look (the relay's `T_LOOK` carries two), which
-   `/api/face/{wallet}` serves for a wallet that set one, so the figure a
-   player is on Elo Pros is the one they ride a ball as here. Then owned ones as Gates
+   Built too: the Elo Pros avatar, a word any game can draw (a 32-colour
+   palette and the figure's six parts at 5 bits each, a face bit), set on a
+   player's profile and served on `/api/face/{wallet}`, which the relay reads
+   at sign-in and sends beside the looks (`T_AVATAR`), so the figure a player
+   is on Elo Pros is the one they ride a ball as here. Next, owned ones as Gates
    does them: an `EloItem` collection for Fireplace (one deploy, the
    operator's), catalog rows in scry-forge's `data/items/catalogs.json` with
    `title: "fireplace"`, and the relay reading

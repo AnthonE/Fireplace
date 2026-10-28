@@ -161,6 +161,28 @@ are still the old card on its side.
 
 ![Every body, and a crowd of blocky riders walking their balls](p2-blocky.png)
 
+**Avatars.** A player who signed in with Elo Pros wears the avatar they
+picked on their profile there: one word (`client/avatar.mjs`), six parts
+(head, torso, each arm, each leg) from a 32-colour palette and a face. The
+relay reads it off `/api/face/{wallet}` as the slot signs in and sends it to
+everyone beside the looks (hello flag 16, `T_AVATAR`, `CL_AVATARS`;
+[wire.md](wire.md)). A blocky rider or fighter wears its colours in place of
+the body's skin and the ball's shirt; the hat and the ball stay the look's,
+and in a team mode the side's colour stays on the shirt. A local room's AI
+players wear avatars of their own (`guestAvatar`); `?avatar=<word>` wears one
+for a visit. `?scene=avatars` on the party demo shows a row.
+
+![Elo Pros avatars on blocky riders](p4-avatars.png)
+
+**The font.** Bumper balls', party's and the TV's text is a bold sans with a
+dark outline (`client/hudfont.mjs`): the 3x5 font's 64 characters drawn again
+at startup from the system's own sans, a rounded one where there is one, into
+an atlas that rides in the renderers' font buffer after the pixel glyphs, so
+no shader gained a binding. The text grid is the pixel font's, a character 4
+x 6 HUD pixels, so every layout is what it was. `?font=pixel` keeps the 3x5
+font. Golf's, the arena's and Dogfight's HUDs draw at one screen pixel a font
+pixel, where a cell is too small for a smooth face, and keep it.
+
 **Emotes and juice.** 1 to 4 in bumper balls and party wave, cheer, dance and
 spin: the look word's top byte, an emote in its low four bits and a count in
 its high four, so the same emote twice is a new word the relay passes on. A

@@ -213,7 +213,7 @@ async function main() {
       text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
       text(GAMES_LINE, 320, 275, 3, '#8ea0b8', 'center');
       if (KEEP) {
-        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t);
+        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
         const { ball, hat, body } = unpackLook(look);
         const s = `B: ${BALLS[ball].name}  H: ${HATS[hat].name}  P: ${BODIES[body].name}  L: ACHIEVEMENTS ${Object.keys(tally.got).length}/${ACHIEVEMENTS.length}`;
         text(s, 320, 300, s.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
@@ -263,7 +263,7 @@ async function main() {
   function lookCard(t) {
     const { ball, hat, body } = unpackLook(look);
     text('YOUR LOOK', 320, 26, 5, '#ffcf6a', 'center');
-    drawLook(g2, 170, 260, 56, Math.max(0, get(L.CL_SLOT)), look, t);
+    drawLook(g2, 170, 246, 50, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
     text('BALL', 330, 80, 3, '#8ea0b8');
     text(BALLS[ball].name, 330, 98, 5, '#ffffff');
     text('B FOR ANOTHER', 330, 126, 3, '#c9b89a');
@@ -273,8 +273,8 @@ async function main() {
     text('BODY', 330, 240, 3, '#8ea0b8');
     text(BODIES[body].name, 330, 258, 5, '#ffffff');
     text('P FOR ANOTHER', 330, 286, 3, '#c9b89a');
-    text('EVERYONE IN THE ROOM SEES IT', 320, 308, 3, '#8ea0b8', 'center');
-    text('IN A GAME, 1 TO 4: WAVE, CHEER, DANCE, SPIN', 320, 328, 3, '#8ea0b8', 'center');
+    text('EVERYONE IN THE ROOM SEES IT', 320, 310, 3, '#8ea0b8', 'center');
+    text('IN A GAME, 1 TO 4: WAVE, CHEER, DANCE, SPIN', 320, 331, 3, '#8ea0b8', 'center');
     const shut = [...BALLS, ...HATS, ...BODIES].find((x) => !isOpen(x, got));
     if (shut) {
       const s = `EARN ${lookName(shut)}: ${ACHIEVEMENTS.find((a) => a.id === shut.unlock).about}`;

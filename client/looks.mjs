@@ -12,6 +12,8 @@
 // A look with `unlock` is earned: it opens when that achievement does
 // (client/achievements.mjs), kept in this browser like the achievements.
 
+import { colorsOf } from './avatar.mjs';
+
 // The ball's patterns, as the bumper and party renderers draw them (case 0)
 export const PATTERN = { BEACH: 0, STRIPES: 1, RIBS: 2, SOLID: 3, METAL: 4, EIGHT: 5 };
 // The hat's styles, as the head is drawn (case 8)
@@ -111,6 +113,14 @@ export function looksOf(h) {
   for (let p = 0; p < 256; p++) t[p] = h.look(p);
   return t;
 }
+// every slot's Elo Pros avatar (client/avatar.mjs), the same way
+const AVATARS = new WeakMap();
+export function avatarsOf(h) {
+  let t = AVATARS.get(h);
+  if (!t) AVATARS.set(h, (t = new Uint32Array(256)));
+  for (let p = 0; p < 256; p++) t[p] = h.avatar ? h.avatar(p) : 0;
+  return t;
+}
 
 // ---- what this browser picked, and what it has earned (localStorage, like the room's theme)
 const KEY = 'fireplace.look';
@@ -145,7 +155,7 @@ export function wearable(w, got) {
 
 // ---- a picture of a look, for the TV's cards (a 2D canvas context)
 const css = (c, k = 1) => `rgb(${c.map((v) => Math.round(Math.min(1, v * k) * 255)).join(',')})`;
-export function drawLook(g, cx, cy, r, slot, w, t = 0) {
+export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0) {
   const L = lookOf(slot, w);
   // the ball
   g.save();
@@ -177,7 +187,7 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0) {
   // a rim, so a dark ball still shows on a dark card
   g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = Math.max(1, r * 0.05);
   g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
-  if (BODIES[L.body].blocky) return drawBlocky(g, cx, cy - r, r, L, t);
+  if (BODIES[L.body].blocky) return drawBlocky(g, cx, cy - r, r, L, t, colorsOf(avatar));
   // the rider, as the renderers place it on a ball of radius r: a body 0.22 r over its top, a head 0.78 r
   const hr = r * 0.3, hx = cx, hy = cy - r - r * 0.78;
   g.fillStyle = css(L.a, 0.8); g.beginPath(); g.arc(cx, cy - r - r * 0.22, r * 0.34, 0, Math.PI * 2); g.fill(); g.stroke();
@@ -195,26 +205,29 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0) {
   g.fillRect(hx + hr * 0.23, hy - hr * 0.1, hr * 0.22, hr * 0.28);
 }
 
-// A blocky rider from the front (client/rider.mjs's sizes, a metre to r), its feet at (cx, top)
-function drawBlocky(g, cx, top, r, L, t) {
+// A blocky rider from the front (client/rider.mjs's sizes, a metre to r), its
+// feet at (cx, top); A its avatar's colours (client/avatar.mjs colorsOf) or null
+function drawBlocky(g, cx, top, r, L, t, A) {
   const B = BODIES[L.body];
   const skin = B.skin || [1, 0.8, 0.66];
   const pants = L.b.map((v) => v * 0.62);
+  const shirt = A ? A.torso : L.a;
   const sw = Math.sin(t * 2) * 0.03 * r; // the arms, swinging a little
   g.lineWidth = Math.max(1, r * 0.025);
   g.strokeStyle = 'rgba(0,0,0,0.55)';
   const rect = (x, y, w, h, c, k = 1) => { g.fillStyle = css(c, k); g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); g.strokeRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
-  rect(-0.24, 0, 0.23, 0.5, pants); rect(0.01, 0, 0.23, 0.5, pants);
-  rect(-0.25, 0.5, 0.5, 0.5, L.a);
-  g.save(); g.translate(0, -sw); rect(-0.49, 0.5, 0.23, 0.5, skin); g.restore();
-  g.save(); g.translate(0, sw); rect(0.26, 0.5, 0.23, 0.5, skin); g.restore();
+  // seen from the front, its right side is on the picture's left
+  rect(-0.24, 0, 0.23, 0.5, A ? A.rleg : pants); rect(0.01, 0, 0.23, 0.5, A ? A.lleg : pants);
+  rect(-0.25, 0.5, 0.5, 0.5, shirt);
+  g.save(); g.translate(0, -sw); rect(-0.49, 0.5, 0.23, 0.5, A ? A.rarm : skin); g.restore();
+  g.save(); g.translate(0, sw); rect(0.26, 0.5, 0.23, 0.5, A ? A.larm : skin); g.restore();
   const pumpkin = L.style === STYLE.PUMPKIN;
   const hw = 0.37, hh = 0.345, hy = 1.01;
-  rect(-hw / 2, hy, hw, hh, pumpkin ? L.hatColor : skin);
+  rect(-hw / 2, hy, hw, hh, pumpkin ? L.hatColor : A ? A.head : skin);
   const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
   // the face
   if (pumpkin) { px(-0.12, hy + 0.17, 0.07, 0.07, '#ffd860'); px(0.05, hy + 0.17, 0.07, 0.07, '#ffd860'); px(-0.11, hy + 0.06, 0.22, 0.05, '#ffd860'); px(-0.02, hy + 0.3, 0.04, 0.08, '#3c8a2c'); }
-  else if (B.face === 4) { px(-0.13, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(0.05, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(-0.08, hy + 0.06, 0.16, 0.05, css(skin, 0.4)); }
+  else if (A ? A.robot : B.face === 4) { px(-0.13, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(0.05, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(-0.08, hy + 0.06, 0.16, 0.05, css(skin, 0.4)); }
   else { px(-0.1, hy + 0.17, 0.04, 0.07, '#111'); px(0.06, hy + 0.17, 0.04, 0.07, '#111'); px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); px(-0.1, hy + 0.1, 0.03, 0.03, '#111'); px(0.07, hy + 0.1, 0.03, 0.03, '#111'); }
   // the hat
   const c = L.hatColor, top2 = hy + hh;

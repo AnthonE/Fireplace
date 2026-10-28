@@ -15,6 +15,7 @@
 // its splay, turned about its front first (a twentieth of a radian a step,
 // 64 none: a hanging arm's hand going out to its right).
 import { lookOf, unpackLook, riderSprites, BODIES, STYLE } from './looks.mjs';
+import { colorsOf } from './avatar.mjs';
 
 export const BLOCK = 12; // the sprite kind, the same in both renderers
 // what a box's faces show: 0 plain plastic, 1 a head's face, 2 a pumpkin's lit face and ribs, 3 metal, 4 a robot's face
@@ -153,8 +154,9 @@ const turnHalf = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
 // speed over the ground and vy its climb (m/s, the arms go up in the air), bob
 // a little lift as it rolls, emote what it is acting out ({ id, t }: EMOTES,
 // seconds in) or null, jolt how hard its ball was just hit (0..1: thrown back,
-// arms out; client/juice.mjs).
-export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob = 0, emote = null, jolt = 0 }) {
+// arms out; client/juice.mjs), avatar the player's Elo Pros avatar word
+// (client/avatar.mjs: a blocky rider wears its colours and face) or 0.
+export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob = 0, emote = null, jolt = 0, avatar = 0 }) {
   const { body } = unpackLook(w);
   const B = BODIES[body];
   const e = emote && emote.t < EMOTE_S ? emote : null;
@@ -196,23 +198,27 @@ export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob
   const leg = (k) => (ek === EMOTE.DANCE ? [0.4 * Math.sin(et * 9) * k, k * 0.12] : [step * k, 0]);
   const y0 = at[1] + bob;
   const base = [at[0], y0, at[2]];
-  const skin = B.skin || PEACH, shirt = L.a, pants = scale(L.b, 0.62);
-  const skinPart = B.metal ? PART.METAL : PART.PLAIN;
+  const A = colorsOf(avatar);
+  const skin = B.skin || PEACH, shirt = A ? A.torso : L.a, pants = scale(L.b, 0.62);
+  const skinPart = B.metal && !A ? PART.METAL : PART.PLAIN;
+  // a part's colour: the avatar's, else the look's
+  const legC = (k) => (A ? (k > 0 ? A.rleg : A.lleg) : pants);
+  const armC = (k) => (A ? (k > 0 ? A.rarm : A.larm) : skin);
   // legs from the hips, stepping
-  for (const k of [-1, 1]) limb(madd(madd(base, up, 0.5), side, 0.125 * k), [0.12, 0.25, 0.12], 0.25, leg(k), pants);
+  for (const k of [-1, 1]) limb(madd(madd(base, up, 0.5), side, 0.125 * k), [0.12, 0.25, 0.12], 0.25, leg(k), legC(k));
   // the torso, leaning into its speed
   box(madd(madd(base, up, 0.75), f, 0.03 * stride - 0.06 * jolt), [0.25, 0.25, 0.125], shirt, 0, 0.1 * stride - 0.35 * jolt);
   // arms from the shoulders, against the legs, up in the air
   for (const k of [-1, 1]) {
     const [pitch, splay] = arm(k);
-    limb(madd(madd(base, up, 0.92), side, 0.375 * k), [0.12, 0.25, 0.12], 0.17, [pitch - 0.6 * jolt, splay + k * 1.5 * jolt], skin, skinPart);
+    limb(madd(madd(base, up, 0.92), side, 0.375 * k), [0.12, 0.25, 0.12], 0.17, [pitch - 0.6 * jolt, splay + k * 1.5 * jolt], armC(k), skinPart);
   }
   // the head, a size up on the rest (as such figures have it), and its hat
   const hs = 1.15;
   const hc = madd(base, up, 1.01 + 0.15 * hs);
   const st = L.style;
   const pumpkin = st === STYLE.PUMPKIN;
-  box(hc, [0.16 * hs, 0.15 * hs, 0.15 * hs], pumpkin ? L.hatColor : skin, pumpkin ? PART.PUMPKIN : B.face);
+  box(hc, [0.16 * hs, 0.15 * hs, 0.15 * hs], pumpkin ? L.hatColor : A ? A.head : skin, pumpkin ? PART.PUMPKIN : A ? (A.robot ? PART.ROBOT : PART.FACE) : B.face);
   const at3 = (u, fw, a = 0) => madd(madd(madd(hc, up, u * hs), f, fw * hs), side, a * hs);
   const hat3 = (ctr, h, color, part) => box(ctr, h.map((v) => v * hs), color, part);
   const hcol = L.hatColor;

@@ -296,7 +296,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       const face = own ? yaw / TURN * 2 * Math.PI : src.yaw;
       const bob = Math.abs(Math.sin(ang * 2)) * Math.min(1, speed / 6) * 0.06;
       solid.push({ pos: [pos[0], pos[1] + r, pos[2]], size: r, color: rs.ball.color, kind: SPRITE.BALL, minpx: 1, vel: src.vel, roll: ang, seed: rs.ball.seed });
-      rider(solid, p, lw, { at: [pos[0], pos[1] + 2 * r, pos[2]], face, roll: ang, speed, vy: src.vel[1], bob, emote: juice.cheer(p, now, [pos[0], pos[1] + 2 * r + 1.5, pos[2]]) ?? emoteOf(emotes, p, lw, now), jolt: juice.jolt(p, now) });
+      rider(solid, p, lw, { at: [pos[0], pos[1] + 2 * r, pos[2]], face, roll: ang, speed, vy: src.vel[1], bob, emote: juice.cheer(p, now, [pos[0], pos[1] + 2 * r + 1.5, pos[2]]) ?? emoteOf(emotes, p, lw, now), jolt: juice.jolt(p, now), avatar: h.avatar(p) });
       if (src.item) solid.push({ pos: [pos[0], pos[1] + 2 * r + 1.55, pos[2]], size: 0.26, color: [...PU_COLOR[src.item], 1], kind: SPRITE.ORB, minpx: 1 });
       if (own) solid.push({ pos: [pos[0], pos[1] + 2 * r + (src.item ? 2.15 : 1.65) + 0.1 * Math.sin(now / 200), pos[2]], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });
       if (src.dash) glow.push({ pos: [pos[0] - src.vel[0] * 0.05, pos[1] + r, pos[2] - src.vel[2] * 0.05], size: r * 1.3, color: [0.4, 0.85, 1, 0.5], kind: SPRITE.FLASH, minpx: 1 });

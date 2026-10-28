@@ -82,3 +82,43 @@ test('the arena draws its fighters as figures of the same boxes, with every body
   assert.match(src, /kind = 15u;/);
   assert.match(readFileSync('client/arena-game.mjs', 'utf8'), /looks: looksOf\(host\)/);
 });
+
+test('an Elo Pros avatar word: six parts from the palette and a face; 0 is none; its default the profile\'s', async () => {
+  const A = await import('../client/avatar.mjs');
+  assert.equal(A.DEFAULT, 0xa31002a0, 'scry-forge meter/faces.py AVATAR_DEFAULT');
+  assert.equal(A.PALETTE.length, 32);
+  assert.equal(A.colorsOf(0), null);
+  assert.equal(A.colorsOf(0x7fffffff), null, 'no set bit, no avatar');
+  const w = A.pack([1, 11, 3, 4, 22, 23], true);
+  const c = A.colorsOf(w);
+  assert.deepEqual([c.head, c.torso, c.larm, c.rarm, c.lleg, c.rleg], [1, 11, 3, 4, 22, 23].map((k) => A.PALETTE[k]));
+  assert.equal(c.robot, true);
+  for (let p = 0; p < 256; p++) assert.ok(A.isAvatar(A.guestAvatar(p)));
+});
+
+test('a blocky rider wears its avatar: the head, arms, torso and legs in its colours, its face; a round one ignores it', async () => {
+  const A = await import('../client/avatar.mjs');
+  const av = A.pack([1, 11, 3, 4, 22, 23], true);
+  const out = [];
+  rider(out, 0, packLook(0, 4, 1), { at: [0, 0, 0], face: 0, avatar: av }); // no hat
+  const col = (i) => out[i].color.slice(0, 3);
+  // the order rider() draws: legs (left, right), the torso, arms (left, right), the head
+  assert.deepEqual([col(0), col(1), col(2), col(3), col(4), col(5)], [22, 23, 11, 3, 4, 1].map((k) => A.PALETTE[k]));
+  assert.equal(out[5].color[3] & 15, 4, 'a robot face');
+  const round = [];
+  rider(round, 0, packLook(0, 0, 0), { at: [0, 0, 0], face: 0, avatar: av });
+  const plain = [];
+  rider(plain, 0, packLook(0, 0, 0), { at: [0, 0, 0], face: 0 });
+  assert.deepEqual(round, plain);
+});
+
+test('the wire carries avatars as it carries looks: a hello flag, then [slot, word] pairs', async () => {
+  const W = await import('../net/wire.mjs');
+  const h = W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: new Uint8Array(8), avatars: true, looks: true }));
+  assert.equal(h.avatars, true);
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: new Uint8Array(8), looks: true })).avatars, false);
+  const buf = W.encodeLooks([[3, 0xa31002a0], [255, 0xc0000000]], W.T_AVATAR);
+  let o = 0;
+  const sr = { read: async (n) => { const b = buf.subarray(o, o + n); o += n; return b; } };
+  assert.deepEqual(await W.readControl(sr), { type: W.T_AVATAR, avatars: [[3, 0xa31002a0], [255, 0xc0000000]] });
+});
