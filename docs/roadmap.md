@@ -214,6 +214,51 @@ The wrapper, ours first:
 Then, in scry-forge: a key-value store per wallet for what lasts (party
 points, marshmallows).
 
+## Experiments: making a game should take minutes
+
+What the kit does today: *use this template*, `tools/kit.mjs init`, a page on
+GitHub Pages with AI players, *Plan my game* in the copy's own Actions, and
+rooms on demand from the kit pool. Each idea below is something no copy can
+do yet; none is built or measured, and each names what it would need first.
+
+1. **A studio in the page.** Edit a minigame's WAT and its constants in the
+   browser, build it there, play it at once against `client/local.mjs`'s AI
+   players, then send it in as a PR or make it a copy of its own. The
+   assembler's `wabt` package is already WebAssembly, and the map editor
+   already runs the map compiler in the page, so the build needs no Node. It
+   needs `tools/asm.mjs`'s preprocessor and checks split from its disk
+   reads, as `map-compile.mjs` was. Claude in the page, paid from Elo Pros
+   credits ("make the ice slipperier"), is the same edit loop with a model in
+   it.
+2. **Bring your own bot.** The referee already runs a wasm it didn't build
+   with one import, a shared memory. A bot is the same: a module that reads
+   the confirmed world and writes its slot's input word. Leagues of bots play
+   headless at full speed on the referee, rated on Elo Pros's ladders, where
+   agents rank apart from people already. It is the cheapest agent-only world
+   (scry-forge `NOW.md` row 14e): no model answers at 125 Hz, so an agent
+   competes by writing the bot.
+3. **Store art from a replay.** `tools/film.mjs` films the trailer from a
+   replay; run in a copy's CI, it could write the capsule, the screenshots
+   and a clip into `elo/`, the art block `elo.json` names. A copy listed
+   through GitHub alone has no art otherwise, and the same shots are what
+   Elo Pros's trading cards are cut from.
+4. **Discord Activities and other embeds.** A Fireplace room is a web page
+   and a relay, which is what an Activity is. Not measured: whether `coi.js`
+   makes a page cross-origin isolated inside Discord's frame, which the
+   shared memory needs. Measure that first.
+5. **Arcade rooms across copies.** The kit pool already runs any copy's
+   wasm. A room that walks a list of copies by sha256 between games, as the
+   map cycle would walk maps, lets a copy with one minigame be played in a
+   room big enough to fill. It needs the relay and the page to swap modules
+   between games, where Fireplace today swaps games inside one module.
+6. **Pay a minigame's author by the rounds played.** The referee knows which
+   minigame each round was, on rooms we host. A pot split by measured rounds
+   passes invariant 1's test (the payer and the amount change no bit of any
+   round). It needs a rule for where the pot comes from.
+7. **A clip per match.** Every hosted room already writes a replay
+   (`--replays`); a watch link per match, and its interval hashes beside it,
+   is the "replay" evidence tier for results and something a player shares.
+
 ## Sessions
 
 1. Teams; the champion kit and FFA ARAM; Team Slayer, CTF, Oddball and King of
