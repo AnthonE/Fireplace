@@ -204,7 +204,7 @@ The wrapper, ours first:
    keeps the wallet as the slot's player ([wire.md](wire.md)). Guests still play.
 3. Names, faces and skins. Names are built: the relay reads
    `/api/face/{wallet}` at each sign-in and sends the name beside the sim,
-   never in it ([wire.md](wire.md), hello flag 16), and every game's labels
+   never in it ([wire.md](wire.md), hello flag 32), and every game's labels
    use it. Faces (the picture) and skins on chain are next: the relay reads
    `/api/items/of/{wallet}?game=fireplace` once `EloItem:FIREPLACE` exists
    and refuses an owned look a slot doesn't hold, and skins become ball
@@ -229,17 +229,20 @@ points, marshmallows).
 What the kit does today: *use this template*, `tools/kit.mjs init`, a page on
 GitHub Pages with AI players, *Plan my game* in the copy's own Actions, and
 rooms on demand from the kit pool. Each idea below is something no copy can
-do yet; none is built or measured, and each names what it would need first.
+do yet, and each names what it would need first; the first is built.
 
-1. **A studio in the page.** Edit a minigame's WAT and its constants in the
-   browser, build it there, play it at once against `client/local.mjs`'s AI
-   players, then send it in as a PR or make it a copy of its own. The
-   assembler's `wabt` package is already WebAssembly, and the map editor
-   already runs the map compiler in the page, so the build needs no Node. It
-   needs `tools/asm.mjs`'s preprocessor and checks split from its disk
-   reads, as `map-compile.mjs` was. Claude in the page, paid from Elo Pros
-   credits ("make the ice slipperier"), is the same edit loop with a model in
-   it.
+1. **A studio in the page.** Built: `client/studio.html` edits a Party
+   minigame's WAT and constants, builds party with it in a worker
+   (`tools/asm-core.mjs`, the assembler's half with no disk in it, on the
+   site's own `src/` and wabt's one script), checks the debug build with AI
+   balls and split two ways, plays the build in party's page against AI
+   balls, and sends the changed files in through GitHub's upload page. An
+   unchanged minigame builds to `npm run build`'s bytes; a build takes about
+   5 s on SwiftShader's machine (`net/run-pages.mjs` checks all of it on a
+   static host). Next: a new minigame from the page (the lists `tools/new-mg.mjs`
+   appends to), the AI and the drawing reading the edited constants, and
+   Claude in the page, paid from Elo Pros credits ("make the ice
+   slipperier"): the same edit loop with a model in it.
 2. **Bring your own bot.** The referee already runs a wasm it didn't build
    with one import, a shared memory. A bot is the same: a module that reads
    the confirmed world and writes its slot's input word. Leagues of bots play

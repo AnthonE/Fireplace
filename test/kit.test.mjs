@@ -76,7 +76,7 @@ test("init gives a copy its own game's name and manifest, and a second run chang
     assert.equal(JSON.parse(read('package.json')).name, 'snow-fort-party');
     assert.equal(JSON.parse(read('client/kit.json')).name, 'Snow Fort Party');
     assert.equal(JSON.parse(read('client/kit.json')).repo, 'KidDev/snow-fort', "the copy's maps go to its own repo, not Fireplace's");
-    assert.deepEqual(elo.tools.map((t) => [t.id, t.url]), [['map-editor', 'https://kiddev.github.io/snow-fort/client/map-editor.html']], "the store links the copy's own map editor");
+    assert.deepEqual(elo.tools.map((t) => [t.id, t.url]), [['map-editor', 'https://kiddev.github.io/snow-fort/client/map-editor.html'], ['studio', 'https://kiddev.github.io/snow-fort/client/studio.html']], "the store links the copy's own map editor and studio");
     assert.match(read('client/fireplace.html'), /<title>Snow Fort Party<\/title>/);
     assert.match(read('client/room.html'), /<title>Snow Fort Party Room<\/title>/);
     assert.match(read('README.md'), /^# Snow Fort Party\n\nSnow Fort Party is made from \[Fireplace\]/);

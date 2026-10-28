@@ -134,6 +134,20 @@ npm run build && node --test test/mg-<key>.test.mjs test/party.test.mjs
 node net/play.mjs --party --mg <id> --bots 7      # play it: open the URL it prints
 ```
 
+Rather not install anything? The studio works on a minigame in the browser:
+`client/studio.html` (on the game's site, or `node tools/serve.mjs` here).
+Pick one of the minigames, edit its rules and its constants, and press build:
+it assembles party with your minigame in it in the page, with the same
+assembler as `npm run build` (on a minigame you haven't changed, the same
+bytes). **Check** plays the debug build with AI balls on your minigame and
+replays it with the balls' work split two ways, the hashes equal tick by
+tick; **play** puts your build in front of you against AI balls; **send it
+in** downloads the files you changed and opens GitHub's upload page for
+`src/mg/`, where proposing the change makes the pull request. Edits reach the
+sim only: the AI and the drawing read the site's constants until the change
+is merged. A new minigame, its client module and tests still start from the
+tool below.
+
 Rather write Rust than WebAssembly text? Add `--rust`: the rules are then a
 crate, `rust/mg/<key>/src/lib.rs`, and `node tools/rust.mjs` turns it into
 `src/mg/<key>.wat` after each change (docs/rust.md; SUMO RING is the worked

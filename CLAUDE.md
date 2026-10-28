@@ -31,6 +31,7 @@ node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the ki
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
 node net/play.mjs --arena --map <name>      # build the arena on it and play (--flight --map for Dogfight's)
+node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -178,6 +179,12 @@ shell whose own command line contains the name: it kills that shell.
   players after. Both sample the input slots through `client/input.mjs`.
   `coi.js` makes a page cross-origin isolated where the host can't send the
   headers.
+- The studio (`client/studio.html`, its worker `client/studio-worker.mjs`)
+  builds party in the page: `tools/asm-core.mjs` (the assembler's
+  preprocessor, checks and prefixer, the file reader passed in) and
+  `tools/party-play.mjs` (a room of AI balls) import nothing from Node, and
+  `tools/site.mjs` ships them with `src/`'s WAT and wabt's one script;
+  `test/studio.test.mjs` holds the page's build to `npm run build`'s bytes.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
 - The room's look is a theme (`client/themes/<id>.json`, `client/themes.mjs`):

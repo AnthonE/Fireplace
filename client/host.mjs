@@ -36,7 +36,8 @@ export function fitSize(q, max = [1600, 1000]) {
 }
 
 // wasm: the sim's URL; watch: a spectator; arena: the arena's input words; fireplace: whichever the game on now reads
-export async function createHost({ wasm, q = new URLSearchParams(location.search), watch = false, arena = false, fireplace = false, connect = true }) {
+// kind names the game for a local room when wasm's URL doesn't (a studio build's blob:)
+export async function createHost({ wasm, q = new URLSearchParams(location.search), watch = false, arena = false, fireplace = false, connect = true, kind = '' }) {
   // ../coi.js reloads the page once its service worker isolates it: wait for that, unless it gives up
   while (!crossOriginIsolated && globalThis.coi?.reloading) await new Promise((ok) => setTimeout(ok, 100));
   if (!crossOriginIsolated) throw new Error('the page must be served cross-origin isolated (node tools/serve.mjs)');
@@ -115,7 +116,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       else if (relay) {
         const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
         h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, names: true, signin: fireplace }, [ch.port1]);
-      } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
+      } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace, kind }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
       h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     };
     const local = (why) => {
@@ -140,8 +141,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
 }
 
 // A local room's AI players (their brain by the page's game) and its seed.
-function localRoom(q, wasm, { arena, fireplace }) {
-  const kind = fireplace ? 'fireplace' : /\/flight\//.test(wasm) ? 'flight' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '';
+function localRoom(q, wasm, { arena, fireplace, kind: named = '' }) {
+  const kind = named || (fireplace ? 'fireplace' : /\/flight\//.test(wasm) ? 'flight' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '');
   const rand = crypto.getRandomValues(new Uint32Array(1))[0];
   const seed = q.has('seed') ? Number(q.get('seed')) >>> 0
     : q.has('mg') && kind === 'party' ? ((0xa7 << 24) | ((Number(q.get('mg')) & 0xff) << 16) | (rand & 0xffff)) >>> 0

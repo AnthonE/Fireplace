@@ -50,6 +50,7 @@ export function repoOf(url) {
 // where GitHub Pages serves owner/name's site
 // elo.json's tools row for the map editor (scry-forge GAME-REPO.md §4c), its url the copy's own
 export const EDITOR = { id: 'map-editor', name: 'Map editor', makes: 'map', about: 'Draw a map for the arena or Dogfight in the browser, play it with bots, and send it in.' };
+export const STUDIO = { id: 'studio', name: 'Studio', makes: 'minigame', about: 'Edit a Party minigame in the browser, build and check it there, play it against AI balls, and send it in.' };
 
 export function pagesUrl(repo) {
   const [owner, name] = repo.split('/');
@@ -82,8 +83,8 @@ export function plan(name, { root = ROOT, slug, repo, blurb, tagline, force = fa
   listing.engine ??= ENGINE;
   if (repo && !HOME.test(repo)) listing.play_url = pagesUrl(repo);
   const art = existsSync(join(root, CAPSULE)) ? { art: { capsule: CAPSULE } } : {};
-  // the map editor on the copy's own site, which the store links beside its mods
-  const tools = listing.play_url ? { tools: [{ ...EDITOR, url: `${listing.play_url}client/map-editor.html` }] } : {};
+  // the map editor and the studio on the copy's own site, which the store links beside its mods
+  const tools = listing.play_url ? { tools: [{ ...EDITOR, url: `${listing.play_url}client/map-editor.html` }, { ...STUDIO, url: `${listing.play_url}client/studio.html` }] } : {};
   const elo = was.game === HOME_SLUG
     ? { elo: 1, game: slug, multiplayer: 'match', listing, ...art, ...tools }
     : { ...was, game: slug, listing, ...(was.tools ? {} : tools) };

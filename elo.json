@@ -21,7 +21,7 @@
     {
       "id": "fireplace-minigame",
       "title": "a Party minigame",
-      "what": "A new round for Party, and so for Fireplace. node tools/new-mg.mjs <key> <prefix> \"<NAME>\" writes one that builds and plays (a sumo ring); make it yours. Ideas are in docs/roadmap.md's kits table: Snowball, Full Tilt, Big Fans, Hoop Hop, Pinball. Its tests, the determinism matrix and the online gate must pass in CI.",
+      "what": "A new round for Party, and so for Fireplace. node tools/new-mg.mjs <key> <prefix> \"<NAME>\" writes one that builds and plays (a sumo ring); make it yours. Or work on one in the browser with client/studio.html: edit its WAT and constants, build and check it there, play it against AI balls, and send it in. Ideas are in docs/roadmap.md's kits table: Snowball, Full Tilt, Big Fans, Hoop Hop, Pinball. Its tests, the determinism matrix and the online gate must pass in CI.",
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
       "check": "machine"
@@ -92,6 +92,13 @@
       "makes": "map",
       "url": "https://game.elopros.com/fireplace/client/map-editor.html",
       "about": "Draw a map for the arena or Dogfight in the browser, play it with bots, and send it in."
+    },
+    {
+      "id": "studio",
+      "name": "Studio",
+      "makes": "minigame",
+      "url": "https://game.elopros.com/fireplace/client/studio.html",
+      "about": "Edit a Party minigame in the browser, build and check it there, play it against AI balls, and send it in."
     }
   ],
   "stats": {
