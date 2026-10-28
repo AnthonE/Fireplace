@@ -12,6 +12,7 @@
 // Every colour comes from the theme (client/themes.mjs), a uniform of its own.
 import { FONT } from './font.mjs';
 import { wgsl, pack, FALLBACK, UNIFORM_BYTES } from './themes.mjs';
+import { drawGlyphs, roundWanted } from './hudfont.mjs';
 
 // The TV's glass, in room metres (on its cabinet's front face, z = SCREEN_Z).
 export const SCREEN = { x0: 0.48, x1: 1.52, y0: 0.27, y1: 0.9, z: 3.05 };
@@ -558,10 +559,13 @@ export async function readTexture(device, tex, W, H, format) {
 
 // The TV's cards are drawn on a 2D canvas in the games' 3x5 font: s in capitals
 // at x, y, each font pixel px wide, aligned left, center or right of x.
+const ROUND = roundWanted();
 export function cardText(g2, s, x, y, px, color, align = 'left') {
   s = String(s).toUpperCase();
   const w = s.length * 4 * px - px;
   let x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  // the rounder font, on the same grid (client/hudfont.mjs), unless ?font=pixel
+  if (ROUND && px >= 2) return drawGlyphs(g2, s, x0, y, px, color);
   g2.fillStyle = color;
   for (const ch of s) {
     const code = ch.charCodeAt(0);

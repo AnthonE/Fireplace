@@ -87,7 +87,8 @@ falling orb will land, come from a small mask drawn on the CPU each frame, so
 a pixel of cheese reads one texel instead of walking 256 balls. The balls are
 glossy beach-ball impostors with depth and a soft ink outline, their stripes
 turning as they roll. Each carries a rider (a body, and a head with a cap and
-eyes that look where the ball faces) and the power-up it holds over its head.
+eyes that look where the ball faces, or a blocky one walking the ball along:
+[fireplace.md](fireplace.md)'s bodies) and the power-up it holds over its head.
 Crumbs fall off the rim as it crumbles. A minimap of the wheel, following the
 rim in, sits in the corner.
 `client/bumper-bot.mjs` is the AI ball. It scores 16 ways to steer by

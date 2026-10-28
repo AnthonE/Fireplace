@@ -21,6 +21,8 @@ import { slotLabel } from './looks.mjs';
 import { parseImpair } from '../net/impair.js';
 import { relayFor, room } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
+import { savedLook, wearable } from './looks.mjs';
+import { loadTally, gotSet } from './achievements.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
 
@@ -60,10 +62,15 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   };
   h.set(L.CL_SLOT, -1);
   h.set(L.CL_PITCH, 512);
+  // this player's look, as this browser keeps it (Fireplace's TV picks it; ?look=<word> for this visit), worn on every page
+  h.set(L.CL_LOOK, watch ? 0 : q.has('look') ? Number(q.get('look')) >>> 0 : wearable(savedLook(), gotSet(loadTally())));
   // a slot's look word (client/looks.mjs): this player's own as picked, the rest as the relay sent them
   h.look = (p) => (p === h.get(L.CL_SLOT) ? h.get(L.CL_LOOK) : h.u32[(L.CL_LOOKS >> 2) + p]) >>> 0;
   // what a label calls a slot: the name its wallet goes by on Elo Pros, as the relay sent it, or P<n>
   h.label = (p) => slotLabel(h.u8, p);
+  // a slot's Elo Pros avatar (client/avatar.mjs) as the relay sent it once it signed in; ?avatar=<word> wears one on this page
+  const myAvatar = q.has('avatar') ? Number(q.get('avatar')) >>> 0 : 0;
+  h.avatar = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) && myAvatar ? myAvatar : h.u32[(L.CL_AVATARS >> 2) + p] >>> 0);
   // the prediction's own instance: it writes only PRED
   h.px = (await WebAssembly.instantiate(module, { env: { mem: memory } })).exports;
   const adapter = await navigator.gpu?.requestAdapter();

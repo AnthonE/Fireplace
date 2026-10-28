@@ -12,7 +12,8 @@
 // the same way, counted on top of what the stand-in held for each wallet (one
 // guest comes with 24 games and PULL UP A CHAIR already); and when every guest
 // was sent the names the stand-in's faces give the signed-in wallets
-// (/api/face), cleaned to what the font draws, and none for a wallet with none.
+// (/api/face), cleaned to what the font draws, and none for a wallet with none,
+// and heard the avatar each face gives (client/avatar.mjs), on its slot.
 //   node net/run-elo.mjs [--bots 6] [--seconds 240] [--port 4441: the relay's, its native door the next, the stand-in the one after]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -55,6 +56,7 @@ const signedBy = (req, body) => {
   const text = serverText('POST', req.url, h['x-elo-server'], h['x-elo-time'], h['x-elo-nonce'], createHash('sha256').update(body).digest('hex'));
   return h['x-elo-server'] === WHO && edVerify(null, Buffer.from(text), publicKey, Buffer.from(h['x-elo-signature'] || '', 'base64'));
 };
+const avatarOf = (w) => (w === walletOf(0) ? null : (0x80000000 | (parseInt(w.slice(-6), 16) & 0x3fffffff)) >>> 0);
 const stub = createServer((req, res) => {
   let body = '';
   req.on('data', (d) => { body += d; });
@@ -71,7 +73,8 @@ const stub = createServer((req, res) => {
     if (req.url.startsWith('/api/face/')) {
       const w = req.url.split('/').pop();
       faces.push(w);
-      return answer(200, { wallet: w, name: FACES[w] ?? null, picture: null });
+      // every wallet's avatar but the first signed-in guest's, which has none
+      return answer(200, { wallet: w, name: FACES[w] ?? null, picture: null, avatar: avatarOf(w) });
     }
     if (req.url.startsWith('/api/gamestats/fireplace/of/')) {
       const w = req.url.split('/').pop();
@@ -133,6 +136,10 @@ must(lc(faces) === lc(signed.map((s) => s.wallet)), `the relay asked Elo Pros fo
 const named = Object.fromEntries(signed.filter((s) => SENT[s.wallet]).map((s) => [s.slot, SENT[s.wallet]]));
 must(joined.every((s) => JSON.stringify(s.names) === JSON.stringify(named)),
   `every guest has the room's names, cleaned, and none for a wallet without one (${JSON.stringify(named)})`);
+const heard = signed.filter((s) => avatarOf(s.wallet) !== null);
+must(heard.length >= 1 && joined.every((o) => heard.every((s) => o.avatars?.[s.slot] === avatarOf(s.wallet)))
+  && joined.every((o) => !o.avatars?.[signed.find((s) => avatarOf(s.wallet) === null)?.slot ?? -1]),
+  `every guest heard each signed-in guest's avatar on its slot, and none for the one with none (${heard.length})`);
 must(bs.results?.length >= 1, `the room's first game ended (${bs.results?.length ?? 0} results seen)`);
 must(reports.length >= 1 && reports.every((r) => r.ok), `the relay reported it, signed with the game's server key (${reports.length} reports)`);
 const first = bs.results?.[0], match = reports[0]?.body?.matches?.[0];

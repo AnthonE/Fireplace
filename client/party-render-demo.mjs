@@ -5,10 +5,13 @@
 // traces/party-render-<scene>.png; in a browser it draws the one in ?scene=
 // (or flips through them all, a click for the next), moving.
 //   ?orbit=0 holds the camera still
-//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
+//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
 import { createRenderer, Scene, LOOK, SPRITE, COLS, DECAL, ENVS } from './party-render.mjs';
 import { put, C } from './font.mjs';
-import { BALLS, HATS, packLook, riderSprites } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, riderSprites } from './looks.mjs';
+import { rider, EMOTE, EMOTE_S } from './rider.mjs';
+import { createJuice } from './juice.mjs';
+import { DEFAULT as AV_DEFAULT, pack as avPack, guestAvatar } from './avatar.mjs';
 
 const q = new URLSearchParams(location.search);
 const canvas = document.getElementById('screen');
@@ -38,15 +41,13 @@ function frameState(W, H, HS) {
 }
 
 // A ball and its rider, as the frontends draw them: casters[slot] its shadow, the sprites its picture.
-function ball(s, p, x, y, z, { vel = [0, 0, 0], roll = 0, face, own = false, item = 0, r = 1, look = 0 } = {}) {
+function ball(s, p, x, y, z, { vel = [0, 0, 0], roll = 0, face, own = false, item = 0, r = 1, look = 0, emote = null, avatar = 0 } = {}) {
   const rs = riderSprites(p, look);
   const f = face ?? Math.atan2(vel[2], vel[0]);
-  const fv = [Math.cos(f), 0, Math.sin(f)];
   while (s.casters.length <= p) s.casters.push([0, -1000, 0, 0]);
   s.casters[p] = [x, y, z, r];
   s.solid.push({ pos: [x, y + r, z], size: r, color: rs.ball.color, kind: SPRITE.BALL, minpx: 1, vel, roll, seed: rs.ball.seed });
-  s.solid.push({ pos: [x, y + 2 * r + 0.22, z], size: 0.34, color: rs.body.color, kind: SPRITE.BODY, minpx: 1 });
-  s.solid.push({ pos: [x, y + 2 * r + 0.78, z], size: 0.3, color: rs.head.color, kind: SPRITE.HEAD, minpx: 1, vel: fv });
+  rider(s.solid, p, look, { at: [x, y + 2 * r, z], face: f, roll, speed: Math.hypot(vel[0], vel[2]), vy: vel[1], emote, avatar });
   if (item) s.solid.push({ pos: [x, y + 2 * r + 1.55, z], size: 0.26, color: [1, 0.85, 0.2, 1], kind: SPRITE.ORB, minpx: 1 });
   if (own) s.solid.push({ pos: [x, y + 2 * r + 1.65, z], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });
 }
@@ -144,6 +145,100 @@ const SCENES = {
     s.slot = -1;
     s.focus = [CX, CX]; s.extent = 24;
     title(s, r, 'EVERY BALL AND HAT', 'IN YELLOW: EARNED WITH AN ACHIEVEMENT');
+  },
+
+  // every body a player can pick (client/rider.mjs) in front, standing still, then walking; a crowd of blocky riders behind, each hat on one
+  blocky(s, r) {
+    s.env = 'day';
+    s.yaw = Math.PI / 2; s.pitch = -0.28;
+    s.cam = [CX, FLOOR + 4.2, CX - 13];
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.62, 0.64, 0.66, LOOK.CHECKER, 4, 0.6);
+    const t = s.time / 1000;
+    BODIES.forEach((b, k) => {
+      const px = CX + (BODIES.length - 1) * 1.3 - k * 2.6;
+      ball(s, k, px, FLOOR, CX - 4, { vel: k & 1 ? [0, 0, 0] : [0, 0, -5], roll: t * 5, face: -Math.PI / 2, look: packLook(k * 2 % BALLS.length, k === 0 ? 0 : k, k) });
+      label(s, r, [px, FLOOR - 0.4, CX - 4], b.name, C.WHITE);
+    });
+    const rand = rng(7);
+    for (let k = 0; k < 40; k++) {
+      const a = rand() * Math.PI, d = 4 + Math.sqrt(rand()) * 14;
+      const v = 1 + rand() * 6, h = rand() * Math.PI * 2;
+      const fly = rand() < 0.15;
+      ball(s, 8 + k, CX + Math.cos(a) * d, FLOOR + (fly ? 1 + rand() : 0), CX + 2 + Math.sin(a) * d, { vel: [Math.cos(h) * v, fly ? 6 : 0, Math.sin(h) * v], roll: t * v + k, look: packLook(k % BALLS.length, k % HATS.length, 1 + (k % (BODIES.length - 1))) });
+    }
+    s.slot = -1;
+    s.focus = [CX, CX + 4]; s.extent = 26;
+    title(s, r, 'EVERY BODY', 'ROUND, THE RIDER AS IT WAS; THE REST BLOCKY, WALKING THEIR BALLS');
+  },
+
+  // every emote (keys 1 to 4 in a game), acted out over and over, on blocky riders and the round one
+  emotes(s, r) {
+    s.env = 'day';
+    s.yaw = Math.PI / 2; s.pitch = -0.12;
+    s.cam = [CX, FLOOR + 2.9, CX - 7.5];
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.62, 0.64, 0.66, LOOK.CHECKER, 4, 0.6);
+    const t = (s.time / 1000) % EMOTE_S;
+    const names = Object.keys(EMOTE);
+    names.forEach((n, k) => {
+      const px = CX + 4.2 - k * 2.1;
+      ball(s, k, px, FLOOR, CX, { r: 0.7, face: -Math.PI / 2, look: packLook(k + 1, k + 1, 1 + (k % (BODIES.length - 1))), emote: { id: EMOTE[n], t: (t + k * 0.37) % EMOTE_S } });
+      label(s, r, [px, FLOOR - 0.35, CX], n, C.WHITE);
+    });
+    ball(s, 9, CX - 6.3, FLOOR, CX, { r: 0.7, face: -Math.PI / 2, look: packLook(1, 0, 0), emote: { id: EMOTE.CHEER, t } });
+    label(s, r, [CX - 6.3, FLOOR - 0.35, CX], 'ROUND', C.GREY);
+    // a winner's confetti (client/juice.mjs), thrown up over the cheer and stepped on to now
+    const j = createJuice();
+    j.burst([CX + 2.1, FLOOR + 3.4, CX], 90);
+    for (let k = 0; k < Math.floor(t * 20) + 12; k++) j.draw(k === Math.floor(t * 20) + 11 ? s.solid : [], 50);
+    s.slot = -1;
+    s.focus = [CX, CX]; s.extent = 16;
+    title(s, r, 'EMOTES', 'KEYS 1 TO 4: WAVE, CHEER, DANCE, SPIN');
+  },
+
+  // Elo Pros avatars (client/avatar.mjs) on blocky riders: the default, a few picked, a robot; a crowd of AI players' behind
+  avatars(s, r) {
+    s.env = 'day';
+    s.yaw = Math.PI / 2; s.pitch = -0.2;
+    s.cam = [CX, FLOOR + 3.6, CX - 9.5];
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.62, 0.64, 0.66, LOOK.CHECKER, 4, 0.6);
+    const t = s.time / 1000;
+    const row = [
+      ['DEFAULT', AV_DEFAULT],
+      ['PICKED', avPack([1, 11, 1, 1, 22, 22])],
+      ['ALL BLACK', avPack([3, 10, 10, 10, 10, 10])],
+      ['ROBOT', avPack([7, 30, 9, 9, 9, 9], true)],
+      ['ODD ARMS', avPack([4, 25, 14, 19, 16, 23])],
+    ];
+    row.forEach(([n, av], k) => {
+      const px = CX + 4.4 - k * 2.2;
+      ball(s, k, px, FLOOR, CX, { r: 0.7, face: -Math.PI / 2 + 0.35 * Math.sin(t + k), look: packLook(k ? 3 + k : 0, k === 3 ? 4 : 1, 1), avatar: av });
+      label(s, r, [px, FLOOR - 0.35, CX], n, C.WHITE);
+    });
+    const rand = rng(5);
+    for (let k = 0; k < 30; k++) {
+      const a = rand() * Math.PI, d = 4 + Math.sqrt(rand()) * 12, v = 1 + rand() * 5, h = rand() * Math.PI * 2;
+      ball(s, 8 + k, CX + Math.cos(a) * d, FLOOR, CX + 3 + Math.sin(a) * d, { vel: [Math.cos(h) * v, 0, Math.sin(h) * v], roll: t * v + k, look: packLook(k % BALLS.length, k % HATS.length, 1), avatar: guestAvatar(k) });
+    }
+    s.slot = -1;
+    s.focus = [CX, CX + 3]; s.extent = 20;
+    title(s, r, 'ELO PROS AVATARS', 'SIX PARTS FROM A 32-COLOUR PALETTE, AND A FACE');
+  },
+
+  // close: every hat on a blocky rider, turning to show its face and its back
+  outfits(s, r) {
+    s.env = 'day';
+    s.yaw = Math.PI / 2; s.pitch = -0.12;
+    s.cam = [CX, FLOOR + 2.9, CX - 7.5];
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.62, 0.64, 0.66, LOOK.CHECKER, 4, 0.6);
+    const t = s.time / 1000;
+    HATS.forEach((x, k) => {
+      const px = CX + (HATS.length - 1) * 0.9 - k * 1.8;
+      ball(s, k, px, FLOOR, CX, { r: 0.7, face: -Math.PI / 2 + 0.5 * Math.sin(t + k), look: packLook(k + 1, k, 1 + (k % (BODIES.length - 1))) });
+      label(s, r, [px, FLOOR - 0.35, CX], x.name, x.unlock ? C.YELLOW : C.WHITE);
+    });
+    s.slot = -1;
+    s.focus = [CX, CX]; s.extent = 16;
+    title(s, r, 'EVERY HAT, BLOCKY', 'IN YELLOW: EARNED WITH AN ACHIEVEMENT');
   },
 
   // three floors of hex ice, cracking under the crowd; tiles that went, tiles going

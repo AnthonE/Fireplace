@@ -144,6 +144,7 @@ type Slot = {
   token: number; // a native session's, 0 for WebTransport
   watch: boolean; // a spectator: no slot (slot -1), no words
   looks?: boolean; // its hello asked for the room's looks (W.HELLO_LOOKS)
+  avatars?: boolean; // and for its avatars (W.HELLO_AVATARS)
   names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
   wallet?: string; // the wallet signed in on this slot
@@ -180,6 +181,14 @@ const LOOKS_MS = 250;
 const lookTable = () => [...looks.keys()].filter((p) => looks[p]).map((p) => [p, looks[p]] as [number, number]);
 const sendLooks = (s: Slot, pairs: [number, number][]) => { if (s.looks && pairs.length) s.ctl.write(W.encodeLooks(pairs)).catch(() => {}); };
 const setLook = (p: number, look: number) => { if (looks[p] !== look >>> 0) { looks[p] = look >>> 0; lookDirty.add(p); } };
+// Each signed-in slot's avatar, read off its Elo Pros face (/api/face/{wallet}
+// `avatar`, client/avatar.mjs) when it signs in: drawing only, as a look is,
+// sent to the sessions that asked (W.HELLO_AVATARS) the same way.
+const avatars = new Uint32Array(W.NP);
+const avatarDirty = new Set<number>();
+const avatarTable = () => [...avatars.keys()].filter((p) => avatars[p]).map((p) => [p, avatars[p]] as [number, number]);
+const sendAvatars = (s: Slot, pairs: [number, number][]) => { if (s.avatars && pairs.length) s.ctl.write(W.encodeLooks(pairs, W.T_AVATAR)).catch(() => {}); };
+const setAvatar = (p: number, w: number) => { if (avatars[p] !== w >>> 0) { avatars[p] = w >>> 0; avatarDirty.add(p); } };
 // Each signed-in slot's name, as the wallet's face on Elo Pros has it (GET
 // /api/face/<wallet>): drawing only like a look, sent to the sessions that
 // asked (W.HELLO_NAMES), '' for a guest or a wallet with no name.
@@ -188,13 +197,17 @@ const nameDirty = new Set<number>();
 const nameTable = () => names.map((n, p) => [p, n] as [number, string]).filter(([, n]) => n);
 const sendNames = (s: Slot, pairs: [number, string][]) => { if (s.names && pairs.length) s.ctl.write(W.encodeNames(pairs)).catch(() => {}); };
 const setName = (p: number, name: string) => { const n = W.cleanName(name); if (names[p] !== n) { names[p] = n; nameDirty.add(p); } };
-async function nameOf(s: Slot, wallet: string) {
+// Both off the wallet's Elo Pros face (GET /api/face/<wallet>), read once as
+// it signs in; the slot may have emptied, or signed in as another wallet,
+// while Elo Pros answered.
+async function readFace(s: Slot, wallet: string) {
   try {
     const r = await fetch(`${eloOrigin}/api/face/${wallet}`, { signal: AbortSignal.timeout(8000) });
     const j = r.ok ? await r.json() : null;
-    // the slot may have emptied, or signed in as another wallet, while Elo Pros answered
-    if (!gone(s) && s.wallet === wallet && typeof j?.name === 'string') setName(s.slot, j.name);
-  } catch (e) { log(`face: ${wallet}: ${e}`); }
+    if (gone(s) || s.wallet !== wallet) return;
+    setAvatar(s.slot, j && Number.isInteger(j.avatar) && j.avatar >= 2 ** 31 && j.avatar < 2 ** 32 ? j.avatar : 0);
+    setName(s.slot, typeof j?.name === 'string' ? j.name : '');
+  } catch (e) { log(`face: ${wallet}: ${e}`); /* no face: the look's own body, and P<n> */ }
 }
 // Who was signed in on each slot, and over which ticks (to is the leave's
 // tick): a result reads it at the tick its game ended, which the referee
@@ -390,9 +403,10 @@ async function signIn(s: Slot, message: string, signature: string) {
     s.since = Math.floor(Date.now() / 1000);
     seats.push({ slot: s.slot, wallet, from: closed + 1, to: Infinity });
     setName(s.slot, '');
-    nameOf(s, wallet);
+    setAvatar(s.slot, 0);
     if (seats.length > SEATS) seats.splice(0, seats.length - SEATS);
     stats.elo.signed++;
+    readFace(s, wallet);
   } else if (status === Elo.SIGNIN.UNCHECKED) stats.elo.unchecked++;
   else stats.elo.refused++;
   log(`slot ${s.slot} sign-in: ${status}${wallet ? ' ' + wallet : ''}`);
@@ -594,7 +608,7 @@ function closeTick(T: number, now: number) {
   for (let p = 0; p < W.NP; p++) {
     const s = slots[p];
     if (!s || T < s.joinTick) continue;
-    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setName(p, ''); continue; }
+    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setAvatar(p, 0); setName(p, ''); continue; }
     if (s.leaveTick === Infinity && now - Math.max(s.lastRecv, stallEnd) > SILENT_MS) {
       stats.leaves.silent = (stats.leaves.silent || 0) + 1;
       stats.leaveAt.push(Number(((now - E) / 1000).toFixed(2)));
@@ -727,7 +741,7 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, names: hello!.names });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
@@ -741,6 +755,7 @@ async function admit(d: Door) {
   await d.sw.write(W.encodeWelcome({ slot: p, maxDatagram, joinTick, seed: roomSeed, serverTick: Math.floor(serverNow()) + 1, roomStart, token: d.token, watch }));
   log(`${watch ? 'a spectator' : `slot ${p}`} joins at ${joinTick}, room ${roomStart}${d.token ? ' (native)' : ''}`);
   sendLooks(s, lookTable());
+  sendAvatars(s, avatarTable());
   sendNames(s, nameTable());
   if (hello!.signin && !watch) {
     if (signinDomains.length) { s.nonce = Elo.newNonce(); d.sw.write(W.encodeSigninNonce(s.nonce)).catch(() => {}); }
@@ -1096,10 +1111,16 @@ const fileTimers: ReturnType<typeof setInterval>[] = [];
 if (statusPath) { writeStatus(); fileTimers.push(setInterval(writeStatus, STATUS_MS)); }
 if (onlinePath) { writeOnline(); fileTimers.push(setInterval(writeOnline, STATUS_MS)); }
 setInterval(() => {
-  if (!lookDirty.size) return;
-  const pairs = [...lookDirty].map((p) => [p, looks[p]] as [number, number]);
-  lookDirty.clear();
-  for (const s of everyone()) sendLooks(s, pairs);
+  if (lookDirty.size) {
+    const pairs = [...lookDirty].map((p) => [p, looks[p]] as [number, number]);
+    lookDirty.clear();
+    for (const s of everyone()) sendLooks(s, pairs);
+  }
+  if (avatarDirty.size) {
+    const pairs = [...avatarDirty].map((p) => [p, avatars[p]] as [number, number]);
+    avatarDirty.clear();
+    for (const s of everyone()) sendAvatars(s, pairs);
+  }
 }, LOOKS_MS);
 setInterval(() => {
   if (!nameDirty.size) return;

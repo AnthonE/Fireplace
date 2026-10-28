@@ -222,6 +222,7 @@ class Session {
     this.failovers = [];
     this.wallet = '0x' + (0xb07 * 2 ** 32 + k).toString(16).padStart(40, '0');
     this.signed = null; // the relay's answer: { status, address }
+    this.avatars = {}; // slot -> the Elo Pros avatar the relay sent for it (W.T_AVATAR), with --signin
     this.signins = 0;
     this.names = {}; // slot to name, as the relay sent them (W.T_NAMES)
   }
@@ -241,7 +242,7 @@ class Session {
     tcp.on('data', (d) => { this.rx = this.rx.length ? Buffer.concat([this.rx, d]) : d; this.parse(); });
     // back after a failover: the same slot in the same room
     const resume = this.lostAt >= 0 && !watch ? this.slot : -1;
-    tcp.on('connect', () => this.stream(W.encodeHello({ maxDatagram: 1400, wasmPrefix: prefix, nonce: this.k, watch, room: resume >= 0 ? this.roomStart : 0, resume, signin: !!signinDomain && !watch, names: !!signinDomain })));
+    tcp.on('connect', () => this.stream(W.encodeHello({ maxDatagram: 1400, wasmPrefix: prefix, nonce: this.k, watch, room: resume >= 0 ? this.roomStart : 0, resume, signin: !!signinDomain && !watch, avatars: !!signinDomain, names: !!signinDomain })));
   }
 
   // The relay went away (or wouldn't have us yet): the next one, in a quarter
@@ -308,6 +309,7 @@ class Session {
       if (b[0] === W.T_KEY) need += (b[1] === W.SYNC.DESYNC ? 8 + 1024 : 0) + dv.getUint32(12, true);
       if (b[0] === W.T_SIGNED) need += b[2];
       if (b[0] === W.T_NAMES) need += (4 + W.NAME_MAX) * dv.getUint16(2, true);
+      if (b[0] === W.T_AVATAR) need += 8 * dv.getUint16(2, true);
       if (b.length < need) return;
       const m = Buffer.from(b.subarray(0, need));
       this.rx = b.subarray(need);
@@ -362,6 +364,7 @@ class Session {
       }
       return;
     }
+    if (m[0] === W.T_AVATAR) { for (let k = 0; k < dv.getUint16(2, true); k++) this.avatars[dv.getUint16(16 + 8 * k, true)] = dv.getUint32(20 + 8 * k, true); return; }
     if (m[0] === W.T_PONG) {
       this.stats.pongs++;
       const rtt = performance.now() - this.pingAt[dv.getUint32(4, true)];
@@ -489,7 +492,7 @@ const per = sessions.map((s) => {
     k: s.k, joined: s.joined, slot: s.slot, reject: s.reject, error: s.error || null, joinTick: s.joinTick0 ?? null, keys: s.keys, failovers: s.failovers,
     expected, bundleTicks: s.stats.bundleTicks, repairTicks: s.stats.repairTicks, bundles: s.stats.bundles,
     downKB: Number((s.stats.down / 1000).toFixed(1)), upKB: Number((s.stats.up / 1000).toFixed(1)), mine: s.mine, matched: s.matched,
-    wallet: signinDomain ? s.wallet : undefined, signed: s.signed, names: signinDomain ? s.names : undefined,
+    wallet: signinDomain ? s.wallet : undefined, signed: s.signed, avatars: signinDomain ? s.avatars : undefined, names: signinDomain ? s.names : undefined,
   };
 });
 const summary = {

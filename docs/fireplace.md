@@ -22,9 +22,9 @@ node net/play.mjs --fireplace --start 4  # from the playlist's entry 4, Dogfight
 
 Click (or Enter) to sit down; then each game's own controls. `?bot=1` sits a
 guest at the controls; `?watch=1` spectates; F goes fullscreen. While the room
-is in view, T changes its theme (`?theme=<id>` picks one), B and H your ball
-and hat, and L lists your achievements (`?look=<word>` wears a look for one
-visit).
+is in view, T changes its theme (`?theme=<id>` picks one), B, H and P your
+ball, hat and body, and L lists your achievements (`?look=<word>` wears a look
+for one visit). In bumper balls and party, 1 to 4 wave, cheer, dance and spin.
 
 **How it fits on the engine.** `build/fireplace/game.wasm` is golf, the arena,
 bumper balls, party and flight's Dogfight in one module: `tools/asm.mjs`
@@ -123,12 +123,14 @@ node tools/serve.mjs                            # then /client/room.html?theme=<
 node --test test/themes.test.mjs
 ```
 
-**Looks.** A look is a ball and a hat a player picks, and everyone in the room
-sees it: ten balls (the house colours, beach, candy, zebra, melon, pumpkin,
-snowball, eight ball, gold, marshmallow) and seven hats (a cap, a beanie, a
-headband, a helmet, none, a pumpkin head, a crown), listed in
+**Looks.** A look is a ball, a hat and a body a player picks, and everyone in
+the room sees it: ten balls (the house colours, beach, candy, zebra, melon,
+pumpkin, snowball, eight ball, gold, marshmallow), seven hats (a cap, a beanie,
+a headband, a helmet, none, a pumpkin head, a crown) and five bodies (the round
+rider, blocky with yellow, peach or cocoa skin, a robot), listed in
 `client/looks.mjs`. A look is drawing only. The page writes its word
-(the ball in the low byte, the hat in the next) to `CL_LOOK`, the net worker
+(the ball in the low byte, the hat in the next, the body in the third, an
+emote in the top) to `CL_LOOK`, the net worker
 sends it on the stream when it changes, and the relay keeps a word a slot and
 sends the table to every session that asked for looks in its hello (flag 4),
 then what changed, at most every 250 ms (`docs/wire.md`). A slot that empties
@@ -142,8 +144,75 @@ fighter the ball's colour (a team mode's sides still win). Look 0 draws exactly
 as the riders always have: the seat's colours, alpha 1, the slot for a seed.
 Musical Pads and Paint Party mark what is whose by the seat's colour, so their
 balls keep it there (`seatColors`); the hat still shows. The page keeps your
-pick in this browser. `client/party-render-demo.html?scene=wardrobe` shows
-every ball and hat.
+pick in this browser, and a browser that never picked wears the house colours
+on a blocky rider (`FIRST_LOOK`); every page with a host wears it, not only
+Fireplace's. AI players in a local room wear a look of their own, open ones
+on blocky bodies (`guestLook`). `client/party-render-demo.html?scene=wardrobe`
+shows every ball and hat, `?scene=blocky` every body, `?scene=outfits` every
+hat on one, `?scene=emotes` the emotes.
+
+**Bodies.** A blocky rider (`client/rider.mjs`) is six boxes and its hat's
+standing on the ball and walking it along: legs that step as it rolls, arms
+that swing against them and go up and out when it flies, a head a size up on
+the rest with a face, the shirt in the ball's colour and the legs in its second
+colour, darker. A box is a sprite of its own kind (12) in both renderers: the
+sprite's square covers the box's bounding sphere, and each pixel casts its own
+ray at the box, so a box is one quad, exact at any size, with a bevel and an
+ink line on its edges like party's solids. Its pitch rides in the seed, its
+yaw in the roll, and a splay about its front in the alpha with its part (a
+face, a pumpkin's lit grin, metal, a robot's eyes). The arena's fighters are
+the same figure a size up (1.83 m) in its splat shader (`figure`), seven boxes
+tested per pixel: legs stepping with their speed, both arms out holding the gun
+along the aim, a zombie's reaching empty; the body's skin and face come from
+the look word (`looksOf`), the shirt from the tint or the side. Evade's downed
+are still the old card on its side.
+
+![Every body, and a crowd of blocky riders walking their balls](p2-blocky.png)
+
+**Avatars.** A player who signed in with Elo Pros wears the avatar they
+picked on their profile there: one word (`client/avatar.mjs`), six parts
+(head, torso, each arm, each leg) from a 32-colour palette and a face. The
+relay reads it off `/api/face/{wallet}` as the slot signs in and sends it to
+everyone beside the looks (hello flag 16, `T_AVATAR`, `CL_AVATARS`;
+[wire.md](wire.md)). A blocky rider or fighter wears its colours in place of
+the body's skin and the ball's shirt; the hat and the ball stay the look's,
+and in a team mode the side's colour stays on the shirt. A local room's AI
+players wear avatars of their own (`guestAvatar`); `?avatar=<word>` wears one
+for a visit. `?scene=avatars` on the party demo shows a row.
+
+![Elo Pros avatars on blocky riders](p4-avatars.png)
+
+**On a phone.** With a coarse pointer (or `?touch=1`; `?touch=0` never)
+every game puts touch controls over its screen (`client/touch.mjs`): a stick
+wherever the left thumb lands, which holds W, A, S and D in the game's own
+keys; a drag anywhere else to look, through the game's own mouse look as if
+the pointer were locked; and round buttons on the right, the first and
+biggest in the corner (jump in bumper balls and party, fire in the arena,
+golf and Dogfight). The couch gets a bar for B, H, P, T, L and F.
+
+![Party on a phone: the stick, the drag, the buttons](p5-phone.png)
+
+**The font.** Bumper balls', party's and the TV's text is a bold sans with a
+dark outline (`client/hudfont.mjs`): the 3x5 font's 64 characters drawn again
+at startup from the system's own sans, a rounded one where there is one, into
+an atlas that rides in the renderers' font buffer after the pixel glyphs, so
+no shader gained a binding. The text grid is the pixel font's, a character 4
+x 6 HUD pixels, so every layout is what it was. `?font=pixel` keeps the 3x5
+font. Golf's, the arena's and Dogfight's HUDs draw at one screen pixel a font
+pixel, where a cell is too small for a smooth face, and keep it.
+
+**Emotes and juice.** 1 to 4 in bumper balls and party wave, cheer, dance and
+spin: the look word's top byte, an emote in its low four bits and a count in
+its high four, so the same emote twice is a new word the relay passes on. A
+page acts one out for 2.5 s from when it sees the word change, and not one it
+found there on joining. `client/juice.mjs` is the rest: riders thrown back
+with their arms out for 350 ms when their balls meet, the camera shaking when
+yours does, and as a round's result is held its winners (place 1: the last
+ball, a shared win, a side) cheering under 90 bits of confetti each, boxes
+that fall turning. All of it is drawing, from FX and the round's end the
+frontends already read.
+
+![The four emotes, and a winner's confetti](p3-emotes.png)
 
 **Achievements.** Thirteen, in `client/achievements.mjs`, kept in this browser:
 a first game, the top three, a win, two and three wins in a row, first,

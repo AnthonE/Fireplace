@@ -54,7 +54,7 @@ player for 2 s takes them as gone.
 
 | message | bytes | layout |
 | --- | --- | --- |
-| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 names) · u8 slot · 2 B 0 |
+| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 avatars, 32 names) · u8 slot · 2 B 0 |
 | welcome | 32 | `0x11` · u8 slot · u16 server max datagram · u32 join_tick · u32 seed · u32 server_tick · u32 tick_us · u8 send_every · u8 nb · u16 np · u32 room_start · u32 token |
 | watching | 32 | `0x17`, then as a welcome with slot 0: you're a spectator |
 | reject | 4 | `0x1f` · u8 reason · 2 B 0 |
@@ -84,7 +84,8 @@ After the welcome, every stream message opens with 16 bytes:
 | nonce, relay to client | `0x19` · 3 B 0 · 12 B the nonce to sign (letters and digits) |
 | sign-in, client to relay | `0x19` · 3 B 0 · u16 message bytes · u16 signature bytes · 8 B 0, then the message and the signature, UTF-8 |
 | signed | `0x1a` · u8 answer · u8 address bytes · 13 B 0, then the wallet signed in, UTF-8 |
-| names | `0x1b` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · 16 B name, 0 after its last character) |
+| avatars | `0x1b` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 avatar word) |
+| names | `0x1c` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · 16 B name, 0 after its last character) |
 
 Looks are optional. A client that sets hello flag 4 gets every slot's look
 after its welcome, then the ones that changed, and may send its own; a client
@@ -93,6 +94,14 @@ without them needs nothing more. A look word is the ball in its low byte and
 the hat in the next (`client/looks.mjs`; 0 is the house look). It is drawing
 only: no tick, keyframe, record or hash carries it, and a slot that empties
 goes back to 0.
+
+Avatars ride the same way. A client that sets hello flag 16 gets every
+signed-in slot's Elo Pros avatar after its welcome, then the ones that
+changed: the word `avatar` on that wallet's `/api/face/{wallet}`, which the
+relay reads when the slot signs in (six parts at 5 bits each into a
+32-colour palette, bit 30 a robot's face, bit 31 set: `client/avatar.mjs`).
+A slot with none, or that empties, is 0. A client that doesn't set the flag
+never sees one.
 
 Sign-in is optional too, and it is how a player's games get rated on Elo
 Pros (`net/elo.mjs`). A client that sets hello flag 8 gets a nonce after its
@@ -112,7 +121,7 @@ From then on, each game the slot plays in is reported to Elo Pros's ratings
 with the place it got (see [hosting.md](hosting.md)). A guest plays the same.
 
 Names are optional too, and drawing only, like looks. A client that sets
-hello flag 16 gets the names of the slots signed in after its welcome, then
+hello flag 32 gets the names of the slots signed in after its welcome, then
 the ones that changed: the name each wallet's face has on Elo Pros
 (`GET /api/face/<wallet>`), upper case and cut to the 3x5 font's characters
 (codes 32 to 95), 16 at most (`cleanName` in `net/wire.mjs`). An empty name
