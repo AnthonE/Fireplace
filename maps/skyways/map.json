@@ -1,5 +1,7 @@
 {
   "name": "Skyways",
+  "by": "AnthonE",
+  "about": "Dogfight's sky over open ground, with a ring race through its gates.",
   "bounds": [192, 832, 192, 832],
   "ceiling": 147,
   "terrain": {

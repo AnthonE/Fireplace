@@ -551,7 +551,15 @@ QG_MAP=mymap npm run build                # or just build: node tools/asm.mjs --
   each flag. Materials: `metal`, `rock`, `dark`, `red`, `blue`, `light`. At
   most 512 boxes in 64 structures, 16 teleporters, 32 spawns, 12 pads and 8
   hills (radius up to 30 m), and each side's half (the spawns strictly
-  nearer its own flag) needs a spawn.
+  nearer its own flag) needs a spawn. `name` is what the game and the store
+  call it; `by`, a GitHub login, and `about`, a line, are the credit
+  `tools/elo.mjs` writes into `elo.json`'s mods (the build reads neither).
+
+`node tools/map-check.mjs maps/mymap` is the check CI runs on every map: it
+compiles, builds into the debug sim (which traps on a NaN) and plays with
+eight AI fighters, a Fiesta, Capture the Flag and King of the Hill on an
+arena map and a Dogfight (and its Ring Race, with gates) on a map with a
+ceiling. Both maps here take about 6 s together.
 
 `tools/canyon.mjs` is how Box Canyon was drawn: the ground painted by
 code into the two images, the rest written to `map.json`. Open it in the

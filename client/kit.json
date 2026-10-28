@@ -1,5 +1,11 @@
 {
   "name": "Fireplace",
   "tagline": "A roomful of games, come and go as you like",
-  "relay": { "url": "", "hash": "", "hash_url": "", "pool": "https://game.elopros.com/kit/" }
+  "repo": "AnthonE/Fireplace",
+  "relay": {
+    "url": "",
+    "hash": "",
+    "hash_url": "",
+    "pool": "https://game.elopros.com/kit/"
+  }
 }

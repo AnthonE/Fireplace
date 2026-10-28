@@ -5,7 +5,11 @@
 // page cross-origin isolated, the site's index opened Fireplace, the room is
 // local (client/local.mjs) with its AI guests in, the sim kept stepping
 // (interval hashes every 128 ticks) through a switch of games, and Party's own
-// page played a local room on the minigame it was asked for. Screenshots go
+// page played a local room on the minigame it was asked for, and the map
+// editor opened Box Canyon from the site and its compiler took it, and the
+// studio built party in the page byte for byte as npm run build does, its
+// check played the debug build and found the split hashes equal, and its
+// build played in party's page. Screenshots go
 // to traces/pages-*.png.
 //   node net/run-pages.mjs [--seconds 200] [--bots 5] [--mg 0]
 import { createServer } from 'node:http';
@@ -89,6 +93,30 @@ try {
   const ps = await party.evaluate(() => ({ ...window.__qa.state(), hashes: window.__qa.hashes.length }));
   await shoot(party, 'party');
   report.party = { isolated: await party.evaluate(() => window.crossOriginIsolated), hashes: ps.hashes, state: { slot: ps.slot, clState: ps.clState, game: ps.game, name: ps.name } };
+  // the map editor from the same site: it opens Box Canyon from maps/ and the build's compiler, in the page, takes it
+  const editor = await ctx.newPage();
+  watch(editor, 'editor');
+  await editor.goto(`${base}/client/map-editor.html`);
+  await editor.waitForFunction(() => document.querySelector('#foot')?.textContent !== 'loading…', null, { timeout: 30000 });
+  await editor.selectOption('#open', 'canyon');
+  await editor.waitForFunction(() => /The build takes it/.test(document.querySelector('#side')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
+  report.editor = { checked: await editor.evaluate(() => /The build takes it/.test(document.querySelector('#side')?.textContent || '')), foot: await editor.textContent('#foot') };
+  // the studio: party assembled in the page, checked, and played from its build
+  const studio = await ctx.newPage();
+  watch(studio, 'studio');
+  await studio.goto(`${base}/client/studio.html?mg=sweep&bots=3&present=0&res=320x200&bot=1`);
+  await studio.waitForFunction(() => window.__studio?.st.served.wat, null, { timeout: 30000 });
+  await studio.evaluate(() => window.__studio.check());
+  report.studio = await studio.evaluate(async () => {
+    const hex = async (b) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', b))].map((x) => x.toString(16).padStart(2, '0')).join('');
+    const st = window.__studio.st;
+    const npm = await (await fetch('../build/party/game.wasm')).arrayBuffer();
+    return { built: !!st.built, error: st.buildError || st.checkError, same: !!st.built && (await hex(st.built.bytes)) === (await hex(npm)), ms: st.built?.ms, checked: st.checked };
+  });
+  await studio.evaluate(() => window.__studio.play());
+  const played = await (await studio.waitForSelector('#play iframe')).contentFrame();
+  await played.waitForFunction(() => window.__qa?.error || window.__qa?.hashes?.length > 2, null, { timeout: 60000 }).catch(() => {});
+  report.studio.played = await played.evaluate(() => (window.__qa?.error ? { error: window.__qa.error } : { hashes: window.__qa?.hashes?.length ?? 0, game: window.__qa?.state?.().game })).catch((e) => ({ error: String(e) }));
 } catch (e) {
   report.errors.push(String(e?.stack || e));
 } finally {
@@ -105,10 +133,14 @@ const gate = {
   switchedGames: seconds < 200 || (f?.games.length ?? 0) >= 2,
   partyLocal: !!report.party?.isolated && report.party.hashes > 0,
   partyOnItsMinigame: ps.game === mg,
+  editorOpensAMap: !!report.editor?.checked,
+  studioBuildsAsNpm: !!report.studio?.same,
+  studioChecks: !!report.studio?.checked?.splitEqual && report.studio.checked.scored > 0,
+  studioPlays: (report.studio?.played?.hashes ?? 0) > 2,
   noErrors: report.errors.length === 0,
 };
 report.gate = { ...gate, pass: Object.values(gate).every(Boolean) };
 writeFileSync('traces/pages.json', JSON.stringify(report, null, 2) + '\n');
-console.log(JSON.stringify({ fireplace: report.fireplace, party: report.party, errors: report.errors, gate: report.gate }, null, 2));
+console.log(JSON.stringify({ fireplace: report.fireplace, party: report.party, editor: report.editor, studio: report.studio, errors: report.errors, gate: report.gate }, null, 2));
 console.log(`PAGES gate: ${report.gate.pass ? 'PASS' : 'FAIL'}`);
 process.exit(report.gate.pass ? 0 : 1);

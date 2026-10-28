@@ -37,7 +37,20 @@ const TOUCH = touchWanted(q); // a phone: no pointer lock, buttons for the couch
 const stage = document.getElementById('stage');
 const note = document.getElementById('note');
 const roomCanvas = document.getElementById('room');
-const canvases = L.GAMES.map((_, k) => document.getElementById(`g${k}`));
+// The page's half of each game in layout.mjs's FP_SETS, by G_*: its frontend
+// (mount(host, opts), client/host.mjs), the size it draws at (320 x 200 for
+// golf's look, null for the window's) and what its picture lights the room
+// with. A game added to FP_SETS adds its row here.
+const PAGES = [
+  { frontend: './golf-game.mjs', size: [320, 200], light: [0.45, 0.7, 0.45] }, // golf's grass
+  { frontend: './arena-game.mjs', size: [320, 200], light: [0.6, 0.65, 0.6] }, // the arena's grey
+  { frontend: './bumper-game.mjs', size: null, light: [1, 0.85, 0.5] }, // the cheese
+  { frontend: './party-game.mjs', size: null, light: [0.55, 0.75, 1] }, // party's sky
+  { frontend: './flight-game.mjs', size: [320, 200], light: [0.5, 0.65, 0.95] }, // Dogfight's bluer sky
+];
+if (PAGES.length !== L.FP_SETS.length) throw new Error(`client/fireplace.mjs knows ${PAGES.length} games and FP_SETS has ${L.FP_SETS.length}`);
+// a canvas a game, fireplace.html's or made here
+const canvases = L.GAMES.map((_, k) => document.getElementById(`g${k}`) ?? stage.appendChild(Object.assign(document.createElement('canvas'), { id: `g${k}`, className: PAGES[k].size ? 'lo' : '' })));
 const BOT = q.get('bot') === '1';
 const FILM = q.has('film') && q.has('replay') ? Number(q.get('film')) : 0;
 const WATCH = q.get('watch') === '1' || q.has('replay');
@@ -46,10 +59,8 @@ const ZOOM_MS = 1700;
 const LOOK_MS = 5000; // how long B or H keeps your look on the TV
 const LIST_MS = 12000; // and L your achievements
 const PER_PAGE = 6; // achievements a page, in type the TV can show from the couch
-// what each game's picture lights the room with, roughly: golf's grass, the
-// arena's grey, the cheese, party's sky, Dogfight's bluer sky
-const TV_LIGHT = [[0.45, 0.7, 0.45], [0.6, 0.65, 0.6], [1, 0.85, 0.5], [0.55, 0.75, 1], [0.5, 0.65, 0.95]];
-const FRONTENDS = { [L.G_GOLF]: './golf-game.mjs', [L.G_ARENA]: './arena-game.mjs', [L.G_BUMPER]: './bumper-game.mjs', [L.G_PARTY]: './party-game.mjs', [L.G_FLIGHT]: './flight-game.mjs' };
+const TV_LIGHT = PAGES.map((p) => p.light);
+const FRONTENDS = PAGES.map((p) => p.frontend);
 const WASM = '../build/fireplace/game.wasm';
 // the title card's name and line, client/kit.json's (node tools/kit.mjs init writes them)
 const TITLE = String(kit.name || 'Fireplace').toUpperCase();
@@ -62,11 +73,7 @@ async function main() {
   roomCanvas.width = W;
   roomCanvas.height = H;
   // golf, the arena and Dogfight are drawn at their 320 x 200, bumper balls and party at the window's size
-  [canvases[L.G_GOLF].width, canvases[L.G_GOLF].height] = [320, 200];
-  [canvases[L.G_ARENA].width, canvases[L.G_ARENA].height] = [320, 200];
-  [canvases[L.G_FLIGHT].width, canvases[L.G_FLIGHT].height] = [320, 200];
-  [canvases[L.G_BUMPER].width, canvases[L.G_BUMPER].height] = [W, H];
-  [canvases[L.G_PARTY].width, canvases[L.G_PARTY].height] = [W, H];
+  canvases.forEach((c, k) => { [c.width, c.height] = PAGES[k].size ?? [W, H]; });
   const clock = FILM ? filmClock() : null;
   const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;
@@ -256,7 +263,7 @@ async function main() {
       const you = x.p === slot;
       if (you) { g2.fillStyle = '#3a2c14'; g2.fillRect(70, y - 6, 500, 28); }
       text(`${list.indexOf(x) + 1}`, 110, y, 4, you ? '#ffcf6a' : '#c9b89a', 'right');
-      text(you ? 'YOU' : `P${x.p + 1}`, 130, y, 4, you ? '#ffcf6a' : '#ffffff');
+      text(you ? 'YOU' : host.label(x.p).slice(0, 9), 130, y, 4, you ? '#ffcf6a' : '#ffffff'); // 9 of the font's 16 px reach the marshmallows at 290
       for (let i = 0; i < Math.min(x.m, 12); i++) { g2.fillStyle = '#f4ecdc'; g2.fillRect(290 + i * 18, y, 12, 14); g2.fillStyle = '#d9cbb0'; g2.fillRect(290 + i * 18, y + 10, 12, 4); }
       if (x.m > 12) text(`+${x.m - 12}`, 290 + 12 * 18 + 4, y, 3, '#c9b89a');
       if (x.got) text(`+${x.got}`, 560, y, 4, '#7fdf7f', 'right');

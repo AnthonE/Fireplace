@@ -134,6 +134,20 @@ npm run build && node --test test/mg-<key>.test.mjs test/party.test.mjs
 node net/play.mjs --party --mg <id> --bots 7      # play it: open the URL it prints
 ```
 
+Rather not install anything? The studio works on a minigame in the browser:
+`client/studio.html` (on the game's site, or `node tools/serve.mjs` here).
+Pick one of the minigames, edit its rules and its constants, and press build:
+it assembles party with your minigame in it in the page, with the same
+assembler as `npm run build` (on a minigame you haven't changed, the same
+bytes). **Check** plays the debug build with AI balls on your minigame and
+replays it with the balls' work split two ways, the hashes equal tick by
+tick; **play** puts your build in front of you against AI balls; **send it
+in** downloads the files you changed and opens GitHub's upload page for
+`src/mg/`, where proposing the change makes the pull request. Edits reach the
+sim only: the AI and the drawing read the site's constants until the change
+is merged. A new minigame, its client module and tests still start from the
+tool below.
+
 Rather write Rust than WebAssembly text? Add `--rust`: the rules are then a
 crate, `rust/mg/<key>/src/lib.rs`, and `node tools/rust.mjs` turns it into
 `src/mg/<key>.wat` after each change (docs/rust.md; SUMO RING is the worked
@@ -224,11 +238,20 @@ there. Then play it with bots:
 
 ```sh
 node net/play.mjs --arena --map <folder>                # open the URL it prints
-node net/play.mjs --flight --mode 12 --map <folder>     # Dogfight's Ring Race, on a map with gates
+node net/play.mjs --flight --mode 15 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
 
 Send it as a pull request with the folder in `maps/`, and say which game
-it is for. A map is part of the game's build, not just a look, so it
+it is for. The editor's **send it in** does that without git: it downloads
+the three files and opens GitHub's upload page for `maps/<folder>/`; drop
+them there and propose the change (GitHub makes a fork for you if you need
+one). CI checks every map in `maps/` the way you can here:
+
+```sh
+node tools/map-check.mjs maps/<folder>   # compiles, builds into the debug sim, plays three modes with AI fighters
+```
+
+A map is part of the game's build, not just a look, so it
 reaches everyone when it is merged and a game is built on it. Each game
 builds one map today; several in one build is on the roadmap.
 `docs/arena.md`'s "Making a map" has the format, for editing `map.json` by

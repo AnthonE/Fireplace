@@ -5,8 +5,9 @@
 // When a game in the playlist ends, the referee reads the places it gave from
 // the confirmed world (FP_LAST, as the room shows them), and the relay reports
 // the signed-in players' places to POST /api/ratings/<slug>/report, signed with
-// the game's server key (Ed25519). Results come from the referee, never from a
-// client. Runs in Deno (the relay), Node (the tests) and Workers.
+// the game's server key (Ed25519), and what the game added to each signed-in
+// wallet's achievements to POST /api/gamestats/<slug>/report (the relay's
+// reportAchievements). Results come from the referee, never from a client. Runs in Deno (the relay), Node (the tests) and Workers.
 import * as L from '../src/layout.mjs';
 
 // The ratings ladder for each game, by G_*: a game's skill is its own.
@@ -40,11 +41,12 @@ export const normWallet = (a) => (/^0x[0-9a-fA-F]{40}$/.test(a) ? a.toLowerCase(
 
 // The game that just ended, read from a Fireplace world while its result is
 // held (FP_STAGE 1): { game, count (the games the room played before this
-// one), places: [[slot, place], ...] for every slot in it, 1 the best }.
+// one), places: [[slot, place], ...] for every slot in it, 1 the best, got:
+// the marshmallows each of those slots got, in the same order }.
 export function readResult(u8, dv) {
-  const places = [];
-  for (let p = 0; p < L.NPLAYER; p++) if (u8[L.FP_LAST + p]) places.push([p, u8[L.FP_LAST + p]]);
-  return { game: dv.getUint32(L.FP_GAME, true), count: dv.getUint16(L.FP_COUNT + 2, true), places };
+  const places = [], got = [];
+  for (let p = 0; p < L.NPLAYER; p++) if (u8[L.FP_LAST + p]) { places.push([p, u8[L.FP_LAST + p]]); got.push(u8[L.FP_GOT + p]); }
+  return { game: dv.getUint32(L.FP_GAME, true), count: dv.getUint16(L.FP_COUNT + 2, true), places, got };
 }
 
 // A result as the match Elo Pros rates, or null when fewer than two of its
@@ -65,6 +67,22 @@ export function matchOf({ seed, roomStart, result, wallet }) {
     ladder: LADDERS[result.game] ?? `game${result.game}`,
     teams: [...best].map(([w, place]) => ({ players: [w], place })),
   };
+}
+
+// The same result for each signed-in wallet's achievements: [{ wallet, r }],
+// r what client/achievements.mjs record() counts ({ key, game, place, got,
+// field }), keyed as the match is so a game counts once. A wallet seen on two
+// seats keeps its better one. Ethereum wallets only: Elo Pros keeps game
+// stats for those.
+export function walletResults({ seed, roomStart, result, wallet }) {
+  const best = new Map();
+  result.places.forEach(([slot, place], i) => {
+    const w = wallet(slot);
+    if (!w || !/^0x[0-9a-f]{40}$/.test(w) || best.get(w)?.place <= place) return;
+    best.set(w, { place, got: result.got?.[i] ?? 0 });
+  });
+  const key = `fp-${(seed >>> 0).toString(16)}-${roomStart >>> 0}-${result.count}`;
+  return [...best].map(([w, { place, got }]) => ({ wallet: w, r: { key, game: result.game, place, got, field: result.places.length } }));
 }
 
 // A server key: the private half of an Ed25519 key in PEM (openssl genpkey

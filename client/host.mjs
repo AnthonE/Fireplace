@@ -17,6 +17,7 @@ import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
 import { wasmPrefix } from '../net/wire.mjs';
 import { createSound } from './sound.mjs';
+import { slotLabel } from './looks.mjs';
 import { parseImpair } from '../net/impair.js';
 import { relayFor, room } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
@@ -35,7 +36,8 @@ export function fitSize(q, max = [1600, 1000]) {
 }
 
 // wasm: the sim's URL; watch: a spectator; arena: the arena's input words; fireplace: whichever the game on now reads
-export async function createHost({ wasm, q = new URLSearchParams(location.search), watch = false, arena = false, fireplace = false, connect = true }) {
+// kind names the game for a local room when wasm's URL doesn't (a studio build's blob:)
+export async function createHost({ wasm, q = new URLSearchParams(location.search), watch = false, arena = false, fireplace = false, connect = true, kind = '' }) {
   // ../coi.js reloads the page once its service worker isolates it: wait for that, unless it gives up
   while (!crossOriginIsolated && globalThis.coi?.reloading) await new Promise((ok) => setTimeout(ok, 100));
   if (!crossOriginIsolated) throw new Error('the page must be served cross-origin isolated (node tools/serve.mjs)');
@@ -65,6 +67,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   h.set(L.CL_LOOK, watch ? 0 : q.has('look') ? Number(q.get('look')) >>> 0 : wearable(savedLook(), gotSet(loadTally())));
   // a slot's look word (client/looks.mjs): this player's own as picked, the rest as the relay sent them
   h.look = (p) => (p === h.get(L.CL_SLOT) ? h.get(L.CL_LOOK) : h.u32[(L.CL_LOOKS >> 2) + p]) >>> 0;
+  // what a label calls a slot: the name its wallet goes by on Elo Pros, as the relay sent it, or P<n>
+  h.label = (p) => slotLabel(h.u8, p);
   // a slot's Elo Pros avatar (client/avatar.mjs) as the relay sent it once it signed in; ?avatar=<word> wears one on this page
   const myAvatar = q.has('avatar') ? Number(q.get('avatar')) >>> 0 : 0;
   h.avatar = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) && myAvatar ? myAvatar : h.u32[(L.CL_AVATARS >> 2) + p] >>> 0);
@@ -111,8 +115,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
       else if (relay) {
         const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
-        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, signin: fireplace }, [ch.port1]);
-      } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
+        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, names: true, signin: fireplace }, [ch.port1]);
+      } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace, kind }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
       h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     };
     const local = (why) => {
@@ -137,8 +141,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
 }
 
 // A local room's AI players (their brain by the page's game) and its seed.
-function localRoom(q, wasm, { arena, fireplace }) {
-  const kind = fireplace ? 'fireplace' : /\/flight\//.test(wasm) ? 'flight' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '';
+function localRoom(q, wasm, { arena, fireplace, kind: named = '' }) {
+  const kind = named || (fireplace ? 'fireplace' : /\/flight\//.test(wasm) ? 'flight' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '');
   const rand = crypto.getRandomValues(new Uint32Array(1))[0];
   const seed = q.has('seed') ? Number(q.get('seed')) >>> 0
     : q.has('mg') && kind === 'party' ? ((0xa7 << 24) | ((Number(q.get('mg')) & 0xff) << 16) | (rand & 0xffff)) >>> 0

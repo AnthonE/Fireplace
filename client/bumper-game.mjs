@@ -141,7 +141,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
   let me = null, pme = null;
   let last = null;
 
-  const name = (p, slot) => (p === slot ? 'YOU' : `P${p + 1}`);
+  const name = (p, slot) => (p === slot ? 'YOU' : h.label(p));
   function show(f, slot, cam) {
     const now = performance.now();
     const d = Math.hypot(f.pos[0] - cam[0], f.pos[1] - cam[1], f.pos[2] - cam[2]);
@@ -233,7 +233,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     if (w.state === L.H_PLAY && lastState === L.H_COUNT) { sound.count(0); banner = { text: 'GO!', until: now + 1000, color: C.GREEN }; }
     if (w.state === L.H_OVER && lastState === L.H_PLAY) {
       if (w.winner === slot && slot >= 0) { banner = { text: 'YOU WIN!', until: now + 5000, color: C.YELLOW }; sound.holed(); }
-      else banner = { text: w.winner === 255 ? (me && !me.out && me.place === 1 ? 'A SHARED WIN' : 'NO WINNER') : `P${w.winner + 1} WINS`, until: now + 5000, color: C.YELLOW };
+      else banner = { text: w.winner === 255 ? (me && !me.out && me.place === 1 ? 'A SHARED WIN' : 'NO WINNER') : `${h.label(w.winner)} WINS`, until: now + 5000, color: C.YELLOW };
     }
     lastSecs = secs;
     // the winners (place 1: the last ball, a shared win, a side's) cheer while the result is held

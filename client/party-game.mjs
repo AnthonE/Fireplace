@@ -184,7 +184,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
   let held0 = null; // PK_SCORE: where the camera waits while your ball is down
   let cut = 0; // the title card's camera: 1 the fly-round, 0 behind your ball
 
-  const name = (p, slot) => (p === slot ? 'YOU' : `P${p + 1}`);
+  const name = (p, slot) => (p === slot ? 'YOU' : h.label(p));
   const pushFeed = (t, color) => { feed.push({ text: t, color, born: performance.now() }); if (feed.length > 5) feed.shift(); };
   const setBanner = (t, color = C.YELLOW, ms = 2000, big = 0) => { banner = { text: t, until: performance.now() + ms, color, big }; };
   function show(f, slot, cam, g) {
@@ -326,7 +326,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     } else if (g.state === L.H_OVER && lastState === L.H_PLAY) {
       if (g.winner === slot && slot >= 0) { setBanner('YOU WIN!', C.YELLOW, 5000, 4); sound.holed(); }
       else if (me?.live && me.place === 1) { setBanner('A SHARED WIN', C.YELLOW, 5000, 3); sound.holed(); }
-      else setBanner(g.winner === 255 ? 'TIME' : `P${g.winner + 1} WINS`, C.YELLOW, 5000, 3);
+      else setBanner(g.winner === 255 ? 'TIME' : `${h.label(g.winner)} WINS`, C.YELLOW, 5000, 3);
     }
     lastSecs = secs;
     // the winners (place 1: the last ball, a shared win, a side's) cheer while the result is held
@@ -589,7 +589,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       // the result: you won, or your place, and who won
       const side = g.teams && (g.twin === 1 || g.twin === 2) ? g.twin - 1 : -1;
       const won = me?.live && me.place === 1 && (g.kind === L.PK_SCORE || !me.out || side >= 0);
-      const who = side >= 0 ? `${SIDES[side].name} WINS` : g.winner !== 255 ? (g.winner === slot ? 'YOU WIN' : `P${g.winner + 1} WINS`) : list.some((o) => o.place === 1) ? 'A SHARED WIN' : 'NO WINNER';
+      const who = side >= 0 ? `${SIDES[side].name} WINS` : g.winner !== 255 ? (g.winner === slot ? 'YOU WIN' : `${h.label(g.winner)} WINS`) : list.some((o) => o.place === 1) ? 'A SHARED WIN' : 'NO WINNER';
       band(1, 9, 0.55);
       if (me?.live && me.place) {
         bigLine(2, won ? (side >= 0 ? `${SIDES[side].name} WINS!` : g.winner === slot ? 'YOU WIN!' : 'A SHARED WIN') : `${ordinal(me.place)} OF ${m}`, won ? C.YELLOW : C.WHITE, 4);

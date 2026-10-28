@@ -118,6 +118,8 @@ export function boxCanyon() {
   const tele = (b, [x, z]) => ({ from: local(b, [-12, 0, 10]), to: [x, +(ground(x, z).h + 0.1).toFixed(2), z], radius: 1.1 });
   return {
     name: 'Box Canyon',
+    by: 'AnthonE',
+    about: 'Two bases at either end of a canyon, a cave between them, teleporters out to the rocks.',
     bounds: BOUNDS,
     terrain: { origin: ORIGIN, height: 'height.png', scale: 1 / 256, base: 0, surface: 'surface.png' },
     prefabs: { base: basePrefab() },
