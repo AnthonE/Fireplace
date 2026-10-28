@@ -545,13 +545,20 @@ QG_MAP=mymap npm run build                # or just build: node tools/asm.mjs --
   `top`; `pads` (slayer's and the team modes' guns), `{ weapon, at }`;
   `flags`, the team modes' two flag stands, `[{ team: 'red', at }, { team:
   'blue', at }]`; `ball`, Oddball's skull, `{ at }`; `hills`, King of the
-  Hill's, `[{ at, radius }]` (`at` as a spawn's: `[x, z]` or `[x, z, top]`).
-  Left out, the flags stand an eighth in from each end of the bounds' longer
-  side, the skull in the middle, and three hills in the middle and halfway to
-  each flag. Materials: `metal`, `rock`, `dark`, `red`, `blue`, `light`. At
-  most 512 boxes in 64 structures, 16 teleporters, 32 spawns, 12 pads and 8
-  hills (radius up to 30 m), and each side's half (the spawns strictly
-  nearer its own flag) needs a spawn.
+  Hill's, `[{ at, radius }]` (`at` as a spawn's: `[x, z]` or `[x, z, top]`);
+  `void`, a height in metres below which a fighter dies by falling (left
+  out, none). Left out, the flags stand an eighth in from each end of the
+  bounds' longer side, the skull in the middle, and three hills in the
+  middle and halfway to each flag. Materials: `metal`, `rock`, `dark`,
+  `red`, `blue`, `light`, `plain`, or a colour of the box's own over one of
+  them: `#rrggbb` (plain) or `rock#7a6e5c`. The colour is drawing only, in
+  the material word's top three bytes; the sim reads a box's corners and
+  nothing else. At most 2048 boxes in 64 structures, 16 teleporters, 32
+  spawns, 12 pads and 8 hills (radius up to 30 m), and each side's half
+  (the spawns strictly nearer its own flag) needs a spawn.
+
+A Roblox place makes a map too: `node tools/roblox.mjs place.rbxl`, or
+open it in the map editor ([docs/roblox.md](roblox.md)).
 
 `tools/canyon.mjs` is how Box Canyon was drawn: the ground painted by
 code into the two images, the rest written to `map.json`. Open it in the

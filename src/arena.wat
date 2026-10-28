@@ -1184,6 +1184,10 @@
               (then (call $a_pickup (local.get $p))))
 #endif
             ))
+        ;; below the map's void (map.json "void": a Roblox place's sky, tools/roblox.mjs): dead by falling
+        (if (i32.and (i32.and (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD))) (i32.eq (local.get $state) (i32.const @H_PLAY)))
+                     (f32.lt (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.const @MAP_VOID)))
+          (then (call $a_kill (local.get $p) (local.get $p) (i32.const @KILL_FALL))))
         (!put u8 @(PLAYERS + A_ACT) (local.get $pb) (i32.and (!at u8 @(PLAYERS + A_ACT) (local.get $pb)) (i32.const @(255 ^ AB_USE)))))))
   (!for $k (i32.const 0) (i32.const @NPAD)
     (local.set $a (i32.add (i32.const @PAD) (i32.shl (local.get $k) (i32.const 4))))

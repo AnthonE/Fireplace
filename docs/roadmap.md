@@ -46,8 +46,9 @@ to four at once. Twelve took four hours.
 - The prediction moves your own body; whatever another player does to you
   arrives a round trip later.
 - No secrets: every machine holds the whole world.
-- Physics: spheres, Quake-style bodies against a heightfield and up to 512
-  boxes, and whatever a minigame's ground and push hooks describe.
+- Physics: spheres, Quake-style bodies against a heightfield and up to 2048
+  boxes (512 until Roblox places needed more: [docs/roblox.md](roblox.md)),
+  and whatever a minigame's ground and push hooks describe.
 - 125 Hz. A lower rate (60 Hz halves CPU and bandwidth) means a per-sim tick
   length the relay reads at the hello; do it only for a game that measures
   over budget.
@@ -91,8 +92,9 @@ only of your own body), physics sandboxes, open worlds.
    top-down game); the grid kit wants a small board renderer.
 3. The arena: several maps in one build chosen at run time, boxes that move
    (obbies), new maps. A map now comes from the map editor
-   (`client/map-editor.html`) as well as from code, so maps chosen at run time
-   are the step that lets players' maps into rooms. What that takes:
+   (`client/map-editor.html`) and from a Roblox place (`tools/roblox.mjs`)
+   as well as from code, so maps chosen at run time are the step that lets
+   players' maps into rooms. What that takes:
    - the map's sizes and offsets read from its own head in memory, not
      compiled in (`$arena_gen`'s `MAPIMG_*` and `MAPSEG_*`, flight's
      `MAP_CEIL`), so its bytes can come from outside the build;
@@ -114,6 +116,58 @@ only of your own body), physics sandboxes, open worlds.
    arena's pages load Party's constants through `layout.mjs`'s `MG_CONSTS`
    (26 KB gzipped).
 7. People playing it. Everything so far is played by bots.
+
+## Bringing maps and games in
+
+Built: a Roblox place as an arena map, one command or one file dropped on
+the map editor ([docs/roblox.md](roblox.md)). Of Roblox's 31 open-source
+levels, 29 convert, 22 of them with every box kept. The converter is two
+halves: a reader for the format (`tools/rbx-file.mjs`) and a core that takes
+solids (convex shapes as planes, a union's parts less its negated ones, a
+colour each), ground columns and markers (spawns, teams), and makes boxes, the
+ground and the report (`tools/rbx-map.mjs`). Another engine is another
+reader into the same solids. None of these is built yet; in order of how
+mechanical each is and where its builders are:
+
+1. **Minecraft** (`.schem`, Sponge's schematic; `.litematic`; a world's
+   `.mca` regions): blocks are unit boxes, so nothing is approximated; the
+   joins and the fit do the rest, and a block's colour comes from a table as
+   BrickColor's does. The most builders of any engine, and their builds are
+   already blocks.
+2. **Quake and TrenchBroom** (`.map`, the Valve 220 format): a brush is a
+   convex solid given by its planes, which is the converter's solid as it
+   stands; `info_player_deathmatch` is a spawn, the weapons are pads, CTF's
+   team spawns are the flags. Arena shooters' mappers, for an arena shooter.
+3. **glTF 2.0** (`.glb`): what Unity (UnityGLTF, glTFast), Unreal (its own
+   exporter), Godot and Blender all write. A mesh goes into the same columns:
+   a vertical line's crossings with a closed mesh's triangles are its solid
+   spans (a collision mesh is best). Nodes named `spawn`, `spawn_red`,
+   `flag_blue`, `pad_rocket` are markers; `void` a height. One reader for every
+   engine that exports glTF.
+4. **MagicaVoxel** (`.vox`): voxels and a palette, exact as Minecraft's.
+5. **Unity's colliders**: an editor script that writes a scene's box,
+   sphere and capsule colliders as JSON. A BoxCollider is an arena box
+   exactly (a turned one through the columns), with no mesh at all: what
+   Unity itself collides with, which is the arena's whole concern.
+
+What no reader brings is a game's code: Luau, C#, GDScript, Blueprints run on
+their engine's API. A game's rules are written fresh on a kit here (a port,
+by an agent). What the readers do for a port is the brief: the level done,
+and the scripts listed with the engine services each calls, its network
+messages and what it sells, so a port is one prompt on everything, not one
+per question.
+
+A whole game that is not a Fireplace game goes to Elo Pros as it is: the
+store lists any web build from a repo (`elo.json`'s `web` block). Unity
+(WebGL), Godot (HTML5), Defold, PlayCanvas, Babylon.js, three.js, Phaser,
+Construct and GameMaker (HTML5) export one; Unreal has had no web export
+since 4.24, so it lists as a desktop build. The mechanical step worth
+building there is the store's: read an engine's export folder (Unity's
+`Build/*.loader.js`, Godot's `.pck` beside its `index.html`) and write the
+`elo.json` for it.
+
+A converted map plays today by being built in (`--map`). Players' own maps
+in rooms wait on maps chosen at run time (Engine work, 3).
 
 ## FFA ARAM (the champion kit's first game)
 

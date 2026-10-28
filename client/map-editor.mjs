@@ -12,9 +12,11 @@
 import * as L from '../src/layout.mjs';
 import {
   compileSpec, place, placePoint, half, SURFACES, SURFACE_RGB, MATERIALS, WEAPONS, GROUND,
-  formatSpec, defaultFlags, defaultBall, defaultHills,
+  formatSpec, defaultFlags, defaultBall, defaultHills, materialWord, materialOf,
 } from '../tools/map-compile.mjs';
 import { decode, encode } from '../tools/png-codec.mjs';
+import { readRoblox } from '../tools/rbx-file.mjs';
+import { robloxToMap } from '../tools/rbx-map.mjs';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view'), ctx = canvas.getContext('2d');
@@ -23,7 +25,7 @@ const SP = L.SPACING;
 const NGATE = L.FLIGHT_CONSTS.NGATE;
 const DRAFT = 'fireplace-map-editor';
 // the arena renderer's colours (client/arena-render.mjs MATERIAL), 0..255
-const MAT_RGB = [[143, 153, 163], [120, 107, 92], [61, 69, 79], [158, 43, 36], [43, 69, 163], [191, 242, 255]];
+const MAT_RGB = [[143, 153, 163], [120, 107, 92], [61, 69, 79], [158, 43, 36], [43, 69, 163], [191, 242, 255], [163, 163, 166]];
 const TEAM = ['#e0574a', '#4f7fe6', '#9aa0b0'];
 
 const tidy = (v) => Math.round(v * 1000) / 1000;
@@ -66,7 +68,7 @@ function adopt(spec, images, folder, dir = null) {
   }
   // from here on the images are what this page writes
   spec.terrain = Object.assign(t, { height: 'height.png', scale: 0.00390625, base: 0, surface: 'surface.png' });
-  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, rev: ++revs });
+  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, rev: ++revs, report: null });
   undo.length = 0; redo.length = 0;
   paintTerrain();
   fit();
@@ -115,7 +117,8 @@ function structBoxes(s, si) {
     let box;
     try { box = place(b, at, turn); } catch { box = b.slice(0, 6); }
     const name = (s.tint && s.tint[b[6]]) || b[6] || 'metal';
-    return { box, mat: Math.max(0, MATERIALS.indexOf(name)), s: si, b: bi };
+    const m = materialOf(Math.max(0, materialWord(name)));
+    return { box, mat: m.look, rgb: m.rgb || MAT_RGB[m.look] || MAT_RGB[0], s: si, b: bi };
   });
 }
 const allBoxes = () => (st.spec.structures || []).flatMap(structBoxes);
@@ -278,7 +281,7 @@ async function openBuiltIn(name) {
   const png = async (f) => decode(await (await fetch(base + f)).arrayBuffer(), inflate);
   const imgs = { height: await png(t.height || 'height.png') };
   if (t.surface) imgs.surface = await png(t.surface);
-  adopt(spec, imgs, name === 'canyon' || name === 'skyways' ? `my-${name}` : name);
+  adopt(spec, imgs, ['canyon', 'skyways', 'crossroads'].includes(name) ? `my-${name}` : name);
   say(`opened ${spec.name || name}; saving writes a new folder, so the original stays as it is`);
 }
 
@@ -308,6 +311,27 @@ async function openFolder() {
   if (t.surface) imgs.surface = await png(t.surface);
   adopt(spec, imgs, dir.name, dir);
   say(`opened ${dir.name}/`);
+}
+// A Roblox place (or model) as a new map, made in the page by
+// tools/rbx-map.mjs as tools/roblox.mjs makes it; what it left out or
+// changed stays in the check panel. A file with zstd chunks needs the
+// command line (Node has zstd; a page doesn't).
+async function openRoblox(file) {
+  say(`making a map of ${file.name}: a big place takes a few seconds`);
+  await new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 0)));
+  const doc = readRoblox(new Uint8Array(await file.arrayBuffer()));
+  const name = file.name.replace(/\.rbx[lm]x?$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const out = robloxToMap(doc, { name });
+  adopt(out.spec, out.images, slug(name));
+  st.report = out.report;
+  st.dirty = true;
+  renderSide();
+  say(`made ${name} from a Roblox place: ${out.report[0]}`);
+}
+function pickRoblox() {
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.rbxl,.rbxlx,.rbxm,.rbxmx' });
+  inp.onchange = () => inp.files[0] && openRoblox(inp.files[0]).catch((e) => say(`could not make a map of it: ${e.message || e}`));
+  inp.click();
 }
 const fail = (s) => { throw new Error(s); };
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-map';
@@ -421,7 +445,7 @@ function frame() {
   const boxes = allBoxes().sort((a, c) => a.box[4] - c.box[4]);
   for (const x of boxes) {
     const [x0, y0] = S(x.box[0], x.box[2]), [x1, y1] = S(x.box[3], x.box[5]);
-    const c = MAT_RGB[x.mat];
+    const c = x.rgb;
     if (!st.xray) { ctx.fillStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, 0.92)`; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
     ctx.strokeStyle = st.xray ? `rgb(${c.map((v) => Math.min(255, v + 60)).join(',')})` : 'rgba(0, 0, 0, 0.55)';
     ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
@@ -1014,7 +1038,15 @@ function selectionPanel(sel) {
         out.push(row(num('x0', () => tidy(w[0]), setW(0)), num('x1', () => tidy(w[3]), setW(3))));
         out.push(row(num('z0', () => tidy(w[2]), setW(2)), num('z1', () => tidy(w[5]), setW(5))));
         out.push(row(num('bottom', () => tidy(b[1] + at[1]), (v) => { b[1] = tidy(v - at[1]); }), num('top', () => tidy(b[4] + at[1]), (v) => { b[4] = tidy(v - at[1]); })));
-        out.push(row(el('label', { textContent: 'material' }), pick1(MATERIALS, b[6] || 'metal', (v) => { b[6] = v; })));
+        // a material, and a colour of the box's own over its look ('rock#7a6e5c'), as tools/roblox.mjs writes
+        const cur = String(b[6] || 'metal'), at6 = cur.indexOf('#');
+        const lookName = at6 < 0 ? cur : at6 ? cur.slice(0, at6) : 'plain', own = at6 < 0 ? '' : cur.slice(at6);
+        const withLook = (lk, c) => (c ? (lk === 'plain' ? c : lk + c) : lk);
+        const colour = el('input', { type: 'color', value: own || '#' + MAT_RGB[Math.max(0, MATERIALS.indexOf(lookName))].map((v) => v.toString(16).padStart(2, '0')).join(''), title: 'its own colour' });
+        colour.oninput = () => { step(); b[6] = withLook(lookName, colour.value); changed(); };
+        colour.onchange = endStep;
+        out.push(row(el('label', { textContent: 'material' }), pick1(MATERIALS, lookName, (v) => { b[6] = withLook(v, own); }), colour,
+          ...(own ? [btn('no colour', () => { step(); b[6] = lookName; endStep(); changed(); renderSide(); })] : [])));
         let lo = Infinity;
         for (let x = w[0]; x <= w[3]; x += Math.max(0.5, (w[3] - w[0]) / 6)) for (let z = w[2]; z <= w[5]; z += Math.max(0.5, (w[5] - w[2]) / 6)) lo = Math.min(lo, ground(x, z));
         out.push(hint(`the ground under it from ${lo.toFixed(2)} m. A fighter walks up a step of ${L.STEP} m; anything higher it jumps or goes round.`));
@@ -1048,7 +1080,9 @@ function renderCheck() {
       lim(m.hills.length, L.NHILL, 'hills'),
       m.race.length ? lim(m.race.length, NGATE, 'race gates') : 'no race (Dogfight\'s Ring Race needs 2 gates or more)',
       `ships fly up to ${m.ceiling} m; ${m.bytes.length.toLocaleString()} B in the wasm`,
+      ...(m.void !== null ? [`a fighter below ${m.void} m dies by falling`] : []),
     ].join(' · ')),
+    ...(st.report ? [el('p', { className: 'hint', textContent: 'From the Roblox place:' }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
   );
 }
 
@@ -1069,6 +1103,7 @@ function buildHeader() {
     try {
       if (v === 'new') { const m = prompt('How big, in metres? (a square, 128 to 768)', '384'); if (m) newMap(clamp(Math.round(Number(m) / 8) * 8 || 384, 128, 768)); }
       else if (v === 'folder') await openFolder();
+      else if (v === 'roblox') pickRoblox();
       else if (v) await openBuiltIn(v);
     } catch (err) { if (err.name !== 'AbortError') say(`could not open it: ${err.message || err}`); }
   };
@@ -1095,6 +1130,15 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => { if (e.key === ' ') { space = false; setTool(st.tool); } });
 addEventListener('beforeunload', keepDraft);
+// a Roblox place dropped on the page
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('drop', (e) => {
+  const f = [...(e.dataTransfer?.files || [])].find((x) => /\.rbx[lm]x?$/i.test(x.name));
+  if (!f) return;
+  e.preventDefault();
+  if (st.dirty && !confirm('Leave this map? Its changes are not saved.')) return;
+  openRoblox(f).catch((err) => say(`could not make a map of it: ${err.message || err}`));
+});
 
 buildHeader();
 setTool('select');

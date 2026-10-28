@@ -9,16 +9,19 @@
 //                 for (two flags, the skull's spot, hills: defaults for any
 //                 left out), flight's ceiling and its race's gates ("race":
 //                 [[x, y, z, radius], ...] in order, none for a map without
-//                 one); see maps/canyon/map.json and maps/skyways/map.json
+//                 one), and "void", a height a fighter falling below dies
+//                 at (none unless given); see maps/canyon/map.json and
+//                 maps/skyways/map.json
 //   height.png    the ground: grey, 8 or 16 bits, 2 m a pixel, read as
 //                 metres = base + level * scale
 //   surface.png   optional: what the ground is (colours, nearest of "surfaces")
 //
 // Anything a fighter can stand on, hide behind or walk under that the ground
 // can't be (walls, roofs, bridges, a cave's roof) is a box: [x0, y0, z0, x1,
-// y1, z1, material], in metres. A prefab is a list of boxes about its own
-// origin, placed by a structure at a point with a quarter turn and a remap of
-// its materials, so one base serves both teams.
+// y1, z1, material], in metres, a material one of MATERIALS or a colour of
+// the box's own ('#rrggbb', 'rock#7a6e5c'), drawing only. A prefab is a list
+// of boxes about its own origin, placed by a structure at a point with a
+// quarter turn and a remap of its materials, so one base serves both teams.
 //
 //   node tools/map.mjs maps/canyon     checks a map and prints what it holds
 import { readFileSync } from 'node:fs';

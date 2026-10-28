@@ -126,8 +126,8 @@ fn ground(w: vec2f) -> vec3f {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-var<private> MATERIAL: array<vec3f, 6> = array<vec3f, 6>(vec3f(0.56, 0.6, 0.64), vec3f(0.47, 0.42, 0.36), vec3f(0.24, 0.27, 0.31),
-  vec3f(0.62, 0.17, 0.14), vec3f(0.17, 0.27, 0.64), vec3f(0.75, 0.95, 1.0));
+var<private> MATERIAL: array<vec3f, 7> = array<vec3f, 7>(vec3f(0.56, 0.6, 0.64), vec3f(0.47, 0.42, 0.36), vec3f(0.24, 0.27, 0.31),
+  vec3f(0.62, 0.17, 0.14), vec3f(0.17, 0.27, 0.64), vec3f(0.75, 0.95, 1.0), vec3f(0.64, 0.64, 0.65));
 
 struct Hit { t: f32, n: vec3f, k: u32 };
 
@@ -168,15 +168,17 @@ fn sunlit(p: vec3f) -> f32 {
 
 fn boxColor(k: u32, w: vec3f, n: vec3f) -> vec3f {
   let lo = boxes[2u * k];
-  let hi = boxes[2u * k + 1u].xyz;
-  let m = min(u32(lo.w), 5u);
+  let hw = boxes[2u * k + 1u];
+  let hi = hw.xyz;
+  let m = min(u32(lo.w) & 127u, 6u);
   var uv = w.xy;
   var e = min(min(w.x - lo.x, hi.x - w.x), min(w.y - lo.y, hi.y - w.y));
   if (abs(n.x) > 0.5) { uv = w.zy; e = min(min(w.z - lo.z, hi.z - w.z), min(w.y - lo.y, hi.y - w.y)); }
   if (abs(n.y) > 0.5) { uv = w.xz; e = min(min(w.x - lo.x, hi.x - w.x), min(w.z - lo.z, hi.z - w.z)); }
   var c = MATERIAL[m];
+  if ((u32(lo.w) & 128u) != 0u) { let rgb = u32(hw.w); c = vec3f(f32(rgb >> 16u), f32((rgb >> 8u) & 255u), f32(rgb & 255u)) / 255.0; }
   if (m == 1u) { c *= 0.75 + 0.4 * hash2(floor(uv * 1.5)); }
-  else if (m != 5u) {
+  else if (m < 5u) {
     let seam = min(abs(fract(uv.x / 2.0) - 0.5), abs(fract(uv.y / 1.0) - 0.5)) > 0.47;
     c *= select(1.0, 0.82, seam) * (0.94 + 0.08 * hash2(floor(uv * 0.5)));
   }
@@ -263,7 +265,7 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (bh.k != 0xffffffffu && (!hit || bh.t < t)) {
     let w = u.cam.xyz + d * bh.t;
     var c = boxColor(bh.k, w, bh.n);
-    if (u32(boxes[2u * bh.k].w) != 5u) {
+    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) {
       c *= 0.42 + 0.68 * max(dot(bh.n, SUN), 0.0) * sunlit(w + bh.n * 0.01) + 0.06 * bh.n.y;
     }
     c = mix(c, SKY_LO, 1.0 - exp(-bh.t / FOG));
@@ -745,7 +747,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     // map: a View's map() (src/arena-view.mjs): its boxes and their groups, its bounds
     setMap(map) {
       const b = new Float32Array(L.NBOX * 8), g = new Float32Array(L.NGROUP * 8);
-      map.boxes.forEach((x, k) => b.set([x.box[0], x.box[1], x.box[2], x.material, x.box[3], x.box[4], x.box[5], 0], 8 * k));
+      // a material word's look and own-colour bit in lo.w, its colour (24 bits, exact in an f32) in hi.w
+      map.boxes.forEach((x, k) => b.set([x.box[0], x.box[1], x.box[2], x.material & 255, x.box[3], x.box[4], x.box[5], x.material >>> 8], 8 * k));
       map.groups.forEach((x, k) => g.set([x.box[0], x.box[1], x.box[2], x.first, x.box[3], x.box[4], x.box[5], x.count], 8 * k));
       device.queue.writeBuffer(boxBuf, 0, b);
       device.queue.writeBuffer(groupBuf, 0, g);

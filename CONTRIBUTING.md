@@ -227,6 +227,12 @@ node net/play.mjs --arena --map <folder>                # open the URL it prints
 node net/play.mjs --flight --mode 12 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
 
+A Roblox place makes a map too: in the editor, **open… > a Roblox place…**
+(or drop the `.rbxl` on the page), or `node tools/roblox.mjs place.rbxl`.
+Its parts, colours, terrain, spawns and teams come over; the report says
+what didn't ([docs/roblox.md](docs/roblox.md)). Only bring a place that is
+yours or that its owner has licensed for reuse.
+
 Send it as a pull request with the folder in `maps/`, and say which game
 it is for. A map is part of the game's build, not just a look, so it
 reaches everyone when it is merged and a game is built on it. Each game

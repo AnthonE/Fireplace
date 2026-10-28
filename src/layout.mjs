@@ -439,12 +439,12 @@ export const MAP_PADS = MAP + 0x1c0; // 12 x 16 B: f32 x, z, top (as MAP_SPAWNY)
 export const MAP_TELE = MAP + 0x280; // 16 x 32 B: f32 x, y, z, radius, to x, y, z | u32 0
 export const MAP_HEAD = 0x480; // the bytes above, copied whole
 export const MAP_GROUPS = MAP + 0x480; // 64 x 32 B: f32 x0, y0, z0, x1, y1, z1 | u32 first box, count
-export const MAP_BOXES = MAP + 0xc80; // 512 x 32 B: f32 x0, y0, z0, x1, y1, z1 | u32 material, group
+export const MAP_BOXES = MAP + 0xc80; // 2048 x 32 B: f32 x0, y0, z0, x1, y1, z1 | u32 material, group
 // The objectives the arena's team modes play for (tools/map.mjs fills them in,
 // defaulting any the map leaves out): the two flags' stands, red's then blue's
 // (f32 x, z, top | u32 0), the skull's spot (the same), and up to NHILL hills
 // (f32 x, z, top, radius), MAP_NHILL of them. Tops as MAP_SPAWNY.
-export const MAP_OBJ = MAP + 0x4c80;
+export const MAP_OBJ = MAP + 0x10c80;
 export const MAP_NHILL = MAP_OBJ; // u32
 export const MAP_FLAGS = MAP_OBJ + 0x10; // 2 x 16 B
 export const MAP_BALL = MAP_OBJ + 0x30; // 16 B
@@ -457,7 +457,7 @@ export const MAP_END = MAP_OBJ + MAP_OBJ_SIZE;
 // A map without one leaves it 0; flight's init copies it out (src/flight.wat).
 export const MAP_RACE = MAP_END;
 export const MAP_RACE_END = MAP_RACE + 16 + 16 * 16;
-export const NBOX = 512;
+export const NBOX = 2048; // a place brought from Roblox (tools/roblox.mjs) wants hundreds to thousands
 export const NGROUP = 64;
 export const NTELE = 16;
 export const BOX_SIZE = 32;

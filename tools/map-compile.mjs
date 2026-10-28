@@ -8,8 +8,26 @@ import * as L from '../src/layout.mjs';
 // surface image paints them with unless map.json says otherwise.
 export const SURFACES = ['grass', 'rock', 'sand', 'metal'];
 export const SURFACE_RGB = { grass: [77, 128, 51], rock: [122, 110, 92], sand: [184, 158, 107], metal: [128, 143, 158] };
-// Box materials, as client/arena-render.mjs colours them.
-export const MATERIALS = ['metal', 'rock', 'dark', 'red', 'blue', 'light'];
+// Box materials, as client/arena-render.mjs colours them. A box may instead
+// have a colour of its own: '#rrggbb' (plain, lit) or '<material>#rrggbb'
+// (that material's look in that colour), as tools/roblox.mjs writes them.
+export const MATERIALS = ['metal', 'rock', 'dark', 'red', 'blue', 'light', 'plain'];
+// A material's u32 in a box: the low byte the look (MATERIALS), bit 7 set when
+// the colour in the three bytes above is the box's own. Drawing only: the sim
+// reads a box's corners and nothing else.
+export const OWN_COLOUR = 0x80;
+export function materialWord(m) {
+  const at = typeof m === 'string' ? m.indexOf('#') : -1;
+  if (at < 0) return MATERIALS.indexOf(m);
+  const look = at ? MATERIALS.indexOf(m.slice(0, at)) : MATERIALS.indexOf('plain');
+  const rgb = m.slice(at + 1);
+  if (look < 0 || !/^[0-9a-fA-F]{6}$/.test(rgb)) return -1;
+  return (look | OWN_COLOUR | (parseInt(rgb, 16) << 8)) >>> 0;
+}
+// and back: { look, rgb } (rgb [r, g, b] 0..255, or null for the look's own)
+export function materialOf(word) {
+  return { look: word & 0x7f, rgb: word & OWN_COLOUR ? [(word >>> 24) & 255, (word >>> 16) & 255, (word >>> 8) & 255] : null };
+}
 export const WEAPONS = { ar: L.W_AR, br: L.W_BR, magnum: L.W_MAGNUM, sniper: L.W_SNIPER, shotgun: L.W_SHOTGUN, rocket: L.W_ROCKET, plasma: L.W_PLASMA, needler: L.W_NEEDLER, sword: L.W_SWORD };
 export const GROUND = -1000; // a spawn or pad with no top: on the ground
 
@@ -68,8 +86,8 @@ export function compileSpec(spec, images, name = 'map.json') {
   const prefabs = spec.prefabs || {};
   const groups = [], boxes = [], teleporters = [];
   const mat = (name, tint, ctx) => {
-    const m = MATERIALS.indexOf((tint && tint[name]) || name || 'metal');
-    if (m < 0) fail(`${ctx}: no material "${name}" (${MATERIALS.join(', ')})`);
+    const m = materialWord((tint && tint[name]) || name || 'metal');
+    if (m < 0) fail(`${ctx}: no material "${name}" (${MATERIALS.join(', ')}, or a colour: "#rrggbb", "rock#rrggbb")`);
     return m;
   };
   for (const [k, s] of (spec.structures || []).entries()) {
@@ -137,6 +155,10 @@ export function compileSpec(spec, images, name = 'map.json') {
     ceiling = Math.ceil(top) + 60;
   }
   if (!(ceiling > 0 && ceiling < 400)) fail(`ceiling ${ceiling}: over 0, under 400 m`);
+  // where a fighter falling off the world dies (map.json "void", metres; none
+  // by default): a Roblox place's sky, as tools/roblox.mjs writes it
+  const voidY = spec.void ?? null;
+  if (voidY !== null && !(typeof voidY === 'number' && voidY > 0 && voidY < ceiling)) fail(`void ${voidY}: a height over 0 m and under the ceiling`);
   // flight's race: its gates in order, balls a ship flies through
   const race = (spec.race || []).map((g, k) => {
     if (!Array.isArray(g) || g.length !== 4 || g.some((v) => typeof v !== 'number')) fail(`race gate ${k}: [x, y, z, radius]`);
@@ -201,10 +223,10 @@ export function compileSpec(spec, images, name = 'map.json') {
     // folded into the arena's WAT as @MAPSEG_* and @MAPIMG_*
     consts: {
       MAPSEG_GROUPS: offs[1], MAPSEG_NGROUPB: gbytes.byteLength, MAPSEG_BOXES: offs[2], MAPSEG_NBOXB: bbytes.byteLength,
-      MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling,
+      MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling, MAP_VOID: voidY ?? -1e9,
       MAPSEG_RACE: race.length ? offs[6] : bytes.length, MAPSEG_NRACEB: race.length ? 16 + 16 * race.length : 0,
     },
-    ceiling,
+    ceiling, void: voidY,
     bounds, groups, boxes, teleporters, spawns, pads, flags, ball, hills, race, sides, heights, surf, origin: [ox, oz], size: [W, H],
   };
 }
