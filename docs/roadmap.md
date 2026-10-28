@@ -151,10 +151,17 @@ crediting who made what (every theme is one). Next, in order:
    stays data. Then the wall shows the viewer's own Elo Pros achievements: a
    plaque drawn in the 3x5 font like the TV's cards, from
    `/api/face/{wallet}` once the page knows a wallet (below).
-2. Skins. Built: looks (`client/looks.mjs`), a ball and a hat each player
-   picks, which the relay carries beside the sim to everyone in the room
-   (hello flag 4), ten balls and seven hats, four of them earned with the
-   page's achievements (`client/achievements.mjs`). Next, owned ones as Gates
+2. Skins. Built: looks (`client/looks.mjs`), a ball, a hat and a body each
+   player picks, which the relay carries beside the sim to everyone in the
+   room (hello flag 4), ten balls, seven hats and five bodies (the round
+   rider, three blocky, a robot: `client/rider.mjs`, the arena's fighters the
+   same figure), four of them earned with the page's achievements
+   (`client/achievements.mjs`), and four emotes in the word's top byte.
+   Next, an avatar any game can draw: a 32-colour palette and the figure's
+   six parts (head, torso, two arms, two legs) at 5 bits each, 30 bits, one
+   more word a slot beside the look (the relay's `T_LOOK` carries two), which
+   `/api/face/{wallet}` serves for a wallet that set one, so the figure a
+   player is on Elo Pros is the one they ride a ball as here. Then owned ones as Gates
    does them: an `EloItem` collection for Fireplace (one deploy, the
    operator's), catalog rows in scry-forge's `data/items/catalogs.json` with
    `title: "fireplace"`, and the relay reading

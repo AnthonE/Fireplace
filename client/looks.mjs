@@ -1,8 +1,9 @@
-// A player's look: a ball and a hat, worn in every game the room plays. It is
+// A player's look: a ball, a hat and a body, worn in every game the room plays. It is
 // drawing only, never the sim: the relay carries each slot's look word beside
 // the ticks (net/wire.mjs T_LOOK), so the hashed world is the same bits with or
 // without them, and a room where nobody picked one looks as it always did.
-// Ball 0 and hat 0 are the house look, the seat's own colours.
+// Ball 0, hat 0 and body 0 are the house look, the seat's own colours on the
+// round rider.
 //
 // The lists are append-only: a look's number is its place in its list, and
 // that number is what goes on the wire. A number this build doesn't know (a
@@ -42,12 +43,25 @@ export const HATS = [
   { key: 'crown', name: 'CROWN', style: STYLE.CROWN, color: [1.0, 0.8, 0.22], unlock: 'roll' },
 ];
 
+// The rider's body (client/rider.mjs): the round one the riders have always
+// been, or a blocky figure of boxes, its arms in skin (null: peach) and a face
+// on its head (rider.mjs PART). Its shirt is the ball's colour, its legs the
+// second colour's, darker.
+export const BODIES = [
+  { key: 'round', name: 'ROUND', blocky: false },
+  { key: 'blocky', name: 'BLOCKY', blocky: true, skin: [0.96, 0.8, 0.22], face: 1 },
+  { key: 'peach', name: 'BLOCKY PEACH', blocky: true, skin: [1.0, 0.8, 0.66], face: 1 },
+  { key: 'cocoa', name: 'BLOCKY COCOA', blocky: true, skin: [0.55, 0.36, 0.24], face: 1 },
+  { key: 'robot', name: 'ROBOT', blocky: true, skin: [0.62, 0.66, 0.72], face: 4, metal: true },
+];
+
 // what a card calls one: THE EIGHT BALL, THE CANDY BALL, THE CROWN
 export const lookName = (x) => `THE ${x.pattern === undefined || /BALL$/.test(x.name) ? x.name : `${x.name} BALL`}`;
 
-// The look word: the ball in the low byte, the hat in the next. 0 is the house look.
-export const packLook = (ball, hat) => ((ball & 255) | ((hat & 255) << 8)) >>> 0;
-export const unpackLook = (w) => ({ ball: BALLS[w & 255] ? w & 255 : 0, hat: HATS[(w >>> 8) & 255] ? (w >>> 8) & 255 : 0 });
+// The look word: the ball in the low byte, the hat in the next, the body in the third. 0 is the house look.
+export const packLook = (ball, hat, body = 0) => ((ball & 255) | ((hat & 255) << 8) | ((body & 255) << 16)) >>> 0;
+const byte = (list, w, k) => (list[(w >>> k) & 255] ? (w >>> k) & 255 : 0);
+export const unpackLook = (w) => ({ ball: byte(BALLS, w, 0), hat: byte(HATS, w, 8), body: byte(BODIES, w, 16) });
 
 // The seat's colour, as the bumper and party frontends have always drawn it
 export const slotColor = (s) => { const h = (s * 0.618034) % 1; return [0, 0.33, 0.67].map((o) => 0.55 + 0.4 * Math.cos(6.2832 * (h + o))); };
@@ -57,10 +71,10 @@ export const rgb24 = (c) => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 
 // What a slot in look w draws as: the ball's colour (the body's too), its
 // second colour, the pattern, the hat's colour and style.
 export function lookOf(slot, w = 0, seat = slotColor) {
-  const { ball, hat } = unpackLook(w);
+  const { ball, hat, body } = unpackLook(w);
   const B = BALLS[ball], Hh = HATS[hat];
   const a = B.a || seat(slot);
-  return { ball, hat, a, b: B.b || seat(slot + 0.5), pattern: B.pattern, hatColor: Hh.color || a, style: Hh.style };
+  return { ball, hat, body, a, b: B.b || seat(slot + 0.5), pattern: B.pattern, hatColor: Hh.color || a, style: Hh.style };
 }
 
 // The sprites' fields for a rider (client/party-render.mjs SPRITE): the ball,
@@ -89,10 +103,29 @@ export function tintsOf(h) {
   return t;
 }
 
+// every slot's look word, for the arena's figures (client/arena-render.mjs: the body's skin and face), kept per host
+const LOOKS = new WeakMap();
+export function looksOf(h) {
+  let t = LOOKS.get(h);
+  if (!t) LOOKS.set(h, (t = new Uint32Array(256)));
+  for (let p = 0; p < 256; p++) t[p] = h.look(p);
+  return t;
+}
+
 // ---- what this browser picked, and what it has earned (localStorage, like the room's theme)
 const KEY = 'fireplace.look';
+// what a browser that never picked wears: the house colours on a blocky rider
+export const FIRST_LOOK = packLook(0, 0, 1);
 export function savedLook() {
-  try { return Number(localStorage.getItem(KEY)) >>> 0; } catch { return 0; }
+  try { const v = localStorage.getItem(KEY); return v === null ? FIRST_LOOK : Number(v) >>> 0; } catch { return FIRST_LOOK; }
+}
+// An AI player's look in a local room (client/local.mjs): any open ball, hat
+// and blocky body, picked from its slot so it keeps it all game.
+export function guestLook(p) {
+  const open = (list) => list.map((x, k) => (x.unlock ? -1 : k)).filter((k) => k >= 0);
+  const h = Math.imul(p + 1, 0x9e3779b1) >>> 0;
+  const balls = open(BALLS), hats = open(HATS), bodies = open(BODIES).filter((k) => BODIES[k].blocky);
+  return packLook(balls[h % balls.length], hats[(h >>> 8) % hats.length], bodies[(h >>> 16) % bodies.length]);
 }
 export function saveLook(w) {
   try { localStorage.setItem(KEY, String(w >>> 0)); } catch { /* private window: this visit only */ }
@@ -106,8 +139,8 @@ export function nextOpen(list, k, got) {
 }
 // a word with anything not open put back to the house look
 export function wearable(w, got) {
-  const { ball, hat } = unpackLook(w);
-  return packLook(isOpen(BALLS[ball], got) ? ball : 0, isOpen(HATS[hat], got) ? hat : 0);
+  const { ball, hat, body } = unpackLook(w);
+  return packLook(isOpen(BALLS[ball], got) ? ball : 0, isOpen(HATS[hat], got) ? hat : 0, isOpen(BODIES[body], got) ? body : 0);
 }
 
 // ---- a picture of a look, for the TV's cards (a 2D canvas context)
@@ -144,6 +177,7 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0) {
   // a rim, so a dark ball still shows on a dark card
   g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = Math.max(1, r * 0.05);
   g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+  if (BODIES[L.body].blocky) return drawBlocky(g, cx, cy - r, r, L, t);
   // the rider, as the renderers place it on a ball of radius r: a body 0.22 r over its top, a head 0.78 r
   const hr = r * 0.3, hx = cx, hy = cy - r - r * 0.78;
   g.fillStyle = css(L.a, 0.8); g.beginPath(); g.arc(cx, cy - r - r * 0.22, r * 0.34, 0, Math.PI * 2); g.fill(); g.stroke();
@@ -159,4 +193,34 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0) {
   g.fillStyle = L.style === STYLE.PUMPKIN ? '#ffd860' : '#111';
   g.fillRect(hx - hr * 0.45, hy - hr * 0.1, hr * 0.22, hr * 0.28);
   g.fillRect(hx + hr * 0.23, hy - hr * 0.1, hr * 0.22, hr * 0.28);
+}
+
+// A blocky rider from the front (client/rider.mjs's sizes, a metre to r), its feet at (cx, top)
+function drawBlocky(g, cx, top, r, L, t) {
+  const B = BODIES[L.body];
+  const skin = B.skin || [1, 0.8, 0.66];
+  const pants = L.b.map((v) => v * 0.62);
+  const sw = Math.sin(t * 2) * 0.03 * r; // the arms, swinging a little
+  g.lineWidth = Math.max(1, r * 0.025);
+  g.strokeStyle = 'rgba(0,0,0,0.55)';
+  const rect = (x, y, w, h, c, k = 1) => { g.fillStyle = css(c, k); g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); g.strokeRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
+  rect(-0.24, 0, 0.23, 0.5, pants); rect(0.01, 0, 0.23, 0.5, pants);
+  rect(-0.25, 0.5, 0.5, 0.5, L.a);
+  g.save(); g.translate(0, -sw); rect(-0.49, 0.5, 0.23, 0.5, skin); g.restore();
+  g.save(); g.translate(0, sw); rect(0.26, 0.5, 0.23, 0.5, skin); g.restore();
+  const pumpkin = L.style === STYLE.PUMPKIN;
+  const hw = 0.37, hh = 0.345, hy = 1.01;
+  rect(-hw / 2, hy, hw, hh, pumpkin ? L.hatColor : skin);
+  const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
+  // the face
+  if (pumpkin) { px(-0.12, hy + 0.17, 0.07, 0.07, '#ffd860'); px(0.05, hy + 0.17, 0.07, 0.07, '#ffd860'); px(-0.11, hy + 0.06, 0.22, 0.05, '#ffd860'); px(-0.02, hy + 0.3, 0.04, 0.08, '#3c8a2c'); }
+  else if (B.face === 4) { px(-0.13, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(0.05, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(-0.08, hy + 0.06, 0.16, 0.05, css(skin, 0.4)); }
+  else { px(-0.1, hy + 0.17, 0.04, 0.07, '#111'); px(0.06, hy + 0.17, 0.04, 0.07, '#111'); px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); px(-0.1, hy + 0.1, 0.03, 0.03, '#111'); px(0.07, hy + 0.1, 0.03, 0.03, '#111'); }
+  // the hat
+  const c = L.hatColor, top2 = hy + hh;
+  if (L.style === STYLE.CAP) { rect(-0.2, top2 - 0.06, 0.4, 0.12, c); rect(-0.2, top2 - 0.07, 0.48, 0.035, c, 0.85); }
+  else if (L.style === STYLE.BEANIE) { rect(-0.2, top2 - 0.1, 0.4, 0.17, c); rect(-0.21, top2 - 0.12, 0.42, 0.06, c, 0.7); rect(-0.04, top2 + 0.07, 0.08, 0.06, c, 0.7); }
+  else if (L.style === STYLE.BAND) rect(-0.19, top2 - 0.14, 0.38, 0.07, c);
+  else if (L.style === STYLE.HELMET) { rect(-0.21, top2 - 0.06, 0.42, 0.12, c); rect(-0.21, hy - 0.02, 0.05, top2 - hy - 0.04, c); rect(0.16, hy - 0.02, 0.05, top2 - hy - 0.04, c); }
+  else if (L.style === STYLE.CROWN) { rect(-0.2, top2 - 0.02, 0.4, 0.09, c); for (const x of [-0.2, -0.04, 0.12]) rect(x, top2 + 0.07, 0.08, 0.08, c); }
 }

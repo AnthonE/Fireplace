@@ -20,6 +20,8 @@ import { createSound } from './sound.mjs';
 import { parseImpair } from '../net/impair.js';
 import { relayFor, room } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
+import { savedLook, wearable } from './looks.mjs';
+import { loadTally, gotSet } from './achievements.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
 
@@ -59,6 +61,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   };
   h.set(L.CL_SLOT, -1);
   h.set(L.CL_PITCH, 512);
+  // this player's look, as this browser keeps it (Fireplace's TV picks it; ?look=<word> for this visit), worn on every page
+  h.set(L.CL_LOOK, watch ? 0 : q.has('look') ? Number(q.get('look')) >>> 0 : wearable(savedLook(), gotSet(loadTally())));
   // a slot's look word (client/looks.mjs): this player's own as picked, the rest as the relay sent them
   h.look = (p) => (p === h.get(L.CL_SLOT) ? h.get(L.CL_LOOK) : h.u32[(L.CL_LOOKS >> 2) + p]) >>> 0;
   // the prediction's own instance: it writes only PRED

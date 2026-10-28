@@ -7,7 +7,7 @@ test('party renderer: the names the minigames draw with', () => {
   assert.equal(COLS, 80);
   assert.deepEqual(SHAPE, { BOX: 0, CYL: 1, HEX: 2, SPHERE: 3 });
   assert.deepEqual(LOOK, { MATTE: 0, PLASTIC: 1, ICE: 2, METAL: 3, HAZARD: 4, GLOW: 5, PAINT: 6, CHECKER: 7, WOOD: 8, RUBBER: 9 });
-  assert.deepEqual(SPRITE, { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11 });
+  assert.deepEqual(SPRITE, { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11, BLOCK: 12 });
   assert.deepEqual(DECAL, { RING: 0, DISC: 1, ZONE: 2, TARGET: 3 });
   // big text (s.big, the title card's): four lines of up to 32 characters, four packed a word
   assert.ok(MAX_BIG >= 4 && BIG_CHARS >= 32 && BIG_CHARS % 4 === 0);

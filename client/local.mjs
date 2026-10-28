@@ -19,6 +19,7 @@ import '../src/party-view.mjs';
 import '../src/flight-view.mjs';
 import { writeClock } from './clock.mjs';
 import { sampler } from './input.mjs';
+import { guestLook } from './looks.mjs';
 
 const epoch = () => performance.timeOrigin + performance.now();
 const LEAD = 2;
@@ -72,6 +73,7 @@ async function run({ local: { kind = '', bots = 0, seed }, memory, simPort, watc
   f32[L.CL_LEAD >> 2] = LEAD;
   f32[L.CL_DELAY >> 2] = DELAY;
   u32.fill(0, L.CL_LOOKS >> 2, (L.CL_LOOKS >> 2) + L.NPLAYER);
+  for (let k = 0; k < guests.length; k++) u32[(L.CL_LOOKS >> 2) + me + 1 + k] = guestLook(me + 1 + k); // the AI players' looks, drawing only
   simPort.onmessage = () => {}; // its hash reports and resync asks have nobody to go to
   simPort.postMessage({ welcome });
   simPort.postMessage({ key: { tick: 0, reason: W.SYNC.JOIN, region: null } });

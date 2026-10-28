@@ -47,6 +47,8 @@ import { NetGraph } from './netgraph.mjs';
 import { Partier } from './party-bot.mjs';
 import { epoch, predict, corrector, follower, capturePng, listeners } from './host.mjs';
 import { riderSprites } from './looks.mjs';
+import { rider, emoteOf, withEmote, EMOTE_KEYS } from './rider.mjs';
+import { createJuice } from './juice.mjs';
 
 const TURN = 16384;
 const TICK = 0.008;
@@ -128,6 +130,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     on(document, 'contextmenu', (e) => e.preventDefault());
     on(document, 'keydown', (e) => {
       if ((e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'KeyQ') && !e.repeat) press(L.CL_PRESSES);
+      else if (EMOTE_KEYS[e.code] && !e.repeat) h.set(L.CL_LOOK, withEmote(h.get(L.CL_LOOK) >>> 0, EMOTE_KEYS[e.code])); // drawing only, beside the sim (client/rider.mjs)
       else if (e.code === 'KeyF' && !e.repeat) {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen().then(() => navigator.keyboard?.lock?.()).catch(() => {});
@@ -158,6 +161,8 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
   let flash = 0;
   let fxSeen = 0, seenRound = -1, lastState = -1, lastSecs = -1, lastDrop = -1;
   const roll = new Map(); // slot -> the angle its stripes have turned through
+  const emotes = new Map(); // slot -> its look word's top byte and when that changed (client/rider.mjs emoteOf)
+  const juice = createJuice(); // riders jolting, the camera shaking, the winner's confetti
   let frames = 0, fpsAt = performance.now(), fps = 0, lastFrame = performance.now();
   let me = null, pme = null;
   let last = null;
@@ -186,6 +191,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
         glows.push({ pos: f.pos, size: 0.5 + f.size * 0.08, color: [1, 1, 0.8, 1], kind: SPRITE.SPARK, born: now, life: 220 });
         sound.boing(f.size, mine ? 0 : d);
         if (mine) flash = Math.min(1, flash + f.size / 25);
+        juice.bump(f.owner, f.shot, f.size, mine, now);
         break;
       }
       case L.FX_SINK: {
@@ -308,6 +314,9 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       else setBanner(g.winner === 255 ? 'TIME' : `P${g.winner + 1} WINS`, C.YELLOW, 5000, 3);
     }
     lastSecs = secs;
+    // the winners (place 1: the last ball, a shared win, a side's) cheer while the result is held
+    if (g.state === L.H_OVER && lastState === L.H_PLAY) juice.win([...Array(L.NPLAYER).keys()].filter((p) => { const b = view.partier(p); return b.live && !b.out && b.place === 1; }), now);
+    if (g.state !== L.H_OVER && lastState === L.H_OVER) juice.reset();
     lastState = g.state;
 
     // who the camera follows: you, or (out, watching) a ball still in, the winner when it's over
@@ -366,6 +375,8 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       camPitch += (o.pitch - camPitch) * k;
     }
 
+    juice.shake(cam, ms, now);
+
     // FX from the confirmed ring
     const nfx = view.fxCount();
     if (nfx - fxSeen > L.FX_MAX) fxSeen = nfx - L.FX_MAX;
@@ -402,14 +413,13 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       const ang = (roll.get(p) || 0) + speed * ms / 1000 / r;
       roll.set(p, ang % (2 * Math.PI * 64));
       // its look (client/looks.mjs); a minigame that marks what is whose by the seat's colour keeps the balls in theirs
-      const rs = riderSprites(p, mod.seatColors ? h.look(p) & ~0xff : h.look(p));
+      const lw = mod.seatColors ? h.look(p) & ~0xff : h.look(p);
+      const rs = riderSprites(p, lw);
       // the rider faces where the ball does (you: where you look), bobbing a little as it rolls
       const face = own ? yaw / TURN * 2 * Math.PI : src.yaw;
-      const fv = [Math.cos(face), 0, Math.sin(face)];
       const bob = Math.abs(Math.sin(ang * 2)) * Math.min(1, speed / 6) * 0.06;
       if (!mod.drawsBalls) solid.push({ pos: [pos[0], pos[1] + r, pos[2]], size: r, color: rs.ball.color, kind: SPRITE.BALL, minpx: 1, vel: src.vel, roll: ang, seed: rs.ball.seed });
-      solid.push({ pos: [pos[0], pos[1] + 2 * r + 0.22 + bob, pos[2]], size: 0.34, color: rs.body.color, kind: SPRITE.BODY, minpx: 1 });
-      solid.push({ pos: [pos[0], pos[1] + 2 * r + 0.78 + bob, pos[2]], size: 0.3, color: rs.head.color, kind: SPRITE.HEAD, minpx: 1, vel: fv });
+      rider(solid, p, lw, { at: [pos[0], pos[1] + 2 * r, pos[2]], face, roll: ang, speed, vy: src.vel[1], bob, emote: juice.cheer(p, now, [pos[0], pos[1] + 2 * r + 1.5, pos[2]]) ?? emoteOf(emotes, p, lw, now), jolt: juice.jolt(p, now) });
       if (src.item) solid.push({ pos: [pos[0], pos[1] + 2 * r + 1.55, pos[2]], size: 0.26, color: [...PU_COLOR[src.item], 1], kind: SPRITE.ORB, minpx: 1 });
       if (own) solid.push({ pos: [pos[0], pos[1] + 2 * r + (src.item ? 2.15 : 1.65) + 0.1 * Math.sin(now / 200), pos[2]], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });
       if (src.dash) glow.push({ pos: [pos[0] - src.vel[0] * 0.05, pos[1] + r, pos[2] - src.vel[2] * 0.05], size: r * 1.3, color: [0.4, 0.85, 1, 0.5], kind: SPRITE.FLASH, minpx: 1 });
@@ -417,6 +427,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       // a team round: its side's ring on the floor round it (the ball and its rider keep their look)
       if (g.teams) decals.push({ pos: [pos[0], pos[1] + 0.03, pos[2]], radius: r * 1.35, width: 0.24, color: [...SIDES[src.side].color, own ? 1 : 0.8], kind: DECAL.RING });
     }
+    juice.draw(solid, ms);
     for (const c of extra) casters.push(c);
     for (const j of view.projectiles()) {
       const pos = [0, 1, 2].map((k) => j.pos[k] + j.vel[k] * dt);

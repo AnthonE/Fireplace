@@ -10,7 +10,8 @@
 // each frame on the CPU, so a pixel of cheese reads one texel rather than
 // walking 256 balls. Balls are glossy beach-ball impostors with depth and a
 // soft ink outline, their stripes turning as they roll, each with a rider
-// (a body, and a head with a cap and eyes that look where the ball faces).
+// (a body, and a head with a cap and eyes that look where the ball faces; or
+// a blocky one of boxes, client/rider.mjs).
 // Orbs, rockets, crumbs and every flash are sprites from the main thread.
 // The HUD's 3x5 font and minimap are scaled up to the screen. Nothing here
 // is hashed.
@@ -18,9 +19,10 @@ import * as L from '../src/layout.mjs';
 import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { PLAT_Y, PLAT_T } from '../src/bumper-view.mjs';
+import { BLOCK, BLOCK_WGSL } from './rider.mjs';
 
 export const COLS = 80;
-export const MAX_SPRITE = 1536;
+export const MAX_SPRITE = 4096; // a blocky rider is six boxes and its hat's
 export const MAX_BEAM = 64;
 export const MAX_RECT = 64;
 export const MAX_CASTER = L.NPLAYER + L.NORB;
@@ -31,9 +33,9 @@ const SUN = (() => { const v = [0.38, 0.8, 0.46]; const n = Math.hypot(...v); re
 const MASK_N = 512;
 const MASK_W = 200;
 
-// sprite kinds: solid 0 a ball, 1 a rider's body, 2 an orb, 6 the arrow over you, 7 a rocket, 8 a rider's head, 9 a crumb;
-// glowing 3 a flash, 4 a ring, 5 a spark
-export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9 };
+// sprite kinds: solid 0 a ball, 1 a rider's body, 2 an orb, 6 the arrow over you, 7 a rocket, 8 a rider's head, 9 a crumb,
+// 12 a box (client/rider.mjs); glowing 3 a flash, 4 a ring, 5 a spark
+export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, BLOCK };
 
 const WGSL = /* wgsl */ `
 struct U {
@@ -302,6 +304,7 @@ struct SOut {
   @location(2) @interpolate(flat) kind: u32,
   @location(3) @interpolate(flat) info: vec4f, // view z, world radius, seed, roll
   @location(4) @interpolate(flat) vel: vec3f,
+  @location(5) @interpolate(flat) ctr: vec3f,
 };
 
 fn project(q: vec3f) -> vec4f {
@@ -331,6 +334,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   let vr = sprites[4u * i + 3u];
   o.info = vec4f(pr.z, a.w, info.w, vr.w);
   o.vel = vr.xyz;
+  o.ctr = a.xyz;
   return o;
 }
 
@@ -396,6 +400,7 @@ fn lookHat(style: u32, n: vec3f, f: vec3f, side: vec3f, c: vec3f, skin: vec3f) -
   return o;
 }
 
+${BLOCK_WGSL}
 fn slotColor(s: f32) -> vec3f {
   let h = s * 0.618034;
   return 0.55 + 0.4 * cos(6.2832 * (fract(h) + vec3f(0.0, 0.33, 0.67)));
@@ -484,6 +489,13 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     }
     case 9u: { // a crumb of cheese
       c = shade(lin(vec3f(1.0, 0.8, 0.32)), n, 1.0, 1.0) * ink;
+    }
+    case 12u: { // a box: a blocky rider's limb, head or hat (client/rider.mjs)
+      let b = blockAt(s.pos.xy, s.ctr, s.vel, s.info.w, s.info.z, u32(s.color.a + 0.5), c);
+      if (!b.hit) { discard; }
+      cover = b.cover;
+      z = b.z;
+      c = (gloss(shade(b.alb, b.n, 1.0, 0.85 + 0.15 * b.n.y), b.n, 40.0, 0.25 * b.shine) + b.glow) * b.ink;
     }
     default: { // a rocket
       c = mix(vec3f(3.0, 2.8, 2.2), c * 2.0, r2);

@@ -19,6 +19,7 @@
 import * as L from '../src/layout.mjs';
 import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
+import { BLOCK, BLOCK_WGSL } from './rider.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 4096;
@@ -37,8 +38,8 @@ const MASK_N = 512;
 const FLAKES = 4000;
 
 // sprite kinds: solid 0 a ball, 1 a rider's body, 2 an orb, 6 the arrow over you, 7 a rocket, 8 a rider's head, 9 a crumb,
-// 10 a spinning coin, 11 a bomb; glowing 3 a flash, 4 a ring, 5 a spark
-export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11 };
+// 10 a spinning coin, 11 a bomb, 12 a box (client/rider.mjs); glowing 3 a flash, 4 a ring, 5 a spark
+export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11, BLOCK };
 export const SHAPE = { BOX: 0, CYL: 1, HEX: 2, SPHERE: 3 };
 // The looks, and what their two parameters a and b do (0 takes the default):
 //   MATTE    paint with a little grain
@@ -976,6 +977,7 @@ fn lookHat(style: u32, n: vec3f, f: vec3f, side: vec3f, c: vec3f, skin: vec3f) -
   return o;
 }
 
+${BLOCK_WGSL}
 // glossy, as the balls are: the sun's highlight and the sky in it, more at a grazing angle
 fn gloss(c: vec3f, n: vec3f, power: f32, k: f32) -> vec3f {
   let v = -u.fwd.xyz;
@@ -1058,6 +1060,14 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     }
     case 9u: { // a crumb, in its colour
       c = shade(c, n, 1.0, 1.0) * ink;
+    }
+    case 12u: { // a box: a blocky rider's limb, head or hat (client/rider.mjs)
+      let b = blockAt(s.pos.xy, s.ctr, s.vel, s.info.w, s.info.z, u32(s.color.a + 0.5), c);
+      if (!b.hit) { discard; }
+      cover = b.cover;
+      z = b.z;
+      let sh = shadowAt(b.p, b.n);
+      c = (gloss(shade(b.alb, b.n, sh, 0.85 + 0.15 * b.n.y), b.n, 40.0, 0.25 * b.shine * (0.35 + 0.65 * sh)) + b.glow) * b.ink;
     }
     case 10u: { // a coin: gold, spinning about the up axis, a raised rim and a star
       let spin = u.fwd.w * 3.2 + s.info.z * 1.7 + s.info.w;
