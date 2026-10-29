@@ -225,9 +225,10 @@ crediting who made what (every theme is one). Next, in order:
    `/api/items/of/{wallet}?title=fireplace` once a slot has a wallet (below)
    and refusing an owned look a slot doesn't hold. A theme is free, a look is
    free or earned, an item is owned.
-3. The playlist as a list (`GAMESETS`, `!pick` and `fireplace.mjs` reading N
-   games), so a whole new game joins Fireplace as one entry once the kits
-   below exist.
+3. ~~The playlist as a list.~~ Built: `FP_SETS` in `src/layout.mjs`, the
+   `fp` macros and `client/fireplace.mjs`'s `PAGES` read it, so a whole new
+   game joins Fireplace as one entry (and its page row) once the kits below
+   exist ([fireplace.md](fireplace.md)).
 
 ## Accounts and persistence through Elo Pros
 
@@ -258,9 +259,12 @@ The wrapper, ours first:
 2. Sign-in: built. The page's button calls `Elo.signIn({nonce})` with a
    nonce the relay hands out, and `net/relay.ts` has Elo Pros check it and
    keeps the wallet as the slot's player ([wire.md](wire.md)). Guests still play.
-3. Names, faces and skins: the relay reads `/api/face/{wallet}` and
-   `/api/items/of/{wallet}` and sends them beside the sim, never in it, so the
-   hashed world is the same with or without them. Skins on chain become ball
+3. Names, faces and skins. Names are built: the relay reads
+   `/api/face/{wallet}` at each sign-in and sends the name beside the sim,
+   never in it ([wire.md](wire.md), hello flag 32), and every game's labels
+   use it. Faces (the picture) and skins on chain are next: the relay reads
+   `/api/items/of/{wallet}?game=fireplace` once `EloItem:FIREPLACE` exists
+   and refuses an owned look a slot doesn't hold, and skins become ball
    stripes and riders' hats.
 4. Presence: the relay serves `online.json` (and the operator a
    `servers.json`), so playtime and friends' join links work.
@@ -268,15 +272,62 @@ The wrapper, ours first:
    interval hashes are the room's truth, not any client's: the "replay"
    evidence tier of `docs/store/ACHIEVEMENTS.md`. Ratings are built: each
    game's places go to Elo Pros as a rated match ([hosting.md](hosting.md)).
-   The page's achievements are
-   already tests over those standings as the world holds them
-   (`client/achievements.mjs` `readResult`, `record`), so the relay can run the
-   same ones for each signed-in slot and publish them per wallet, the shape
-   Gates' shards serve (`/achievements.json`), and they follow the player
-   off one browser.
+   Achievements are built too: the relay runs the page's tests
+   (`client/achievements.mjs`) for each signed-in slot on a tally it reads
+   back from Elo Pros's game stats, and reports each game's counts and
+   unlocks there, so they follow the wallet off one browser. They show on
+   Elo Pros once `elo.json`'s `stats` block lands on the row.
 
 Then, in scry-forge: a key-value store per wallet for what lasts (party
 points, marshmallows).
+
+## Experiments: making a game should take minutes
+
+What the kit does today: *use this template*, `tools/kit.mjs init`, a page on
+GitHub Pages with AI players, *Plan my game* in the copy's own Actions, and
+rooms on demand from the kit pool. Each idea below is something no copy can
+do yet, and each names what it would need first; the first is built.
+
+1. **A studio in the page.** Built: `client/studio.html` edits a Party
+   minigame's WAT and constants, builds party with it in a worker
+   (`tools/asm-core.mjs`, the assembler's half with no disk in it, on the
+   site's own `src/` and wabt's one script), checks the debug build with AI
+   balls and split two ways, plays the build in party's page against AI
+   balls, and sends the changed files in through GitHub's upload page. An
+   unchanged minigame builds to `npm run build`'s bytes; a build takes about
+   5 s on SwiftShader's machine (`net/run-pages.mjs` checks all of it on a
+   static host). Next: a new minigame from the page (the lists `tools/new-mg.mjs`
+   appends to), the AI and the drawing reading the edited constants, and
+   Claude in the page, paid from Elo Pros credits ("make the ice
+   slipperier"): the same edit loop with a model in it.
+2. **Bring your own bot.** The referee already runs a wasm it didn't build
+   with one import, a shared memory. A bot is the same: a module that reads
+   the confirmed world and writes its slot's input word. Leagues of bots play
+   headless at full speed on the referee, rated on Elo Pros's ladders, where
+   agents rank apart from people already. It is the cheapest agent-only world
+   (scry-forge `NOW.md` row 14e): no model answers at 125 Hz, so an agent
+   competes by writing the bot.
+3. **Store art from a replay.** `tools/film.mjs` films the trailer from a
+   replay; run in a copy's CI, it could write the capsule, the screenshots
+   and a clip into `elo/`, the art block `elo.json` names. A copy listed
+   through GitHub alone has no art otherwise, and the same shots are what
+   Elo Pros's trading cards are cut from.
+4. **Discord Activities and other embeds.** A Fireplace room is a web page
+   and a relay, which is what an Activity is. Not measured: whether `coi.js`
+   makes a page cross-origin isolated inside Discord's frame, which the
+   shared memory needs. Measure that first.
+5. **Arcade rooms across copies.** The kit pool already runs any copy's
+   wasm. A room that walks a list of copies by sha256 between games, as the
+   map cycle would walk maps, lets a copy with one minigame be played in a
+   room big enough to fill. It needs the relay and the page to swap modules
+   between games, where Fireplace today swaps games inside one module.
+6. **Pay a minigame's author by the rounds played.** The referee knows which
+   minigame each round was, on rooms we host. A pot split by measured rounds
+   passes invariant 1's test (the payer and the amount change no bit of any
+   round). It needs a rule for where the pot comes from.
+7. **A clip per match.** Every hosted room already writes a replay
+   (`--replays`); a watch link per match, and its interval hashes beside it,
+   is the "replay" evidence tier for results and something a player shares.
 
 ## Sessions
 

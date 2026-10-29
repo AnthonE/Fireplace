@@ -33,6 +33,7 @@ node tools/serve.mjs                        # then /client/map-editor.html: draw
 node tools/roblox.mjs place.rbxl [maps/<name>] [--brief]   # a Roblox place (.rbxl/.rbxlx) as a map, --brief its scripts and port.md (docs/roblox.md); the editor opens one too
 node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs/vox.md), through the same back half (tools/scene-map.mjs); the editor opens one too
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
+node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -149,7 +150,10 @@ shell whose own command line contains the name: it kills that shell.
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
   meeting (`$f_collide`) touch two records, so they are confirmed-only.
 - Fireplace (`src/fireplace.wat`): each game is its own build under a prefix
-  (`tools/asm.mjs` `prefixed()`, `GAMESETS`), so a change to a game changes
+  (`tools/asm.mjs` `prefixed()`), listed in `FP_SETS` (`src/layout.mjs`: its
+  flags, world, join, input word, matches, score, seed), from which the `fp`
+  macros write the playlist's game-by-game code; a new game is an entry there
+  and a row in `client/fireplace.mjs`'s `PAGES`. A change to a game changes
   Fireplace too. The playlist's state is the header's last 16 bytes
   (`FP_GAME`...) and `REGION + 0xe000` (8 KiB no game uses: marshmallows,
   `FP_NEXT`, `FP_MODE`): keep games out of both. `PLAYLIST` goes by position
@@ -184,6 +188,12 @@ shell whose own command line contains the name: it kills that shell.
   players after. Both sample the input slots through `client/input.mjs`.
   `coi.js` makes a page cross-origin isolated where the host can't send the
   headers.
+- The studio (`client/studio.html`, its worker `client/studio-worker.mjs`)
+  builds party in the page: `tools/asm-core.mjs` (the assembler's
+  preprocessor, checks and prefixer, the file reader passed in) and
+  `tools/party-play.mjs` (a room of AI balls) import nothing from Node, and
+  `tools/site.mjs` ships them with `src/`'s WAT and wabt's one script;
+  `test/studio.test.mjs` holds the page's build to `npm run build`'s bytes.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
 - The room's look is a theme (`client/themes/<id>.json`, `client/themes.mjs`):

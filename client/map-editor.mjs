@@ -395,6 +395,30 @@ async function save() {
     if (e.name !== 'AbortError') say(`not saved: ${e.message || e}`);
   }
 }
+// Sending a map in: the three files downloaded, and GitHub's upload page for
+// maps/<folder>/ opened in the repo the map goes to, where dropping them and
+// proposing the change makes the pull request (GitHub forks the repo first for
+// someone who can't write to it); CI then plays the map (tools/map-check.mjs).
+// The repo is client/kit.json's (node tools/kit.mjs init writes a copy's own),
+// or the one a GitHub Pages site serves.
+const pagesRepo = () => {
+  const m = /^([a-z0-9-]+)\.github\.io$/i.exec(location.hostname), name = location.pathname.split('/')[1];
+  return m && name ? `${m[1]}/${name}` : '';
+};
+const mapRepo = fetch(new URL('./kit.json', import.meta.url), { cache: 'no-cache' })
+  .then((r) => (r.ok ? r.json() : {})).then((k) => k.repo || pagesRepo()).catch(() => pagesRepo());
+export const uploadUrl = (repo, folder) => `https://github.com/${repo}/upload/main/maps/${encodeURIComponent(folder)}`;
+
+async function sendIn() {
+  const repo = await mapRepo;
+  if (!repo) { say('this page doesn\'t know which repo its maps go to: set "repo" in client/kit.json'); return; }
+  if (st.error) { say(`not yet: the check refuses it (${st.error})`); return; }
+  // opened first, while the click still counts as the person's, so it isn't blocked as a pop-up
+  window.open(uploadUrl(repo, st.folder), '_blank', 'noopener');
+  await download();
+  say(`downloaded map.json, height.png and surface.png: drop them on the GitHub page that opened (${repo}, maps/${st.folder}/) and propose the change`);
+}
+
 async function download() {
   for (const [name, bytes] of Object.entries(await files())) {
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([bytes])), download: name });
@@ -1054,6 +1078,15 @@ function renderSide() {
   name.oninput = () => { step(); sp.name = name.value; changed(); };
   name.onchange = endStep;
   side.append(row(el('label', { textContent: 'name' }), name));
+  // the credit when it's merged (tools/elo.mjs makes it a mod in elo.json)
+  const text = (k, label, size) => {
+    const i = el('input', { type: 'text', value: sp[k] || '', maxLength: size });
+    i.oninput = () => { step(); if (i.value.trim()) sp[k] = i.value.trim(); else delete sp[k]; changed(); };
+    i.onchange = endStep;
+    return row(el('label', { textContent: label }), i);
+  };
+  side.append(text('by', 'by', 39), hint('Your GitHub login: the credit on the store when the map is merged.'));
+  side.append(text('about', 'about', 200));
   const folder = el('input', { type: 'text', value: st.folder });
   folder.onchange = () => { st.folder = slug(folder.value); folder.value = st.folder; if (st.dir && st.dir.name !== st.folder) st.dir = null; renderSide(); };
   side.append(row(el('label', { textContent: 'folder' }), folder));
@@ -1082,10 +1115,11 @@ function renderSide() {
     ...(race ? [btn('fly it', () => playHere('flight'), 'Dogfight\'s Ring Race on this map')] : [])));
   side.append(hint('Online with friends and bots: save it into Fireplace\'s maps/' + f + '/ (or download the files and put them there), then from the repo:'));
   side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --arena --map ${f}` })));
-  if (race) side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --flight --mode 12 --map ${f}` })), hint('flies its Ring Race.'));
+  if (race) side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --flight --mode ${L.FLIGHT_CONSTS.M_RACE} --map ${f}` })), hint('flies its Ring Race.'));
   side.append(hint('Open the URL it prints: that is your map with bots on it. --bots N for more, --mode k for one mode (5 Capture the Flag, 6 Oddball, 7 King of the Hill).'));
-  side.append(row(btn('download the files', download)));
-  side.append(hint('To have it played on Fireplace for everyone, send it as a pull request: CONTRIBUTING.md, "A map".'));
+  side.append(h3('Send it in'));
+  side.append(hint('To have it played for everyone: send it in downloads the three files and opens GitHub\'s upload page for this folder. Drop them there and propose the change; that is the pull request, and CI plays the map with AI fighters. CONTRIBUTING.md, "A map", has the rest.'));
+  side.append(row(btn('send it in', sendIn, 'download the files and open GitHub\'s upload page'), btn('download the files', download)));
 }
 
 // The map as it is now, packed (packMap) and handed to the arena's page (or

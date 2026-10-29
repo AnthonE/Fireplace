@@ -1,5 +1,7 @@
 {
   "name": "Box Canyon",
+  "by": "AnthonE",
+  "about": "Two bases at either end of a canyon, a cave between them, teleporters out to the rocks.",
   "bounds": [356, 668, 432, 592],
   "terrain": {
     "origin": [320, 400],

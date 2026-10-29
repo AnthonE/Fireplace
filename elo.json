@@ -21,7 +21,7 @@
     {
       "id": "fireplace-minigame",
       "title": "a Party minigame",
-      "what": "A new round for Party, and so for Fireplace. node tools/new-mg.mjs <key> <prefix> \"<NAME>\" writes one that builds and plays (a sumo ring); make it yours. Ideas are in docs/roadmap.md's kits table: Snowball, Full Tilt, Big Fans, Hoop Hop, Pinball. Its tests, the determinism matrix and the online gate must pass in CI.",
+      "what": "A new round for Party, and so for Fireplace. node tools/new-mg.mjs <key> <prefix> \"<NAME>\" writes one that builds and plays (a sumo ring); make it yours. Or work on one in the browser with client/studio.html: edit its WAT and constants, build and check it there, play it against AI balls, and send it in. Ideas are in docs/roadmap.md's kits table: Snowball, Full Tilt, Big Fans, Hoop Hop, Pinball. Its tests, the determinism matrix and the online gate must pass in CI.",
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
       "check": "machine"
@@ -29,10 +29,10 @@
     {
       "id": "fireplace-map",
       "title": "a map for the arena or Dogfight",
-      "what": "A new place to fight: a folder in maps/ (map.json, height.png, surface.png), drawn in the browser with client/map-editor.html: shape and paint the ground, drag out walls and roofs, place spawns, weapon pads, teleporters, flags, hills and race gates. node net/play.mjs --arena --map <folder> plays it with bots.",
+      "what": "A new place to fight: a folder in maps/ (map.json, height.png, surface.png), drawn in the browser with client/map-editor.html: shape and paint the ground, drag out walls and roofs, place spawns, weapon pads, teleporters, flags, hills and race gates. Put your GitHub login in its by field. node net/play.mjs --arena --map <folder> plays it with bots; send it in from the editor. CI compiles it and plays it with AI fighters (node tools/map-check.mjs).",
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
-      "check": "review"
+      "check": "machine"
     }
   ],
   "mods": [
@@ -67,6 +67,224 @@
       "by": "AnthonE",
       "about": "Blue stripes, light oak, nothing on the mantel and rain on the window.",
       "path": "client/themes/summer-rain.json"
+    },
+    {
+      "id": "map-canyon",
+      "kind": "map",
+      "name": "Box Canyon",
+      "by": "AnthonE",
+      "about": "Two bases at either end of a canyon, a cave between them, teleporters out to the rocks.",
+      "path": "maps/canyon"
+    },
+    {
+      "id": "map-skyways",
+      "kind": "map",
+      "name": "Skyways",
+      "by": "AnthonE",
+      "about": "Dogfight's sky over open ground, with a ring race through its gates.",
+      "path": "maps/skyways"
     }
-  ]
+  ],
+  "tools": [
+    {
+      "id": "map-editor",
+      "name": "Map editor",
+      "makes": "map",
+      "url": "https://game.elopros.com/fireplace/client/map-editor.html",
+      "about": "Draw a map for the arena or Dogfight in the browser, play it with bots, and send it in."
+    },
+    {
+      "id": "studio",
+      "name": "Studio",
+      "makes": "minigame",
+      "url": "https://game.elopros.com/fireplace/client/studio.html",
+      "about": "Edit a Party minigame in the browser, build and check it there, play it against AI balls, and send it in."
+    }
+  ],
+  "stats": {
+    "stats": [
+      {
+        "id": "games",
+        "name": "Games played",
+        "agg": "sum"
+      },
+      {
+        "id": "mallows",
+        "name": "Marshmallows",
+        "agg": "sum"
+      },
+      {
+        "id": "wins",
+        "name": "Wins",
+        "agg": "sum"
+      },
+      {
+        "id": "streak",
+        "name": "Wins in a row now",
+        "agg": "latest"
+      },
+      {
+        "id": "best_streak",
+        "name": "Most wins in a row",
+        "agg": "max"
+      },
+      {
+        "id": "place.1",
+        "name": "Firsts",
+        "agg": "sum"
+      },
+      {
+        "id": "place.2",
+        "name": "Seconds",
+        "agg": "sum"
+      },
+      {
+        "id": "place.3",
+        "name": "Thirds",
+        "agg": "sum"
+      },
+      {
+        "id": "crowd",
+        "name": "Most in one game",
+        "agg": "max"
+      },
+      {
+        "id": "played.golf",
+        "name": "Played Golf",
+        "agg": "sum"
+      },
+      {
+        "id": "played.arena",
+        "name": "Played Arena",
+        "agg": "sum"
+      },
+      {
+        "id": "played.bumper",
+        "name": "Played Bumper balls",
+        "agg": "sum"
+      },
+      {
+        "id": "played.party",
+        "name": "Played Party",
+        "agg": "sum"
+      },
+      {
+        "id": "played.dogfight",
+        "name": "Played Dogfight",
+        "agg": "sum"
+      },
+      {
+        "id": "won.golf",
+        "name": "Won Golf",
+        "agg": "sum"
+      },
+      {
+        "id": "won.arena",
+        "name": "Won Arena",
+        "agg": "sum"
+      },
+      {
+        "id": "won.bumper",
+        "name": "Won Bumper balls",
+        "agg": "sum"
+      },
+      {
+        "id": "won.party",
+        "name": "Won Party",
+        "agg": "sum"
+      },
+      {
+        "id": "won.dogfight",
+        "name": "Won Dogfight",
+        "agg": "sum"
+      }
+    ],
+    "achievements": [
+      {
+        "id": "CHAIR",
+        "name": "Pull up a chair",
+        "desc": "Play a game in the room"
+      },
+      {
+        "id": "TOASTED",
+        "name": "Toasted",
+        "desc": "Finish in the top three"
+      },
+      {
+        "id": "GOLDEN",
+        "name": "Golden brown",
+        "desc": "Win a game"
+      },
+      {
+        "id": "ROLL",
+        "name": "On a roll",
+        "desc": "Win two games in a row"
+      },
+      {
+        "id": "HATTRICK",
+        "name": "Hat trick",
+        "desc": "Win three games in a row"
+      },
+      {
+        "id": "PODIUM",
+        "name": "Every step",
+        "desc": "Finish first, second and third"
+      },
+      {
+        "id": "BAG",
+        "name": "A bag of them",
+        "desc": "25 marshmallows in all",
+        "progress": {
+          "stat": "mallows",
+          "max": 25
+        }
+      },
+      {
+        "id": "CAMPFIRE",
+        "name": "Campfire",
+        "desc": "100 marshmallows in all",
+        "progress": {
+          "stat": "mallows",
+          "max": 100
+        }
+      },
+      {
+        "id": "REGULAR",
+        "name": "A regular",
+        "desc": "Play 25 games",
+        "progress": {
+          "stat": "games",
+          "max": 25
+        }
+      },
+      {
+        "id": "PLAYLIST",
+        "name": "The whole playlist",
+        "desc": "Play golf, the arena, bumper balls and party"
+      },
+      {
+        "id": "ALLROUND",
+        "name": "All-rounder",
+        "desc": "Win golf, the arena, bumper balls and party"
+      },
+      {
+        "id": "CROWD",
+        "name": "A full house",
+        "desc": "Play a game with 32 or more in it"
+      },
+      {
+        "id": "ACE",
+        "name": "Ace",
+        "desc": "Win a Dogfight"
+      }
+    ],
+    "boards": [
+      {
+        "id": "mallows",
+        "name": "Marshmallows",
+        "sort": "desc",
+        "keep": "best"
+      }
+    ]
+  }
 }

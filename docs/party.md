@@ -240,4 +240,13 @@ assembled like any other minigame's, so `npm run build` needs no Rust and
 the gates run the wasm. `node tools/new-mg.mjs <key> <prefix> "<NAME>" --rust`
 starts one; [rust.md](rust.md) is how, and what the sim refuses.
 
+**In the page.** `client/studio.html` works on a minigame with no install:
+its WAT and constants edited in the page, party assembled there in a worker
+with the assembler's own half (`tools/asm-core.mjs`), the debug build played
+by 12 AI balls for 4,000 ticks and replayed split two ways (every tick's hash
+equal), the build played in party's page against AI balls, and the changed
+files sent in through GitHub's upload page. Unchanged, a minigame builds to
+`npm run build`'s bytes, in about 5 s here; edited constants reach the sim,
+not yet the client module that draws it and steers the AI.
+
 Not done yet: power-ups in more of the minigames.

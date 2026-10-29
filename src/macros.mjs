@@ -2,7 +2,7 @@
 // returns WAT text; the assembler re-scans the output, so macros may nest.
 // Layout constants stay as @NAME here and are folded after expansion.
 import * as layout from './layout.mjs';
-import { AM, AM_HOOKS, ARMS, FP_MATCHES, GAMES, MINIGAMES } from './layout.mjs';
+import { AM, AM_HOOKS, ARMS, FP_MATCHES, FP_SETS, GAMES, MINIGAMES } from './layout.mjs';
 
 const SHIFT = { f32: 2, i32: 2, i64: 3, u16: 1, u8: 0, v128: 2 };
 const LOAD = { f32: 'f32.load', i32: 'i32.load', i64: 'i64.load', u16: 'i32.load16_u', u8: 'i32.load8_u', v128: 'v128.load' };
@@ -12,6 +12,16 @@ function scaled(type, idx) {
   const s = SHIFT[type];
   if (s === undefined) throw new Error(`no element type ${type}`);
   return s === 0 ? idx : `(i32.shl ${idx} (i32.const ${s}))`;
+}
+
+// An if-chain over games ks on g, each running body(k); the first is the
+// last else, so it is what any game not listed would run.
+function fpChain(type, g, ks, body) {
+  if (!ks.length) return type === 'none' ? '(nop)' : `(${type}.const 0)`;
+  const r = type === 'none' ? '' : ` (result ${type})`;
+  let out = body(ks[0]);
+  for (let i = ks.length - 1; i >= 1; i--) out = `(if${r} (i32.eq ${g} (i32.const ${ks[i]})) (then ${body(ks[i])}) (else ${out}))`;
+  return out;
 }
 
 export function makeMacros({ DEBUG }) {
@@ -93,13 +103,24 @@ export function makeMacros({ DEBUG }) {
       return a.slice(0, -1).reduceRight((out, v, k) => `(select (i32.const ${v}) ${out} (i32.eq ${i} (i32.const ${k})))`, `(i32.const ${a.at(-1)})`);
     },
 
-    // Fireplace: (!pick type golf arena bumper party flight), the expression
-    // for the game on now (FP_GAME); type is a result type, or none.
-    pick: (type, g, a, b, p, f) => {
-      const r = type === 'none' ? '' : ` (result ${type})`;
-      const on = (k) => `(i32.eq (i32.load (i32.const @FP_GAME)) (i32.const ${k}))`;
-      return `(if${r} ${on(1)} (then ${a}) (else (if${r} ${on(2)} (then ${b}) (else (if${r} ${on(3)} (then ${p}) (else (if${r} ${on(4)} (then ${f}) (else ${g}))))))))`;
+    // Fireplace's games are FP_SETS (layout.mjs); these write the playlist's
+    // code over them, so a game joins as an entry there.
+    // (!fp type fn args...): the game on now (FP_GAME) running its own fn,
+    // $<prefix>.fn args; type is a result type, or none.
+    fp: (type, fn, ...args) => fpChain(type, '(i32.load (i32.const @FP_GAME))', [...FP_SETS.keys()], (k) => `(call $${FP_SETS[k].prefix}.${fn}${args.map((a) => ` ${a}`).join('')})`),
+    // (!fpwhere field value g): 1 if game g's entry has field === value
+    fpwhere: (field, value, g) => {
+      const eq = FP_SETS.flatMap((s, k) => (String(s[field]) === value ? [`(i32.eq ${g} (i32.const ${k}))`] : []));
+      return eq.length ? eq.reduce((a, b) => `(i32.or ${a} ${b})`) : '(i32.const 0)';
     },
+    // (!fpworld g seed): game g's static world built, its generators in order
+    fpworld: (g, seed) => FP_SETS.map((s, k) => `(if (i32.eq ${g} (i32.const ${k})) (then${s.world.map((f) => ` (call $${s.prefix}.${f} ${seed})`).join('')}))`).join('\n'),
+    // (!fpjoin g rec): an 'ev' game joining the player its EV_JOIN record names
+    fpjoin: (g, rec) => fpChain('none', g, FP_SETS.flatMap((s, k) => (s.join === 'ev' ? [k] : [])), (k) => `(call $${FP_SETS[k].prefix}.ev_join ${rec})`),
+    // (!fpround g last): a 'round' game laying everyone in out at once
+    fpround: (g, last) => fpChain('none', g, FP_SETS.flatMap((s, k) => (s.join === 'round' ? [k] : [])), (k) => `(call $${FP_SETS[k].prefix}.b_join ${last})`),
+    // (!fpcuts g): a match of game g cut to its Fireplace length
+    fpcuts: (g) => FP_SETS.map((s, k) => (s.ticks ? `(if (i32.eq ${g} (i32.const ${k})) (then (call $fp_cut (i32.const ${s.ticks}))))` : '')).filter(Boolean).join('\n'),
     // (!fpmatches g): how many matches game g plays before the playlist moves on
     fpmatches: (g) => GAMES.reduceRight((out, _, k) => `(select (i32.const ${FP_MATCHES[k]}) ${out} (i32.eq ${g} (i32.const ${k})))`, '(i32.const 1)'),
 

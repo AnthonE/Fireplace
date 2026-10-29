@@ -97,7 +97,7 @@ export const CELLOF = 0x1f8000; // u16[BALL_CAP], the ball's bucket, 0xffff for 
 // are awake, never hashed: bucket b's balls are SI[SBOUND[b], SBOUND[b + 1]),
 // in ascending index, with their positions copied beside them. Buckets number
 // x fastest, so a row of three cells is one run of the arrays. It sits past
-// the client's slots at NET, which use its first 2 KiB.
+// the client's slots at NET, which use its first 12 KiB.
 export const SBOUND = 0x300000; // u16[NCELL + 2]
 export const SX = 0x320000; // f32[BALL_CAP] each, by sorted position
 export const SY = 0x330000;
@@ -162,6 +162,9 @@ export const CL_HEARD = NET + 208; // u32 closed ticks heard, by any of them
 // Looks (client/looks.mjs), drawing only: the relay carries them beside the ticks.
 export const CL_LOOK = NET + 212; // u32 this player's look, written by the page; the net worker sends it when it changes
 export const CL_LOOKS = NET + 2048; // u32[256] every slot's look as the relay last sent it (0: the house look)
+// Names, drawing only too: each signed-in slot's, as the relay last sent it (net/wire.mjs T_NAMES)
+export const NAME_BYTES = 16; // net/wire.mjs NAME_MAX: the font's characters, 0 after the last
+export const CL_NAMES = NET + 8192; // u8[256 * NAME_BYTES], every slot's name ('' for none: P1, P2, ...)
 export const CL_AVATARS = NET + 3072; // u32[256] every signed-in slot's Elo Pros avatar as the relay last sent it (0: none; client/avatar.mjs)
 // Input words by server tick (& 255), written by the net worker as it samples them:
 export const CL_WORDS = NET + 1024;
@@ -1042,15 +1045,43 @@ export const G_ARENA = 1;
 export const G_BUMPER = 2;
 export const G_PARTY = 3;
 export const G_FLIGHT = 4;
-export const GAMES = ['GOLF', 'ARENA', 'BUMPER BALLS', 'PARTY', 'DOGFIGHT'];
-// By position, so a game may come round more than once: the room plays entry
-// (games played) % length next.
-export const PLAYLIST = [G_BUMPER, G_PARTY, G_ARENA, G_PARTY, G_FLIGHT, G_GOLF];
-export const FP_MATCHES = [1, 1, 2, 3, 1]; // by game: matches it plays before the next game (bumper's rounds, party's minigames)
 export const FP_HOLD = 750; // 6 s of the result, the standings, then the next game
 export const FP_ARENA_TICKS = 22500; // an arena match of 3 min, whatever its mode (Infection's is 3 already; the rest 5 or 10)
 export const FP_FLIGHT_TICKS = 22500; // a Dogfight of 3 min, whatever its mode
 export const FP_GOLF_TICKS = 18750; // a hole of at most 2.5 min, not 4
+// The games, by G_*: what the playlist (src/fireplace.wat, through the fp
+// macros), the assembler (tools/asm.mjs) and the page need to know of one, so
+// a game joins Fireplace as an entry here, its build's flags and one of the
+// ways below of being joined, scored and seeded. Append-only: a game's number
+// is its place, and replays and the playlist name games by number.
+//   prefix   its functions' prefix in the module ($g.step)
+//   flags    its build's (#if ARENA ...); map: the arena's map, or flight's own
+//   world    its generators, called (gen seed) in order to build its static world
+//   join     'ev': each player in joins by an EV_JOIN record (its ev_join);
+//            'round': everyone in is laid out at once (its b_join of the last slot)
+//   word     whose input word it reads: 'golf' (golf's, which bumper and party
+//            share) or 'arena' (which Dogfight shares); a switch keeps the
+//            players' words only between games that read the same one
+//   matches  how many it plays before the next game (bumper's rounds, party's minigames)
+//   ticks    the longest a match may run in Fireplace, 0 for its own length
+//   score    how a player's place is read: 'golf' fewest strokes; 'arena' a
+//            Fiesta's kills, then deaths, any other mode's place; 'bumper'
+//            rounds won, then KOs, then bumps; 'party' party points, then wins
+//   seed     what its next seed forces: 'arena' a mode of ARENA_MODES (never
+//            the last), 'flight' one of FLIGHT_MODES, 'party' never one
+//            minigame; none for a seed as drawn
+export const FP_SETS = [
+  { name: 'GOLF', prefix: 'g', flags: {}, world: ['terrain_gen', 'course_gen'], join: 'ev', word: 'golf', matches: 1, ticks: FP_GOLF_TICKS, score: 'golf' },
+  { name: 'ARENA', prefix: 'a', flags: { ARENA: true }, map: 'arena', world: ['terrain_gen', 'arena_gen'], join: 'ev', word: 'arena', matches: 1, ticks: FP_ARENA_TICKS, score: 'arena', seed: 'arena' },
+  { name: 'BUMPER BALLS', prefix: 'b', flags: { BUMPER: true }, world: ['terrain_gen', 'bumper_gen'], join: 'round', word: 'golf', matches: 2, ticks: 0, score: 'bumper' },
+  { name: 'PARTY', prefix: 'p', flags: { BUMPER: true, PARTY: true }, world: ['terrain_gen', 'bumper_gen'], join: 'round', word: 'golf', matches: 3, ticks: 0, score: 'party', seed: 'party' },
+  { name: 'DOGFIGHT', prefix: 'f', flags: { ARENA: true, FLIGHT: true }, map: 'flight', world: ['terrain_gen', 'arena_gen'], join: 'ev', word: 'arena', matches: 1, ticks: FP_FLIGHT_TICKS, score: 'arena', seed: 'flight' },
+];
+export const GAMES = FP_SETS.map((g) => g.name);
+export const FP_MATCHES = FP_SETS.map((g) => g.matches); // by game: matches it plays before the next game
+// By position, so a game may come round more than once: the room plays entry
+// (games played) % length next.
+export const PLAYLIST = [G_BUMPER, G_PARTY, G_ARENA, G_PARTY, G_FLIGHT, G_GOLF];
 export const FP_START = 0xf1; // a Fireplace seed with this top byte starts the playlist at entry (seed >>> 16) & 0xff, for gates and dev
 export const FP_PARTY_FORCE = 0xa7; // a party seed with this top byte plays one minigame only (party.wat's $bumper_gen): Fireplace's never has it
 // In the header's last 16 bytes, which no game uses (inside the prediction's copy):

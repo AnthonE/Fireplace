@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
-import { ACHIEVEMENTS, emptyTally, record, readResult } from '../client/achievements.mjs';
+import { ACHIEVEMENTS, byId, emptyTally, record, readResult, eloStats, tallyOfStats, statsReport, GAME_KEYS, STORE_ID } from '../client/achievements.mjs';
+import { LADDERS } from '../net/elo.mjs';
 
 const inFont = (s) => [...s].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) <= 95);
 let n = 0;
@@ -74,4 +75,63 @@ test('a result is read from the world as it is held: the game, the place, the ma
   [[3, 1, 3], [9, 2, 2], [40, 3, 1], [41, 4, 0]].forEach(([p, place, got]) => { v.u8[L.FP_LAST + p] = place; v.u8[L.FP_GOT + p] = got; });
   assert.deepEqual(readResult(v, 9, 123456), { key: '123456:6:1', game: L.G_ARENA, place: 2, got: 2, field: 4 });
   assert.equal(readResult(v, 5, 123456).place, 0);
+});
+
+// Elo Pros's rules for combining a stat's reports (scry-forge meter/gamestats.py apply_reports)
+function fold(held, reps, defs) {
+  const agg = new Map(defs.stats.map((s) => [s.id, s.agg]));
+  for (const rep of reps) {
+    for (const [id, v] of Object.entries(rep.stats)) {
+      const cur = held.stats[id], a = agg.get(id);
+      held.stats[id] = cur === undefined || a === 'latest' ? v : a === 'sum' ? cur + v : a === 'max' ? Math.max(cur, v) : Math.min(cur, v);
+    }
+    for (const id of rep.unlock) held.got[id] ??= 1;
+    for (const a of defs.achievements) if (a.progress && !held.got[a.id] && held.stats[a.progress.stat] >= a.progress.max) held.got[a.id] = 1;
+  }
+  return held;
+}
+const answer = (held, defs) => ({
+  stats: defs.stats.map((s) => ({ id: s.id, value: held.stats[s.id] ?? null })),
+  achievements: defs.achievements.map((a) => ({ id: a.id, earned: !!held.got[a.id], unlocked_at: held.got[a.id] ?? null })),
+});
+
+test("elo.json's stats block: ids and lines Elo Pros takes, a stat per thing a test reads, the counted ones as progress", () => {
+  const defs = eloStats();
+  assert.deepEqual(GAME_KEYS, LADDERS, 'the stats name each game as its ladder does');
+  assert.equal(GAME_KEYS.length, L.GAMES.length);
+  for (const s of defs.stats) assert.match(s.id, /^[a-z0-9_.:]{1,64}$/, s.id);
+  assert.equal(new Set(defs.stats.map((s) => s.id)).size, defs.stats.length);
+  for (const a of defs.achievements) {
+    assert.match(a.id, /^[A-Z0-9_]{1,64}$/, a.id);
+    assert.ok(a.name.length <= 48 && a.desc.length <= 200, a.id);
+    if (a.progress) assert.ok(defs.stats.some((s) => s.id === a.progress.stat && s.agg !== 'min'), a.id);
+  }
+  assert.deepEqual(defs.achievements.map((a) => a.id), ACHIEVEMENTS.map((a) => STORE_ID(a.id)));
+  // a progress row unlocks at the same count its test does
+  for (const a of defs.achievements.filter((x) => x.progress)) {
+    const id = a.id.toLowerCase(), t = { ...emptyTally(), [a.progress.stat === 'mallows' ? 'mallows' : 'games']: a.progress.max };
+    assert.ok(byId.get(id).test(t) && !byId.get(id).test({ ...t, mallows: t.mallows && t.mallows - 1, games: t.games && t.games - 1 }), id);
+  }
+});
+
+test('a tally reported game by game comes back whole from what Elo Pros keeps, and opens nothing twice', () => {
+  const defs = eloStats();
+  const games = [L.G_GOLF, L.G_ARENA, L.G_BUMPER, L.G_PARTY, L.G_FLIGHT];
+  const results = Array.from({ length: 60 }, (_, i) => res({ game: games[i % 5], place: [1, 1, 2, 1, 3, 5, 1, 0][i % 8], got: [3, 3, 2, 3, 1, 0, 3, 0][i % 8], field: 4 + (i % 40) }));
+  let t = emptyTally(), held = { stats: {}, got: {} };
+  const unlocked = [];
+  results.forEach((r, i) => {
+    // every 7 games the relay starts over from Elo Pros's answer, as a new room would
+    if (i % 7 === 6) t = tallyOfStats(answer(held, defs));
+    const x = record(t, r, 1e12);
+    const rep = statsReport('0x' + 'ab'.repeat(20), t, x.tally, r, x.opened);
+    if (r.place) assert.ok(rep); else assert.equal(rep, null);
+    if (rep) { held = fold(held, [rep], defs); unlocked.push(...rep.unlock); assert.equal(rep.scores.mallows, x.tally.mallows); }
+    t = x.tally;
+  });
+  const back = tallyOfStats(answer(held, defs));
+  for (const k of ['games', 'mallows', 'wins', 'streak', 'best', 'places', 'played', 'won', 'crowd']) assert.equal(back[k], t[k], k);
+  assert.deepEqual(Object.keys(back.got).sort(), Object.keys(t.got).sort());
+  assert.equal(new Set(unlocked).size, unlocked.length, 'each unlock reported once');
+  assert.deepEqual(tallyOfStats(null), emptyTally(), 'no answer is a first game');
 });

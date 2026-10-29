@@ -7,9 +7,14 @@
 // the room's first game ended and the relay reported it once, signed with the
 // game's server key over the text Elo Pros checks, as a match of the signed-in
 // guests at the places every client saw (the bot host's shared world), with
-// the refused guest left out; and every guest heard the avatar the stand-in's
-// face gives each signed-in wallet (client/avatar.mjs), on its slot.
-//   node net/run-elo.mjs [--bots 6] [--seconds 150] [--port 4441: the relay's, its native door the next, the stand-in the one after]
+// the refused guest left out; when the relay reported each of those guests'
+// achievements (client/achievements.mjs) to the stand-in's game stats, signed
+// the same way, counted on top of what the stand-in held for each wallet (one
+// guest comes with 24 games and PULL UP A CHAIR already); and when every guest
+// was sent the names the stand-in's faces give the signed-in wallets
+// (/api/face), cleaned to what the font draws, and none for a wallet with none,
+// and heard the avatar each face gives (client/avatar.mjs), on its slot.
+//   node net/run-elo.mjs [--bots 6] [--seconds 240] [--port 4441: the relay's, its native door the next, the stand-in the one after]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -21,7 +26,8 @@ import { serverText } from './elo.mjs';
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
 const nbots = Number(opt('bots', 6));
-const seconds = Number(opt('seconds', 150));
+// the first game (bumper balls) ended 97 and 106 s in, and not in 170 s twice, on a 4-core box
+const seconds = Number(opt('seconds', 240));
 const port = Number(opt('port', 4441));
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 const DOMAIN = 'fireplace.test';
@@ -29,6 +35,10 @@ const WHO = 'fireplace/gate';
 // the bot host's made-up wallet for its session k (net/bot-host.mjs)
 const walletOf = (k) => '0x' + (0xb07 * 2 ** 32 + k).toString(16).padStart(40, '0');
 const REFUSED = walletOf(1);
+const SEEDED = walletOf(2);
+// the names the stand-in's faces give, and what the relay may send for them
+const FACES = { [walletOf(0)]: 'Lucky 7', [walletOf(3)]: '  ana ü  #3 — a very long name indeed' };
+const SENT = { [walletOf(0)]: 'LUCKY 7', [walletOf(3)]: 'ANA #3 A VERY LO' };
 
 execFileSync('sh', ['tools/cert.sh'], { stdio: 'inherit' });
 execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
@@ -40,7 +50,12 @@ writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }), { mo
 // The stand-in: a sign-in is good when it was made on DOMAIN with the nonce
 // asked about (the wallet is the message's own; the signature goes unchecked),
 // except REFUSED's; a report is good when its signature is.
-const signins = [], reports = [];
+const signins = [], reports = [], statReports = [], asked = [], faces = [];
+const signedBy = (req, body) => {
+  const h = req.headers;
+  const text = serverText('POST', req.url, h['x-elo-server'], h['x-elo-time'], h['x-elo-nonce'], createHash('sha256').update(body).digest('hex'));
+  return h['x-elo-server'] === WHO && edVerify(null, Buffer.from(text), publicKey, Buffer.from(h['x-elo-signature'] || '', 'base64'));
+};
 const avatarOf = (w) => (w === walletOf(0) ? null : (0x80000000 | (parseInt(w.slice(-6), 16) & 0x3fffffff)) >>> 0);
 const stub = createServer((req, res) => {
   let body = '';
@@ -55,13 +70,25 @@ const stub = createServer((req, res) => {
       if (f.address === REFUSED) return answer(401, { ok: false, code: 'signature' });
       return answer(200, { ok: true, address: f.address, chain: 'evm' });
     }
-    // a face: every wallet's avatar but the first signed-in guest's, which has none
-    const face = /^\/api\/face\/(0x[0-9a-f]{40})$/.exec(req.url);
-    if (face) return answer(200, { wallet: face[1], name: null, avatar: avatarOf(face[1]) });
+    if (req.url.startsWith('/api/face/')) {
+      const w = req.url.split('/').pop();
+      faces.push(w);
+      // every wallet's avatar but the first signed-in guest's, which has none
+      return answer(200, { wallet: w, name: FACES[w] ?? null, picture: null, avatar: avatarOf(w) });
+    }
+    if (req.url.startsWith('/api/gamestats/fireplace/of/')) {
+      const w = req.url.split('/').pop();
+      asked.push(w);
+      if (w !== SEEDED) return answer(404, { error: 'not on record' });
+      return answer(200, { stats: [{ id: 'games', value: 24 }, { id: 'played.golf', value: 24 }], achievements: [{ id: 'CHAIR', earned: true, unlocked_at: 1 }] });
+    }
+    if (req.url === '/api/gamestats/fireplace/report') {
+      const ok = signedBy(req, body);
+      statReports.push({ ok, body: JSON.parse(body) });
+      return answer(ok ? 200 : 401, ok ? { ok: true, recorded: 1 } : { error: 'bad signature' });
+    }
     if (req.url === '/api/ratings/fireplace/report') {
-      const h = req.headers;
-      const text = serverText('POST', req.url, h['x-elo-server'], h['x-elo-time'], h['x-elo-nonce'], createHash('sha256').update(body).digest('hex'));
-      const ok = h['x-elo-server'] === WHO && edVerify(null, Buffer.from(text), publicKey, Buffer.from(h['x-elo-signature'] || '', 'base64'));
+      const ok = signedBy(req, body);
       reports.push({ ok, at: performance.now(), body: JSON.parse(body) });
       return answer(ok ? 200 : 401, ok ? { ok: true, recorded: 1 } : { error: 'bad signature' });
     }
@@ -105,6 +132,10 @@ const lc = (ws) => ws.map((w) => String(w).toLowerCase()).sort().join();
 must(lc(roster.map((r) => r.wallet)) === lc(signed.map((s) => s.wallet)) && roster.every((r) => Number.isInteger(r.since)),
   `the room's roster names every signed-in guest and nobody else (${roster.length})`);
 must(!existsSync(onlinePath), 'a relay that ends removes its roster');
+must(lc(faces) === lc(signed.map((s) => s.wallet)), `the relay asked Elo Pros for each signed-in guest's face once (${faces.length})`);
+const named = Object.fromEntries(signed.filter((s) => SENT[s.wallet]).map((s) => [s.slot, SENT[s.wallet]]));
+must(joined.every((s) => JSON.stringify(s.names) === JSON.stringify(named)),
+  `every guest has the room's names, cleaned, and none for a wallet without one (${JSON.stringify(named)})`);
 const heard = signed.filter((s) => avatarOf(s.wallet) !== null);
 must(heard.length >= 1 && joined.every((o) => heard.every((s) => o.avatars?.[s.slot] === avatarOf(s.wallet)))
   && joined.every((o) => !o.avatars?.[signed.find((s) => avatarOf(s.wallet) === null)?.slot ?? -1]),
@@ -124,8 +155,23 @@ if (first && match) {
   must(match.teams.every((t) => t.players.length === 1 && t.place === placeOf.get(slotOf.get(t.players[0]))),
     'each at the place every client saw');
   must(new Set(reports.map((r) => r.body.matches[0].id)).size === reports.length, 'each game reported once');
+  must(statReports.length >= 1 && statReports.every((r) => r.ok), `the relay reported achievements, signed with the game's server key (${statReports.length} calls)`);
+  const reps = statReports[0]?.body?.reports ?? [];
+  must(lc(reps.map((r) => r.wallet)) === lc(players), `one report a signed-in guest in the game (${reps.length})`);
+  const gotOf = new Map(first.places.map(([slot], i) => [slot, first.got[i]]));
+  must(reps.every((r) => {
+    const slot = slotOf.get(r.wallet), place = placeOf.get(slot), st = r.stats;
+    return st.games === 1 && st[`played.${Elo.LADDERS[first.game]}`] === 1 && (place > 3 || st[`place.${place}`] === 1)
+      && (st.mallows ?? 0) === gotOf.get(slot) && r.scores.mallows === gotOf.get(slot);
+  }), 'each at its place, with the marshmallows every client saw');
+  const fresh = reps.filter((r) => r.wallet !== SEEDED), seeded = reps.find((r) => r.wallet === SEEDED);
+  must(fresh.every((r) => r.unlock.includes('CHAIR')), 'a first game opens PULL UP A CHAIR');
+  must(!seeded || (seeded.unlock.includes('REGULAR') && !seeded.unlock.includes('CHAIR')),
+    "the guest Elo Pros knew counts on from its 24 games: A REGULAR, and not PULL UP A CHAIR again");
+  must(new Set(asked).size === asked.length && asked.every((w) => players.includes(w)), `each signed-in guest's stats asked for once (${asked.length})`);
+  must(rs.elo.achievements.reports >= 1 && rs.elo.achievements.failed === 0, `the relay counts ${rs.elo.achievements.reports} achievement reports, none failed`);
   console.log(`the first game ended ${(first.simTick / 125).toFixed(0)} s in; reported ${((reports[0].at - t0) / 1000).toFixed(0)} s after the relay started`);
 }
-writeFileSync('traces/elo.json', JSON.stringify({ signins, reports, relayElo: rs.elo, results: bs.results, fails }, null, 1) + '\n');
+writeFileSync('traces/elo.json', JSON.stringify({ signins, reports, statReports, asked, faces, relayElo: rs.elo, results: bs.results, fails }, null, 1) + '\n');
 console.log(fails.length ? `FAIL: ${fails.length}` : 'PASS');
 process.exit(fails.length ? 1 : 0);

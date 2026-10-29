@@ -124,6 +124,8 @@ jobs:
         run: |
           node tools/genparty.mjs --mg 40 --bots 16 --ticks 20000 --out logs/sumo.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/sumo.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: Every map in maps/ compiles, builds into the debug sim and plays with AI fighters
+        run: node tools/map-check.mjs --all
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -179,8 +181,8 @@ jobs:
         run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 240
       - name: Fireplace online from Dogfight (the playlist started at its entry 4, 64 guests, the room moved on into golf, every hash checked)
         run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 220 --start 4
-      - name: Elo Pros online (guests sign in through the relay, one refused; the first game's places reported once, signed with the server key)
-        run: node net/run-elo.mjs --bots 6 --seconds 150
+      - name: Elo Pros online (guests sign in through the relay, one refused; the first game's places and each guest's achievements reported once, signed with the server key)
+        run: node net/run-elo.mjs --bots 6 --seconds 240
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

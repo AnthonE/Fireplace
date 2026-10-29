@@ -229,7 +229,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (who.done) right(rows - 1, 'IN', C.GREEN);
       else if (who.ball >= 0) {
         const b = view.ball(who.ball).pos;
-        right(rows - 1, `BALL ${Math.round(Math.hypot(b[0] - h.cup[0], b[2] - h.cup[2]))}M TO CUP  ${slot === get(L.CL_SLOT) ? 'YOU' : 'P' + (slot + 1)} ${Math.round(Math.hypot(b[0] - cam[0], b[2] - cam[2]))}M`, C.CYAN);
+        right(rows - 1, `BALL ${Math.round(Math.hypot(b[0] - h.cup[0], b[2] - h.cup[2]))}M TO CUP  ${slot === get(L.CL_SLOT) ? 'YOU' : host.label(slot)} ${Math.round(Math.hypot(b[0] - cam[0], b[2] - cam[2]))}M`, C.CYAN);
       }
     }
     if (!BOT && !WATCH && !locked && st === 2) centre(Math.floor(rows / 2) + 2, 'CLICK TO PLAY', C.WHITE);

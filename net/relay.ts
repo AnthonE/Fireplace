@@ -48,7 +48,9 @@
 // signature is good; the slot is then that wallet's. With --elo-key (the
 // private half of the game's server key, PEM) and --elo-key-id (<slug>/<key
 // id>), Fireplace's build reports each game's result to --elo's ratings, the
-// signed-in players at the places the referee read: a rated match per game.
+// signed-in players at the places the referee read: a rated match per game,
+// and each signed-in wallet's achievements (client/achievements.mjs) to its
+// game stats there.
 //                  [--elo https://elopros.com] [--signin-domains host[,host...]] [--elo-key file --elo-key-id fireplace/<id>]
 // Clients are Chrome (net/run-m0.mjs hosts the bots there): Deno's WebTransport
 // client always binds an IPv6 socket, which hosts without IPv6 refuse. Native
@@ -60,6 +62,7 @@ import { recordLog } from './inbox.mjs';
 import { encodeReplay } from './replay.mjs';
 import { simRefusal } from './sim-check.mjs';
 import * as Elo from './elo.mjs';
+import * as A from '../client/achievements.mjs';
 
 const argv = Deno.args;
 const opt = (k: string, d: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
@@ -146,6 +149,7 @@ type Slot = {
   watch: boolean; // a spectator: no slot (slot -1), no words
   looks?: boolean; // its hello asked for the room's looks (W.HELLO_LOOKS)
   avatars?: boolean; // and for its avatars (W.HELLO_AVATARS)
+  names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
   wallet?: string; // the wallet signed in on this slot
   since?: number; // when it signed in, unix seconds
@@ -189,13 +193,25 @@ const avatarDirty = new Set<number>();
 const avatarTable = () => [...avatars.keys()].filter((p) => avatars[p]).map((p) => [p, avatars[p]] as [number, number]);
 const sendAvatars = (s: Slot, pairs: [number, number][]) => { if (s.avatars && pairs.length) s.ctl.write(W.encodeLooks(pairs, W.T_AVATAR)).catch(() => {}); };
 const setAvatar = (p: number, w: number) => { if (avatars[p] !== w >>> 0) { avatars[p] = w >>> 0; avatarDirty.add(p); } };
-async function readAvatar(s: Slot, wallet: string) {
+// Each signed-in slot's name, as the wallet's face on Elo Pros has it (GET
+// /api/face/<wallet>): drawing only like a look, sent to the sessions that
+// asked (W.HELLO_NAMES), '' for a guest or a wallet with no name.
+const names: string[] = Array(W.NP).fill('');
+const nameDirty = new Set<number>();
+const nameTable = () => names.map((n, p) => [p, n] as [number, string]).filter(([, n]) => n);
+const sendNames = (s: Slot, pairs: [number, string][]) => { if (s.names && pairs.length) s.ctl.write(W.encodeNames(pairs)).catch(() => {}); };
+const setName = (p: number, name: string) => { const n = W.cleanName(name); if (names[p] !== n) { names[p] = n; nameDirty.add(p); } };
+// Both off the wallet's Elo Pros face (GET /api/face/<wallet>), read once as
+// it signs in; the slot may have emptied, or signed in as another wallet,
+// while Elo Pros answered.
+async function readFace(s: Slot, wallet: string) {
   try {
-    const r = await fetch(`${eloOrigin}/api/face/${wallet}`);
+    const r = await fetch(`${eloOrigin}/api/face/${wallet}`, { signal: AbortSignal.timeout(8000) });
     const j = r.ok ? await r.json() : null;
-    const w = j && Number.isInteger(j.avatar) && j.avatar >= 2 ** 31 && j.avatar < 2 ** 32 ? j.avatar : 0;
-    if (!gone(s) && s.wallet === wallet) setAvatar(s.slot, w);
-  } catch { /* no face, no avatar: the look's own body */ }
+    if (gone(s) || s.wallet !== wallet) return;
+    setAvatar(s.slot, j && Number.isInteger(j.avatar) && j.avatar >= 2 ** 31 && j.avatar < 2 ** 32 ? j.avatar : 0);
+    setName(s.slot, typeof j?.name === 'string' ? j.name : '');
+  } catch (e) { log(`face: ${wallet}: ${e}`); /* no face: the look's own body, and P<n> */ }
 }
 // Who was signed in on each slot, and over which ticks (to is the leave's
 // tick): a result reads it at the tick its game ended, which the referee
@@ -249,7 +265,8 @@ const stats = {
   refHashes: [] as [number, string][], reports: {} as Record<number, [number, string][]>,
   replays: [] as string[], watchSessions: 0, watchMax: 0, watchBytes: 0, watchSeconds: 0, watchCompared: 0, watchAgreed: 0,
   resumed: 0, takeover: null as null | Record<string, number>,
-  elo: { signins: 0, signed: 0, refused: 0, unchecked: 0, results: 0, unrated: 0, reported: 0, failed: 0, matches: [] as string[] },
+  elo: { signins: 0, signed: 0, refused: 0, unchecked: 0, results: 0, unrated: 0, reported: 0, failed: 0, matches: [] as string[],
+    achievements: { reports: 0, players: 0, unlocked: 0, failed: 0, seeded: 0, short: 0 } },
 };
 
 // The referee: closed ticks go to it in batches; interval hashes and packed keyframes come back.
@@ -280,12 +297,13 @@ referee.onmessage = (e: MessageEvent) => {
     stats.refLagMax = Math.max(stats.refLagMax, closed - roomStart - m.at);
   }
   // an edge's referee sees the same ends; the room's own relay reports them
-  if (m.results && rated && !edge) for (const r of m.results) reportResult(r);
+  if (m.results && rated && !edge) for (const r of m.results) { reportResult(r); reportAchievements(r); }
 };
 
 // A game's end, as the referee read it, to Elo Pros's ratings: the players
 // signed in on its slots at the tick it ended, at the places it gave them.
-function reportResult(result: { tick: number; game: number; count: number; places: [number, number][] }) {
+type Result = { tick: number; game: number; count: number; places: [number, number][]; got: number[] };
+function reportResult(result: Result) {
   stats.elo.results++;
   const at = roomStart + result.tick;
   const match = Elo.matchOf({ seed: roomSeed, roomStart, result, wallet: (slot: number) => walletAt(slot, at) });
@@ -293,22 +311,72 @@ function reportResult(result: { tick: number; game: number; count: number; place
   stats.elo.matches.push(match.id);
   postReport(match);
 }
-async function postReport(match: object) {
-  const path = `/api/ratings/${eloWho.split('/')[0]}/report`;
-  const body = new TextEncoder().encode(JSON.stringify({ matches: [match] }));
+function postReport(match: { id: string }) {
+  postSigned('ratings', { matches: [match] }, (text) => { stats.elo.reported++; log(`rated: ${text.slice(0, 200)}`); }, () => { stats.elo.failed++; });
+}
+// A signed call to one of --elo's report routes (/api/<what>/<slug>/report),
+// tried again while Elo Pros is down; a refusal is final.
+async function postSigned(what: string, payload: object, ok: (text: string) => void, failed: () => void) {
+  const path = `/api/${what}/${eloWho.split('/')[0]}/report`;
+  const body = new TextEncoder().encode(JSON.stringify(payload));
   for (let k = 0; k < 4; k++) {
     try {
       const headers = await Elo.serverHeaders(eloKey!, eloWho, 'POST', path, body);
       const r = await fetch(eloOrigin + path, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body });
       const text = await r.text();
-      if (r.ok) { stats.elo.reported++; log(`rated: ${text.slice(0, 200)}`); return; }
+      if (r.ok) { ok(text); return; }
       // a refusal says why, and sending it again would get the same answer
-      if (r.status < 500 && r.status !== 429) { stats.elo.failed++; console.error(`relay: ratings refused the match (${r.status}): ${text.slice(0, 300)}`); return; }
-    } catch (e) { log(`ratings: ${e}`); }
+      if (r.status < 500 && r.status !== 429) { failed(); console.error(`relay: ${what} refused the report (${r.status}): ${text.slice(0, 300)}`); return; }
+    } catch (e) { log(`${what}: ${e}`); }
     await new Promise((ok) => setTimeout(ok, 2000 * 2 ** k));
   }
-  stats.elo.failed++;
-  console.error('relay: ratings could not be reached; the match went unreported');
+  failed();
+  console.error(`relay: ${what} could not be reached; the report went unsent`);
+}
+
+// Achievements on Elo Pros: each signed-in wallet's tally, rebuilt at its
+// first game here from what Elo Pros holds for it (its game stats), then kept
+// for the relay's life, one game at a time per wallet. A tally Elo Pros
+// couldn't give back counts that one game from nothing (it opens fewer, never
+// a wrong one) and is asked for again at the wallet's next game. One game's
+// reports go in one signed call.
+type Tally = ReturnType<typeof A.emptyTally> & { short?: boolean };
+const TALLIES = 4096;
+const tallies = new Map<string, Promise<Tally>>();
+async function seedTally(wallet: string): Promise<Tally> {
+  try {
+    const r = await fetch(`${eloOrigin}/api/gamestats/${eloWho.split('/')[0]}/of/${wallet}`, { signal: AbortSignal.timeout(8000) });
+    // 404: the game declares no stats yet, or none for this wallet: a first game
+    if (r.ok || r.status === 404) { stats.elo.achievements.seeded++; return A.tallyOfStats(r.ok ? await r.json() : null); }
+    log(`gamestats: ${wallet}'s stats answered ${r.status}`);
+  } catch (e) { log(`gamestats: ${wallet}'s stats: ${e}`); }
+  stats.elo.achievements.short++;
+  return { ...A.emptyTally(), short: true };
+}
+function reportAchievements(result: Result) {
+  const at = roomStart + result.tick;
+  const steps = Elo.walletResults({ seed: roomSeed, roomStart, result, wallet: (slot: number) => walletAt(slot, at) }).map(({ wallet, r }) => {
+    const step = (tallies.get(wallet) ?? seedTally(wallet)).then((t) => {
+      const x = A.record(t, r);
+      return { wallet, t: { ...x.tally, short: t.short } as Tally, rep: A.statsReport(wallet, t, x.tally, r, x.opened) };
+    });
+    const kept = step.then((s) => s.t);
+    tallies.delete(wallet);
+    tallies.set(wallet, kept);
+    if (tallies.size > TALLIES) tallies.delete(tallies.keys().next().value!);
+    step.then((s) => { if (s.t.short && tallies.get(wallet) === kept) tallies.delete(wallet); });
+    return step;
+  });
+  if (!steps.length) return;
+  Promise.all(steps).then((done) => {
+    const reports = done.map((s) => s.rep).filter(Boolean);
+    if (!reports.length) return;
+    const unlocked = reports.reduce((n, x) => n + x!.unlock.length, 0);
+    postSigned('gamestats', { reports }, () => {
+      Object.assign(stats.elo.achievements, { reports: stats.elo.achievements.reports + 1, players: stats.elo.achievements.players + reports.length, unlocked: stats.elo.achievements.unlocked + unlocked });
+      log(`achievements: ${reports.length} players, ${unlocked} unlocked`);
+    }, () => { stats.elo.achievements.failed++; });
+  });
 }
 
 // A player's sign-in: the message their wallet signed, made on one of our
@@ -338,9 +406,11 @@ async function signIn(s: Slot, message: string, signature: string) {
     s.wallet = wallet;
     s.since = Math.floor(Date.now() / 1000);
     seats.push({ slot: s.slot, wallet, from: closed + 1, to: Infinity });
+    setName(s.slot, '');
+    setAvatar(s.slot, 0);
     if (seats.length > SEATS) seats.splice(0, seats.length - SEATS);
     stats.elo.signed++;
-    readAvatar(s, wallet);
+    readFace(s, wallet);
   } else if (status === Elo.SIGNIN.UNCHECKED) stats.elo.unchecked++;
   else stats.elo.refused++;
   log(`slot ${s.slot} sign-in: ${status}${wallet ? ' ' + wallet : ''}`);
@@ -542,7 +612,7 @@ function closeTick(T: number, now: number) {
   for (let p = 0; p < W.NP; p++) {
     const s = slots[p];
     if (!s || T < s.joinTick) continue;
-    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setAvatar(p, 0); continue; }
+    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setAvatar(p, 0); setName(p, ''); continue; }
     if (s.leaveTick === Infinity && now - Math.max(s.lastRecv, stallEnd) > SILENT_MS) {
       stats.leaves.silent = (stats.leaves.silent || 0) + 1;
       stats.leaveAt.push(Number(((now - E) / 1000).toFixed(2)));
@@ -675,7 +745,7 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
@@ -690,6 +760,7 @@ async function admit(d: Door) {
   log(`${watch ? 'a spectator' : `slot ${p}`} joins at ${joinTick}, room ${roomStart}${d.token ? ' (native)' : ''}`);
   sendLooks(s, lookTable());
   sendAvatars(s, avatarTable());
+  sendNames(s, nameTable());
   if (hello!.signin && !watch) {
     if (signinDomains.length) { s.nonce = Elo.newNonce(); d.sw.write(W.encodeSigninNonce(s.nonce)).catch(() => {}); }
     else d.sw.write(W.encodeSigned(Elo.SIGNIN.OFF)).catch(() => {});
@@ -1031,12 +1102,18 @@ function writeOnline() {
   const online = slots.filter((s) => s && !s.ghost && s.wallet).map((s) => ({ wallet: s!.wallet, since: s!.since }));
   return writeWhole(onlinePath, { at: Math.floor(Date.now() / 1000), online }, 'online');
 }
+// the writes in flight, so finish() can let them land before it removes the files
+const writing = new Set<Promise<void>>();
 function writeWhole(path: string, doc: unknown, what: string) {
   const tmp = `${path}.tmp`;
-  return Deno.writeTextFile(tmp, JSON.stringify(doc) + '\n').then(() => Deno.rename(tmp, path)).catch((e) => console.error(`relay: ${what}: ${e}`));
+  const w = Deno.writeTextFile(tmp, JSON.stringify(doc) + '\n').then(() => Deno.rename(tmp, path)).catch((e) => console.error(`relay: ${what}: ${e}`));
+  writing.add(w);
+  w.finally(() => writing.delete(w));
+  return w;
 }
-if (statusPath) { writeStatus(); setInterval(writeStatus, STATUS_MS); }
-if (onlinePath) { writeOnline(); setInterval(writeOnline, STATUS_MS); }
+const fileTimers: ReturnType<typeof setInterval>[] = [];
+if (statusPath) { writeStatus(); fileTimers.push(setInterval(writeStatus, STATUS_MS)); }
+if (onlinePath) { writeOnline(); fileTimers.push(setInterval(writeOnline, STATUS_MS)); }
 setInterval(() => {
   if (lookDirty.size) {
     const pairs = [...lookDirty].map((p) => [p, looks[p]] as [number, number]);
@@ -1048,6 +1125,12 @@ setInterval(() => {
     avatarDirty.clear();
     for (const s of everyone()) sendAvatars(s, pairs);
   }
+}, LOOKS_MS);
+setInterval(() => {
+  if (!nameDirty.size) return;
+  const pairs = [...nameDirty].map((p) => [p, names[p]] as [number, string]);
+  nameDirty.clear();
+  for (const s of everyone()) sendNames(s, pairs);
 }, LOOKS_MS);
 setInterval(() => {
   if (edge || roomStart < 0) return;
@@ -1076,6 +1159,9 @@ async function finish(code = 0) {
   const text = JSON.stringify(summary());
   if (summaryPath) await Deno.writeTextFile(summaryPath, text + '\n');
   else console.log(text);
+  // a write landing after the remove would put the file back: none starts now, and those under way finish first
+  for (const t of fileTimers) clearInterval(t);
+  await Promise.all(writing);
   if (statusPath) await Deno.remove(statusPath).catch(() => {});
   if (onlinePath) await Deno.remove(onlinePath).catch(() => {});
   Deno.exit(code);

@@ -62,6 +62,70 @@ export function record(tally, r, now = Date.now()) {
 
 export const gotSet = (t) => new Set(Object.keys(t.got));
 
+// Elo Pros keeps the same achievements per wallet (scry-forge
+// meter/gamestats.py): the relay runs record() for each signed-in slot, on a
+// tally rebuilt from what Elo Pros holds for that wallet, and reports what a
+// game added. The stats are a tally's fields as Elo Pros combines them (a sum
+// per game, the extremes kept), so the tally comes back from them whole.
+// Every test above only ever turns true as a tally grows, so a tally that
+// came back short (Elo Pros not reached) opens fewer, never a wrong one.
+export const GAME_KEYS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // by G_*; net/elo.mjs LADDERS
+export const STORE_ID = (id) => id.toUpperCase();
+const PROGRESS = { bag: ['mallows', 25], campfire: ['mallows', 100], regular: ['games', 25] };
+const sentence = (s) => (s[0] + s.slice(1).toLowerCase()).replace(/\bdogfight\b/g, 'Dogfight');
+
+// elo.json's stats block (tools/elo.mjs writes it from this list).
+export function eloStats() {
+  const perGame = (k, what) => GAME_KEYS.map((g, i) => ({ id: `${k}.${g}`, name: `${what} ${sentence(L.GAMES[i])}`.slice(0, 48), agg: 'sum' }));
+  return {
+    stats: [
+      { id: 'games', name: 'Games played', agg: 'sum' },
+      { id: 'mallows', name: 'Marshmallows', agg: 'sum' },
+      { id: 'wins', name: 'Wins', agg: 'sum' },
+      { id: 'streak', name: 'Wins in a row now', agg: 'latest' },
+      { id: 'best_streak', name: 'Most wins in a row', agg: 'max' },
+      { id: 'place.1', name: 'Firsts', agg: 'sum' },
+      { id: 'place.2', name: 'Seconds', agg: 'sum' },
+      { id: 'place.3', name: 'Thirds', agg: 'sum' },
+      { id: 'crowd', name: 'Most in one game', agg: 'max' },
+      ...perGame('played', 'Played'), ...perGame('won', 'Won'),
+    ],
+    achievements: ACHIEVEMENTS.map((a) => ({
+      id: STORE_ID(a.id), name: sentence(a.name), desc: sentence(a.about),
+      ...(PROGRESS[a.id] ? { progress: { stat: PROGRESS[a.id][0], max: PROGRESS[a.id][1] } } : {}),
+    })),
+    boards: [{ id: 'mallows', name: 'Marshmallows', sort: 'desc', keep: 'best' }],
+  };
+}
+
+// A tally from Elo Pros's answer for one wallet (GET /api/gamestats/<slug>/of/<wallet>).
+export function tallyOfStats(answer) {
+  const t = emptyTally();
+  const v = new Map((answer?.stats || []).map((s) => [s.id, Number.isSafeInteger(s.value) ? s.value : 0]));
+  const n = (id) => Math.max(0, v.get(id) || 0);
+  t.games = n('games'); t.mallows = n('mallows'); t.wins = n('wins');
+  t.streak = n('streak'); t.best = Math.max(n('best_streak'), t.streak); t.crowd = n('crowd');
+  for (let p = 1; p <= 3; p++) if (n(`place.${p}`)) t.places |= 1 << (p - 1);
+  GAME_KEYS.forEach((g, i) => { if (n(`played.${g}`)) t.played |= 1 << i; if (n(`won.${g}`)) t.won |= 1 << i; });
+  const ids = new Map(ACHIEVEMENTS.map((a) => [STORE_ID(a.id), a.id]));
+  for (const a of answer?.achievements || []) if (a.earned && ids.has(a.id)) t.got[ids.get(a.id)] = a.unlocked_at || 0;
+  return t;
+}
+
+// What one counted result adds, as a report for Elo Pros: the sums by how
+// much, the kept ones as they now stand, the unlocks record() opened, and the
+// marshmallow board's score. Null when the result changed nothing.
+export function statsReport(wallet, before, after, r, opened) {
+  if (after === before) return null;
+  const stats = { games: 1, streak: after.streak, best_streak: after.best, crowd: r.field };
+  if (r.got) stats.mallows = r.got;
+  if (r.place === 1) stats.wins = 1;
+  if (r.place <= 3) stats[`place.${r.place}`] = 1;
+  const g = GAME_KEYS[r.game];
+  if (g) { stats[`played.${g}`] = 1; if (r.place === 1) stats[`won.${g}`] = 1; }
+  return { wallet, stats, unlock: opened.map(STORE_ID), scores: { mallows: after.mallows } };
+}
+
 const KEY = 'fireplace.achievements';
 export function loadTally() {
   try {
