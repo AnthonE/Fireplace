@@ -1,16 +1,30 @@
-// WebGPU renderer, three passes over one small canvas scaled up with crisp
-// pixels: the terrain ray-marched per pixel (voxel space, pitch by shearing)
-// writing depth, bodies as depth-tested splats uploaded straight from the
-// sim's shared memory, then a HUD in a 3x5 font. Nothing here is hashed, so
-// any math goes.
+// Golf's WebGPU renderer, three passes: the terrain ray-marched per pixel
+// (voxel space, pitch by shearing) and drawn low-poly, flat triangles in
+// clean colours under a blue sky with clouds, writing depth; then bodies as
+// depth-tested splats uploaded straight from the sim's shared memory (balls,
+// the golfers as the arena's blocky figures, and trees of boxes in the rough
+// with their shadows); then a HUD on a 320 x 200 grid scaled to the screen.
+// Nothing here is hashed, so any math goes.
 import * as L from '../src/layout.mjs';
-import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
+import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
+import { BLOCK_RAY_WGSL } from './rider.mjs';
+import { BODIES } from './looks.mjs';
+import { PALETTE as AV_PALETTE } from './avatar.mjs';
 
-export const COLS = 80; // HUD cells of 4 x 6 px
+export const COLS = 80; // HUD cells of 4 x 6 HUD px
 const FAR = 900;
 const MAX_FLASH = 64;
+const MAX_TREE = 4096;
 const NO_TINTS = new Uint32Array(L.NPLAYER); // a page with no looks: every seat its own colour
+const NO_LOOKS = new Uint32Array(L.NPLAYER).fill(0x10000); // nor bodies: everyone blocky
+const NO_AVATARS = new Uint32Array(L.NPLAYER); // nor avatars
+// a body's skin and face (client/looks.mjs BODIES) for the golfers' figures
+const SKINS = BODIES.map((b) => b.skin || [1.0, 0.8, 0.66]);
+const FACES = BODIES.map((b) => b.face || 1);
+const vec3 = (c) => `vec3f(${c.map((v) => v.toFixed(3)).join(', ')})`;
+// the trees' leaves: mostly greens, now and then an autumn one
+const LEAVES = [[0.3, 0.66, 0.22], [0.36, 0.72, 0.2], [0.24, 0.56, 0.2], [0.42, 0.7, 0.24], [0.2, 0.5, 0.26], [1.0, 0.68, 0.2], [0.98, 0.44, 0.22]];
 // the third array (vz) ends at 6 x BALL_CAP floats; flags and owners follow
 const BALL_WORDS = 6 * L.BALL_CAP + L.BALL_CAP / 4 + L.BALL_CAP / 2;
 
@@ -23,6 +37,7 @@ struct U {
   hole: vec4f,     // hole direction x, z, highest ground, flash count
   me: vec4u,       // nballs, my ball (or 0xffffffff), hud rows, sunk-ball count
   pred: vec4f,     // extrapolate my projectiles (s): they come from the prediction, at its own clock; the net graph shown (1)
+  hudv: vec4f,     // the HUD's scale (screen px a HUD px), the text block's left (px), trees
 };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var hmap: texture_2d<f32>;
@@ -34,10 +49,14 @@ struct U {
 @group(0) @binding(7) var<storage, read> hud: array<u32>;
 @group(0) @binding(8) var<storage, read> font: array<u32>;
 @group(0) @binding(9) var<storage, read> graph: array<vec4f>;
+@group(0) @binding(10) var<storage, read> trees: array<vec4f>; // two a tree: x, ground y, z, size | turn, style, leaf colour (rgba8 bits), 0
 
-const SKY_LO = vec3f(0.62, 0.66, 0.74);
-const SKY_HI = vec3f(0.16, 0.22, 0.42);
-const SUN = vec3f(0.48, 0.74, 0.47);
+const SKY_HOR = vec3f(0.74, 0.87, 0.98);
+const SKY_TOP = vec3f(0.22, 0.5, 0.92);
+const SUN = vec3f(0.55, 0.66, 0.5);
+const SUNC = vec3f(1.0, 0.96, 0.86);
+const AMB = vec3f(0.46, 0.52, 0.62);
+const FOG = 700.0;
 
 fn hgt(x: f32, z: f32) -> f32 {
   let g = clamp(vec2f(x, z) * 0.5, vec2f(0.0), vec2f(510.99));
@@ -51,40 +70,74 @@ fn hgt(x: f32, z: f32) -> f32 {
 }
 
 fn hash2(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
-
-fn surfColor(s: u32, w: vec2f) -> vec3f {
-  let n = hash2(floor(w * 2.0));
-  let stripe = select(0.94, 1.06, (i32(floor(dot(w, vec2f(-u.hole.y, u.hole.x)) / 5.0)) & 1) == 0);
-  switch s {
-    case 0u: { return vec3f(0.33, 0.6, 0.2) * stripe * (0.96 + 0.08 * n); }
-    case 1u: { return vec3f(0.2, 0.4, 0.13) * (0.85 + 0.3 * n); }
-    case 2u: { return vec3f(0.86, 0.77, 0.52) * (0.92 + 0.12 * n); }
-    default: { return vec3f(0.4, 0.74, 0.3) * select(0.97, 1.03, ((i32(floor(w.x)) + i32(floor(w.y))) & 1) == 0); }
-  }
+fn vnoise(p: vec2f) -> f32 {
+  let i = floor(p);
+  let f = p - i;
+  let k = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), k.x), mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), k.x), k.y);
 }
 
-// surface colours blended over the four samples around w, so edges are soft
-fn ground(w: vec2f) -> vec3f {
+// The ground drawn low-poly: flat triangles on a 4 m grid, each lit by its
+// own normal and given its own small tint (w), over the 2 m heights the
+// march (and the sim) follow, so the outline is the course's own.
+fn facet(w: vec2f) -> vec4f {
+  let g = w / 4.0;
+  let c = floor(g);
+  let f = g - c;
+  let p = c * 4.0;
+  let h00 = hgt(p.x, p.y);
+  let h10 = hgt(p.x + 4.0, p.y);
+  let h01 = hgt(p.x, p.y + 4.0);
+  let h11 = hgt(p.x + 4.0, p.y + 4.0);
+  if (f.x + f.y < 1.0) { return vec4f(normalize(vec3f(h00 - h10, 4.0, h00 - h01)), hash2(c * 2.0)); }
+  return vec4f(normalize(vec3f(h01 - h11, 4.0, h10 - h11)), hash2(c * 2.0 + 1.0));
+}
+
+// The surface at w with crisp, smooth edges: of the four surfaces around it,
+// the one with the most bilinear weight (x), and how sure it is (y, 0.25..1).
+fn surfAt(w: vec2f) -> vec2f {
   let g = clamp(w * 0.5 - 0.5, vec2f(0.0), vec2f(510.0));
   let i = vec2i(g);
   let f = g - vec2f(i);
-  let a = surfColor(textureLoad(smap, i, 0).r, w);
-  let b = surfColor(textureLoad(smap, i + vec2i(1, 0), 0).r, w);
-  let c = surfColor(textureLoad(smap, i + vec2i(0, 1), 0).r, w);
-  let d = surfColor(textureLoad(smap, i + vec2i(1, 1), 0).r, w);
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  let s = array<u32, 4>(textureLoad(smap, i, 0).r, textureLoad(smap, i + vec2i(1, 0), 0).r, textureLoad(smap, i + vec2i(0, 1), 0).r, textureLoad(smap, i + vec2i(1, 1), 0).r);
+  let k = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  var best = s[0];
+  var bw = 0.0;
+  for (var a = 0; a < 4; a++) {
+    var sum = 0.0;
+    for (var b = 0; b < 4; b++) { if (s[b] == s[a]) { sum += k[b]; } }
+    if (sum > bw) { bw = sum; best = s[a]; }
+  }
+  return vec2f(f32(best), bw);
 }
 
-fn sky(sy: f32) -> vec3f {
-  let t = clamp((u.view.z - sy) / u.screen.y * 1.6, 0.0, 1.0);
-  return mix(SKY_LO, SKY_HI, t);
+// fairway mown in stripes across the hole, the rough a tint a facet, sand with a lip, the green in a checker
+fn surfColor(sw: vec2f, w: vec2f, tint: f32) -> vec3f {
+  let stripe = select(0.93, 1.07, (i32(floor(dot(w, vec2f(-u.hole.y, u.hole.x)) / 6.0)) & 1) == 0);
+  switch u32(sw.x) {
+    case 0u: { return vec3f(0.36, 0.74, 0.24) * stripe; }
+    case 1u: { return vec3f(0.22, 0.54, 0.17) * (0.9 + 0.18 * tint); }
+    case 2u: { return select(vec3f(0.98, 0.88, 0.6), vec3f(0.86, 0.74, 0.48), sw.y < 0.62); }
+    default: { return vec3f(0.44, 0.84, 0.32) * select(0.97, 1.03, ((i32(floor(w.x / 3.0)) + i32(floor(w.y / 3.0))) & 1) == 0); }
+  }
 }
 
-fn dither(c: vec3f, p: vec2f) -> vec3f {
-  var m = array<f32, 4>(0.0, 0.5, 0.75, 0.25);
-  let k = m[(u32(p.x) & 1u) + 2u * (u32(p.y) & 1u)];
-  return floor(c * 31.0 + k) / 31.0;
+fn sky(d: vec3f) -> vec3f {
+  var c = mix(SKY_HOR, SKY_TOP, pow(clamp(d.y, 0.0, 1.0), 0.6));
+  let sd = max(dot(d, normalize(SUN)), 0.0);
+  c += SUNC * (pow(sd, 8.0) * 0.12 + smoothstep(0.9993, 0.9996, sd) * 2.0);
+  // puffy clouds on a layer 300 m up, white on top and grey-blue under
+  if (d.y > 0.01) {
+    let q = u.cam.xz + d.xz * ((300.0 - u.cam.y) / d.y) + vec2f(u.view.w * 2.0, 0.0);
+    let n = vnoise(q / 160.0) * 0.6 + vnoise(q / 55.0) * 0.28 + vnoise(q / 19.0) * 0.12;
+    let cl = smoothstep(0.52, 0.62, n) * smoothstep(0.0, 0.12, d.y);
+    c = mix(c, mix(vec3f(0.78, 0.84, 0.94), vec3f(1.0), smoothstep(0.55, 0.75, n)), cl * 0.92);
+  }
+  return c;
 }
+
+// far things go the colour of the horizon
+fn fogged(c: vec3f, z: f32) -> vec3f { return mix(c, SKY_HOR, 1.0 - exp(-z / FOG)); }
 
 struct VOut { @builtin(position) pos: vec4f };
 @vertex fn vs_full(@builtin(vertex_index) i: u32) -> VOut {
@@ -104,34 +157,39 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   var z = 0.3;
   var prev = 0.0;
   var hit = false;
+  // the steps grow with distance, and shrink as the screen's pixels do
+  let k = 0.012 * 240.0 / u.cam.w;
   loop {
     let w = u.cam.xz + dir * z;
     let ry = u.cam.y + rise * z;
     if (ry <= hgt(w.x, w.y)) { hit = true; break; }
     if (rise >= 0.0 && ry > u.hole.z) { break; }
     prev = z;
-    z += 0.04 + z * 0.012;
+    z += 0.04 + z * k;
     if (z > u.screen.z) { break; }
   }
   if (!hit) {
-    var c = sky(p.y);
-    let sd = dot(normalize(vec3f(dir.x, rise, dir.y)), SUN);
-    c += vec3f(1.0, 0.9, 0.7) * pow(max(sd, 0.0), 300.0);
-    o.color = vec4f(dither(c, p.xy), 1.0);
+    o.color = vec4f(sky(normalize(vec3f(dir.x, rise, dir.y))), 1.0);
     o.depth = 1.0;
     return o;
   }
   var a = prev;
   var b = z;
-  for (var k = 0; k < 6; k++) {
+  for (var i = 0; i < 6; i++) {
     let m = 0.5 * (a + b);
     let w = u.cam.xz + dir * m;
     if (u.cam.y + rise * m <= hgt(w.x, w.y)) { b = m; } else { a = m; }
   }
   z = b;
   let w = u.cam.xz + dir * z;
-  let n = normalize(vec3f(hgt(w.x - 1.0, w.y) - hgt(w.x + 1.0, w.y), 2.0, hgt(w.x, w.y - 1.0) - hgt(w.x, w.y + 1.0)));
-  var c = ground(w) * (0.45 + 0.65 * max(dot(n, SUN), 0.0));
+  let fc = facet(w);
+  let n = fc.xyz;
+  var c = surfColor(surfAt(w), w, fc.w);
+  // steep ground is rock, faceted grey
+  c = select(c, vec3f(0.55, 0.53, 0.5) * (0.88 + 0.2 * fc.w), n.y < 0.72);
+  // close up, the grass has a soft grain, gone by 40 m
+  c *= 1.0 + (vnoise(w * 2.5) + vnoise(w * 0.9) - 1.0) * 0.07 * (1.0 - smoothstep(10.0, 40.0, z));
+  c *= AMB * (0.8 + 0.2 * n.y) + SUNC * 0.78 * max(dot(n, normalize(SUN)), 0.0);
   // the slipgate: a dark swirl in the green with a lit rim
   let dc = distance(w, u.cup.xz);
   if (dc < 0.62) {
@@ -140,9 +198,7 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     c = mix(vec3f(0.08, 0.02, 0.12), vec3f(0.45, 0.15, 0.7), swirl * (1.0 - dc / 0.62));
     if (dc > 0.5) { c = vec3f(0.85, 0.75, 1.0); }
   }
-  let fog = 1.0 - exp(-z / 380.0);
-  c = mix(c, SKY_LO, fog);
-  o.color = vec4f(dither(c, p.xy), 1.0);
+  o.color = vec4f(fogged(c, z), 1.0);
   o.depth = z / u.screen.z;
   return o;
 }
@@ -153,7 +209,103 @@ struct SOut {
   @location(0) uv: vec2f,
   @location(1) color: vec4f,
   @location(2) @interpolate(flat) kind: u32,
+  @location(3) @interpolate(flat) feet: vec3f, // a golfer's or a tree's: where it stands
+  @location(4) @interpolate(flat) pose: vec4f, // a golfer's heading, aim (rad, up), stride's phase and length (0..1); a tree's turn, size, style
+  @location(5) @interpolate(flat) skin: vec4f, // a golfer's skin, and its face (client/rider.mjs PART)
+  @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
 };
+${BLOCK_RAY_WGSL}
+const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
+const FACES = array<u32, ${FACES.length}>(${FACES.map((f) => `${f}u`).join(', ')});
+const AV_PALETTE = array<vec3f, 32>(${AV_PALETTE.map(vec3).join(', ')});
+fn avc(a: u32, k: u32) -> vec3f { return AV_PALETTE[(a >> (5u * k)) & 31u]; }
+
+// A golfer as a blocky figure, the arena's fighter (client/arena-render.mjs)
+// with the launcher in its hands: legs stepping with its speed, arms out
+// along its aim, a head with a face. The nearest of its boxes on the ray.
+fn figure(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
+  let S = 1.35;
+  let yaw = s.pose.x;
+  let f = vec3f(cos(yaw), 0.0, sin(yaw));
+  let side = vec3f(-f.z, 0.0, f.x);
+  let up = vec3f(0.0, 1.0, 0.0);
+  let c = s.color.rgb;
+  let av = select(0u, s.av, (s.av >> 31u) == 1u);
+  var best: Block;
+  best.hit = false;
+  best.t = 1e9;
+  for (var i = 0u; i < 7u; i++) {
+    let k = select(-1.0, 1.0, (i & 1u) == 1u);
+    var ctr = vec3f(0.0);
+    var h = vec3f(0.12, 0.25, 0.12) * S;
+    var pitch = 0.0;
+    var splay = 0.0;
+    var col = c;
+    var part = 0u;
+    if (i < 2u) { // a leg
+      pitch = sin(s.pose.z) * 0.7 * s.pose.w * k;
+      let ay = up * cos(pitch) - f * sin(pitch);
+      ctr = s.feet + up * 0.5 * S + side * 0.125 * S * k - ay * 0.25 * S;
+      col = select(c * 0.5, avc(av, select(4u, 5u, k > 0.0)), av != 0u);
+    } else if (i < 4u) { // an arm
+      pitch = 1.5 + s.pose.y;
+      splay = -0.22 * k;
+      let u0 = up * cos(pitch) - f * sin(pitch);
+      let ay = u0 * cos(splay) - side * sin(splay);
+      ctr = s.feet + up * 0.92 * S + side * 0.375 * S * k - ay * 0.17 * S;
+      col = select(s.skin.rgb, avc(av, select(2u, 3u, k > 0.0)), av != 0u);
+    } else if (i == 4u) { // the torso
+      ctr = s.feet + up * 0.75 * S;
+      h = vec3f(0.25, 0.25, 0.125) * S;
+      if (av != 0u) { col = avc(av, 1u); }
+    } else if (i == 5u) { // the head
+      ctr = s.feet + up * 1.1825 * S;
+      h = vec3f(0.16, 0.15, 0.15) * 1.15 * S;
+      col = select(s.skin.rgb, avc(av, 0u), av != 0u);
+      part = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
+    } else { // the launcher, on the shoulder along the aim
+      let g = f * cos(s.pose.y) + up * sin(s.pose.y);
+      ctr = s.feet + up * 0.95 * S + g * 0.5 * S + side * 0.08 * S;
+      h = vec3f(0.08, 0.08, 0.42) * S;
+      pitch = s.pose.y;
+      col = vec3f(0.3, 0.42, 0.22);
+      part = 3u;
+    }
+    let b = blockRay(e, d, fwd, u.cam.w, ctr, h, yaw, pitch, part + 16u * u32(round(splay / 0.05) + 64.0), col);
+    if (b.hit && b.t < best.t) { best = b; }
+  }
+  return best;
+}
+
+// A tree in the rough, of boxes: a trunk under a round top of two (style 0,
+// most) or a pine of four tiers (style 1). Size scales it, about 7 m tall at 1.
+fn tree(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
+  let k = s.pose.y;
+  let pine = s.pose.z > 0.5;
+  let leaf = s.color.rgb;
+  var best: Block;
+  best.hit = false;
+  best.t = 1e9;
+  for (var i = 0u; i < 5u; i++) {
+    var ctr = vec3f(0.0, 0.0, 0.0);
+    var h = vec3f(0.0);
+    var col = leaf;
+    if (i == 0u) { ctr.y = select(1.6, 1.3, pine); h = vec3f(0.32, ctr.y, 0.32); col = vec3f(0.46, 0.31, 0.18); }
+    else if (!pine) {
+      if (i == 1u) { ctr.y = 4.0; h = vec3f(1.8, 1.35, 1.8); }
+      else if (i == 2u) { ctr.y = 5.7; h = vec3f(1.15, 0.7, 1.15); col = leaf * 1.08; }
+      else { continue; }
+    } else {
+      let t = f32(i - 1u);
+      ctr.y = 2.8 + t * 1.15;
+      h = vec3f(vec2f(1.9 - t * 0.45), 0.58).xzy;
+      col = leaf * (0.92 + 0.05 * t);
+    }
+    let b = blockRay(e, d, fwd, u.cam.w, s.feet + ctr * k, h * k, s.pose.x, 0.0, 16u * 64u, col);
+    if (b.hit && b.t < best.t) { best = b; }
+  }
+  return best;
+}
 
 fn pf(base: u32, off: u32) -> f32 { return bitcast<f32>(players[(base + off) / 4u]); }
 fn jf(base: u32, off: u32) -> f32 { return bitcast<f32>(proj[(base + off) / 4u]); }
@@ -176,10 +328,15 @@ fn project(q: vec3f) -> vec4f {
   let s = u.cam.w / max(zf, 0.01);
   return vec4f(u.screen.x * 0.5 + xr * s, u.view.z - r.y * s, zf, s);
 }
+// this pixel's ray, unit, and the camera's forward axis (level: the pitch is a shear)
+fn pixelRay(px: vec2f) -> vec3f {
+  let fwd = vec3f(u.view.x, 0.0, u.view.y);
+  return normalize(fwd + vec3f(-u.view.y, 0.0, u.view.x) * ((px.x - u.screen.x * 0.5) / u.cam.w) + vec3f(0.0, (u.view.z - px.y) / u.cam.w, 0.0));
+}
 
 var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, -1), vec2f(-1, 1), vec2f(-1, 1), vec2f(1, -1), vec2f(1, 1));
 
-// instance ranges: balls [0, BALL_CAP), players, projectiles, flashes, markers
+// instance ranges: balls [0, BALL_CAP), players, projectiles, flashes, markers, trees, then the trees' shadows
 @vertex fn vs_splat(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> SOut {
   var o: SOut;
   o.pos = vec4f(2.0, 2.0, 2.0, 1.0); // off screen unless set below
@@ -206,10 +363,19 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   } else if (i < ${L.BALL_CAP + L.NPLAYER}u) {
     let p = i - ${L.BALL_CAP}u;
     let b = p * ${L.PSIZE}u;
-    if ((players[(b + ${L.P_FL}u) / 4u] & ${L.PF_LIVE}u) == 0u || p == u32(u.cup.w)) { return o; }
+    let fl = players[(b + ${L.P_FL}u) / 4u] & 255u;
+    if ((fl & ${L.PF_LIVE}u) == 0u || p == u32(u.cup.w)) { return o; }
     let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
-    center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.9, pf(b, ${L.P_PZ}u)) + vel * dt;
-    half = vec2f(0.45, 0.9);
+    center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92, pf(b, ${L.P_PZ}u)) + vel * dt;
+    half = vec2f(1.05, 1.0);
+    // its figure: heading and aim from its input word (src/view.mjs), legs stepping as fast as it goes, its look's body
+    let w = players[(b + ${L.P_IN}u) / 4u];
+    let speed = length(vel.xz);
+    o.feet = center - vec3f(0.0, 0.92, 0.0);
+    o.pose = vec4f(f32(w & 0x3fffu) / 16384.0 * 6.2832, (f32((w >> 14u) & 0x3ffu) - 512.0) / 1024.0 * 3.1416, u.view.w * (3.0 + speed * 0.9), min(speed / 6.0, 1.0));
+    let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + p] >> 16u) & 255u, ${BODIES.length - 1}u);
+    o.skin = vec4f(SKINS[body], f32(FACES[body]));
+    o.av = players[${L.NPLAYER * L.PSIZE / 4 + 2 * L.NPLAYER}u + p];
     color = vec4f(tintOf(p, slotColor(p)), 1.0);
     kind = 1u;
     minpx = 1.0;
@@ -233,7 +399,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     half = vec2f(info.y * (0.35 + 0.65 * grow));
     color = vec4f(select(vec3f(1.0, 0.65, 0.2), vec3f(0.75, 0.4, 1.0), info.z > 1.5), 1.0 - grow);
     kind = 3u;
-  } else {
+  } else if (i < ${L.BALL_CAP + L.NPLAYER + L.NPROJ + MAX_FLASH + 2}u) {
     // markers: 0 the flag over the cup, 1 the arrow over my ball
     let m = i - ${L.BALL_CAP + L.NPLAYER + L.NPROJ + MAX_FLASH}u;
     if (m == 0u) {
@@ -252,11 +418,35 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
       kind = 5u;
       minpx = 2.5;
     }
+  } else {
+    // a tree, or (the second run of instances) its shadow on the ground
+    let base = ${L.BALL_CAP + L.NPLAYER + L.NPROJ + MAX_FLASH + 2}u;
+    let shadow = i - base >= ${MAX_TREE}u;
+    let t = (i - base) % ${MAX_TREE}u;
+    if (t >= u32(u.hudv.z)) { return o; }
+    let a = trees[2u * t];      // x, ground y, z, size
+    let b = trees[2u * t + 1u]; // turn, style, leaf colour (r, g)
+    o.feet = a.xyz;
+    o.pose = vec4f(b.x, a.w, b.y, 0.0);
+    color = vec4f(unpack4x8unorm(bitcast<u32>(b.z)).rgb, 1.0);
+    if (shadow) {
+      // where the top's shadow falls: away from the sun, as far as the top is high
+      let sd = normalize(SUN);
+      center = a.xyz - vec3f(sd.x, 0.0, sd.z) / sd.y * 3.6 * a.w + vec3f(0.0, 0.3, 0.0);
+      o.feet = center;
+      half = vec2f(2.6 * a.w);
+      kind = 7u;
+    } else {
+      center = a.xyz + vec3f(0.0, 3.4 * a.w, 0.0);
+      half = vec2f(4.4 * a.w);
+      kind = 6u;
+    }
+    minpx = 0.0;
   }
   let pr = project(center);
   if (pr.z < 0.3 || pr.z > u.screen.z || (kind == 5u && pr.z < 4.0)) { return o; }
-  var px = max(half * pr.w, vec2f(minpx, minpx * half.y / half.x));
-  if (kind == 5u) { px = min(px, vec2f(4.0)); } // the arrow over my ball stays small
+  var px = max(half * pr.w, vec2f(minpx, minpx * half.y / max(half.x, 1e-3)));
+  if (kind == 5u) { px = min(px, vec2f(4.0 * u.hudv.x)); } // the arrow over my ball stays small
   let s = vec2f(pr.x, pr.y) + corner * px;
   o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, pr.z / u.screen.z, 1.0);
   o.uv = corner;
@@ -265,38 +455,54 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   return o;
 }
 
-@fragment fn fs_splat(s: SOut) -> @location(0) vec4f {
+// a box's pixel lit as the ground is, with its edges inked
+fn shadeBlock(b: Block) -> vec3f {
+  let lit = AMB * (0.85 + 0.15 * b.n.y) + SUNC * 0.75 * max(dot(b.n, normalize(SUN)), 0.0);
+  return (b.alb * lit + b.glow) * mix(1.0, b.ink, 0.6);
+}
+
+struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
+@fragment fn fs_splat(s: SOut) -> FOut {
+  var o: FOut;
+  o.depth = s.pos.z;
+  if (s.kind == 1u || s.kind == 6u) {
+    let fwd = vec3f(u.view.x, 0.0, u.view.y);
+    let d = pixelRay(s.pos.xy);
+    var b: Block;
+    if (s.kind == 1u) { b = figure(u.cam.xyz, d, fwd, s); } else { b = tree(u.cam.xyz, d, fwd, s); }
+    if (!b.hit || b.cover < 0.5) { discard; }
+    o.color = vec4f(fogged(shadeBlock(b), b.z), 1.0);
+    o.depth = b.z / u.screen.z;
+    return o;
+  }
   let r2 = dot(s.uv, s.uv);
   var c = s.color.rgb;
   switch s.kind {
-    case 0u: { // a ball: a lit sphere
+    case 0u: { // a ball: shiny plastic
       if (r2 > 1.0) { discard; }
       let n = vec3f(s.uv.x, -s.uv.y, sqrt(1.0 - r2));
-      c *= 0.45 + 0.6 * max(dot(n, normalize(vec3f(0.3, 0.8, 0.5))), 0.0);
-    }
-    case 1u: { // a player: body and head
-      let head = length(vec2f(s.uv.x, (s.uv.y + 0.78) * 2.2)) < 0.42;
-      let body = abs(s.uv.x) < 0.8 - 0.25 * max(s.uv.y, 0.0) && s.uv.y > -0.55;
-      if (!head && !body) { discard; }
-      if (head) { c = vec3f(0.85, 0.66, 0.5); }
-      c *= 0.7 + 0.3 * (1.0 - abs(s.uv.x));
+      let l = normalize(vec3f(0.3, 0.8, 0.5));
+      c = c * (0.5 + 0.6 * max(dot(n, l), 0.0)) + vec3f(0.5) * pow(max(dot(n, normalize(l + vec3f(0.0, 0.0, 1.0))), 0.0), 24.0);
     }
     case 2u: { // a rocket: hot core, glow
       if (r2 > 1.0) { discard; }
       c = mix(vec3f(1.0, 1.0, 0.85), c, sqrt(r2));
     }
-    case 4u: { // the flag: pole and pennant
-      let pole = abs(s.uv.x + 0.85) < 0.12;
-      let flag = s.uv.x > -0.85 && s.uv.y < -0.35 && s.uv.y > -1.0 + (s.uv.x + 0.85) * 0.18 && s.uv.x < 1.0 - abs(s.uv.y + 0.68) * 0.5;
+    case 4u: { // the flag: pole and pennant, rippling
+      let pole = abs(s.uv.x + 0.85) < 0.1;
+      let wave = 0.06 * sin(s.uv.x * 5.0 - u.view.w * 6.0) * (s.uv.x + 0.85);
+      let fy = s.uv.y - wave;
+      let flag = s.uv.x > -0.85 && fy < -0.35 && fy > -1.0 + (s.uv.x + 0.85) * 0.18 && s.uv.x < 1.0 - abs(fy + 0.68) * 0.5;
       if (!pole && !flag) { discard; }
-      c = select(vec3f(0.9, 0.9, 0.85), vec3f(0.85, 0.12, 0.1), flag);
+      c = select(vec3f(0.95, 0.95, 0.92), vec3f(0.95, 0.15, 0.12) * (0.9 + 0.6 * wave), flag);
     }
     case 5u: { // my arrow, pointing down
       if (abs(s.uv.x) > (1.0 - s.uv.y) * 0.5 || s.uv.y < -1.0) { discard; }
     }
     default: {}
   }
-  return vec4f(dither(c, s.pos.xy), 1.0);
+  o.color = vec4f(c, 1.0);
+  return o;
 }
 
 @fragment fn fs_flash(s: SOut) -> @location(0) vec4f {
@@ -306,7 +512,25 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.8), (1.0 - r2) * a) * a, a);
 }
 
-// ---- HUD: COLS x rows cells of 4 x 6 px; each cell a char (low 8 bits) and a colour (bits 8-11)
+// A tree's shadow: the pixel's ray met with the level of its foot, a soft
+// dark disc there, its depth pulled a metre nearer so slopes don't cut it.
+struct SH { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
+@fragment fn fs_shadow(s: SOut) -> SH {
+  var o: SH;
+  let d = pixelRay(s.pos.xy);
+  if (d.y > -1e-4) { discard; }
+  let t = (s.feet.y - u.cam.y) / d.y;
+  let q = u.cam.xyz + d * t;
+  let r = distance(q.xz, s.feet.xz) / (2.2 * s.pose.y);
+  if (r > 1.0 || t < 0.0) { discard; }
+  let a = 0.4 * (1.0 - smoothstep(0.6, 1.0, r));
+  let z = t * dot(d, vec3f(u.view.x, 0.0, u.view.y));
+  o.color = vec4f(0.0, 0.0, 0.0, a);
+  o.depth = clamp((z - 1.5) / u.screen.z, 0.0, 1.0);
+  return o;
+}
+
+// ---- HUD: COLS x rows cells of 4 x 6 HUD px (u.hudv.x screen px each); each cell a char (low 8 bits) and a colour (bits 8-11)
 var<private> PALETTE: array<vec3f, 8> = array<vec3f, 8>(vec3f(1.0), vec3f(1.0, 0.85, 0.25), vec3f(1.0, 0.35, 0.3), vec3f(0.4, 1.0, 0.4),
   vec3f(0.6), vec3f(0.5, 0.85, 1.0), vec3f(1.0, 0.6, 0.2), vec3f(0.8, 0.55, 1.0));
 
@@ -319,14 +543,15 @@ fn glyphBit(cell: vec2i, px: vec2i) -> bool {
 }
 
 fn lit(p: vec2i) -> bool {
+  if (p.x < 0 || p.y < 0) { return false; }
   let cell = vec2i(p.x / 4, p.y / 6);
   return glyphBit(cell, vec2i(p.x - cell.x * 4, p.y - cell.y * 6));
 }
 
 // ---- the net graph (client/netgraph.mjs): ${GRAPH_PANELS} strips of ${GRAPH_N} columns at the top right, under
-// their labels (HUD rows 2, 6, 10, 14), each 17 px tall, newest on the right
+// their labels (HUD rows 2, 6, 10, 14), each 17 HUD px tall, newest on the right
 fn graphPx(p: vec2i) -> vec4f {
-  let col = p.x - (i32(u.screen.x) - ${GRAPH_N + 4});
+  let col = p.x - (${COLS * 4} - ${GRAPH_N + 4});
   if (u.pred.y < 0.5 || col < 0 || col >= ${GRAPH_N}) { return vec4f(0.0); }
   let k = (p.y - 18) / 24;
   let yy = p.y - 18 - 24 * k;
@@ -355,17 +580,23 @@ fn graphPx(p: vec2i) -> vec4f {
   return back;
 }
 
+${HUD_FONT_WGSL}
 @fragment fn fs_hud(@builtin(position) q: vec4f) -> @location(0) vec4f {
-  let p = vec2i(q.xy);
-  let c = vec2i(i32(u.screen.x) / 2, i32(u.screen.y) / 2);
-  let d = p - c;
+  // the crosshair, in HUD px from the screen's centre
+  let d = vec2i(floor((q.xy - floor(vec2f(u.screen.x, u.screen.y) * 0.5)) / u.hudv.x));
   if ((d.x == 0 && abs(d.y) >= 2 && abs(d.y) <= 4) || (d.y == 0 && abs(d.x) >= 2 && abs(d.x) <= 4)) { return vec4f(1.0, 1.0, 1.0, 0.9); }
-  if (lit(p)) {
+  let hp = (q.xy - vec2f(u.hudv.y, 0.0)) / u.hudv.x;
+  let p = vec2i(floor(hp));
+  // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
+  let roundOn = font[64u] != 0u;
+  let t = roundText(hp, ${COLS}u, u.me.z);
+  if (t.a > 0.0) { return t; }
+  if (!roundOn && lit(p)) {
     let cell = vec2i(p.x / 4, p.y / 6);
     let k = (hud[u32(cell.y) * ${COLS}u + u32(cell.x)] >> 8u) & 7u;
     return vec4f(PALETTE[k], 1.0);
   }
-  if (lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.8); }
+  if (!roundOn && lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.8); }
   let g = graphPx(p);
   if (g.a > 0.0) { return g; }
   discard;
@@ -373,9 +604,53 @@ fn graphPx(p: vec2i) -> vec4f {
 }
 `;
 
+// Trees for a course, drawing only: on a 9 m grid jittered by a hash, thick
+// where a slow noise says so, and only in rough with nothing but rough for
+// 16 m round them (balls fly through them, so they keep clear of the play)
+// and level enough to stand on. Two vec4s each, as the shader's trees.
+function plantTrees(hf, surf) {
+  const out = new Float32Array(MAX_TREE * 8);
+  const bits = new Uint32Array(out.buffer);
+  const hash = (x, z, k) => { let h = Math.imul(x * 374761393 + z * 668265263 + k * 2147483647, 1274126177); h ^= h >>> 13; h = Math.imul(h, 1103515245); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  const smooth = (x, z) => {
+    const gx = x / 140, gz = z / 140, ix = Math.floor(gx), iz = Math.floor(gz), fx = gx - ix, fz = gz - iz;
+    const a = hash(ix, iz, 9), b = hash(ix + 1, iz, 9), c = hash(ix, iz + 1, 9), d = hash(ix + 1, iz + 1, 9);
+    const kx = fx * fx * (3 - 2 * fx), kz = fz * fz * (3 - 2 * fz);
+    return a + (b - a) * kx + (c - a) * kz + (a - b - c + d) * kx * kz;
+  };
+  const cell = (x, z) => Math.min(511, Math.max(0, Math.trunc(z * 0.5))) * 512 + Math.min(511, Math.max(0, Math.trunc(x * 0.5)));
+  const height = (x, z) => {
+    const gx = Math.min(Math.max(x * 0.5, 0), 510.99), gz = Math.min(Math.max(z * 0.5, 0), 510.99);
+    const ix = Math.trunc(gx), iz = Math.trunc(gz), fx = gx - ix, fz = gz - iz, i = iz * 512 + ix;
+    return hf[i] + (hf[i + 1] - hf[i]) * fx + (hf[i + 512] - hf[i]) * fz + (hf[i] - hf[i + 1] - hf[i + 512] + hf[i + 513]) * fx * fz;
+  };
+  let n = 0;
+  for (let gz = 0; gz < 1024 && n < MAX_TREE; gz += 9) {
+    for (let gx = 0; gx < 1024 && n < MAX_TREE; gx += 9) {
+      if (hash(gx, gz, 1) > smooth(gx, gz) * 0.9 - 0.1) continue;
+      const x = gx + hash(gx, gz, 2) * 9, z = gz + hash(gx, gz, 3) * 9;
+      if (x < 8 || z < 8 || x > 1016 || z > 1016) continue;
+      let clear = surf[cell(x, z)] === 1;
+      for (let k = 0; clear && k < 12; k++) {
+        const a = k * Math.PI / 6;
+        clear = surf[cell(x + Math.cos(a) * 8, z + Math.sin(a) * 8)] === 1 && surf[cell(x + Math.cos(a) * 16, z + Math.sin(a) * 16)] === 1;
+      }
+      if (!clear) continue;
+      const y = height(x, z);
+      if (Math.abs(height(x + 2, z) - height(x - 2, z)) > 2.5 || Math.abs(height(x, z + 2) - height(x, z - 2)) > 2.5) continue;
+      const leaf = LEAVES[Math.min(LEAVES.length - 1, Math.floor(hash(gx, gz, 4) ** 3 * LEAVES.length))];
+      out.set([x, y - 0.2, z, 0.8 + 0.6 * hash(gx, gz, 5), hash(gx, gz, 6) * Math.PI / 2, hash(gx, gz, 7) < 0.3 ? 1 : 0, 0, 0], n * 8);
+      bits[n * 8 + 6] = Math.round(leaf[0] * 255) | (Math.round(leaf[1] * 255) << 8) | (Math.round(leaf[2] * 255) << 16) | (0x40 << 24); // a top byte that keeps the float normal
+      n++;
+    }
+  }
+  return out.subarray(0, n * 8);
+}
+
 // present: false draws nothing to the canvas (only capture() renders), for
 // headless browsers, where presenting a WebGPU canvas loses the device.
-export async function createRenderer(canvas, { present = true, device: shared = null } = {}) {
+// hudScale: screen px a HUD px, by default as many as fit 320 x 200 whole.
+export async function createRenderer(canvas, { present = true, hudScale = 0, device: shared = null } = {}) {
   // a page with several renderers (Fireplace) gives them one device, so one can draw into another's texture
   let device = shared;
   if (!device) {
@@ -388,22 +663,26 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const ctx = present ? canvas.getContext('webgpu') : null;
   ctx?.configure({ device, format, alphaMode: 'opaque' });
   const W = canvas.width, H = canvas.height;
-  const rows = Math.floor(H / 6);
+  const hs = hudScale || Math.max(1, Math.floor(Math.min(W / 320, H / 200)));
+  const rows = Math.floor(H / hs / 6);
+  const hudX = Math.max(0, Math.floor((W / hs - COLS * 4) / 2)) * hs; // the text block, centred
   const module = device.createShaderModule({ code: WGSL });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
 
-  const ubuf = device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const ballBuf = storage(BALL_WORDS * 4);
-  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 4); // the records, then each slot's tint
+  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, look and avatar
   const projBuf = storage(L.NPROJ * L.JSIZE);
   const flashBuf = storage(MAX_FLASH * 32);
   const hudBuf = storage(COLS * rows * 4);
-  const fontBuf = storage(FONT.length * 4);
+  const fontAll = fontData({ round: roundWanted() });
+  const fontBuf = storage(fontAll.length * 4);
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
-  device.queue.writeBuffer(fontBuf, 0, FONT);
+  const treeBuf = storage(MAX_TREE * 32);
+  device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
@@ -413,7 +692,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
-      ...[3, 4, 5, 6, 7, 8, 9].map((b) => ({ binding: b, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      ...[3, 4, 5, 6, 7, 8, 9, 10].map((b) => ({ binding: b, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
     ],
   });
   const bind = device.createBindGroup({
@@ -422,7 +701,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 0, resource: { buffer: ubuf } },
       { binding: 1, resource: hmap.createView() },
       { binding: 2, resource: smap.createView() },
-      ...[ballBuf, playerBuf, projBuf, flashBuf, hudBuf, fontBuf, graphBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
+      ...[ballBuf, playerBuf, projBuf, flashBuf, hudBuf, fontBuf, graphBuf, treeBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
@@ -436,25 +715,31 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const terrain = pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' });
   const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
+  const shadow = pipe('vs_splat', 'fs_shadow', { depthWrite: false, depthCompare: 'less', blend: over });
   const flash = pipe('vs_splat', 'fs_flash', { depthWrite: false, depthCompare: 'less', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } });
   const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
 
-  const uf = new Float32Array(28);
+  const uf = new Float32Array(32);
   const uu = new Uint32Array(uf.buffer);
   const hud = new Uint32Array(COLS * rows);
   const flashData = new Float32Array(MAX_FLASH * 8);
   let hmax = 100;
+  let ntree = 0;
 
   return {
-    rows,
-    // The terrain, once per room: heights (1/256 m) and surfaces out of shared memory.
+    rows, width: W, height: H, hudScale: hs, hudX,
+    // The terrain, once per room: heights (1/256 m) and surfaces out of shared memory, and the trees from them.
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
       const hf = new Float32Array(512 * 512);
       hmax = 0;
       for (let i = 0; i < hf.length; i++) { hf[i] = h16[i] / 256; hmax = Math.max(hmax, hf[i]); }
+      const surf = u8.slice(L.TERRAIN_S, L.TERRAIN_S + 512 * 512);
       device.queue.writeTexture({ texture: hmap }, hf, { bytesPerRow: 512 * 4 }, [512, 512]);
-      device.queue.writeTexture({ texture: smap }, u8.slice(L.TERRAIN_S, L.TERRAIN_S + 512 * 512), { bytesPerRow: 512 }, [512, 512]);
+      device.queue.writeTexture({ texture: smap }, surf, { bytesPerRow: 512 }, [512, 512]);
+      const trees = plantTrees(hf, surf);
+      ntree = trees.length / 8;
+      device.queue.writeBuffer(treeBuf, 0, trees);
     },
 
     // One frame. s: { cam: [x, y, z], yaw, pitch (radians), time, dt, dtPred, proj, cup, dir, slot, myBall, nballs, flashes: [{ pos, age, size, kind }], text: Uint32Array, graph: the net graph's Float32Array or null }
@@ -469,6 +754,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       uu[20] = s.nballs; uu[21] = s.myBall < 0 ? 0xffffffff : s.myBall; uu[22] = rows; uu[23] = 0;
       uf[24] = s.dtPred ?? s.dt;
       uf[25] = s.graph ? 1 : 0;
+      uf.set([hs, hudX, ntree, 0], 28);
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       const n = s.nballs;
@@ -479,6 +765,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       }
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE, s.tints ?? NO_TINTS);
+      device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 4, s.looks ?? NO_LOOKS);
+      device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 8, s.avatars ?? NO_AVATARS);
       device.queue.writeBuffer(projBuf, 0, u8, s.proj ?? L.PROJ, L.NPROJ * L.JSIZE);
       s.flashes.slice(0, MAX_FLASH).forEach((f, k) => flashData.set([f.pos[0], f.pos[1], f.pos[2], 0, f.age, f.size, f.kind, 0], k * 8));
       device.queue.writeBuffer(flashBuf, 0, flashData);
@@ -492,10 +780,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       pass.setBindGroup(0, bind);
       pass.setPipeline(terrain);
       pass.draw(3);
+      const trees0 = L.BALL_CAP + L.NPLAYER + L.NPROJ + MAX_FLASH + 2;
+      pass.setPipeline(shadow);
+      if (ntree) pass.draw(6, ntree, 0, trees0 + MAX_TREE);
       pass.setPipeline(splat);
       if (n) pass.draw(6, n, 0, 0);
       pass.draw(6, L.NPLAYER + L.NPROJ, 0, L.BALL_CAP);
       pass.draw(6, 2, 0, L.BALL_CAP + L.NPLAYER + L.NPROJ + MAX_FLASH);
+      if (ntree) pass.draw(6, ntree, 0, trees0);
       pass.setPipeline(flash);
       if (s.flashes.length) pass.draw(6, Math.min(s.flashes.length, MAX_FLASH), 0, L.BALL_CAP + L.NPLAYER + L.NPROJ);
       pass.setPipeline(hudPipe);

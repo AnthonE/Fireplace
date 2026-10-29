@@ -19,7 +19,7 @@ import { NetGraph } from './netgraph.mjs';
 const q = new URLSearchParams(location.search);
 const canvas = document.getElementById('screen');
 const note = document.getElementById('note');
-const [W, H] = (q.get('res') || '320x200').split('x').map(Number);
+const [W, H] = (q.get('res') || '640x400').split('x').map(Number);
 canvas.width = W;
 canvas.height = H;
 const SENS = Number(q.get('sens') || 3); // yaw units (1/16384 turn) per pixel of mouse
