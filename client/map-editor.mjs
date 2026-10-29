@@ -19,6 +19,8 @@ import { decode, encode } from '../tools/png-codec.mjs';
 import { readRoblox } from '../tools/rbx-file.mjs';
 import { robloxToMap } from '../tools/rbx-map.mjs';
 import { robloxBrief } from '../tools/rbx-brief.mjs';
+import { readVox } from '../tools/vox-file.mjs';
+import { voxToMap } from '../tools/vox-map.mjs';
 import { zip } from '../tools/zip.mjs';
 import { createMapView } from './map-view.mjs';
 
@@ -330,14 +332,35 @@ async function openRoblox(file) {
   const out = robloxToMap(doc, { name });
   adopt(out.spec, out.images, slug(name));
   st.report = out.report;
+  st.reportFrom = 'From the Roblox place:';
   st.brief = { name: slug(name), ...robloxBrief(doc, { map: out, name }) };
   st.dirty = true;
   renderSide();
   say(`made ${name} from a Roblox place: ${out.report[0]}`);
 }
-function pickRoblox() {
-  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.rbxl,.rbxlx,.rbxm,.rbxmx' });
-  inp.onchange = () => inp.files[0] && openRoblox(inp.files[0]).catch((e) => say(`could not make a map of it: ${e.message || e}`));
+// A MagicaVoxel model as a new map, made by tools/vox-map.mjs as
+// tools/vox.mjs makes it.
+async function openVox(file) {
+  say(`making a map of ${file.name}`);
+  await new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 0)));
+  const name = file.name.replace(/\.vox$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const out = voxToMap(readVox(new Uint8Array(await file.arrayBuffer())), { name });
+  adopt(out.spec, out.images, slug(name));
+  st.report = out.report;
+  st.reportFrom = 'From the voxel model:';
+  st.dirty = true;
+  renderSide();
+  say(`made ${name} from a voxel model: ${out.report[0]}`);
+}
+// a file made into a map by what it is
+const IMPORTS = [[/\.rbx[lm]x?$/i, openRoblox], [/\.vox$/i, openVox]];
+function openFile(f) {
+  const go = IMPORTS.find(([re]) => re.test(f.name))?.[1];
+  return go ? go(f).catch((e) => say(`could not make a map of it: ${e.message || e}`)) : say(`${f.name}: not a file the editor makes maps of (.rbxl, .rbxlx, .rbxm, .rbxmx, .vox)`);
+}
+function pick(accept) {
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept });
+  inp.onchange = () => inp.files[0] && openFile(inp.files[0]);
   inp.click();
 }
 const fail = (s) => { throw new Error(s); };
@@ -1202,7 +1225,7 @@ function renderCheck() {
       `ships fly up to ${m.ceiling} m; ${m.bytes.length.toLocaleString()} B in the wasm`,
       ...(m.void !== null ? [`a fighter below ${m.void} m dies by falling`] : []),
     ].join(' · ')),
-    ...(st.report ? [el('p', { className: 'hint', textContent: 'From the Roblox place:' }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
+    ...(st.report ? [el('p', { className: 'hint', textContent: st.reportFrom }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
     ...(st.brief ? [
       el('p', { className: 'hint', textContent: `Its game is ${st.brief.summary.scripts} scripts (${st.brief.summary.lines.toLocaleString('en')} lines). The port brief is them as files and port.md, what they do and lean on: hand it to an agent to write the rules here.` }),
       el('div', { className: 'row' }, btn('download the port brief', () => {
@@ -1231,7 +1254,8 @@ function buildHeader() {
     try {
       if (v === 'new') { const m = prompt('How big, in metres? (a square, 128 to 768)', '384'); if (m) newMap(clamp(Math.round(Number(m) / 8) * 8 || 384, 128, 768)); }
       else if (v === 'folder') await openFolder();
-      else if (v === 'roblox') pickRoblox();
+      else if (v === 'roblox') pick('.rbxl,.rbxlx,.rbxm,.rbxmx');
+      else if (v === 'vox') pick('.vox');
       else if (v) await openBuiltIn(v);
     } catch (err) { if (err.name !== 'AbortError') say(`could not open it: ${err.message || err}`); }
   };
@@ -1259,14 +1283,14 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => { if (e.key === ' ') { space = false; setTool(st.tool); } });
 addEventListener('beforeunload', keepDraft);
-// a Roblox place dropped on the page
+// a Roblox place or a voxel model dropped on the page
 addEventListener('dragover', (e) => e.preventDefault());
 addEventListener('drop', (e) => {
-  const f = [...(e.dataTransfer?.files || [])].find((x) => /\.rbx[lm]x?$/i.test(x.name));
+  const f = [...(e.dataTransfer?.files || [])].find((x) => IMPORTS.some(([re]) => re.test(x.name)));
   if (!f) return;
   e.preventDefault();
   if (st.dirty && !confirm('Leave this map? Its changes are not saved.')) return;
-  openRoblox(f).catch((err) => say(`could not make a map of it: ${err.message || err}`));
+  openFile(f);
 });
 
 buildHeader();

@@ -31,6 +31,7 @@ node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the ki
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
 node tools/roblox.mjs place.rbxl [maps/<name>] [--brief]   # a Roblox place (.rbxl/.rbxlx) as a map, --brief its scripts and port.md (docs/roblox.md); the editor opens one too
+node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs/vox.md), through the same back half (tools/scene-map.mjs); the editor opens one too
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 ```
 

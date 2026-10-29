@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readRoblox, lz4, basicRotation, path } from '../tools/rbx-file.mjs';
-import { robloxToMap, terrainColumns, fit } from '../tools/rbx-map.mjs';
+import { robloxToMap, terrainColumns } from '../tools/rbx-map.mjs';
+import { fit } from '../tools/scene-map.mjs';
 import { robloxBrief, weaponOf } from '../tools/rbx-brief.mjs';
 import { zip, crc32 } from '../tools/zip.mjs';
 import { compileSpec, materialWord, materialOf } from '../tools/map-compile.mjs';
@@ -269,7 +270,7 @@ test('maps/crossroads, Roblox\'s Crossroads made by the converter, builds', () =
 });
 
 test('the converter is the page\'s too: no Node in its modules', () => {
-  for (const f of ['rbx-file.mjs', 'rbx-map.mjs', 'rbx-brief.mjs', 'zip.mjs']) {
+  for (const f of ['rbx-file.mjs', 'rbx-map.mjs', 'rbx-brief.mjs', 'zip.mjs', 'scene-map.mjs']) {
     const src = readFileSync(new URL(`../tools/${f}`, import.meta.url), 'utf8');
     assert.ok(!/from 'node:|require\(/.test(src), `${f} imports Node`);
   }

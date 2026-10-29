@@ -564,7 +564,8 @@ from a camera that orbits the 2D view's middle; drag turns it, right-drag
 moves it, the wheel zooms. Picking is the 2D view's.
 
 A Roblox place makes a map too: `node tools/roblox.mjs place.rbxl`, or
-open it in the map editor ([docs/roblox.md](roblox.md)).
+open it in the map editor ([docs/roblox.md](roblox.md)); so does a
+MagicaVoxel model, `node tools/vox.mjs model.vox` ([docs/vox.md](vox.md)).
 
 ### Maps at run time
 

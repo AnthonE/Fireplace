@@ -187,7 +187,8 @@ Only bring a place that is yours, or that its owner has licensed for reuse
 | File | |
 | --- | --- |
 | `tools/rbx-file.mjs` | a Roblox file into instances: binary (LZ4, zstd given a decoder) and XML, no Node |
-| `tools/rbx-map.mjs` | instances into `map.json` and the two images, the report, no Node |
+| `tools/rbx-map.mjs` | instances into solids, the terrain's columns, spawns and pads, no Node |
+| `tools/scene-map.mjs` | the back half, shared with the voxel converter ([docs/vox.md](vox.md)): solids into `map.json` and the two images, the fit, the void, the report, no Node |
 | `tools/rbx-brief.mjs` | the port brief: the scripts as files, port.md, assets.json, no Node |
 | `tools/zip.mjs` | the brief as one stored zip, for the editor, no Node |
 | `tools/roblox.mjs` | the command line: a file in, `maps/<name>/` out, compiled by `tools/map.mjs`; `--brief` writes `port/<name>/` |

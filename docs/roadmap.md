@@ -121,13 +121,16 @@ only of your own body), physics sandboxes, open worlds.
 
 Built: a Roblox place as an arena map, one command or one file dropped on
 the map editor ([docs/roblox.md](roblox.md)). Of Roblox's 31 open-source
-levels, 29 convert, 22 of them with every box kept. The converter is two
-halves: a reader for the format (`tools/rbx-file.mjs`) and a core that takes
-solids (convex shapes as planes, a union's parts less its negated ones, a
-colour each), ground columns and markers (spawns, teams), and makes boxes, the
-ground and the report (`tools/rbx-map.mjs`). Another engine is another
-reader into the same solids. None of these is built yet; in order of how
-mechanical each is and where its builders are:
+levels, 29 convert, 22 of them with every box kept. And a MagicaVoxel model
+the same way ([docs/vox.md](vox.md)): its voxels as boxes in their own
+colours, its floor the ground, objects named for spawns and weapons. Each
+converter is a reader for its format (`tools/rbx-file.mjs`,
+`tools/vox-file.mjs`) and a front that makes a scene: solids (convex shapes
+as planes, a colour each), the ground, and markers (spawns, teams, pads).
+One back half makes boxes, the ground, the void and the report from any
+scene (`tools/scene-map.mjs`). Another engine is another reader into the
+same scene. None of these is built yet; in order of how mechanical each is
+and where its builders are:
 
 1. **Minecraft** (`.schem`, Sponge's schematic; `.litematic`; a world's
    `.mca` regions): blocks are unit boxes, so nothing is approximated; the
@@ -144,8 +147,7 @@ mechanical each is and where its builders are:
    spans (a collision mesh is best). Nodes named `spawn`, `spawn_red`,
    `flag_blue`, `pad_rocket` are markers; `void` a height. One reader for every
    engine that exports glTF.
-4. **MagicaVoxel** (`.vox`): voxels and a palette, exact as Minecraft's.
-5. **Unity's colliders**: an editor script that writes a scene's box,
+4. **Unity's colliders**: an editor script that writes a scene's box,
    sphere and capsule colliders as JSON. A BoxCollider is an arena box
    exactly (a turned one through the columns), with no mesh at all: what
    Unity itself collides with, which is the arena's whole concern.
