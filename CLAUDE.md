@@ -117,7 +117,9 @@ shell whose own command line contains the name: it kills that shell.
   (literal numbers; gathered into `AM_CONSTS` for the assembler as
   `MG_CONSTS` is, and read in JS from `src/am/consts.mjs`), its
   client module `client/am/<key>.mjs` (drawing, HUD, news, board, the AI
-  fighter's goal), its tests `test/arena-<key>.test.mjs`. The map's
+  fighter's goal), its tests `test/arena-<key>.test.mjs`. A kit mode with
+  `team: 0` in `MODES` has no sides; an AM entry may name optional hooks
+  (`strike`, `spawn`, `hurt`). The map's
   objectives (flags, skull, hills) are `MAP_OBJ`, from `map.json`. The
   map compiler's core (`tools/map-compile.mjs`, with `tools/png-codec.mjs`)
   imports nothing from Node, because the map editor
@@ -130,10 +132,6 @@ shell whose own command line contains the name: it kills that shell.
   Anything that reads the map reads it from memory, never from a
   `MAPSEG_*`/`MAPIMG_*`/`MAP_CEIL` constant outside `$arena_gen`'s
   built-in half.
-  fighter's goal), its tests `test/arena-<key>.test.mjs`. A kit mode with
-  `team: 0` in `MODES` has no sides; an AM entry may name optional hooks
-  (`strike`, `spawn`, `hurt`). The map's
-  objectives (flags, skull, hills) are `MAP_OBJ`, from `map.json`.
 - Flight (`src/flight.wat`) is the arena build with `#if FLIGHT` where a
   ship differs: `$move` hands its tick to `$f_move`, charge shots and bombs
   fly in `$f_proj`, `$a_spawn` ends in `$f_spawn`, no pads, the match picks
@@ -142,12 +140,10 @@ shell whose own command line contains the name: it kills that shell.
   the arena's gun bytes in the record, so arena code that arms a fighter
   (`$a_arm`, pickups) must stay off a ship. A ship's position is its
   centre. It builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
-  drawn by `tools/skyways.mjs`; `--flight-map` gives it another); `MAP_CEILING` holds its ceiling. Its own
-  mode, Ring Race (`M_RACE`, 12), sits past the arena's `MODES` so the
-  centre. It always builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
-  drawn by `tools/skyways.mjs`); `MAP_CEILING` holds its ceiling. Its own
-  mode, Ring Race (`M_RACE`, 15: `MODES.length`, its news past every kit
-  mode's MX codes, which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
+  drawn by `tools/skyways.mjs`; `--flight-map` gives it another);
+  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 15:
+  `MODES.length`, its news past every kit mode's MX codes, which
+  `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
   arena's build never sees it: its clock is `FLIGHT_TICKS`, its course the
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
   meeting (`$f_collide`) touch two records, so they are confirmed-only.
@@ -203,9 +199,9 @@ shell whose own command line contains the name: it kills that shell.
   Grandma's writes out every default. A new colour goes in `COLORS`, the
   shader and CONTRIBUTING.md's table (`test/themes.test.mjs` checks all
   three); `elo.json`'s mods are written from the themes (`node tools/elo.mjs`).
-- A player's look (`client/looks.mjs`: a ball and a hat) is drawing only: the
-  relay carries each slot's word beside the ticks (hello flag 4, `T_LOOK`),
-  never in a tick, record or hash. The lists are append-only (a look's number
+- A player's look (`client/looks.mjs`: a ball, a hat and a body) is drawing
+  only: the relay carries each slot's word beside the ticks (hello flag 4,
+  `T_LOOK`), never in a tick, record or hash. The lists are append-only (a look's number
   goes on the wire); look 0 draws exactly as the riders always have, and a new
   pattern or hat style goes in both bumper's and party's shaders
   (`test/looks.test.mjs` checks). Achievements (`client/achievements.mjs`)
