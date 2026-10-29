@@ -93,7 +93,8 @@ view the game draws into a texture that the TV shows through a curved CRT with
 scanlines and a shadow mask, and those fade as the camera closes in, so the
 zoom's last frame is the game as it draws itself; then the page shows the
 game's own canvas. The TV's cards (the title, the standings, what's next, the
-arena by its mode: "NEXT: ARENA INFECTION") are drawn in the games' 3x5 font.
+arena by its mode: "NEXT: ARENA INFECTION") are drawn in the games' HUD font,
+on its grid (`client/hudfont.mjs` `drawGlyphs`).
 `client/fireplace-bot.mjs` is a guest: a brain for each game (party's is
 `client/party-bot.mjs`'s Partier), asked for the one that's on.
 
@@ -192,14 +193,16 @@ golf and Dogfight). The couch gets a bar for B, H, P, T, L and F.
 
 ![Party on a phone: the stick, the drag, the buttons](p5-phone.png)
 
-**The font.** Bumper balls', party's and the TV's text is a bold sans with a
-dark outline (`client/hudfont.mjs`): the 3x5 font's 64 characters drawn again
-at startup from the system's own sans, a rounded one where there is one, into
+**The font.** Every game's text and the TV's is a bold sans with a dark
+outline (`client/hudfont.mjs`): the 3x5 font's 64 characters drawn again at
+startup from the system's own sans, a rounded one where there is one, into
 an atlas that rides in the renderers' font buffer after the pixel glyphs, so
 no shader gained a binding. The text grid is the pixel font's, a character 4
-x 6 HUD pixels, so every layout is what it was. `?font=pixel` keeps the 3x5
-font. Golf's, the arena's and Dogfight's HUDs draw at one screen pixel a font
-pixel, where a cell is too small for a smooth face, and keep it.
+x 6 HUD pixels, so every layout is what it was. Golf's, the arena's and
+Dogfight's HUDs are a 320 x 200 grid scaled to fit the window and centred on
+it (`client/lowpoly.mjs` `hudFrame`), so their cells are big enough for the
+smooth face too. `?font=pixel` keeps the 3x5 font everywhere, and the TV's
+text smaller than two canvas pixels a font pixel keeps it anyway.
 
 **Emotes and juice.** 1 to 4 in bumper balls and party wave, cheer, dance and
 spin: the look word's top byte, an emote in its low four bits and a count in
@@ -306,7 +309,7 @@ page's own (the couch, the zoom into the TV, the standings between games), run
 on that clock at 60 frames a second with every other one kept. The sound is
 the game's own, every call made while a shot rolls, rendered in an
 OfflineAudioContext on the cut's timeline (`client/film.mjs`), then brought
-to -14 LUFS. Captions are drawn in the games' 3x5 font.
+to -14 LUFS. Captions are drawn in the games' font.
 
 ```sh
 node tools/film.mjs record --seconds 960 --bots 64   # a replay in replays/
@@ -320,6 +323,14 @@ Juggernaut from 423 s, party from 612 s, golf from 846 s). On SwiftShader at
 1280 x 720 a second of film took about a minute to draw. A replay is tied to
 the build of `game.wasm` it was recorded on: after a sim change, record again,
 plan it and move the shots.
+
+`film/flex.json` is a second cut, 1920 x 1080, made of rooms recorded side
+by side: `record --start k --port p` starts a room at the playlist's entry k
+on its own port, and a shot naming its own `replay` cuts to that room, so
+the cut moves between games that ran at once. Its `"guests": true` dresses
+every seat as a local room's AI players are, since a replay keeps no looks,
+and its `"score"` lays one of the game's tunes under the whole cut in place
+of the rooms' own music, its beat 1.024 s, every shot ending on one.
 
 A signed-in player goes by the name their wallet has on Elo Pros, in every
 game's labels and the marshmallow board; the relay looks it up and sends it
