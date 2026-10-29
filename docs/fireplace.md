@@ -124,9 +124,10 @@ node --test test/themes.test.mjs
 ```
 
 **Looks.** A look is a ball, a hat and a body a player picks, and everyone in
-the room sees it: ten balls (the house colours, beach, candy, zebra, melon,
-pumpkin, snowball, eight ball, gold, marshmallow), seven hats (a cap, a beanie,
-a headband, a helmet, none, a pumpkin head, a crown) and five bodies (the round
+the room sees it: fourteen balls (the house colours, beach, candy, zebra,
+melon, pumpkin, snowball, eight ball, gold, marshmallow, Swiss cheese, ember,
+s'more, platinum), eight hats (a cap, a beanie, a headband, a helmet, none, a
+pumpkin head, a crown, a flight helmet) and five bodies (the round
 rider, blocky with yellow, peach or cocoa skin, a robot), listed in
 `client/looks.mjs`. A look is drawing only. The page writes its word
 (the ball in the low byte, the hat in the next, the body in the third, an
@@ -214,11 +215,12 @@ frontends already read.
 
 ![The four emotes, and a winner's confetti](p3-emotes.png)
 
-**Achievements.** Thirteen, in `client/achievements.mjs`, kept in this browser:
-a first game, the top three, a win, two and three wins in a row, first,
-second and third, 25 and 100 marshmallows, 25 games, golf, the arena, bumper
-balls and party each played and each won, a game with 32 or more in it, and
-a Dogfight won. Each is a test over
+**Achievements.** Twenty-four, in `client/achievements.mjs`, kept in this
+browser: a first game, the top three, a win, two, three and five wins in a
+row, 10 wins, first, second and third, 25, 100 and 250 marshmallows, 25 and
+100 games, golf, the arena, bumper balls and party each played and each won,
+all five with Dogfight played and won, each game won on its own, and a game
+with 32, and one with 100, or more in it. Each is a test over
 a tally of results, and a result is what the confirmed world holds while a
 game's end is on screen (`FP_STAGE` 1): the game, this slot's place
 (`FP_LAST`) and marshmallows (`FP_GOT`), and how many were in it. So every
@@ -227,9 +229,13 @@ game (a key of the room, the games played and the game, so a keyframe that
 shows the same end again counts nothing). A signed-in player's are kept on
 Elo Pros too, where they follow the wallet: the room's relay runs the same
 tests for each signed-in slot and reports them ([hosting.md](hosting.md)).
-Four open a look: the pumpkin head,
-the eight ball, the gold ball and the crown (the marshmallow ball takes 100
-marshmallows). What one opened shows under the standings, and L lists them on
+Ten open a look: the pumpkin head (a
+first game), the eight ball (the top three), the gold ball (a win), the crown
+(two in a row), the marshmallow ball (100 marshmallows), Swiss cheese (bumper
+balls won), the flight helmet (a Dogfight won), ember (five in a row), s'more
+(250 marshmallows) and platinum (all five games won). Each names its picture
+on Elo Pros (`icon`, drawn in scry-forge's
+`watchtower/art/achievements/fireplace/`). What one opened shows under the standings, and L lists them on
 the TV, six a page. They are this browser's record, not the room's: signing in
 with Elo Pros, and the referee's standings as their evidence, come next
 (`docs/roadmap.md`).

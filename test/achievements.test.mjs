@@ -28,7 +28,7 @@ test('ids unique, names and lines in the font and short enough for the TV', () =
 test('a first game, a marshmallow, a win, then two and three in a row', () => {
   assert.deepEqual(play([res({})]).opened, ['chair']);
   assert.deepEqual(play([res({ place: 3, got: 1 })]).opened, ['chair', 'toasted']);
-  assert.deepEqual(play([res({ place: 1, got: 3 })]).opened, ['chair', 'toasted', 'golden']);
+  assert.deepEqual(play([res({ place: 1, got: 3 })]).opened, ['chair', 'toasted', 'golden', 'cheese']);
   const { t, opened } = play([res({ place: 1, got: 3 }), res({ place: 1, got: 3 })]);
   assert.ok(opened.includes('roll') && !opened.includes('hattrick'));
   assert.ok(play([res({ place: 1, got: 3 })], t).opened.includes('hattrick'));
@@ -64,7 +64,39 @@ test('the long ones: every game played and won, every step, a full house, 25 and
   assert.ok(play([res({ game: L.G_FLIGHT, place: 1, got: 3 })]).opened.includes('ace'));
   assert.ok(!play([res({ game: L.G_FLIGHT, place: 2, got: 2 })]).opened.includes('ace'));
   const all = ACHIEVEMENTS.map((a) => a.id);
-  assert.deepEqual(Object.keys(play([...[...four, L.G_FLIGHT].map((game) => res({ game, place: 1, got: 3, field: 40 })), res({ place: 2 }), res({ place: 3 }), ...Array.from({ length: 34 }, () => res({ place: 1, got: 3 }))]).t.got).sort(), [...all].sort());
+  assert.deepEqual(Object.keys(play([...[...four, L.G_FLIGHT].map((game) => res({ game, place: 1, got: 3, field: 100 })), res({ place: 2 }), res({ place: 3 }), ...Array.from({ length: 100 }, () => res({ place: 1, got: 3 }))]).t.got).sort(), [...all].sort());
+});
+
+test('all five games, each one won, five in a row, 10 wins, 250 marshmallows, 100 games, 100 in a room', () => {
+  const five = [L.G_GOLF, L.G_ARENA, L.G_BUMPER, L.G_PARTY, L.G_FLIGHT];
+  const keys = { [L.G_GOLF]: 'fore', [L.G_ARENA]: 'sharp', [L.G_BUMPER]: 'cheese', [L.G_PARTY]: 'life', [L.G_FLIGHT]: 'ace' };
+  for (const game of five) {
+    assert.ok(play([res({ game, place: 1 })]).opened.includes(keys[game]), keys[game]);
+    assert.ok(!play([res({ game, place: 2 })]).opened.includes(keys[game]), keys[game]);
+  }
+  let x = play(five.slice(0, 4).map((game) => res({ game, place: 4 })));
+  assert.ok(x.opened.includes('playlist') && !x.opened.includes('surfer'), 'the four are the old playlist, not all five');
+  x = play([res({ game: L.G_FLIGHT, place: 4 })], x.t);
+  assert.deepEqual(x.opened, ['surfer']);
+  assert.equal(byId.get('surfer').have(x.t)[0], 5);
+  const won = play(five.map((game) => res({ game, place: 1 })));
+  assert.ok(won.opened.includes('house') && won.opened.includes('onfire'));
+  assert.ok(!play(five.slice(0, 4).map((game) => res({ game, place: 1 }))).opened.includes('house'));
+  assert.ok(!play([1, 1, 1, 1, 2, 1].map((place) => res({ place }))).opened.includes('onfire'), 'a loss breaks the run');
+  const ten = play(Array.from({ length: 10 }, (_, i) => res({ place: i % 2 ? 1 : 2 })));
+  assert.ok(ten.opened.length && !ten.opened.includes('champ'));
+  assert.ok(play([res({ place: 1 })], play(Array.from({ length: 9 }, () => res({ place: 1 }))).t).opened.includes('champ'));
+  assert.ok(play([res({ field: 100 })]).opened.includes('packed'));
+  assert.ok(!play([res({ field: 99 })]).opened.includes('packed'));
+  const long = play(Array.from({ length: 100 }, () => res({ place: 3, got: 1 })));
+  assert.ok(long.opened.includes('fixture') && !long.opened.includes('bonfire'));
+  assert.ok(play(Array.from({ length: 84 }, () => res({ place: 1, got: 3 }))).opened.includes('bonfire'));
+});
+
+test('every achievement names its picture on Elo Pros, a stem the store takes, none shared', () => {
+  for (const a of ACHIEVEMENTS) assert.match(a.icon ?? '', /^[a-z0-9_]{1,48}$/, a.id);
+  assert.equal(new Set(ACHIEVEMENTS.map((a) => a.icon)).size, ACHIEVEMENTS.length);
+  for (const a of eloStats().achievements) assert.equal(a.icon, byId.get(a.id.toLowerCase()).icon);
 });
 
 test('a result is read from the world as it is held: the game, the place, the marshmallows, who was in it', () => {
@@ -109,8 +141,9 @@ test("elo.json's stats block: ids and lines Elo Pros takes, a stat per thing a t
   assert.deepEqual(defs.achievements.map((a) => a.id), ACHIEVEMENTS.map((a) => STORE_ID(a.id)));
   // a progress row unlocks at the same count its test does
   for (const a of defs.achievements.filter((x) => x.progress)) {
-    const id = a.id.toLowerCase(), t = { ...emptyTally(), [a.progress.stat === 'mallows' ? 'mallows' : 'games']: a.progress.max };
-    assert.ok(byId.get(id).test(t) && !byId.get(id).test({ ...t, mallows: t.mallows && t.mallows - 1, games: t.games && t.games - 1 }), id);
+    const id = a.id.toLowerCase(), k = a.progress.stat, t = { ...emptyTally(), [k]: a.progress.max };
+    assert.ok(['games', 'mallows', 'wins'].includes(k), `${id}: ${k} is a tally field`);
+    assert.ok(byId.get(id).test(t) && !byId.get(id).test({ ...t, [k]: t[k] - 1 }), id);
   }
 });
 

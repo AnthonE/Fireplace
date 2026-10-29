@@ -10,23 +10,38 @@
 import * as L from '../src/layout.mjs';
 
 const ALL4 = (1 << L.G_GOLF) | (1 << L.G_ARENA) | (1 << L.G_BUMPER) | (1 << L.G_PARTY);
+const ALL5 = ALL4 | (1 << L.G_FLIGHT);
 const bits = (m) => { let n = 0; for (; m; m &= m - 1) n++; return n; };
+const won = (g) => (t) => ((t.won >> g) & 1) === 1;
 
-// test(t): is it earned on this tally; have(t): how far along, for the list
+// test(t): is it earned on this tally; have(t): how far along, for the list;
+// icon: the picture Elo Pros shows beside it (scry-forge
+// watchtower/art/achievements/fireplace/<icon>.png)
 export const ACHIEVEMENTS = [
-  { id: 'chair', name: 'PULL UP A CHAIR', about: 'PLAY A GAME IN THE ROOM', test: (t) => t.games >= 1 },
-  { id: 'toasted', name: 'TOASTED', about: 'FINISH IN THE TOP THREE', test: (t) => t.mallows >= 1 },
-  { id: 'golden', name: 'GOLDEN BROWN', about: 'WIN A GAME', test: (t) => t.wins >= 1 },
-  { id: 'roll', name: 'ON A ROLL', about: 'WIN TWO GAMES IN A ROW', test: (t) => t.best >= 2 },
-  { id: 'hattrick', name: 'HAT TRICK', about: 'WIN THREE GAMES IN A ROW', test: (t) => t.best >= 3 },
-  { id: 'podium', name: 'EVERY STEP', about: 'FINISH FIRST, SECOND AND THIRD', test: (t) => t.places === 7, have: (t) => [bits(t.places), 3] },
-  { id: 'bag', name: 'A BAG OF THEM', about: '25 MARSHMALLOWS IN ALL', test: (t) => t.mallows >= 25, have: (t) => [t.mallows, 25] },
-  { id: 'campfire', name: 'CAMPFIRE', about: '100 MARSHMALLOWS IN ALL', test: (t) => t.mallows >= 100, have: (t) => [t.mallows, 100] },
-  { id: 'regular', name: 'A REGULAR', about: 'PLAY 25 GAMES', test: (t) => t.games >= 25, have: (t) => [t.games, 25] },
-  { id: 'playlist', name: 'THE WHOLE PLAYLIST', about: 'PLAY GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.played & ALL4) === ALL4, have: (t) => [bits(t.played & ALL4), 4] },
-  { id: 'allround', name: 'ALL-ROUNDER', about: 'WIN GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.won & ALL4) === ALL4, have: (t) => [bits(t.won & ALL4), 4] },
-  { id: 'crowd', name: 'A FULL HOUSE', about: 'PLAY A GAME WITH 32 OR MORE IN IT', test: (t) => t.crowd >= 32 },
-  { id: 'ace', name: 'ACE', about: 'WIN A DOGFIGHT', test: (t) => ((t.won >> L.G_FLIGHT) & 1) === 1 },
+  { id: 'chair', name: 'PULL UP A CHAIR', about: 'PLAY A GAME IN THE ROOM', test: (t) => t.games >= 1, icon: 'chair' },
+  { id: 'toasted', name: 'TOASTED', about: 'FINISH IN THE TOP THREE', test: (t) => t.mallows >= 1, icon: 'toasted' },
+  { id: 'golden', name: 'GOLDEN BROWN', about: 'WIN A GAME', test: (t) => t.wins >= 1, icon: 'trophy' },
+  { id: 'roll', name: 'ON A ROLL', about: 'WIN TWO GAMES IN A ROW', test: (t) => t.best >= 2, icon: 'rolling' },
+  { id: 'hattrick', name: 'HAT TRICK', about: 'WIN THREE GAMES IN A ROW', test: (t) => t.best >= 3, icon: 'laurels' },
+  { id: 'podium', name: 'EVERY STEP', about: 'FINISH FIRST, SECOND AND THIRD', test: (t) => t.places === 7, have: (t) => [bits(t.places), 3], icon: 'podium' },
+  { id: 'bag', name: 'A BAG OF THEM', about: '25 MARSHMALLOWS IN ALL', test: (t) => t.mallows >= 25, have: (t) => [t.mallows, 25], icon: 'bag' },
+  { id: 'campfire', name: 'CAMPFIRE', about: '100 MARSHMALLOWS IN ALL', test: (t) => t.mallows >= 100, have: (t) => [t.mallows, 100], icon: 'campfire' },
+  { id: 'regular', name: 'A REGULAR', about: 'PLAY 25 GAMES', test: (t) => t.games >= 25, have: (t) => [t.games, 25], icon: 'sofa' },
+  { id: 'playlist', name: 'THE WHOLE PLAYLIST', about: 'PLAY GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.played & ALL4) === ALL4, have: (t) => [bits(t.played & ALL4), 4], icon: 'tv' },
+  { id: 'allround', name: 'ALL-ROUNDER', about: 'WIN GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.won & ALL4) === ALL4, have: (t) => [bits(t.won & ALL4), 4], icon: 'medal' },
+  { id: 'crowd', name: 'A FULL HOUSE', about: 'PLAY A GAME WITH 32 OR MORE IN IT', test: (t) => t.crowd >= 32, icon: 'crowd' },
+  { id: 'ace', name: 'ACE', about: 'WIN A DOGFIGHT', test: won(L.G_FLIGHT), icon: 'jet' },
+  { id: 'surfer', name: 'CHANNEL SURFER', about: 'PLAY ALL FIVE GAMES ON THE TV', test: (t) => (t.played & ALL5) === ALL5, have: (t) => [bits(t.played & ALL5), 5], icon: 'gamepad' },
+  { id: 'house', name: 'HOUSE CHAMPION', about: 'WIN ALL FIVE GAMES ON THE TV', test: (t) => (t.won & ALL5) === ALL5, have: (t) => [bits(t.won & ALL5), 5], icon: 'fireplace' },
+  { id: 'fore', name: 'FORE!', about: 'WIN A HOLE OF GOLF', test: won(L.G_GOLF), icon: 'golf' },
+  { id: 'sharp', name: 'SHARPSHOOTER', about: 'WIN AN ARENA MATCH', test: won(L.G_ARENA), icon: 'target' },
+  { id: 'cheese', name: 'BIG CHEESE', about: 'WIN BUMPER BALLS', test: won(L.G_BUMPER), icon: 'cheese' },
+  { id: 'life', name: 'LIFE OF THE PARTY', about: 'WIN A GAME OF PARTY', test: won(L.G_PARTY), icon: 'popper' },
+  { id: 'onfire', name: 'ON FIRE', about: 'WIN FIVE GAMES IN A ROW', test: (t) => t.best >= 5, have: (t) => [t.best, 5], icon: 'meteor' },
+  { id: 'champ', name: 'CHAMPION', about: 'WIN 10 GAMES', test: (t) => t.wins >= 10, have: (t) => [t.wins, 10], icon: 'cup' },
+  { id: 'bonfire', name: 'BONFIRE', about: '250 MARSHMALLOWS IN ALL', test: (t) => t.mallows >= 250, have: (t) => [t.mallows, 250], icon: 'bonfire' },
+  { id: 'fixture', name: 'A FIXTURE', about: 'PLAY 100 GAMES', test: (t) => t.games >= 100, have: (t) => [t.games, 100], icon: 'rocking' },
+  { id: 'packed', name: 'PACKED HOUSE', about: 'PLAY A GAME WITH 100 OR MORE IN IT', test: (t) => t.crowd >= 100, icon: 'packed' },
 ];
 export const byId = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
 
@@ -71,7 +86,7 @@ export const gotSet = (t) => new Set(Object.keys(t.got));
 // came back short (Elo Pros not reached) opens fewer, never a wrong one.
 export const GAME_KEYS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // by G_*; net/elo.mjs LADDERS
 export const STORE_ID = (id) => id.toUpperCase();
-const PROGRESS = { bag: ['mallows', 25], campfire: ['mallows', 100], regular: ['games', 25] };
+const PROGRESS = { bag: ['mallows', 25], campfire: ['mallows', 100], regular: ['games', 25], champ: ['wins', 10], bonfire: ['mallows', 250], fixture: ['games', 100] };
 const sentence = (s) => (s[0] + s.slice(1).toLowerCase()).replace(/\bdogfight\b/g, 'Dogfight');
 
 // elo.json's stats block (tools/elo.mjs writes it from this list).
@@ -91,7 +106,7 @@ export function eloStats() {
       ...perGame('played', 'Played'), ...perGame('won', 'Won'),
     ],
     achievements: ACHIEVEMENTS.map((a) => ({
-      id: STORE_ID(a.id), name: sentence(a.name), desc: sentence(a.about),
+      id: STORE_ID(a.id), name: sentence(a.name), desc: sentence(a.about), icon: a.icon,
       ...(PROGRESS[a.id] ? { progress: { stat: PROGRESS[a.id][0], max: PROGRESS[a.id][1] } } : {}),
     })),
     boards: [{ id: 'mallows', name: 'Marshmallows', sort: 'desc', keep: 'best' }],
