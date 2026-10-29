@@ -8,7 +8,10 @@
 // game, 3 Juggernaut, 4 Team Slayer, 5 CTF, 6 Oddball, 7 King of the Hill)
 // through the relay's seed, and the gate wants it played, by the bot host's
 // world and every page; in a team mode, both sides dealt fighters.
-//   node net/run-arena.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k]
+// --map m plays a map from outside the build (a name in maps/ or a
+// directory): packed, laid by the relay's referee, the bot host and the page
+// in their sims (map_load), and named in every hello's hash.
+//   node net/run-arena.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k] [--map m]
 //                          [--port 4433: the relay's, its native door the next]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -16,6 +19,8 @@ import { createRequire } from 'node:module';
 import { serve } from '../tools/serve.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import * as L from '../src/layout.mjs';
+import { compileMap, mapDir } from '../tools/map.mjs';
+import { packMap } from '../tools/map-compile.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
@@ -26,23 +31,31 @@ const impair = opt('impair', '');
 const shots = opt('shots', '1') !== '0';
 const mode = opt('mode', '') === '' ? null : Number(opt('mode', ''));
 const seed = mode === null ? 7 : forcedSeed(mode);
-const tag = mode === null ? 'arena' : `arena-${L.MODES[mode].name.toLowerCase().replace(/ /g, '')}`;
+const mapName = opt('map', '');
+const tag = (mode === null ? 'arena' : `arena-${L.MODES[mode].name.toLowerCase().replace(/ /g, '')}`) + (mapName ? `-${mapName.split('/').filter(Boolean).pop()}` : '');
 const port = Number(opt('port', 4433));
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 const LOCAL_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
 execFileSync('sh', ['tools/cert.sh'], { stdio: 'inherit' });
 execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
+let mapFile = '', mapArgs = [];
+if (mapName) {
+  mapFile = `build/maps/${mapDir(mapName).split('/').pop()}.qgmap`;
+  mkdirSync('build/maps', { recursive: true });
+  writeFileSync(mapFile, packMap(compileMap(mapDir(mapName))));
+  mapArgs = ['--map', mapFile];
+}
 const hash = readFileSync('certs/hash.txt', 'utf8').trim();
 mkdirSync('traces', { recursive: true });
 const summaryPath = `traces/${tag}.relay.json`;
 rmSync(summaryPath, { force: true });
 const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', String(port), '--seed', String(seed),
-  '--native-port', String(port + 1), '--wasm', 'build/arena/game.wasm', '--duration', String(seconds + 40), '--summary', summaryPath, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
+  '--native-port', String(port + 1), '--wasm', 'build/arena/game.wasm', ...mapArgs, '--duration', String(seconds + 40), '--summary', summaryPath, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
 await new Promise((ok) => setTimeout(ok, 1500));
 const botsPath = `traces/${tag}.bots.json`;
 rmSync(botsPath, { force: true });
-const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--arena', '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
+const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--arena', ...mapArgs, '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
   { stdio: ['ignore', 'inherit', 'inherit'] }) : null;
 const botsDone = bots ? new Promise((ok) => bots.once('exit', ok)) : null;
 
@@ -54,7 +67,7 @@ const browser = await chromium.launch({
   args: ['--no-sandbox', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--autoplay-policy=no-user-gesture-required'],
 });
 const pages = [];
-const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9' });
+const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', ...(mapFile ? { map: `../${mapFile}` } : {}) });
 const report = { bots: nbots, chrome, seconds, impair: impair || 'none', mode: mode === null ? 'rotation' : L.MODES[mode].name, seed, screenshots: [], kills: [], errors: [] };
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(0);

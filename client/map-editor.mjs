@@ -3,8 +3,9 @@
 // (map.json, height.png, surface.png; tools/map.mjs has the format), and runs
 // the build's own compiler (tools/map-compile.mjs) on every change, so what
 // it calls fine is what `npm run build` takes. The sim never sees the page:
-// a map reaches a game by being built in, `node net/play.mjs --arena --map
-// <folder>` to play it with bots.
+// play it packs the map (packMap) and opens the arena's page on it, a local
+// room with AI fighters, which lays it in its sim (map_load); `node
+// net/play.mjs --arena --map <folder>` plays a saved one online with bots.
 //
 // The ground is held as the compiler holds it, a u16 a sample in 1/256 m
 // (16-bit height.png, scale 1/256, base 0), with a surface index beside it.
@@ -12,9 +13,16 @@
 import * as L from '../src/layout.mjs';
 import {
   compileSpec, place, placePoint, half, SURFACES, SURFACE_RGB, MATERIALS, WEAPONS, GROUND,
-  formatSpec, defaultFlags, defaultBall, defaultHills,
+  formatSpec, defaultFlags, defaultBall, defaultHills, materialWord, materialOf, packMap,
 } from '../tools/map-compile.mjs';
 import { decode, encode } from '../tools/png-codec.mjs';
+import { readRoblox } from '../tools/rbx-file.mjs';
+import { robloxToMap } from '../tools/rbx-map.mjs';
+import { robloxBrief } from '../tools/rbx-brief.mjs';
+import { readVox } from '../tools/vox-file.mjs';
+import { voxToMap } from '../tools/vox-map.mjs';
+import { zip } from '../tools/zip.mjs';
+import { createMapView } from './map-view.mjs';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view'), ctx = canvas.getContext('2d');
@@ -23,7 +31,7 @@ const SP = L.SPACING;
 const NGATE = L.FLIGHT_CONSTS.NGATE;
 const DRAFT = 'fireplace-map-editor';
 // the arena renderer's colours (client/arena-render.mjs MATERIAL), 0..255
-const MAT_RGB = [[143, 153, 163], [120, 107, 92], [61, 69, 79], [158, 43, 36], [43, 69, 163], [191, 242, 255]];
+const MAT_RGB = [[143, 153, 163], [120, 107, 92], [61, 69, 79], [158, 43, 36], [43, 69, 163], [191, 242, 255], [163, 163, 166]];
 const TEAM = ['#e0574a', '#4f7fe6', '#9aa0b0'];
 
 const tidy = (v) => Math.round(v * 1000) / 1000;
@@ -66,7 +74,7 @@ function adopt(spec, images, folder, dir = null) {
   }
   // from here on the images are what this page writes
   spec.terrain = Object.assign(t, { height: 'height.png', scale: 0.00390625, base: 0, surface: 'surface.png' });
-  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, rev: ++revs });
+  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, rev: ++revs, report: null, brief: null });
   undo.length = 0; redo.length = 0;
   paintTerrain();
   fit();
@@ -115,7 +123,8 @@ function structBoxes(s, si) {
     let box;
     try { box = place(b, at, turn); } catch { box = b.slice(0, 6); }
     const name = (s.tint && s.tint[b[6]]) || b[6] || 'metal';
-    return { box, mat: Math.max(0, MATERIALS.indexOf(name)), s: si, b: bi };
+    const m = materialOf(Math.max(0, materialWord(name)));
+    return { box, mat: m.look, rgb: m.rgb || MAT_RGB[m.look] || MAT_RGB[0], s: si, b: bi };
   });
 }
 const allBoxes = () => (st.spec.structures || []).flatMap(structBoxes);
@@ -247,7 +256,9 @@ function changed() {
 function check() {
   try { st.result = compileSpec(st.spec, images(), 'map.json'); st.error = null; }
   catch (e) { st.result = null; st.error = String(e.message || e).replace(/^map\.json: /, ''); }
+  if (st.result) map3 = true;
   renderCheck();
+  draw3();
 }
 
 // ---- the draft, kept in this browser
@@ -278,7 +289,7 @@ async function openBuiltIn(name) {
   const png = async (f) => decode(await (await fetch(base + f)).arrayBuffer(), inflate);
   const imgs = { height: await png(t.height || 'height.png') };
   if (t.surface) imgs.surface = await png(t.surface);
-  adopt(spec, imgs, name === 'canyon' || name === 'skyways' ? `my-${name}` : name);
+  adopt(spec, imgs, ['canyon', 'skyways', 'crossroads'].includes(name) ? `my-${name}` : name);
   say(`opened ${spec.name || name}; saving writes a new folder, so the original stays as it is`);
 }
 
@@ -308,6 +319,49 @@ async function openFolder() {
   if (t.surface) imgs.surface = await png(t.surface);
   adopt(spec, imgs, dir.name, dir);
   say(`opened ${dir.name}/`);
+}
+// A Roblox place (or model) as a new map, made in the page by
+// tools/rbx-map.mjs as tools/roblox.mjs makes it; what it left out or
+// changed stays in the check panel. A file with zstd chunks needs the
+// command line (Node has zstd; a page doesn't).
+async function openRoblox(file) {
+  say(`making a map of ${file.name}: a big place takes a few seconds`);
+  await new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 0)));
+  const doc = readRoblox(new Uint8Array(await file.arrayBuffer()));
+  const name = file.name.replace(/\.rbx[lm]x?$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const out = robloxToMap(doc, { name });
+  adopt(out.spec, out.images, slug(name));
+  st.report = out.report;
+  st.reportFrom = 'From the Roblox place:';
+  st.brief = { name: slug(name), ...robloxBrief(doc, { map: out, name }) };
+  st.dirty = true;
+  renderSide();
+  say(`made ${name} from a Roblox place: ${out.report[0]}`);
+}
+// A MagicaVoxel model as a new map, made by tools/vox-map.mjs as
+// tools/vox.mjs makes it.
+async function openVox(file) {
+  say(`making a map of ${file.name}`);
+  await new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 0)));
+  const name = file.name.replace(/\.vox$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const out = voxToMap(readVox(new Uint8Array(await file.arrayBuffer())), { name });
+  adopt(out.spec, out.images, slug(name));
+  st.report = out.report;
+  st.reportFrom = 'From the voxel model:';
+  st.dirty = true;
+  renderSide();
+  say(`made ${name} from a voxel model: ${out.report[0]}`);
+}
+// a file made into a map by what it is
+const IMPORTS = [[/\.rbx[lm]x?$/i, openRoblox], [/\.vox$/i, openVox]];
+function openFile(f) {
+  const go = IMPORTS.find(([re]) => re.test(f.name))?.[1];
+  return go ? go(f).catch((e) => say(`could not make a map of it: ${e.message || e}`)) : say(`${f.name}: not a file the editor makes maps of (.rbxl, .rbxlx, .rbxm, .rbxmx, .vox)`);
+}
+function pick(accept) {
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept });
+  inp.onchange = () => inp.files[0] && openFile(inp.files[0]);
+  inp.click();
 }
 const fail = (s) => { throw new Error(s); };
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-map';
@@ -399,6 +453,7 @@ const terr = document.createElement('canvas'), tctx = terr.getContext('2d');
 // The ground from above: its surface's colour, lit from the north-west, a
 // line every 5 m of height.
 function paintTerrain() {
+  ground3 = true;
   const { W, H, hgt, srf } = st;
   terr.width = W; terr.height = H;
   const im = tctx.createImageData(W, H), d = im.data, pal = palette(st.spec.terrain);
@@ -418,6 +473,7 @@ function paintTerrain() {
 
 let drawQueued = false;
 function draw() {
+  draw3();
   if (drawQueued) return;
   drawQueued = true;
   requestAnimationFrame(() => { drawQueued = false; frame(); });
@@ -445,7 +501,7 @@ function frame() {
   const boxes = allBoxes().sort((a, c) => a.box[4] - c.box[4]);
   for (const x of boxes) {
     const [x0, y0] = S(x.box[0], x.box[2]), [x1, y1] = S(x.box[3], x.box[5]);
-    const c = MAT_RGB[x.mat];
+    const c = x.rgb;
     if (!st.xray) { ctx.fillStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, 0.92)`; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
     ctx.strokeStyle = st.xray ? `rgb(${c.map((v) => Math.min(255, v + 60)).join(',')})` : 'rgba(0, 0, 0, 0.55)';
     ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
@@ -560,10 +616,107 @@ function drawTele(from, to, mine, i) {
   ctx.beginPath(); ctx.moveTo(x1, y1 - 6); ctx.lineTo(x1 + 6, y1); ctx.lineTo(x1, y1 + 6); ctx.lineTo(x1 - 6, y1); ctx.fill();
 }
 
+// ---- the 3D view (client/map-view.mjs): the arena's own renderer on the map
+// being edited, from a camera orbiting the 2D view's middle, so panning
+// either moves both. Drag turns it, right-drag (or Shift-drag) moves it, the
+// wheel zooms. Nothing is picked in it yet: picking is the 2D view's.
+const canvas3 = $('view3d');
+const cam3 = { yaw: -Math.PI / 2, pitch: -0.55, dist: 140 };
+let view3 = null, view3Failed = false, ground3 = true, map3 = true, draw3Queued = false, drawing3 = false, again3 = false;
+const MODE = 'fireplace-map-editor-view';
+function setMode(m) {
+  st.mode = m;
+  $('wrap').className = m;
+  for (const b of $('modes').children) b.classList.toggle('on', b.dataset.mode === m);
+  try { localStorage.setItem(MODE, m); } catch { /* the page works without it */ }
+  if (m !== '2d' && !view3 && !view3Failed) {
+    createMapView(canvas3, { present: new URLSearchParams(location.search).get('present') !== '0' }).then((v) => { view3 = v; ground3 = map3 = true; draw3(); }).catch((e) => {
+      view3Failed = true;
+      say(`no 3D view: ${e.message || e}`);
+      setMode('2d');
+    });
+  }
+  draw();
+}
+// what can be placed, as sprites and zones the renderer draws: spawns a disc
+// in their side's colour, pads, flags and the skull standing, hills as the
+// game paints them, teleporters and race gates glowing, the pick bright
+function marks3() {
+  const sp = st.spec, solid = [], glow = [], zone = [];
+  const flags = flagsNow();
+  const side = [[0.9, 0.3, 0.25], [0.3, 0.5, 0.95], [0.85, 0.85, 0.85]];
+  for (const s of sp.spawns || []) glow.push({ pos: [s[0], stand(s[0], s[1], s[2] ?? GROUND) + 0.1, s[1]], size: 0.6, color: [...side[half(s[0], s[1], flags)], 0.9], kind: 3, minpx: 2 });
+  for (const p of sp.pads || []) solid.push({ pos: [p.at[0], stand(p.at[0], p.at[1], p.at[2] ?? GROUND) + 0.7, p.at[1]], size: 0.55, aspect: 0.8, color: [0.9, 0.6, 0.2, 1], kind: 4, minpx: 2 });
+  flags.forEach((f, k) => solid.push({ pos: [f[0], stand(f[0], f[1], f[2]) + 1.2, f[1]], size: 0.8, aspect: 0.5, color: [...side[k], 1], kind: 4, minpx: 3 }));
+  const b = ballNow();
+  solid.push({ pos: [b[0], stand(b[0], b[1], b[2]) + 0.6, b[1]], size: 0.4, color: [0.95, 0.95, 0.9, 1], kind: 4, minpx: 2 });
+  for (const h of hillsNow().slice(0, 8)) zone.push({ x: h[0], z: h[1], r: h[3], y: stand(h[0], h[1], h[2]), h: 3, color: [0.9, 0.85, 0.3], pulse: 0 });
+  for (const t of sp.teleporters || []) {
+    glow.push({ pos: [t.from[0], t.from[1] + 1.1, t.from[2]], size: (t.radius ?? 1.2) * 1.3, color: [0.35, 0.85, 1, 0.7], kind: 6, minpx: 1 });
+    glow.push({ pos: [t.to[0], t.to[1] + 0.15, t.to[2]], size: 0.8, color: [0.5, 0.9, 1, 0.35], kind: 3, minpx: 1 });
+  }
+  for (const g of sp.race || []) glow.push({ pos: [g[0], g[1], g[2]], size: g[3], color: [1, 0.8, 0.3, 0.6], kind: 6, minpx: 2 });
+  if (st.sel && st.sel.kind !== 'box') {
+    const [x, z] = posOf(st.sel);
+    glow.push({ pos: [x, stand(x, z, 1e9) + 1, z], size: 1.4, color: [1, 0.85, 0.35, 0.9], kind: 3, minpx: 4 });
+  }
+  return { solid, glow, zone: zone.length ? zone : null };
+}
+function draw3() {
+  if (!view3 || st.mode === '2d' || draw3Queued || !st.spec) return;
+  draw3Queued = true;
+  requestAnimationFrame(async () => {
+    draw3Queued = false;
+    // one frame at a time (the first makes the renderer, which takes a while): a change meanwhile draws again after
+    if (drawing3) { again3 = true; return; }
+    drawing3 = true;
+    try {
+      if (ground3) { view3.ground(st); ground3 = false; }
+      if (map3 && st.result) { view3.map(st.result); map3 = false; }
+      view3.marks(marks3());
+      await view3.draw({ target: [view.cx, ground(view.cx, view.cz), view.cz], ...cam3 });
+    } finally { drawing3 = false; }
+    if (again3) { again3 = false; draw3(); }
+  });
+}
+let drag3 = null;
+canvas3.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas3.addEventListener('pointerdown', (e) => {
+  drag3 = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey };
+  canvas3.setPointerCapture(e.pointerId);
+});
+canvas3.addEventListener('pointermove', (e) => {
+  if (!drag3) return;
+  const dx = e.clientX - drag3.x, dy = e.clientY - drag3.y;
+  drag3.x = e.clientX; drag3.y = e.clientY;
+  if (drag3.pan) {
+    // the ground under the cursor follows it: across the screen is the camera's right, up it its forward
+    const k = cam3.dist / (canvas3.clientWidth * 0.62);
+    const c = Math.cos(cam3.yaw), s = Math.sin(cam3.yaw);
+    const f = 1 / Math.max(0.3, -Math.sin(cam3.pitch)); // the ground foreshortened along the view
+    view.cx += (s * dx + c * dy * f) * k;
+    view.cz += (-c * dx + s * dy * f) * k;
+  } else {
+    cam3.yaw += dx * 0.008;
+    cam3.pitch = clamp(cam3.pitch + dy * 0.005, -1.3, -0.03);
+  }
+  draw();
+});
+const end3 = () => { drag3 = null; };
+canvas3.addEventListener('pointerup', end3);
+canvas3.addEventListener('pointercancel', end3);
+canvas3.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  cam3.dist = clamp(cam3.dist * Math.exp(e.deltaY * 0.0012), 4, 1200);
+  draw3();
+}, { passive: false });
+new ResizeObserver(() => draw()).observe($('wrap'));
+
 function fit() {
   const b = bounds(), cw = canvas.clientWidth || 800, ch = canvas.clientHeight || 600;
   view.cx = (b[0] + b[1]) / 2; view.cz = (b[2] + b[3]) / 2;
   view.zoom = Math.min(cw / (b[1] - b[0] + 40), ch / (b[3] - b[2] + 40));
+  cam3.dist = clamp(Math.max(b[1] - b[0], b[3] - b[2]) * 0.9, 20, 1200);
   draw();
 }
 
@@ -958,13 +1111,27 @@ function renderSide() {
   // playing it
   const f = st.folder, race = (sp.race || []).length;
   side.append(h3('Play it'));
-  side.append(hint(`Save into Fireplace's maps/${f}/ (or download the files and put them there), then from the repo:`));
+  side.append(row(btn('play it here', () => playHere('arena'), 'the arena on this map, you and AI fighters, in a new tab'),
+    ...(race ? [btn('fly it', () => playHere('flight'), 'Dogfight\'s Ring Race on this map')] : [])));
+  side.append(hint('Online with friends and bots: save it into Fireplace\'s maps/' + f + '/ (or download the files and put them there), then from the repo:'));
   side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --arena --map ${f}` })));
   if (race) side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --flight --mode ${L.FLIGHT_CONSTS.M_RACE} --map ${f}` })), hint('flies its Ring Race.'));
   side.append(hint('Open the URL it prints: that is your map with bots on it. --bots N for more, --mode k for one mode (5 Capture the Flag, 6 Oddball, 7 King of the Hill).'));
   side.append(h3('Send it in'));
   side.append(hint('To have it played for everyone: send it in downloads the three files and opens GitHub\'s upload page for this folder. Drop them there and propose the change; that is the pull request, and CI plays the map with AI fighters. CONTRIBUTING.md, "A map", has the rest.'));
   side.append(row(btn('send it in', sendIn, 'download the files and open GitHub\'s upload page'), btn('download the files', download)));
+}
+
+// The map as it is now, packed (packMap) and handed to the arena's page (or
+// Dogfight's) in a new tab: a local room with AI players, which lays the map
+// in its sim before the first tick (?map=, client/host.mjs). The blob lives as
+// long as this page does.
+function playHere(game) {
+  if (!st.result) { say(`not yet: ${st.error || 'the map is still being checked'}`); return; }
+  const url = URL.createObjectURL(new Blob([packMap(st.result)]));
+  const q = new URLSearchParams({ local: '1', map: url, ...(game === 'flight' ? { mode: String(L.FLIGHT_CONSTS.M_RACE) } : {}) });
+  open(`./${game}.html?${q}`, '_blank');
+  say(`opened ${st.spec.name || 'the map'} in ${game === 'flight' ? 'Dogfight' : 'the arena'}, in a new tab`);
 }
 
 function selectionPanel(sel) {
@@ -1048,7 +1215,15 @@ function selectionPanel(sel) {
         out.push(row(num('x0', () => tidy(w[0]), setW(0)), num('x1', () => tidy(w[3]), setW(3))));
         out.push(row(num('z0', () => tidy(w[2]), setW(2)), num('z1', () => tidy(w[5]), setW(5))));
         out.push(row(num('bottom', () => tidy(b[1] + at[1]), (v) => { b[1] = tidy(v - at[1]); }), num('top', () => tidy(b[4] + at[1]), (v) => { b[4] = tidy(v - at[1]); })));
-        out.push(row(el('label', { textContent: 'material' }), pick1(MATERIALS, b[6] || 'metal', (v) => { b[6] = v; })));
+        // a material, and a colour of the box's own over its look ('rock#7a6e5c'), as tools/roblox.mjs writes
+        const cur = String(b[6] || 'metal'), at6 = cur.indexOf('#');
+        const lookName = at6 < 0 ? cur : at6 ? cur.slice(0, at6) : 'plain', own = at6 < 0 ? '' : cur.slice(at6);
+        const withLook = (lk, c) => (c ? (lk === 'plain' ? c : lk + c) : lk);
+        const colour = el('input', { type: 'color', value: own || '#' + MAT_RGB[Math.max(0, MATERIALS.indexOf(lookName))].map((v) => v.toString(16).padStart(2, '0')).join(''), title: 'its own colour' });
+        colour.oninput = () => { step(); b[6] = withLook(lookName, colour.value); changed(); };
+        colour.onchange = endStep;
+        out.push(row(el('label', { textContent: 'material' }), pick1(MATERIALS, lookName, (v) => { b[6] = withLook(v, own); }), colour,
+          ...(own ? [btn('no colour', () => { step(); b[6] = lookName; endStep(); changed(); renderSide(); })] : [])));
         let lo = Infinity;
         for (let x = w[0]; x <= w[3]; x += Math.max(0.5, (w[3] - w[0]) / 6)) for (let z = w[2]; z <= w[5]; z += Math.max(0.5, (w[5] - w[2]) / 6)) lo = Math.min(lo, ground(x, z));
         out.push(hint(`the ground under it from ${lo.toFixed(2)} m. A fighter walks up a step of ${L.STEP} m; anything higher it jumps or goes round.`));
@@ -1082,7 +1257,17 @@ function renderCheck() {
       lim(m.hills.length, L.NHILL, 'hills'),
       m.race.length ? lim(m.race.length, NGATE, 'race gates') : 'no race (Dogfight\'s Ring Race needs 2 gates or more)',
       `ships fly up to ${m.ceiling} m; ${m.bytes.length.toLocaleString()} B in the wasm`,
+      ...(m.void !== null ? [`a fighter below ${m.void} m dies by falling`] : []),
     ].join(' · ')),
+    ...(st.report ? [el('p', { className: 'hint', textContent: st.reportFrom }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
+    ...(st.brief ? [
+      el('p', { className: 'hint', textContent: `Its game is ${st.brief.summary.scripts} scripts (${st.brief.summary.lines.toLocaleString('en')} lines). The port brief is them as files and port.md, what they do and lean on: hand it to an agent to write the rules here.` }),
+      el('div', { className: 'row' }, btn('download the port brief', () => {
+        const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([zip(Object.fromEntries(Object.entries(st.brief.files).map(([f, t]) => [`${st.brief.name}-port/${f}`, t])))])), download: `${st.brief.name}-port.zip` });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      })),
+    ] : []),
   );
 }
 
@@ -1103,10 +1288,13 @@ function buildHeader() {
     try {
       if (v === 'new') { const m = prompt('How big, in metres? (a square, 128 to 768)', '384'); if (m) newMap(clamp(Math.round(Number(m) / 8) * 8 || 384, 128, 768)); }
       else if (v === 'folder') await openFolder();
+      else if (v === 'roblox') pick('.rbxl,.rbxlx,.rbxm,.rbxmx');
+      else if (v === 'vox') pick('.vox');
       else if (v) await openBuiltIn(v);
     } catch (err) { if (err.name !== 'AbortError') say(`could not open it: ${err.message || err}`); }
   };
   $('save').onclick = save;
+  for (const b of $('modes').children) b.onclick = () => setMode(b.dataset.mode);
   $('undo').onclick = () => restore(undo, redo);
   $('redo').onclick = () => restore(redo, undo);
 }
@@ -1129,9 +1317,23 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => { if (e.key === ' ') { space = false; setTool(st.tool); } });
 addEventListener('beforeunload', keepDraft);
+// a Roblox place or a voxel model dropped on the page
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('drop', (e) => {
+  const f = [...(e.dataTransfer?.files || [])].find((x) => IMPORTS.some(([re]) => re.test(x.name)));
+  if (!f) return;
+  e.preventDefault();
+  if (st.dirty && !confirm('Leave this map? Its changes are not saved.')) return;
+  openFile(f);
+});
 
 buildHeader();
 setTool('select');
+{
+  let m = null;
+  try { m = localStorage.getItem(MODE); } catch { /* none kept */ }
+  setMode(m || (navigator.gpu && innerWidth > 1100 ? 'split' : '2d'));
+}
 const q = new URLSearchParams(location.search);
 (async () => {
   try {

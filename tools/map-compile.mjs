@@ -8,8 +8,26 @@ import * as L from '../src/layout.mjs';
 // surface image paints them with unless map.json says otherwise.
 export const SURFACES = ['grass', 'rock', 'sand', 'metal'];
 export const SURFACE_RGB = { grass: [77, 128, 51], rock: [122, 110, 92], sand: [184, 158, 107], metal: [128, 143, 158] };
-// Box materials, as client/arena-render.mjs colours them.
-export const MATERIALS = ['metal', 'rock', 'dark', 'red', 'blue', 'light'];
+// Box materials, as client/arena-render.mjs colours them. A box may instead
+// have a colour of its own: '#rrggbb' (plain, lit) or '<material>#rrggbb'
+// (that material's look in that colour), as tools/roblox.mjs writes them.
+export const MATERIALS = ['metal', 'rock', 'dark', 'red', 'blue', 'light', 'plain'];
+// A material's u32 in a box: the low byte the look (MATERIALS), bit 7 set when
+// the colour in the three bytes above is the box's own. Drawing only: the sim
+// reads a box's corners and nothing else.
+export const OWN_COLOUR = 0x80;
+export function materialWord(m) {
+  const at = typeof m === 'string' ? m.indexOf('#') : -1;
+  if (at < 0) return MATERIALS.indexOf(m);
+  const look = at ? MATERIALS.indexOf(m.slice(0, at)) : MATERIALS.indexOf('plain');
+  const rgb = m.slice(at + 1);
+  if (look < 0 || !/^[0-9a-fA-F]{6}$/.test(rgb)) return -1;
+  return (look | OWN_COLOUR | (parseInt(rgb, 16) << 8)) >>> 0;
+}
+// and back: { look, rgb } (rgb [r, g, b] 0..255, or null for the look's own)
+export function materialOf(word) {
+  return { look: word & 0x7f, rgb: word & OWN_COLOUR ? [(word >>> 24) & 255, (word >>> 16) & 255, (word >>> 8) & 255] : null };
+}
 export const WEAPONS = { ar: L.W_AR, br: L.W_BR, magnum: L.W_MAGNUM, sniper: L.W_SNIPER, shotgun: L.W_SHOTGUN, rocket: L.W_ROCKET, plasma: L.W_PLASMA, needler: L.W_NEEDLER, sword: L.W_SWORD };
 export const GROUND = -1000; // a spawn or pad with no top: on the ground
 
@@ -68,8 +86,8 @@ export function compileSpec(spec, images, name = 'map.json') {
   const prefabs = spec.prefabs || {};
   const groups = [], boxes = [], teleporters = [];
   const mat = (name, tint, ctx) => {
-    const m = MATERIALS.indexOf((tint && tint[name]) || name || 'metal');
-    if (m < 0) fail(`${ctx}: no material "${name}" (${MATERIALS.join(', ')})`);
+    const m = materialWord((tint && tint[name]) || name || 'metal');
+    if (m < 0) fail(`${ctx}: no material "${name}" (${MATERIALS.join(', ')}, or a colour: "#rrggbb", "rock#rrggbb")`);
     return m;
   };
   for (const [k, s] of (spec.structures || []).entries()) {
@@ -137,6 +155,10 @@ export function compileSpec(spec, images, name = 'map.json') {
     ceiling = Math.ceil(top) + 60;
   }
   if (!(ceiling > 0 && ceiling < 400)) fail(`ceiling ${ceiling}: over 0, under 400 m`);
+  // where a fighter falling off the world dies (map.json "void", metres; none
+  // by default): a Roblox place's sky, as tools/roblox.mjs writes it
+  const voidY = spec.void ?? null;
+  if (voidY !== null && !(typeof voidY === 'number' && voidY > 0 && voidY < ceiling)) fail(`void ${voidY}: a height over 0 m and under the ceiling`);
   // flight's race: its gates in order, balls a ship flies through
   const race = (spec.race || []).map((g, k) => {
     if (!Array.isArray(g) || g.length !== 4 || g.some((v) => typeof v !== 'number')) fail(`race gate ${k}: [x, y, z, radius]`);
@@ -158,6 +180,7 @@ export function compileSpec(spec, images, name = 'map.json') {
   head.setUint32(rel(L.MAP_NSPAWN), spawns.length, true);
   head.setUint32(rel(L.MAP_NPAD), pads.length, true);
   bounds.forEach((v, k) => head.setFloat32(rel(L.MAP_BOUNDS) + 4 * k, v, true));
+  head.setFloat32(rel(L.MAP_VOID), voidY ?? 0, true);
   spawns.forEach((s, k) => {
     head.setFloat32(rel(L.MAP_SPAWN) + 8 * k, s.x, true);
     head.setFloat32(rel(L.MAP_SPAWN) + 8 * k + 4, s.z, true);
@@ -204,7 +227,7 @@ export function compileSpec(spec, images, name = 'map.json') {
       MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling,
       MAPSEG_RACE: race.length ? offs[6] : bytes.length, MAPSEG_NRACEB: race.length ? 16 + 16 * race.length : 0,
     },
-    ceiling,
+    ceiling, void: voidY,
     bounds, groups, boxes, teleporters, spawns, pads, flags, ball, hills, race, sides, heights, surf, origin: [ox, oz], size: [W, H],
   };
 }
@@ -247,3 +270,21 @@ export function dataSegment(bytes, name = '$map') {
   for (const b of bytes) s += /[A-Za-z0-9]/.test(String.fromCharCode(b)) ? String.fromCharCode(b) : '\\' + b.toString(16).padStart(2, '0');
   return `(data ${name} "${s}")`;
 }
+
+// A compiled map packed for the arena's and flight's map_load export, which
+// takes a map from outside the build: a head of MAPPACK_HEAD bytes (layout.mjs
+// MP_*: where each part of `bytes` is, the images' place and size, the
+// ceiling), then the bytes as a build's own map segment holds them.
+export function packMap(m) {
+  const c = m.consts, out = new Uint8Array(L.MAPPACK_HEAD + m.bytes.length), dv = new DataView(out.buffer);
+  const u32 = { MP_MAGIC: L.MAPPACK_MAGIC, MP_BYTES: m.bytes.length, MP_GROUPS: c.MAPSEG_GROUPS, MP_NGROUPB: c.MAPSEG_NGROUPB, MP_BOXES: c.MAPSEG_BOXES,
+    MP_NBOXB: c.MAPSEG_NBOXB, MP_H: c.MAPSEG_H, MP_S: c.MAPSEG_S, MP_OBJ: c.MAPSEG_OBJ, MP_RACE: c.MAPSEG_RACE, MP_NRACEB: c.MAPSEG_NRACEB,
+    MP_X0: c.MAPIMG_X0, MP_Z0: c.MAPIMG_Z0, MP_W: c.MAPIMG_W, MP_HT: c.MAPIMG_H };
+  for (const [k, v] of Object.entries(u32)) dv.setUint32(L[k], v, true);
+  dv.setFloat32(L.MP_CEIL, m.ceiling, true);
+  out.set(m.bytes, L.MAPPACK_HEAD);
+  return out;
+}
+// What map_load's codes mean
+export const MAP_LOAD_ERRORS = ['', 'not a packed map (its head)', 'a count past the build\'s limits', 'a part outside its bytes',
+  'its images outside the world', 'a group or a box (out of range, inside out, or not a number)', 'its ceiling or void', 'a place that is not a number in reach'];

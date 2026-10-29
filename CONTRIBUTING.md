@@ -232,7 +232,8 @@ and smooth the ground and paint it grass, rock, sand or metal; drag out
 boxes for walls, floors and roofs; place spawns, weapon pads, teleporters,
 the two flags, the skull, King of the Hill's hills and, for Dogfight, the
 race's gates. The panel checks the map with the build's own compiler as you
-go and says what it would refuse. Save writes the three files: in Chrome,
+go and says what it would refuse. **3D** (or **both**) shows it as the game
+draws it: drag to turn, right-drag to move, the wheel to zoom. Save writes the three files: in Chrome,
 pick a new folder in `maps/`; elsewhere they download and you put them
 there. Then play it with bots:
 
@@ -240,6 +241,16 @@ there. Then play it with bots:
 node net/play.mjs --arena --map <folder>                # open the URL it prints
 node net/play.mjs --flight --mode 15 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
+
+A Roblox place makes a map too: in the editor, **open… > a Roblox place…**
+(or drop the `.rbxl` on the page), or `node tools/roblox.mjs place.rbxl`.
+Its parts, colours, terrain, spawns and teams come over; the report says
+what didn't, and **download the port brief** gives its scripts and what
+they do, to port the game itself ([docs/roblox.md](docs/roblox.md)). Only bring a place that is
+yours or that its owner has licensed for reuse. A MagicaVoxel model
+(`.vox`) does too, the same ways (**a MagicaVoxel model…**, or `node
+tools/vox.mjs model.vox`): name an object `red spawn`, `blue spawn` or a
+weapon's name in MagicaVoxel and it comes over as one ([docs/vox.md](docs/vox.md)).
 
 Send it as a pull request with the folder in `maps/`, and say which game
 it is for. The editor's **send it in** does that without git: it downloads

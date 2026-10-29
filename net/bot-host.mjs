@@ -84,7 +84,9 @@ const skilled = () => Math.max(0.1, Math.min(1, skill + (Math.random() - 0.5) * 
 const makeBot = (slot) => (flight ? new Pilot(slot, (Math.random() * 1e9) | 0, skilled()) : arena ? new Fighter(slot, (Math.random() * 1e9) | 0, skilled()) : bumper ? new Roller(slot, (Math.random() * 1e9) | 0, skilled())
   : party ? new Partier(slot, (Math.random() * 1e9) | 0, skilled())
   : fireplace ? new Guest(slot, (Math.random() * 1e9) | 0, skilled(), genome) : new BrainBot(slot, genome, { lag: 8 }));
-const prefix = await W.wasmPrefix(bytes);
+// --map: a map from outside the build (tools/map-compile.mjs packMap), as the relay's --map
+const mapBytes = opt('map', '') ? new Uint8Array(readFileSync(opt('map', ''))) : null;
+const prefix = await W.wasmPrefix(bytes, mapBytes);
 const t0 = performance.now();
 const cpu0 = process.cpuUsage();
 
@@ -97,6 +99,7 @@ const world = {
 };
 const memory = newMemory();
 world.sim = new Sim(await instantiate(await WebAssembly.compile(bytes), memory), memory);
+if (mapBytes) world.sim.loadMap(mapBytes);
 world.view = new View(memory.buffer);
 const at = () => world.roomStart + world.sim.tick; // the next server tick to step
 const serverTick = (now) => world.sBase + (now - world.sEpoch) / W.TICK_MS;

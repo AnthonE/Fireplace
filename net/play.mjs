@@ -23,7 +23,10 @@
 // this page as secure: chrome://flags/#unsafely-treat-insecure-origin-as-secure
 // with http://<this machine>:8080 (shared memory and WebTransport need it).
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { compileMap, mapDir } from '../tools/map.mjs';
+import { packMap } from '../tools/map-compile.mjs';
 import { serve } from '../tools/serve.mjs';
 import { PLAYLIST, GAMES, MINIGAMES, FP_START } from '../src/layout.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
@@ -49,12 +52,24 @@ const nbots = Number(opt('bots', arena || flight ? 5 : bumper || party || firepl
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 
 execFileSync('sh', ['tools/cert.sh'], { stdio: 'inherit' });
-// --map builds the arena (or with --flight, Dogfight) on a map of your own:
-// a name in maps/ or a directory, as client/map-editor.html saves it
+// --map plays the arena (or with --flight, Dogfight) on a map of your own, a
+// name in maps/ or a directory as client/map-editor.html saves it, with no
+// build: packed into build/maps/ (tools/map-compile.mjs packMap), it goes to
+// the relay, the bots and the page, each laying it in its sim (map_load)
 const map = opt('map', null);
-execFileSync(process.execPath, ['tools/asm.mjs', ...(map ? [flight ? '--flight-map' : '--map', map] : [])], { stdio: 'inherit' });
+execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
+let mapArgs = [], mapQuery = '';
+if (map) {
+  const m = compileMap(mapDir(map));
+  const file = `build/maps/${basename(mapDir(map))}.qgmap`;
+  mkdirSync('build/maps', { recursive: true });
+  writeFileSync(file, packMap(m));
+  mapArgs = ['--map', file];
+  mapQuery = `&map=../${file}`;
+  console.log(`${m.name}: ${m.boxes.length} boxes, ${m.spawns.length} spawns, packed to ${file}`);
+}
 const hash = readFileSync('certs/hash.txt', 'utf8').trim();
-const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', port, '--host', host, '--replays', 'replays', ...(seed ? ['--seed', seed] : []), ...(arena ? ['--wasm', 'build/arena/game.wasm'] : flight ? ['--wasm', 'build/flight/game.wasm'] : bumper ? ['--wasm', 'build/bumper/game.wasm'] : party ? ['--wasm', 'build/party/game.wasm'] : fireplace ? ['--wasm', 'build/fireplace/game.wasm'] : [])], { stdio: 'inherit' });
+const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', port, '--host', host, '--replays', 'replays', ...(seed ? ['--seed', seed] : []), ...mapArgs, ...(arena ? ['--wasm', 'build/arena/game.wasm'] : flight ? ['--wasm', 'build/flight/game.wasm'] : bumper ? ['--wasm', 'build/bumper/game.wasm'] : party ? ['--wasm', 'build/party/game.wasm'] : fireplace ? ['--wasm', 'build/fireplace/game.wasm'] : [])], { stdio: 'inherit' });
 relay.on('exit', (code) => { console.error(`relay exited (${code})`); process.exit(1); });
 let bots = null;
 process.on('SIGINT', () => { relay.kill(); bots?.kill(); process.exit(0); });
@@ -95,24 +110,24 @@ if (fireplace) {
 } else if (flight) {
   await serve({ port: web, host });
   const page = host === '0.0.0.0' ? '<this machine>' : host;
-  console.log(`\nopen http://${page}:${web}/client/flight.html?hash=${encodeURIComponent(hash)} in Chrome`);
+  console.log(`\nopen http://${page}:${web}/client/flight.html?hash=${encodeURIComponent(hash)}${mapQuery} in Chrome`);
   console.log('click to fly: the mouse aims and the nose follows, left click fires lasers, hold right click (or Space) to charge a homing shot,');
   console.log('W or Shift boosts, S or Ctrl brakes, Q and E (or A and D twice) barrel-roll, G drops a bomb, Tab scores, F fullscreen.');
   if (nbots) {
     await new Promise((ok) => setTimeout(ok, 1500));
     mkdirSync('traces', { recursive: true });
-    bots = spawn(process.execPath, ['net/bot-host.mjs', '--flight', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
+    bots = spawn(process.execPath, ['net/bot-host.mjs', '--flight', ...mapArgs, '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
   }
 } else if (arena) {
   await serve({ port: web, host });
   const page = host === '0.0.0.0' ? '<this machine>' : host;
-  console.log(`\nopen http://${page}:${web}/client/arena.html?hash=${encodeURIComponent(hash)} in Chrome`);
+  console.log(`\nopen http://${page}:${web}/client/arena.html?hash=${encodeURIComponent(hash)}${mapQuery} in Chrome`);
   console.log('click to play: mouse aims, WASD runs, space jumps, left click fires, right click zooms, 1/2, X or the wheel swaps guns,');
   console.log('Q melee, G grenade, R reload, E picks up the gun on a pad, Tab scores, F fullscreen. Grab Bag: random guns, most kills in 10 minutes wins.');
   if (nbots) {
     await new Promise((ok) => setTimeout(ok, 1500));
     mkdirSync('traces', { recursive: true });
-    bots = spawn(process.execPath, ['net/bot-host.mjs', '--arena', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
+    bots = spawn(process.execPath, ['net/bot-host.mjs', '--arena', ...mapArgs, '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
   }
 } else {
   await serve({ port: web, host });

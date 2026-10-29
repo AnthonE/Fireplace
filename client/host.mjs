@@ -16,6 +16,7 @@
 import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
 import { wasmPrefix } from '../net/wire.mjs';
+import { loadMap } from '../harness/core.mjs';
 import { createSound } from './sound.mjs';
 import { slotLabel } from './looks.mjs';
 import { parseImpair } from '../net/impair.js';
@@ -43,7 +44,12 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   if (!crossOriginIsolated) throw new Error('the page must be served cross-origin isolated (node tools/serve.mjs)');
   const bytes = await (await fetch(wasm)).arrayBuffer();
   const module = await WebAssembly.compile(bytes);
-  const prefix = await wasmPrefix(bytes);
+  // ?map=<url>: a map from outside the build (tools/map-compile.mjs packMap:
+  // the map editor's play button, net/play.mjs --map), laid in the shared
+  // memory before the sim starts; the hello's hash names it, so a room on
+  // another map turns the page away
+  const map = q.get('map') ? new Uint8Array(await (await fetch(q.get('map'))).arrayBuffer()) : null;
+  const prefix = await wasmPrefix(bytes, map);
   const memory = new WebAssembly.Memory({ initial: L.PAGES, maximum: L.PAGES, shared: true });
   const i32 = new Int32Array(memory.buffer);
   const h = {
@@ -74,6 +80,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   h.avatar = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) && myAvatar ? myAvatar : h.u32[(L.CL_AVATARS >> 2) + p] >>> 0);
   // the prediction's own instance: it writes only PRED
   h.px = (await WebAssembly.instantiate(module, { env: { mem: memory } })).exports;
+  if (map) loadMap(h.px, h.u8, map);
   const adapter = await navigator.gpu?.requestAdapter();
   if (!adapter) throw new Error('WebGPU is not available in this browser');
   h.device = await adapter.requestDevice();

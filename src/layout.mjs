@@ -11,6 +11,10 @@ export const JOB_QUIT = 0x0c0;
 export const JOB_NA = 0x0c4; // awake balls this tick
 export const JOB_NB = 0x0c8; // 4-ball blocks with an awake ball
 export const JOB_ABORT = 0x0cc; // set by any thread that fails; every barrier gives up
+// 1 when the arena's map came from outside the build (the map_load export):
+// here, where init clears nothing, so init leaves the map and the ground it
+// laid (MAP to NET) as they are
+export const MAP_HOSTED = 0x100;
 export const ERR_CODE = 0x240;
 export const ERR_INDEX = 0x244;
 export const ERR_TICK = 0x248;
@@ -24,6 +28,7 @@ export const GRID_TICK = 0x310;
 export const GRID_N = 0x314;
 export const GRID_OK = 0x318;
 export const SORT_ON = 0x31c; // 1 when tick_begin built this tick's sorted copy (SBOUND...) for contacts
+
 export const DIGESTS = 0x400; // u64[128], slice s digested at tick K+s+1; the interval closes at K+128
 export const INBOX = 0x1000; // u32 count, then records
 export const INBOX_REC = 0x1010;
@@ -435,6 +440,7 @@ export const MAP_NTELE = MAP + 8;
 export const MAP_NSPAWN = MAP + 12;
 export const MAP_NPAD = MAP + 16;
 export const MAP_CEILING = MAP + 20; // f32 flight's ceiling (tools/map.mjs), written by its init; 0 in the arena's
+export const MAP_VOID = MAP + 24; // f32 a fighter whose feet are below it dies by falling (map.json "void"); 0 none
 export const MAP_BOUNDS = MAP + 32; // f32 x0, x1, z0, z1: where fighters can go
 export const MAP_SPAWN = MAP + 0x40; // 32 x 8 B: f32 x, z; a fighter spawns on what is under (x, z) from MAP_SPAWNY up
 export const MAP_SPAWNY = MAP + 0x140; // 32 x f32: the highest feet a spawn may stand at (-1000: the ground)
@@ -442,12 +448,12 @@ export const MAP_PADS = MAP + 0x1c0; // 12 x 16 B: f32 x, z, top (as MAP_SPAWNY)
 export const MAP_TELE = MAP + 0x280; // 16 x 32 B: f32 x, y, z, radius, to x, y, z | u32 0
 export const MAP_HEAD = 0x480; // the bytes above, copied whole
 export const MAP_GROUPS = MAP + 0x480; // 64 x 32 B: f32 x0, y0, z0, x1, y1, z1 | u32 first box, count
-export const MAP_BOXES = MAP + 0xc80; // 512 x 32 B: f32 x0, y0, z0, x1, y1, z1 | u32 material, group
+export const MAP_BOXES = MAP + 0xc80; // 2048 x 32 B: f32 x0, y0, z0, x1, y1, z1 | u32 material, group
 // The objectives the arena's team modes play for (tools/map.mjs fills them in,
 // defaulting any the map leaves out): the two flags' stands, red's then blue's
 // (f32 x, z, top | u32 0), the skull's spot (the same), and up to NHILL hills
 // (f32 x, z, top, radius), MAP_NHILL of them. Tops as MAP_SPAWNY.
-export const MAP_OBJ = MAP + 0x4c80;
+export const MAP_OBJ = MAP + 0x10c80;
 export const MAP_NHILL = MAP_OBJ; // u32
 export const MAP_FLAGS = MAP_OBJ + 0x10; // 2 x 16 B
 export const MAP_BALL = MAP_OBJ + 0x30; // 16 B
@@ -460,7 +466,34 @@ export const MAP_END = MAP_OBJ + MAP_OBJ_SIZE;
 // A map without one leaves it 0; flight's init copies it out (src/flight.wat).
 export const MAP_RACE = MAP_END;
 export const MAP_RACE_END = MAP_RACE + 16 + 16 * 16;
-export const NBOX = 512;
+export const NBOX = 2048; // a place brought from Roblox (tools/roblox.mjs) wants hundreds to thousands
+// A map from outside the build, packed (tools/map-compile.mjs packMap) for the
+// arena's and flight's map_load export: a head, then the bytes a build's own
+// map segment holds. The host writes it at MAP_STAGE, the keyframe slots,
+// which nothing uses before init, so at most MAP_STAGE_MAX bytes.
+export const MAPPACK_MAGIC = 0x314d4751; // "QGM1"
+export const MAPPACK_HEAD = 64;
+// u32 fields of the head: the magic, the bytes after it, where each part of
+// the map is in them and how big (as MAPSEG_* name them in a build), the
+// images' place and size in samples (MAPIMG_*); then f32 the ceiling
+export const MP_MAGIC = 0;
+export const MP_BYTES = 4;
+export const MP_GROUPS = 8;
+export const MP_NGROUPB = 12;
+export const MP_BOXES = 16;
+export const MP_NBOXB = 20;
+export const MP_H = 24;
+export const MP_S = 28;
+export const MP_OBJ = 32;
+export const MP_RACE = 36;
+export const MP_NRACEB = 40;
+export const MP_X0 = 44;
+export const MP_Z0 = 48;
+export const MP_W = 52;
+export const MP_HT = 56;
+export const MP_CEIL = 60;
+export const MAP_STAGE = 0x0a0000; // SNAP0
+export const MAP_STAGE_MAX = 0x100000; // to DVX
 export const NGROUP = 64;
 export const NTELE = 16;
 export const BOX_SIZE = 32;

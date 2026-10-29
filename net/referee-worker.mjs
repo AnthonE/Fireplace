@@ -1,7 +1,7 @@
 // The referee's Worker on the relay (net/relay.ts): closed ticks in, interval
 // hashes and packed keyframes out. Messages are handled in order; packing a
 // keyframe runs beside the ticks, from a copy taken when it was asked for.
-//   in:  { wasm, threads, results } once, { reset: { room, seed, region? } }, { room, ticks: [each tick's parts] }, { room, want: id }
+//   in:  { wasm, threads, results, map } once (map: a map from outside the build, or none), { reset: { room, seed, region? } }, { room, ticks: [each tick's parts] }, { room, want: id }
 //   out: { room, intervals: [{ tick, hash, digests }], at }, { room, key: { id, tick, raw, packed } },
 //        { room, results: [{ tick, game, count, places }] } (with results on: a game in the playlist ended)
 import { Referee } from './referee.mjs';
@@ -16,7 +16,7 @@ self.onmessage = (e) => {
 };
 
 async function handle(m) {
-  if (m.wasm) ref = await Referee.create(m.wasm, m.threads, !!m.results);
+  if (m.wasm) ref = await Referee.create(m.wasm, m.threads, !!m.results, m.map || null);
   if (m.reset) {
     room = m.reset.room;
     ref.reset(m.reset.seed, m.reset.region);

@@ -10,13 +10,16 @@ import { readResult } from './elo.mjs';
 import * as W from './wire.mjs';
 import { feedTick } from './inbox.mjs';
 import { startTeam, stepTeam } from './team.mjs';
+import { loadMap } from '../harness/core.mjs';
 
 export class Referee {
   // threads: the referee's own and its helpers' (net/team.mjs), 1 for none
-  static async create(bytes, threads = 1, results = false) {
+  // map: a map from outside the build (tools/map-compile.mjs packMap), laid before the first init
+  static async create(bytes, threads = 1, results = false, map = null) {
     const memory = new WebAssembly.Memory({ initial: L.PAGES, maximum: L.PAGES, shared: true });
     const module = await WebAssembly.compile(bytes);
     const { exports } = await WebAssembly.instantiate(module, { env: { mem: memory } });
+    if (map) loadMap(exports, new Uint8Array(memory.buffer), map);
     const r = new Referee(exports, memory, await startTeam({ bytes, memory, n: threads }));
     r.results = results;
     return r;

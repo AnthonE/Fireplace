@@ -46,8 +46,9 @@ to four at once. Twelve took four hours.
 - The prediction moves your own body; whatever another player does to you
   arrives a round trip later.
 - No secrets: every machine holds the whole world.
-- Physics: spheres, Quake-style bodies against a heightfield and up to 512
-  boxes, and whatever a minigame's ground and push hooks describe.
+- Physics: spheres, Quake-style bodies against a heightfield and up to 2048
+  boxes (512 until Roblox places needed more: [docs/roblox.md](roblox.md)),
+  and whatever a minigame's ground and push hooks describe.
 - 125 Hz. A lower rate (60 Hz halves CPU and bandwidth) means a per-sim tick
   length the relay reads at the hello; do it only for a game that measures
   over budget.
@@ -91,18 +92,19 @@ only of your own body), physics sandboxes, open worlds.
    top-down game); the grid kit wants a small board renderer.
 3. The arena: several maps in one build chosen at run time, boxes that move
    (obbies), new maps. A map now comes from the map editor
-   (`client/map-editor.html`) as well as from code, so maps chosen at run time
-   are the step that lets players' maps into rooms. What that takes:
-   - the map's sizes and offsets read from its own head in memory, not
-     compiled in (`$arena_gen`'s `MAPIMG_*` and `MAPSEG_*`, flight's
-     `MAP_CEIL`), so its bytes can come from outside the build;
-   - the map as the room's choice: lockstep needs every machine on the same
-     bytes, so the room names a map by its sha256 and each client fetches and
-     checks it before the first tick;
-   - the bytes checked again before they reach memory, since the limits are
-     enforced only by `tools/map-compile.mjs` at build time today;
-   - a replay that names its map's sha256 beside the wasm's;
-   - a map cycle: a list of map hashes the room walks, beside `PLAYLIST`.
+   (`client/map-editor.html`) and from a Roblox place (`tools/roblox.mjs`)
+   as well as from code. Maps at run time are done (docs/arena.md, "Maps
+   at run time"): a packed map laid by the `map_load` export, every number
+   in it checked first, the page's `?map=`, the relay's and bot host's
+   `--map`, and the hello's hash naming the map with the build. Left:
+   - the kit's room pool by map: a room asked for by its wasm's and map's
+     hashes, the map fetched by the pool as the wasm is;
+   - a replay that names its map's bytes beside the wasm's (its prefix
+     already covers both);
+   - a map cycle: a list of map hashes the room walks, beside `PLAYLIST`,
+     which means laying a map between matches, not only before the first
+     init;
+   - Fireplace taking one (its playlist builds each game's world itself).
 4. Fireplace: a vote for the next game, then a board between games (dice,
    stars, coins) over the minigames.
 5. Pipelines compiled before a Fireplace switch: on SwiftShader the first
@@ -114,6 +116,61 @@ only of your own body), physics sandboxes, open worlds.
    arena's pages load Party's constants through `layout.mjs`'s `MG_CONSTS`
    (26 KB gzipped).
 7. People playing it. Everything so far is played by bots.
+
+## Bringing maps and games in
+
+Built: a Roblox place as an arena map, one command or one file dropped on
+the map editor ([docs/roblox.md](roblox.md)). Of Roblox's 31 open-source
+levels, 29 convert, 22 of them with every box kept. And a MagicaVoxel model
+the same way ([docs/vox.md](vox.md)): its voxels as boxes in their own
+colours, its floor the ground, objects named for spawns and weapons. Each
+converter is a reader for its format (`tools/rbx-file.mjs`,
+`tools/vox-file.mjs`) and a front that makes a scene: solids (convex shapes
+as planes, a colour each), the ground, and markers (spawns, teams, pads).
+One back half makes boxes, the ground, the void and the report from any
+scene (`tools/scene-map.mjs`). Another engine is another reader into the
+same scene. None of these is built yet; in order of how mechanical each is
+and where its builders are:
+
+1. **Minecraft** (`.schem`, Sponge's schematic; `.litematic`; a world's
+   `.mca` regions): blocks are unit boxes, so nothing is approximated; the
+   joins and the fit do the rest, and a block's colour comes from a table as
+   BrickColor's does. The most builders of any engine, and their builds are
+   already blocks.
+2. **Quake and TrenchBroom** (`.map`, the Valve 220 format): a brush is a
+   convex solid given by its planes, which is the converter's solid as it
+   stands; `info_player_deathmatch` is a spawn, the weapons are pads, CTF's
+   team spawns are the flags. Arena shooters' mappers, for an arena shooter.
+3. **glTF 2.0** (`.glb`): what Unity (UnityGLTF, glTFast), Unreal (its own
+   exporter), Godot and Blender all write. A mesh goes into the same columns:
+   a vertical line's crossings with a closed mesh's triangles are its solid
+   spans (a collision mesh is best). Nodes named `spawn`, `spawn_red`,
+   `flag_blue`, `pad_rocket` are markers; `void` a height. One reader for every
+   engine that exports glTF.
+4. **Unity's colliders**: an editor script that writes a scene's box,
+   sphere and capsule colliders as JSON. A BoxCollider is an arena box
+   exactly (a turned one through the columns), with no mesh at all: what
+   Unity itself collides with, which is the arena's whole concern.
+
+What no reader brings is a game's code: Luau, C#, GDScript, Blueprints run on
+their engine's API. A game's rules are written fresh on a kit here (a port,
+by an agent). What the readers do for a port is the brief: the level done,
+and the scripts listed with the engine services each calls, its network
+messages and what it sells, so a port is one prompt on everything, not one
+per question.
+
+A whole game that is not a Fireplace game goes to Elo Pros as it is: the
+store lists any web build from a repo (`elo.json`'s `web` block). Unity
+(WebGL), Godot (HTML5), Defold, PlayCanvas, Babylon.js, three.js, Phaser,
+Construct and GameMaker (HTML5) export one; Unreal has had no web export
+since 4.24, so it lists as a desktop build. The mechanical step worth
+building there is the store's: read an engine's export folder (Unity's
+`Build/*.loader.js`, Godot's `.pck` beside its `index.html`) and write the
+`elo.json` for it.
+
+A converted map plays the minute it is made, in the editor's **play it
+here** or online with `net/play.mjs --map`, laid at run time (Engine work,
+3); what's left is the room pool taking maps by hash.
 
 ## FFA ARAM (the champion kit's first game)
 

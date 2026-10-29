@@ -3,6 +3,7 @@
 // splits, or n threads), and records a hash of the whole region every tick.
 
 import * as L from '../src/layout.mjs';
+import { MAP_LOAD_ERRORS } from '../tools/map-compile.mjs';
 
 export function newMemory() {
   return new WebAssembly.Memory({ initial: L.PAGES, maximum: L.PAGES, shared: true });
@@ -102,6 +103,19 @@ function splitter(seed) {
   };
 }
 
+// A map from outside the build (tools/map-compile.mjs packMap) into an
+// arena's or flight's memory, before init: staged at MAP_STAGE (the keyframe
+// slots, unused till then), checked and laid in place by the sim's map_load,
+// the stage cleared again. Throws with what was wrong; nothing changes then.
+export function loadMap(x, u8, packed) {
+  if (!x.map_load) throw new Error('this build takes no map from outside (only the arena\'s and flight\'s do)');
+  if (packed.length > L.MAP_STAGE_MAX) throw new Error(`a map of ${packed.length} B: at most ${L.MAP_STAGE_MAX}`);
+  u8.set(packed, L.MAP_STAGE);
+  const r = x.map_load(L.MAP_STAGE, packed.length);
+  u8.fill(0, L.MAP_STAGE, L.MAP_STAGE + packed.length);
+  if (r) throw new Error(`the map was refused: ${MAP_LOAD_ERRORS[r] || `code ${r}`}`);
+}
+
 export class Sim {
   constructor(exports, memory) {
     this.x = exports;
@@ -115,6 +129,8 @@ export class Sim {
     this.x.init(seed);
     this.recPtr = 0;
   }
+
+  loadMap(packed) { loadMap(this.x, this.u8, packed); }
 
   get tick() { return Atomics.load(this.i32, L.HDR_TICK >> 2); }
   get nballs() { return Atomics.load(this.i32, L.HDR_NBALLS >> 2); }
