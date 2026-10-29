@@ -15,7 +15,7 @@
     { "at": 395, "len": 3 },
     { "at": 440, "len": 4, "caption": "The arena" },
     { "at": 520, "len": 3 },
-    { "at": 604, "len": 6, "theme": "christmas-eve", "caption": "Marshmallows\nfor the top three" },
+    { "at": 604, "len": 6, "theme": "summer-rain", "caption": "Marshmallows\nfor the top three" },
     { "at": 650, "len": 4, "theme": "haunted" },
     { "at": 750, "len": 3, "caption": "Up to 256\nin one room" },
     { "at": 870, "len": 4, "caption": "Golf" },
