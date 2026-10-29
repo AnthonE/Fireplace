@@ -1,0 +1,257 @@
+{
+ "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+ "out": "film/out/fireplace-flex.mp4",
+ "size": [
+  1920,
+  1080
+ ],
+ "fps": 30,
+ "theme": "grandma",
+ "guests": true,
+ "score": 20,
+ "fade": 0.6,
+ "shots": [
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "couch": 4.096
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "sit": 4.096
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 30,
+   "len": 2.048,
+   "caption": "BUMPER BALLS\nUP TO 256 IN A ROOM"
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 60,
+   "len": 1.024
+  },
+  {
+   "replay": "replays/f1010025-2026-10-29T05-57-03-146Z.qgr",
+   "at": 25,
+   "len": 2.048,
+   "caption": "PARTY\n41 MINIGAMES"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 30,
+   "len": 1.536,
+   "caption": "COIN RUSH"
+  },
+  {
+   "replay": "replays/f1010017-2026-10-29T05-57-00-091Z.qgr",
+   "at": 30,
+   "len": 1.536,
+   "caption": "SNOWBALL"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 115,
+   "len": 1.536,
+   "caption": "MUSICAL PADS"
+  },
+  {
+   "replay": "replays/f1010017-2026-10-29T05-57-00-091Z.qgr",
+   "at": 110,
+   "len": 1.536,
+   "caption": "MINGLE"
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 215,
+   "len": 1.536,
+   "caption": "GLASS BRIDGE"
+  },
+  {
+   "replay": "replays/f1010025-2026-10-29T05-57-03-146Z.qgr",
+   "at": 114,
+   "len": 1.536,
+   "caption": "DODGEBALL\nRED AGAINST BLUE"
+  },
+  {
+   "replay": "replays/f1010025-2026-10-29T05-57-03-146Z.qgr",
+   "at": 175,
+   "len": 1.536,
+   "caption": "DISASTER ISLAND"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 220,
+   "len": 1.536,
+   "caption": "BOMB RAIN"
+  },
+  {
+   "replay": "replays/f1010017-2026-10-29T05-57-00-091Z.qgr",
+   "at": 215,
+   "len": 1.536,
+   "caption": "RED LIGHT"
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 320,
+   "len": 1.536,
+   "caption": "THE WALL"
+  },
+  {
+   "replay": "replays/f1020029-2026-10-29T06-11-02-616Z.qgr",
+   "at": 203,
+   "len": 1.536,
+   "caption": "TAG"
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 540,
+   "len": 2.048,
+   "caption": "THE ARENA\nCAPTURE THE FLAG"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 340,
+   "len": 2.048,
+   "caption": "ESCAPE"
+  },
+  {
+   "replay": "replays/f1010017-2026-10-29T05-57-00-091Z.qgr",
+   "at": 300,
+   "len": 2.048,
+   "caption": "JUGGERNAUT"
+  },
+  {
+   "replay": "replays/f1010025-2026-10-29T05-57-03-146Z.qgr",
+   "at": 300,
+   "len": 2.048,
+   "caption": "TERRITORIES"
+  },
+  {
+   "replay": "replays/f1020029-2026-10-29T06-11-02-616Z.qgr",
+   "at": 260,
+   "len": 1.536,
+   "caption": "SLAP HAPPY"
+  },
+  {
+   "replay": "replays/f1020035-2026-10-29T06-11-06-201Z.qgr",
+   "at": 60,
+   "len": 2.048,
+   "caption": "GRAB BAG"
+  },
+  {
+   "replay": "replays/f1020029-2026-10-29T06-11-02-616Z.qgr",
+   "at": 360,
+   "len": 1.536,
+   "caption": "JUMP ROPE"
+  },
+  {
+   "replay": "replays/f1020035-2026-10-29T06-11-06-201Z.qgr",
+   "at": 320,
+   "len": 1.536,
+   "caption": "PARRY BALL"
+  },
+  {
+   "replay": "replays/f1020043-2026-10-29T06-11-05-200Z.qgr",
+   "at": 290,
+   "len": 1.536,
+   "caption": "SEESAWS"
+  },
+  {
+   "replay": "replays/f1020043-2026-10-29T06-11-05-200Z.qgr",
+   "at": 395,
+   "len": 1.536,
+   "caption": "MAZE RUN"
+  },
+  {
+   "replay": "replays/f102004f-2026-10-29T06-11-11-852Z.qgr",
+   "at": 310,
+   "len": 1.536,
+   "caption": "TRAP RUN"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 495,
+   "len": 1.536,
+   "caption": "CANNONADE"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 590,
+   "len": 1.536,
+   "caption": "GATE CRASH"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 660,
+   "len": 1.536,
+   "caption": "STOMPIN' GROUND"
+  },
+  {
+   "replay": "replays/f1010017-2026-10-29T05-57-00-091Z.qgr",
+   "at": 466,
+   "len": 1.536,
+   "caption": "THIN ICE"
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 688,
+   "len": 3.072,
+   "caption": "MARSHMALLOWS\nFOR THE TOP THREE",
+   "theme": "christmas-eve",
+   "room": true
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 715,
+   "len": 1.536,
+   "caption": "RISING LAVA"
+  },
+  {
+   "replay": "replays/f1010025-2026-10-29T05-57-03-146Z.qgr",
+   "at": 640,
+   "len": 1.536,
+   "caption": "SUMO RING"
+  },
+  {
+   "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
+   "at": 900,
+   "len": 1.536,
+   "caption": "VOLLEYBALL"
+  },
+  {
+   "replay": "replays/f101000b-2026-10-29T05-56-56-570Z.qgr",
+   "at": 760,
+   "len": 2.048,
+   "caption": "DOGFIGHT"
+  },
+  {
+   "replay": "replays/f1020035-2026-10-29T06-11-06-201Z.qgr",
+   "at": 490,
+   "len": 2.048,
+   "caption": "DOGFIGHT\nJUGGERNAUT"
+  },
+  {
+   "replay": "replays/f1010025-2026-10-29T05-57-03-146Z.qgr",
+   "at": 745,
+   "len": 2.048
+  },
+  {
+   "replay": "replays/f1010025-2026-10-29T05-57-03-146Z.qgr",
+   "at": 842,
+   "len": 2.048,
+   "caption": "GOLF\nWITH ROCKETS"
+  },
+  {
+   "replay": "replays/f102004f-2026-10-29T06-11-11-852Z.qgr",
+   "at": 650,
+   "len": 2.048,
+   "caption": "EVERY ONE OF THEM\nIN YOUR BROWSER"
+  },
+  {
+   "replay": "replays/f102004f-2026-10-29T06-11-11-852Z.qgr",
+   "back": 6.144,
+   "caption": "FIREPLACE\nON ELO PROS",
+   "theme": "grandma"
+  }
+ ]
+}
