@@ -1,8 +1,9 @@
 // The arena's WebGPU renderer: golf's look (the terrain ray-marched per pixel
-// at 320x200, bodies as depth-tested splats, a 3x5 HUD font), the map's
-// boxes ray-traced in the same pass (walls, roofs, the cave's roof: a slab
-// test per box, a group's bounds first, and a ray to the sun from whatever a
-// pixel lands on for its shadow), with what a
+// and drawn low-poly, client/lowpoly.mjs; bodies as depth-tested splats, a
+// HUD on a 320 x 200 grid scaled to the screen), the map's boxes ray-traced in
+// the same pass as plastic, metal and rock (walls, roofs, the cave's roof: a
+// slab test per box, a group's bounds first, and a ray to the sun from
+// whatever a pixel lands on for its shadow), with what a
 // shooter needs on top: tracers as beams, sprites for blasts, sparks and
 // weapon pads, the team modes' flags and skull, zones painted on the ground
 // for a hill or the territories, and a HUD of rectangles under the text for
@@ -10,11 +11,13 @@
 // and the hit marker. Fighters and projectiles come straight from shared memory;
 // everything else from the main thread each frame. Nothing here is hashed.
 import * as L from '../src/layout.mjs';
-import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
+import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
+import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { VIEWMODEL_WGSL, MAX_VM } from './viewmodel.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 256;
@@ -36,7 +39,7 @@ const vec3 = (c) => `vec3f(${c.map((v) => v.toFixed(3)).join(', ')})`;
 // sees through: the focal length (px) and the horizon's row, the pitch a
 // vertical shear as golf's.
 export function lens(s, W, H) {
-  const focal = W * 0.62 * (s.zoom || 1);
+  const focal = focalFor(W, H) * (s.zoom || 1);
   return { focal, horizon: H / 2 + Math.tan(Math.max(-1.35, Math.min(1.35, s.pitch))) * focal };
 }
 
@@ -61,7 +64,8 @@ struct U {
   fx: vec4f,      // damage flash (0..1), scope (1), net graph shown (1), crosshair gap (px)
   pred: vec4f,    // extrapolate my projectiles (s); the motion tracker's centre x, y and radius (px)
   map: vec4f,     // boxes, groups, sides (0 none, 1 one against the rest, 2 red and blue), the zones' height band (m)
-  zn: vec4f,      // how many zones
+  zn: vec4f,      // how many zones, boxes in my hands
+  hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px), the focal length unzoomed (px) (client/lowpoly.mjs)
   zones: array<vec4f, ${2 * MAX_ZONE}>, // two a zone, a disc painted on the ground: centre x, z, radius, the height it's at | its colour, how hard it pulses (0..1)
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -77,10 +81,12 @@ struct U {
 @group(0) @binding(10) var<storage, read> graph: array<vec4f>;
 @group(0) @binding(11) var<storage, read> boxes: array<vec4f>;  // two a box: x0, y0, z0, material | x1, y1, z1, 0
 @group(0) @binding(12) var<storage, read> groups: array<vec4f>; // two a group: x0, y0, z0, first box | x1, y1, z1, count
+@group(0) @binding(13) var<storage, read> vm: array<vec4f>;     // what I hold (client/viewmodel.mjs): three a box
 
-const SKY_LO = vec3f(0.74, 0.8, 0.88);
-const SKY_HI = vec3f(0.22, 0.42, 0.72);
-const SUN = vec3f(0.42, 0.78, 0.46);
+const FOG = 600.0;
+${LOWPOLY_WGSL}
+${GROUND_WGSL}
+${BOXES_WGSL}
 
 fn hgt(x: f32, z: f32) -> f32 {
   let g = clamp(vec2f(x, z) * 0.5, vec2f(0.0), vec2f(510.99));
@@ -91,99 +97,6 @@ fn hgt(x: f32, z: f32) -> f32 {
   let c = textureLoad(hmap, i + vec2i(0, 1), 0).r;
   let d = textureLoad(hmap, i + vec2i(1, 1), 0).r;
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-fn hash2(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
-
-// grass, rock, the sand track, the bases' metal
-fn surfColor(s: u32, w: vec2f) -> vec3f {
-  let n = hash2(floor(w * 2.0));
-  switch s {
-    case 0u: { return vec3f(0.3, 0.5, 0.2) * (0.88 + 0.2 * n); }
-    case 1u: { return vec3f(0.48, 0.43, 0.36) * (0.8 + 0.35 * hash2(floor(w * 0.7))); }
-    case 2u: { return vec3f(0.72, 0.62, 0.42) * (0.92 + 0.12 * n); }
-    default: {
-      let seam = min(abs(fract(w.x / 4.0) - 0.5), abs(fract(w.y / 4.0) - 0.5)) < 0.04;
-      return select(vec3f(0.5, 0.56, 0.62), vec3f(0.3, 0.34, 0.4), seam);
-    }
-  }
-}
-
-fn ground(w: vec2f) -> vec3f {
-  let g = clamp(w * 0.5 - 0.5, vec2f(0.0), vec2f(510.0));
-  let i = vec2i(g);
-  let f = g - vec2f(i);
-  let a = surfColor(textureLoad(smap, i, 0).r, w);
-  let b = surfColor(textureLoad(smap, i + vec2i(1, 0), 0).r, w);
-  let c = surfColor(textureLoad(smap, i + vec2i(0, 1), 0).r, w);
-  let d = surfColor(textureLoad(smap, i + vec2i(1, 1), 0).r, w);
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-// The boxes' materials (tools/map.mjs's MATERIALS): metal, rock, dark metal, red, blue, light, plain.
-// A box's lo.w is its look, plus 128 when hi.w holds a colour of its own (0xrrggbb).
-var<private> MATERIAL: array<vec3f, 7> = array<vec3f, 7>(vec3f(0.56, 0.6, 0.64), vec3f(0.47, 0.42, 0.36), vec3f(0.24, 0.27, 0.31),
-  vec3f(0.62, 0.17, 0.14), vec3f(0.17, 0.27, 0.64), vec3f(0.75, 0.95, 1.0), vec3f(0.64, 0.64, 0.65));
-
-struct Hit { t: f32, n: vec3f, k: u32 };
-
-// The nearest box the ray o + t d enters past t = 0 and before tmax (k = 0xffffffff for none).
-// A box the ray starts inside isn't seen, so a camera in a wall sees out.
-fn traceBoxes(o: vec3f, d: vec3f, tmax: f32) -> Hit {
-  var h: Hit;
-  h.t = tmax;
-  h.k = 0xffffffffu;
-  let inv = 1.0 / select(d, vec3f(1e-9), abs(d) < vec3f(1e-9));
-  for (var g = 0u; g < u32(u.map.y); g++) {
-    let gl = groups[2u * g];
-    let gh = groups[2u * g + 1u];
-    let ga = (gl.xyz - o) * inv;
-    let gb = (gh.xyz - o) * inv;
-    let gn = min(ga, gb);
-    let gf = max(ga, gb);
-    if (max(max(gn.x, gn.y), max(gn.z, 0.0)) > min(min(gf.x, gf.y), min(gf.z, h.t))) { continue; }
-    let first = u32(gl.w);
-    for (var k = first; k < first + u32(gh.w); k++) {
-      let ta = (boxes[2u * k].xyz - o) * inv;
-      let tb = (boxes[2u * k + 1u].xyz - o) * inv;
-      let tn = min(ta, tb);
-      let tf = max(ta, tb);
-      let t0 = max(max(tn.x, tn.y), tn.z);
-      if (t0 <= min(min(tf.x, tf.y), tf.z) && t0 > 0.0 && t0 < h.t) {
-        h.t = t0;
-        h.k = k;
-        if (t0 == tn.x) { h.n = vec3f(-sign(d.x), 0.0, 0.0); } else if (t0 == tn.y) { h.n = vec3f(0.0, -sign(d.y), 0.0); } else { h.n = vec3f(0.0, 0.0, -sign(d.z)); }
-      }
-    }
-  }
-  return h;
-}
-
-// 0 where a box stands between p and the sun, else 1.
-fn sunlit(p: vec3f) -> f32 {
-  if (u.map.x < 0.5) { return 1.0; }
-  return select(1.0, 0.0, traceBoxes(p, SUN, 400.0).k != 0xffffffffu);
-}
-
-// A box's face at w: its material, panel seams on metal, a dark line on every edge.
-fn boxColor(k: u32, w: vec3f, n: vec3f) -> vec3f {
-  let lo = boxes[2u * k];
-  let hw = boxes[2u * k + 1u];
-  let hi = hw.xyz;
-  let m = min(u32(lo.w) & 127u, 6u);
-  // the two axes across the face
-  var uv = w.xy;
-  var e = min(min(w.x - lo.x, hi.x - w.x), min(w.y - lo.y, hi.y - w.y));
-  if (abs(n.x) > 0.5) { uv = w.zy; e = min(min(w.z - lo.z, hi.z - w.z), min(w.y - lo.y, hi.y - w.y)); }
-  if (abs(n.y) > 0.5) { uv = w.xz; e = min(min(w.x - lo.x, hi.x - w.x), min(w.z - lo.z, hi.z - w.z)); }
-  var c = MATERIAL[m];
-  if ((u32(lo.w) & 128u) != 0u) { let rgb = u32(hw.w); c = vec3f(f32(rgb >> 16u), f32((rgb >> 8u) & 255u), f32(rgb & 255u)) / 255.0; }
-  if (m == 1u) { c *= 0.75 + 0.4 * hash2(floor(uv * 1.5)); }
-  else if (m < 5u) {
-    let seam = min(abs(fract(uv.x / 2.0) - 0.5), abs(fract(uv.y / 1.0) - 0.5)) > 0.47;
-    c *= select(1.0, 0.82, seam) * (0.94 + 0.08 * hash2(floor(uv * 0.5)));
-  }
-  return c * select(1.0, 0.6, e < 0.06);
 }
 
 // The zones (a hill, the territories) on what a pixel landed on: at w
@@ -204,17 +117,6 @@ fn zone(c: vec3f, w: vec2f, y: f32, z: f32) -> vec3f {
     o = mix(o, zc.rgb, k);
   }
   return o;
-}
-
-fn sky(sy: f32) -> vec3f {
-  let t = clamp((u.view.z - sy) / u.screen.y * 1.6, 0.0, 1.0);
-  return mix(SKY_LO, SKY_HI, t);
-}
-
-fn dither(c: vec3f, p: vec2f) -> vec3f {
-  var m = array<f32, 4>(0.0, 0.5, 0.75, 0.25);
-  let k = m[(u32(p.x) & 1u) + 2u * (u32(p.y) & 1u)];
-  return floor(c * 31.0 + k) / 31.0;
 }
 
 struct VOut { @builtin(position) pos: vec4f };
@@ -251,28 +153,23 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   if (bh.k != 0xffffffffu && (!hit || bh.t < z)) {
     let w = u.cam.xyz + ray * bh.t;
-    var c = boxColor(bh.k, w, bh.n);
-    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) {
-      c *= 0.42 + 0.68 * max(dot(bh.n, SUN), 0.0) * sunlit(w + bh.n * 0.01) + 0.06 * bh.n.y;
-    }
+    var c = boxColor(bh.k, w, bh.n, bh.t / u.cam.w);
+    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) { c *= light(bh.n, sunlit(w + bh.n * 0.01)); }
     if (bh.n.y > 0.5) { c = zone(c, w.xz, w.y, bh.t); }
-    c = mix(c, SKY_LO, 1.0 - exp(-bh.t / 420.0));
-    o.color = vec4f(dither(c, p.xy), 1.0);
+    o.color = vec4f(fogged(c, bh.t), 1.0);
     o.depth = bh.t / u.screen.z;
     return o;
   }
   if (!hit) {
-    var c = sky(p.y);
-    let sd = dot(normalize(vec3f(dir.x, rise, dir.y)), SUN);
-    c += vec3f(1.0, 0.9, 0.7) * pow(max(sd, 0.0), 300.0);
-    // a ringed planet low in the sky, for the look
     let pd = normalize(vec3f(dir.x, rise, dir.y));
+    var c = sky(pd, u.cam.xyz, u.view.w);
+    // a ringed planet low in the sky, for the look
     let pc = normalize(vec3f(-0.6, 0.32, 0.74));
     let a = acos(clamp(dot(pd, pc), -1.0, 1.0));
     if (a < 0.16) { c = mix(c, vec3f(0.62, 0.66, 0.78) * (0.7 + 0.3 * (pd.y - pc.y + 0.16) / 0.32), 0.85); }
     let ring = abs(a - 0.24) < 0.012 && abs(pd.y - pc.y) < 0.06;
     if (ring) { c = mix(c, vec3f(0.85, 0.85, 0.9), 0.6); }
-    o.color = vec4f(dither(c, p.xy), 1.0);
+    o.color = vec4f(c, 1.0);
     o.depth = 1.0;
     return o;
   }
@@ -285,15 +182,11 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   z = hi;
   let w = u.cam.xz + dir * z;
-  let n = normalize(vec3f(hgt(w.x - 1.0, w.y) - hgt(w.x + 1.0, w.y), 2.0, hgt(w.x, w.y - 1.0) - hgt(w.x, w.y + 1.0)));
-  var c = ground(w);
-  // steep ground is rock whatever it's painted
-  c = mix(c, vec3f(0.46, 0.41, 0.35) * (0.8 + 0.3 * hash2(floor(w * 0.5))), smoothstep(0.82, 0.7, n.y));
-  c *= 0.45 + 0.65 * max(dot(n, SUN), 0.0) * select(1.0, sunlit(vec3f(w.x, u.cam.y + rise * z + 0.05, w.y)), z < 160.0);
+  let fc = facetAt(w, z);
+  var c = groundColor(w, fc) * grain(w, z);
+  c *= light(fc.xyz, select(1.0, sunlit(vec3f(w.x, u.cam.y + rise * z + 0.05, w.y)), z < 160.0));
   c = zone(c, w, u.cam.y + rise * z, z);
-  let fog = 1.0 - exp(-z / 420.0);
-  c = mix(c, SKY_LO, fog);
-  o.color = vec4f(dither(c, p.xy), 1.0);
+  o.color = vec4f(fogged(c, z), 1.0);
   o.depth = z / u.screen.z;
   return o;
 }
@@ -420,6 +313,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     if ((fl & ${L.PF_LIVE}u) == 0u || (fl & ${L.PF_DEAD}u) != 0u || i == u32(u.misc.x)) { return o; }
     let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
     center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92, pf(b, ${L.P_PZ}u)) + vel * dt;
+    // a camera standing in one (a spectator's, riding the eyes it watches) doesn't see it from inside
+    if (distance(center.xz, u.cam.xz) < 0.7 && abs(center.y - u.cam.y) < 1.4) { return o; }
     half = vec2f(1.05, 1.0);
     // its figure: heading and aim from its input word (src/arena-view.mjs), legs stepping as fast as it goes, its look's body
     let w = players[(b + ${L.P_IN}u) / 4u];
@@ -492,8 +387,7 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     let ray = fwd + vec3f(-u.view.y, 0.0, u.view.x) * ((s.pos.x - u.screen.x * 0.5) / u.cam.w) + vec3f(0.0, (u.view.z - s.pos.y) / u.cam.w, 0.0);
     let b = figure(u.cam.xyz, normalize(ray), fwd, s);
     if (!b.hit || b.cover < 0.5) { discard; }
-    let lit = 0.5 + 0.6 * max(dot(b.n, normalize(SUN)), 0.0) + 0.12 * b.n.y;
-    o.color = vec4f(dither((b.alb * lit + b.glow) * mix(1.0, b.ink, 0.6), s.pos.xy), 1.0);
+    o.color = vec4f(fogged((b.alb * light(b.n, 1.0) + b.glow) * mix(1.0, b.ink, 0.6), b.z), 1.0);
     o.depth = b.z / u.screen.z;
     return o;
   }
@@ -629,7 +523,7 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     }
     default: {}
   }
-  o.color = vec4f(dither(c, s.pos.xy), 1.0);
+  o.color = vec4f(fogged(c, s.pos.z * u.screen.z), 1.0);
   return o;
 }
 
@@ -684,12 +578,13 @@ fn glyphBit(cell: vec2i, px: vec2i) -> bool {
 }
 
 fn lit(p: vec2i) -> bool {
+  if (p.x < 0 || p.y < 0) { return false; }
   let cell = vec2i(p.x / 4, p.y / 6);
   return glyphBit(cell, vec2i(p.x - cell.x * 4, p.y - cell.y * 6));
 }
 
 fn graphPx(p: vec2i) -> vec4f {
-  let col = p.x - (i32(u.screen.x) - ${GRAPH_N + 4});
+  let col = p.x - (${COLS * 4} - ${GRAPH_N + 4});
   if (u.fx.z < 0.5 || col < 0 || col >= ${GRAPH_N}) { return vec4f(0.0); }
   let k = (p.y - 18) / 24;
   let yy = p.y - 18 - 24 * k;
@@ -732,33 +627,42 @@ fn cross(d: vec2f, kind: u32, gap: f32) -> bool {
   }
 }
 
+${HUD_FONT_WGSL}
+${VIEWMODEL_WGSL}
 @fragment fn fs_hud(@builtin(position) q: vec4f) -> @location(0) vec4f {
-  let p = vec2i(q.xy);
+  let hs = u.hudv.x;
   let c = vec2f(u.screen.x, u.screen.y) * 0.5;
   let d = q.xy - c - vec2f(0.5);
+  let dh = d / hs; // in HUD px
   // the scope: black past a circle, a fine cross through it
   if (u.fx.y > 0.5) {
     let r = length(d);
     if (r > u.screen.y * 0.46) { return vec4f(0.0, 0.0, 0.0, 1.0); }
-    if (abs(r - u.screen.y * 0.46) < 1.0) { return vec4f(0.1, 0.1, 0.1, 1.0); }
-    if ((abs(d.x) < 0.5 || abs(d.y) < 0.5) && r > 3.0) { return vec4f(0.0, 0.0, 0.0, 0.8); }
+    if (abs(r - u.screen.y * 0.46) < hs) { return vec4f(0.1, 0.1, 0.1, 1.0); }
+    if ((abs(dh.x) < 0.5 || abs(dh.y) < 0.5) && length(dh) > 3.0) { return vec4f(0.0, 0.0, 0.0, 0.8); }
   }
   // the hit marker: four short ticks out from the centre
-  if (u.hud.w > 0.0 && abs(abs(d.x) - abs(d.y)) < 0.7 && max(abs(d.x), abs(d.y)) > 3.0 && max(abs(d.x), abs(d.y)) < 6.5) {
+  if (u.hud.w > 0.0 && abs(abs(dh.x) - abs(dh.y)) < 0.7 && max(abs(dh.x), abs(dh.y)) > 3.0 && max(abs(dh.x), abs(dh.y)) < 6.5) {
     return vec4f(1.0, 1.0, 1.0, u.hud.w);
   }
   // the crosshair, red over an enemy in range
   let ck = u32(u.hud.z);
-  if (u.fx.y < 0.5 && cross(d, ck & 7u, u.fx.w)) { return select(vec4f(0.55, 0.85, 1.0, 0.9), vec4f(1.0, 0.25, 0.2, 0.95), ck >= 8u); }
+  if (u.fx.y < 0.5 && cross(dh, ck & 7u, u.fx.w)) { return select(vec4f(0.55, 0.85, 1.0, 0.9), vec4f(1.0, 0.25, 0.2, 0.95), ck >= 8u); }
   let td = q.xy - u.pred.yz;
   let tr = length(td);
-  if (u.pred.w > 0.0 && (abs(tr - u.pred.w) < 0.7 || (tr < u.pred.w && (abs(td.x) < 0.4 || abs(td.y) < 0.4)))) { return vec4f(0.5, 0.8, 1.0, 0.7); }
-  if (lit(p)) {
+  if (u.pred.w > 0.0 && (abs(tr - u.pred.w) < 0.7 * hs || (tr < u.pred.w && (abs(td.x) < 0.4 * hs || abs(td.y) < 0.4 * hs)))) { return vec4f(0.5, 0.8, 1.0, 0.7); }
+  let hp = (q.xy - u.hudv.yz) / hs;
+  let p = vec2i(floor(hp));
+  // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
+  let roundOn = font[64u] != 0u;
+  let t = roundText(hp, ${COLS}u, u32(u.hud.x));
+  if (t.a > 0.0) { return t; }
+  if (!roundOn && lit(p)) {
     let cell = vec2i(p.x / 4, p.y / 6);
     let k = (hud[u32(cell.y) * ${COLS}u + u32(cell.x)] >> 8u) & 7u;
     return vec4f(PALETTE[k], 1.0);
   }
-  if (lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.8); }
+  if (!roundOn && lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.8); }
   let g = graphPx(p);
   if (g.a > 0.0) { return g; }
   // rectangles, the last drawn on top: the gun, the bars
@@ -766,8 +670,13 @@ fn cross(d: vec2f, kind: u32, gap: f32) -> bool {
     let r = rects[2u * u32(k)];
     if (q.x >= r.x && q.x < r.z && q.y >= r.y && q.y < r.w) {
       let col = rects[2u * u32(k) + 1u];
-      return vec4f(dither(col.rgb, q.xy), col.a);
+      return col;
     }
+  }
+  // what I hold, under every rect, at the lens's focal length unzoomed
+  if (u.zn.y > 0.0 && q.x > u.screen.x * 0.3 && q.y > u.screen.y * 0.15) {
+    let g = viewModel(q.xy, u32(u.zn.y), u.hudv.w);
+    if (g.a > 0.0) { return g; }
   }
   // the tracker's face, and the sweep going round it
   if (u.pred.w > 0.0 && tr < u.pred.w) {
@@ -795,13 +704,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const ctx = present ? canvas.getContext('webgpu') : null;
   ctx?.configure({ device, format, alphaMode: 'opaque' });
   const W = canvas.width, H = canvas.height;
-  const rows = Math.floor(H / 6);
+  const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
+  const rows = Math.floor(200 / 6);
   const module = device.createShaderModule({ code: WGSL });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
 
-  const ubuf = device.createBuffer({ size: 4 * (36 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 4 * (40 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, its look word, its avatar
   const projBuf = storage(L.NPROJ * L.JSIZE);
@@ -809,12 +719,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const beamBuf = storage(MAX_BEAM * 48);
   const rectBuf = storage(MAX_RECT * 32);
   const hudBuf = storage(COLS * rows * 4);
-  const fontBuf = storage(FONT.length * 4);
+  const fontAll = fontData({ round: roundWanted() });
+  const fontBuf = storage(fontAll.length * 4);
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const boxBuf = storage(L.NBOX * 32);
   const groupBuf = storage(L.NGROUP * 32);
+  const vmBuf = storage(MAX_VM * 48);
   let nbox = 0, ngroup = 0;
-  device.queue.writeBuffer(fontBuf, 0, FONT);
+  device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
@@ -825,7 +737,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
       // the bodies, projectiles, sprites and beams are read by the vertex stage, the rest by the fragment's: at most 8 a stage
-      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((b) => ({ binding: b, visibility: b <= 6 ? GPUShaderStage.VERTEX : GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((b) => ({ binding: b, visibility: b <= 6 ? GPUShaderStage.VERTEX : GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
     ],
   });
   const bind = device.createBindGroup({
@@ -834,7 +746,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 0, resource: { buffer: ubuf } },
       { binding: 1, resource: hmap.createView() },
       { binding: 2, resource: smap.createView() },
-      ...[playerBuf, projBuf, spriteBuf, beamBuf, rectBuf, hudBuf, fontBuf, graphBuf, boxBuf, groupBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
+      ...[playerBuf, projBuf, spriteBuf, beamBuf, rectBuf, hudBuf, fontBuf, graphBuf, boxBuf, groupBuf, vmBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
@@ -853,7 +765,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
   const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
 
-  const uf = new Float32Array(36 + 8 * MAX_ZONE);
+  const uf = new Float32Array(40 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);
   const spriteData = new Float32Array(MAX_SPRITE * 12);
   const beamData = new Float32Array(MAX_BEAM * 12);
@@ -861,7 +773,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   let hmax = 100;
 
   return {
-    rows, width: W, height: H,
+    rows, width: W, height: H, hudScale: hs, hudX, hudY,
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
       const hf = new Float32Array(512 * 512);
@@ -898,8 +810,9 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       uf.set([s.cam[0], s.cam[1], s.cam[2], focal, Math.cos(s.yaw), Math.sin(s.yaw), horizon, s.time,
         W, H, FAR, s.dt, s.slot, sprites.length, hmax + 2, Math.min(s.beams.length, MAX_BEAM),
         rows, Math.min(s.rects.length, MAX_RECT), s.crosshair, s.marker, s.hurt, s.scope ? 1 : 0, s.graph ? 1 : 0, s.gap, s.dtPred ?? s.dt, ...(s.tracker || [0, 0, 0]),
-        nbox, ngroup, Number(s.sides) || 0, z ? (z.y === undefined ? 1e9 : z.h ?? 2) : 0, zs.length, 0, 0, 0]);
-      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 36 + 8 * k));
+        nbox, ngroup, Number(s.sides) || 0, z ? (z.y === undefined ? 1e9 : z.h ?? 2) : 0, zs.length, s.viewmodel ? Math.min(MAX_VM, s.viewmodel.length / 12) : 0, 0, 0, hs, hudX, hudY, focalFor(W, H)]);
+      if (s.viewmodel?.length) device.queue.writeBuffer(vmBuf, 0, s.viewmodel.subarray(0, MAX_VM * 12));
+      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 40 + 8 * k));
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);

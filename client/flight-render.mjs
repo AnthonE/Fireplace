@@ -1,20 +1,22 @@
 // Flight's WebGPU renderer (src/flight.wat): the arena's look (the terrain
-// ray-marched per pixel, the map's boxes ray-traced in the same pass with
-// their shadows, a 3x5 HUD font over rectangles), seen through a camera that
+// ray-marched per pixel and drawn low-poly, client/lowpoly.mjs; the map's
+// boxes ray-traced in the same pass with their shadows; a HUD on a 320 x 200
+// grid scaled to the screen, over rectangles), seen through a camera that
 // can point anywhere: a full basis (forward, right, up) instead of golf's
 // yaw and sheared pitch, so a chase camera can look straight down a dive.
 // Ships are ray-traced in their own quads: a small distance field (a
 // fuselage, a canopy, swept wings, fins at the tips, an engine) in the
-// ship's frame, its nose and pitch from the record, banked into its turns
-// and spun through a barrel roll, the engine bright while it boosts. Lasers
-// are beams, charge shots and bombs glowing balls, blasts and sparks blended
-// sprites. The map's edge shows as a red grid as you near it. Ships and
+// ship's frame, flat-shaded, its nose and pitch from the record, banked into
+// its turns and spun through a barrel roll, the engine bright while it
+// boosts. Lasers are beams, charge shots and bombs glowing balls, a ship's
+// end and a bomb's blast solid fireballs, flashes and sparks blended sprites. The map's edge shows as a red grid as you near it. Ships and
 // projectiles come straight from shared memory; everything else from the
 // main thread each frame. Nothing here is hashed.
 import * as L from '../src/layout.mjs';
 import * as F from '../src/flight.mjs';
-import { FONT } from './font.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
+import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
+import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 384;
@@ -37,7 +39,7 @@ export function basis(yaw, pitch, roll = 0) {
 }
 
 // The focal length (px) of a frame state's camera on a W x H screen.
-export const focalOf = (s, W) => W * 0.62 * (s.zoom || 1);
+export const focalOf = (s, W, H) => focalFor(W, H) * (s.zoom || 1);
 
 // Where world point q lands on the screen through frame state s ({ cam,
 // basis }), as the shader's project() puts it: [x, y, depth ahead of the eye
@@ -46,7 +48,7 @@ export function project(s, W, H, q) {
   const { f, r, u } = s.basis;
   const d = [q[0] - s.cam[0], q[1] - s.cam[1], q[2] - s.cam[2]];
   const zf = d[0] * f[0] + d[1] * f[1] + d[2] * f[2];
-  const k = focalOf(s, W) / Math.max(zf, 0.01);
+  const k = focalOf(s, W, H) / Math.max(zf, 0.01);
   return [W / 2 + (d[0] * r[0] + d[1] * r[1] + d[2] * r[2]) * k, H / 2 - (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) * k, zf];
 }
 
@@ -62,6 +64,7 @@ struct U {
   map: vec4f,     // boxes, groups, sides (0 none, 1 one against the rest, 2 red and blue), the ceiling (m)
   bounds: vec4f,  // the map's edge: x0, x1, z0, z1
   fx: vec4f,      // net graph shown, the radar's centre x, y and radius (px)
+  hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px) (client/lowpoly.mjs hudFrame)
 };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var hmap: texture_2d<f32>;
@@ -77,10 +80,10 @@ struct U {
 @group(0) @binding(11) var<storage, read> boxes: array<vec4f>;  // two a box: x0, y0, z0, material | x1, y1, z1, 0
 @group(0) @binding(12) var<storage, read> groups: array<vec4f>; // two a group: x0, y0, z0, first box | x1, y1, z1, count
 
-const SKY_LO = vec3f(0.72, 0.8, 0.9);
-const SKY_HI = vec3f(0.16, 0.34, 0.68);
-const SUN = vec3f(0.42, 0.78, 0.46);
-const FOG = 650.0;
+const FOG = 800.0;
+${LOWPOLY_WGSL}
+${GROUND_WGSL}
+${BOXES_WGSL}
 
 fn hgt(x: f32, z: f32) -> f32 {
   let g = clamp(vec2f(x, z) * 0.5, vec2f(0.0), vec2f(510.99));
@@ -91,116 +94,6 @@ fn hgt(x: f32, z: f32) -> f32 {
   let c = textureLoad(hmap, i + vec2i(0, 1), 0).r;
   let d = textureLoad(hmap, i + vec2i(1, 1), 0).r;
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-fn hash2(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
-fn vnoise(p: vec2f) -> f32 {
-  let i = floor(p);
-  let f = fract(p);
-  let s = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), s.x), mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), s.x), s.y);
-}
-
-// grass, rock, sand, metal
-fn surfColor(s: u32, w: vec2f) -> vec3f {
-  let n = hash2(floor(w * 2.0));
-  switch s {
-    case 0u: { return vec3f(0.3, 0.5, 0.2) * (0.86 + 0.24 * n) * (0.88 + 0.24 * vnoise(w * 0.05)); }
-    case 1u: { return vec3f(0.48, 0.43, 0.36) * (0.8 + 0.35 * hash2(floor(w * 0.7))); }
-    case 2u: { return vec3f(0.72, 0.62, 0.42) * (0.92 + 0.12 * n); }
-    default: {
-      let seam = min(abs(fract(w.x / 4.0) - 0.5), abs(fract(w.y / 4.0) - 0.5)) < 0.04;
-      return select(vec3f(0.5, 0.56, 0.62), vec3f(0.3, 0.34, 0.4), seam);
-    }
-  }
-}
-
-fn ground(w: vec2f) -> vec3f {
-  let g = clamp(w * 0.5 - 0.5, vec2f(0.0), vec2f(510.0));
-  let i = vec2i(g);
-  let f = g - vec2f(i);
-  let a = surfColor(textureLoad(smap, i, 0).r, w);
-  let b = surfColor(textureLoad(smap, i + vec2i(1, 0), 0).r, w);
-  let c = surfColor(textureLoad(smap, i + vec2i(0, 1), 0).r, w);
-  let d = surfColor(textureLoad(smap, i + vec2i(1, 1), 0).r, w);
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-var<private> MATERIAL: array<vec3f, 7> = array<vec3f, 7>(vec3f(0.56, 0.6, 0.64), vec3f(0.47, 0.42, 0.36), vec3f(0.24, 0.27, 0.31),
-  vec3f(0.62, 0.17, 0.14), vec3f(0.17, 0.27, 0.64), vec3f(0.75, 0.95, 1.0), vec3f(0.64, 0.64, 0.65));
-
-struct Hit { t: f32, n: vec3f, k: u32 };
-
-fn traceBoxes(o: vec3f, d: vec3f, tmax: f32) -> Hit {
-  var h: Hit;
-  h.t = tmax;
-  h.k = 0xffffffffu;
-  let inv = 1.0 / select(d, vec3f(1e-9), abs(d) < vec3f(1e-9));
-  for (var g = 0u; g < u32(u.map.y); g++) {
-    let gl = groups[2u * g];
-    let gh = groups[2u * g + 1u];
-    let ga = (gl.xyz - o) * inv;
-    let gb = (gh.xyz - o) * inv;
-    let gn = min(ga, gb);
-    let gf = max(ga, gb);
-    if (max(max(gn.x, gn.y), max(gn.z, 0.0)) > min(min(gf.x, gf.y), min(gf.z, h.t))) { continue; }
-    let first = u32(gl.w);
-    for (var k = first; k < first + u32(gh.w); k++) {
-      let ta = (boxes[2u * k].xyz - o) * inv;
-      let tb = (boxes[2u * k + 1u].xyz - o) * inv;
-      let tn = min(ta, tb);
-      let tf = max(ta, tb);
-      let t0 = max(max(tn.x, tn.y), tn.z);
-      if (t0 <= min(min(tf.x, tf.y), tf.z) && t0 > 0.0 && t0 < h.t) {
-        h.t = t0;
-        h.k = k;
-        if (t0 == tn.x) { h.n = vec3f(-sign(d.x), 0.0, 0.0); } else if (t0 == tn.y) { h.n = vec3f(0.0, -sign(d.y), 0.0); } else { h.n = vec3f(0.0, 0.0, -sign(d.z)); }
-      }
-    }
-  }
-  return h;
-}
-
-fn sunlit(p: vec3f) -> f32 {
-  if (u.map.x < 0.5) { return 1.0; }
-  return select(1.0, 0.0, traceBoxes(p, SUN, 400.0).k != 0xffffffffu);
-}
-
-fn boxColor(k: u32, w: vec3f, n: vec3f) -> vec3f {
-  let lo = boxes[2u * k];
-  let hw = boxes[2u * k + 1u];
-  let hi = hw.xyz;
-  let m = min(u32(lo.w) & 127u, 6u);
-  var uv = w.xy;
-  var e = min(min(w.x - lo.x, hi.x - w.x), min(w.y - lo.y, hi.y - w.y));
-  if (abs(n.x) > 0.5) { uv = w.zy; e = min(min(w.z - lo.z, hi.z - w.z), min(w.y - lo.y, hi.y - w.y)); }
-  if (abs(n.y) > 0.5) { uv = w.xz; e = min(min(w.x - lo.x, hi.x - w.x), min(w.z - lo.z, hi.z - w.z)); }
-  var c = MATERIAL[m];
-  if ((u32(lo.w) & 128u) != 0u) { let rgb = u32(hw.w); c = vec3f(f32(rgb >> 16u), f32((rgb >> 8u) & 255u), f32(rgb & 255u)) / 255.0; }
-  if (m == 1u) { c *= 0.75 + 0.4 * hash2(floor(uv * 1.5)); }
-  else if (m < 5u) {
-    let seam = min(abs(fract(uv.x / 2.0) - 0.5), abs(fract(uv.y / 1.0) - 0.5)) > 0.47;
-    c *= select(1.0, 0.82, seam) * (0.94 + 0.08 * hash2(floor(uv * 0.5)));
-  }
-  return c * select(1.0, 0.6, e < 0.08);
-}
-
-fn sky(d: vec3f) -> vec3f {
-  var c = mix(SKY_LO, SKY_HI, clamp(d.y * 1.8 + 0.1, 0.0, 1.0));
-  c += vec3f(1.0, 0.9, 0.7) * pow(max(dot(d, SUN), 0.0), 300.0);
-  // clouds: a high flat layer, thin
-  if (d.y > 0.02) {
-    let q = u.cam.xz + d.xz * ((400.0 - u.cam.y) / d.y);
-    let n = vnoise(q / 140.0) * 0.6 + vnoise(q / 47.0) * 0.3 + vnoise(q / 17.0) * 0.1;
-    c = mix(c, vec3f(0.96, 0.97, 1.0), smoothstep(0.5, 0.75, n) * 0.75 * clamp(d.y * 6.0, 0.0, 1.0));
-  }
-  return c;
-}
-
-fn dither(c: vec3f, p: vec2f) -> vec3f {
-  var m = array<f32, 4>(0.0, 0.5, 0.75, 0.25);
-  let k = m[(u32(p.x) & 1u) + 2u * (u32(p.y) & 1u)];
-  return floor(c * 31.0 + k) / 31.0;
 }
 
 // The ray through screen pixel p.
@@ -264,19 +157,15 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   if (bh.k != 0xffffffffu && (!hit || bh.t < t)) {
     let w = u.cam.xyz + d * bh.t;
-    var c = boxColor(bh.k, w, bh.n);
-    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) {
-      c *= 0.42 + 0.68 * max(dot(bh.n, SUN), 0.0) * sunlit(w + bh.n * 0.01) + 0.06 * bh.n.y;
-    }
-    c = mix(c, SKY_LO, 1.0 - exp(-bh.t / FOG));
-    c = edge(c, d, bh.t);
-    o.color = vec4f(dither(c, p.xy), 1.0);
+    var c = boxColor(bh.k, w, bh.n, bh.t * fz / u.cam.w);
+    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) { c *= light(bh.n, sunlit(w + bh.n * 0.01)); }
+    c = edge(fogged(c, bh.t), d, bh.t);
+    o.color = vec4f(c, 1.0);
     o.depth = bh.t * fz / u.right.w;
     return o;
   }
   if (!hit) {
-    let c = edge(sky(d), d, 1e9);
-    o.color = vec4f(dither(c, p.xy), 1.0);
+    o.color = vec4f(edge(sky(d, u.cam.xyz, u.fwd.w), d, 1e9), 1.0);
     o.depth = 1.0;
     return o;
   }
@@ -289,13 +178,10 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   t = hi;
   let w = u.cam.xyz + d * t;
-  let n = normalize(vec3f(hgt(w.x - 1.0, w.z) - hgt(w.x + 1.0, w.z), 2.0, hgt(w.x, w.z - 1.0) - hgt(w.x, w.z + 1.0)));
-  var c = ground(w.xz);
-  c = mix(c, vec3f(0.46, 0.41, 0.35) * (0.8 + 0.3 * hash2(floor(w.xz * 0.5))), smoothstep(0.82, 0.7, n.y));
-  c *= 0.45 + 0.65 * max(dot(n, SUN), 0.0) * select(1.0, sunlit(w + vec3f(0.0, 0.05, 0.0)), t < 200.0);
-  c = mix(c, SKY_LO, 1.0 - exp(-t / FOG));
-  c = edge(c, d, t);
-  o.color = vec4f(dither(c, p.xy), 1.0);
+  let fc = facetAt(w.xz, t);
+  var c = groundColor(w.xz, fc) * grain(w.xz, t);
+  c *= light(fc.xyz, select(1.0, sunlit(w + vec3f(0.0, 0.05, 0.0)), t < 200.0));
+  o.color = vec4f(edge(fogged(c, t), d, t), 1.0);
   o.depth = t * fz / u.right.w;
   return o;
 }
@@ -448,6 +334,8 @@ struct ShipFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (s.color.w < 0.5) {
     let e = vec2f(0.01, -0.01);
     n = normalize(e.xyy * shipSdf(p + e.xyy).x + e.yyx * shipSdf(p + e.yyx).x + e.yxy * shipSdf(p + e.yxy).x + e.xxx * shipSdf(p + e.xxx).x);
+    // flat-shaded: the normal snapped to a few directions, so the hull reads as facets
+    if (part != 1.0) { n = normalize(round(n * 2.4)); }
   }
   // back to the world for the light
   let nw = normalize(s.f.xyz * n.x + s.up.xyz * n.y + s.r.xyz * n.z);
@@ -462,8 +350,7 @@ struct ShipFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   // the engine's mouth: the back of the engine glows, white hot while boosting
   if (part == 4.0 && p.x < -1.95) { c = mix(vec3f(0.3, 0.75, 1.0), vec3f(1.0, 0.95, 0.8), s.f.w) * 1.4; }
   let w = u.cam.xyz + d * t;
-  c = mix(c, SKY_LO, 1.0 - exp(-t / FOG));
-  o.color = vec4f(dither(c, s.pos.xy), 1.0);
+  o.color = vec4f(fogged(c, t), 1.0);
   o.depth = dot(w - u.cam.xyz, u.fwd.xyz) / u.right.w;
   return o;
 }
@@ -512,7 +399,9 @@ struct SOut {
   }
   let pr = project(center);
   if (pr.z < 0.3 || pr.z > u.right.w) { return o; }
-  let px = max(half * pr.w, vec2f(minpx, minpx * half.y / half.x));
+  var px = max(half * pr.w, vec2f(minpx, minpx * half.y / half.x));
+  // a fireball close by fills a third of the screen at most
+  if (kind == 7u) { px = min(px, vec2f(u.screen.y * 0.35)); }
   let s = pr.xy + corner * px;
   o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, pr.z / u.right.w, 1.0);
   o.uv = corner;
@@ -521,18 +410,34 @@ struct SOut {
   return o;
 }
 
-// solid splats: 2 a glowing ball (its core white)
+// solid splats: 2 a glowing ball (its core white), 7 a fireball
 @fragment fn fs_splat(s: SOut) -> @location(0) vec4f {
   let r2 = dot(s.uv, s.uv);
-  if (r2 > 1.0) { discard; }
-  let c = mix(vec3f(1.0, 1.0, 0.95), s.color.rgb, sqrt(r2));
-  return vec4f(dither(c, s.pos.xy), 1.0);
+  if (r2 > 1.0 || (s.kind != 2u && s.kind != 7u)) { discard; }
+  if (s.kind == 7u) { return fireball(s.uv, 1.0 - s.color.a); }
+  return vec4f(mix(vec3f(1.0, 1.0, 0.95), s.color.rgb, sqrt(r2)), 1.0);
+}
+
+// A fireball age (0..1) through its life, drawn solid as the old consoles
+// drew them: a lumpy disc in flat bands, white-hot inside, orange, red at the
+// rim, lit from above, burning out to smoke through holes that open from the
+// outside in.
+fn fireball(uv: vec2f, age: f32) -> vec4f {
+  let r = length(uv);
+  let ang = atan2(uv.y, uv.x);
+  let rim = (0.82 + 0.1 * sin(ang * 5.0 + age * 5.0) + 0.08 * sin(ang * 9.0 - age * 7.0)) * (1.0 - 0.25 * age);
+  if (r > rim) { discard; }
+  let k = r / rim;
+  if (vnoise(uv * 3.2 + vec2f(age * 2.0, -age)) < age * 1.25 - 0.35 + k * 0.4) { discard; }
+  var c = select(select(vec3f(0.88, 0.24, 0.08), vec3f(1.0, 0.56, 0.14), k < 0.72), vec3f(1.0, 0.94, 0.6), k < 0.38 - 0.3 * age);
+  c *= 0.86 + 0.24 * -uv.y;
+  return vec4f(mix(c, vec3f(0.32, 0.3, 0.3), smoothstep(0.45, 0.95, age)), 1.0);
 }
 
 // glowing sprites, blended: 3 a blast, 5 a spark, 6 a ring
 @fragment fn fs_glow(s: SOut) -> @location(0) vec4f {
   let r2 = dot(s.uv, s.uv);
-  if (r2 > 1.0) { discard; }
+  if (r2 > 1.0 || s.kind == 7u) { discard; }
   var a = s.color.a * (1.0 - r2);
   if (s.kind == 6u) { a = s.color.a * smoothstep(0.5, 1.0, r2) * 2.0; }
   return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a, a);
@@ -579,12 +484,13 @@ fn glyphBit(cell: vec2i, px: vec2i) -> bool {
 }
 
 fn lit(p: vec2i) -> bool {
+  if (p.x < 0 || p.y < 0) { return false; }
   let cell = vec2i(p.x / 4, p.y / 6);
   return glyphBit(cell, vec2i(p.x - cell.x * 4, p.y - cell.y * 6));
 }
 
 fn graphPx(p: vec2i) -> vec4f {
-  let col = p.x - (i32(u.screen.x) - ${GRAPH_N + 4});
+  let col = p.x - (${COLS * 4} - ${GRAPH_N + 4});
   if (u.fx.x < 0.5 || col < 0 || col >= ${GRAPH_N}) { return vec4f(0.0); }
   let k = (p.y - 18) / 24;
   let yy = p.y - 18 - 24 * k;
@@ -612,38 +518,43 @@ fn graphPx(p: vec2i) -> vec4f {
   return vec4f(0.0, 0.0, 0.0, 0.5);
 }
 
+${HUD_FONT_WGSL}
 @fragment fn fs_hud(@builtin(position) q: vec4f) -> @location(0) vec4f {
-  let p = vec2i(q.xy);
+  let hs = u.hudv.x;
   let c = vec2f(u.screen.x, u.screen.y) * 0.5;
   let d = q.xy - c - vec2f(0.5);
-  let r = length(d);
+  let dh = d / hs; // in HUD px
+  let r = length(dh);
   // the hit marker: four short ticks out from the centre
-  if (u.hud.z > 0.0 && abs(abs(d.x) - abs(d.y)) < 0.7 && max(abs(d.x), abs(d.y)) > 4.0 && max(abs(d.x), abs(d.y)) < 8.0) {
+  if (u.hud.z > 0.0 && abs(abs(dh.x) - abs(dh.y)) < 0.7 && max(abs(dh.x), abs(dh.y)) > 4.0 && max(abs(dh.x), abs(dh.y)) < 8.0) {
     return vec4f(1.0, 1.0, 1.0, u.hud.z);
   }
   // where the mouse aims: a small open ring (1), or nothing (0)
   if (u.hud.y > 0.5 && abs(r - 3.5) < 0.6) { return vec4f(1.0, 1.0, 1.0, 0.7); }
-  if (lit(p)) {
+  let hp = (q.xy - u.hudv.yz) / hs;
+  let p = vec2i(floor(hp));
+  // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
+  let roundOn = font[64u] != 0u;
+  let t = roundText(hp, ${COLS}u, u32(u.hud.x));
+  if (t.a > 0.0) { return t; }
+  if (!roundOn && lit(p)) {
     let cell = vec2i(p.x / 4, p.y / 6);
     let k = (hud[u32(cell.y) * ${COLS}u + u32(cell.x)] >> 8u) & 7u;
     return vec4f(PALETTE[k], 1.0);
   }
-  if (lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.8); }
+  if (!roundOn && lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.8); }
   let g = graphPx(p);
   if (g.a > 0.0) { return g; }
   for (var k = i32(u.misc.w) - 1; k >= 0; k--) {
     let rc = rects[2u * u32(k)];
-    if (q.x >= rc.x && q.x < rc.z && q.y >= rc.y && q.y < rc.w) {
-      let col = rects[2u * u32(k) + 1u];
-      return vec4f(dither(col.rgb, q.xy), col.a);
-    }
+    if (q.x >= rc.x && q.x < rc.z && q.y >= rc.y && q.y < rc.w) { return rects[2u * u32(k) + 1u]; }
   }
   // the radar's face, and its sweep
   let td = q.xy - u.fx.yz;
   let tr = length(td);
-  if (u.fx.w > 0.0 && abs(tr - u.fx.w) < 0.7) { return vec4f(0.5, 0.8, 1.0, 0.7); }
+  if (u.fx.w > 0.0 && abs(tr - u.fx.w) < 0.7 * hs) { return vec4f(0.5, 0.8, 1.0, 0.7); }
   if (u.fx.w > 0.0 && tr < u.fx.w) {
-    if (abs(td.x) < 0.4 || abs(td.y) < 0.4) { return vec4f(0.5, 0.8, 1.0, 0.3); }
+    if (abs(td.x) < 0.4 * hs || abs(td.y) < 0.4 * hs) { return vec4f(0.5, 0.8, 1.0, 0.3); }
     let sweep = fract(atan2(td.y, td.x) / 6.2832 - u.fwd.w * 0.5);
     return vec4f(0.08, 0.2, 0.32, 0.4 + 0.25 * pow(sweep, 8.0));
   }
@@ -666,13 +577,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const ctx = present ? canvas.getContext('webgpu') : null;
   ctx?.configure({ device, format, alphaMode: 'opaque' });
   const W = canvas.width, H = canvas.height;
-  const rows = Math.floor(H / 6);
+  const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
+  const rows = Math.floor(200 / 6);
   const module = device.createShaderModule({ code: WGSL });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
 
-  const NU = 40;
+  const NU = 44;
   const ubuf = device.createBuffer({ size: 4 * NU, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 4);
@@ -681,12 +593,13 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const beamBuf = storage(MAX_BEAM * 48);
   const rectBuf = storage(MAX_RECT * 32);
   const hudBuf = storage(COLS * rows * 4);
-  const fontBuf = storage(FONT.length * 4);
+  const fontAll = fontData({ round: roundWanted() });
+  const fontBuf = storage(fontAll.length * 4);
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const boxBuf = storage(L.NBOX * 32);
   const groupBuf = storage(L.NGROUP * 32);
   let nbox = 0, ngroup = 0, bounds = [0, 1024, 0, 1024];
-  device.queue.writeBuffer(fontBuf, 0, FONT);
+  device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
@@ -734,7 +647,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   let hmax = 100;
 
   return {
-    rows, width: W, height: H,
+    rows, width: W, height: H, hudScale: hs, hudX, hudY,
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
       const hf = new Float32Array(512 * 512);
@@ -759,7 +672,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
 
     // s: { cam, basis ({ f, r, u }: basis()), zoom, time, dt, dtPred, proj, slot (mine, drawn from `me`),
     //      me (my ship's record as the prediction has it, 64 B, its position already corrected), ceiling,
-    //      glow: [{ pos, size, color: [r,g,b,a], kind (3 a blast, 5 a spark, 6 a ring), minpx }],
+    //      glow: [{ pos, size, color: [r,g,b,a], kind (3 a blast, 5 a spark, 6 a ring, 7 a fireball, solid, its alpha its life left), minpx }],
     //      beams: [{ a, b, width, color: [r,g,b,a] }], rects: [[x0, y0, x1, y1, r, g, b, a]],
     //      crosshair (0 none, 1 the aim's ring), marker, hurt, text, graph, radar ([x, y, r] px, or null),
     //      sides (0 colour by slot, 1 one side against the rest, 2 red and blue), tints }
@@ -768,10 +681,10 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       const sprites = s.glow.slice(0, MAX_SPRITE);
       const { f, r, u } = s.basis;
       const radar = s.radar || [0, 0, 0];
-      uf.set([s.cam[0], s.cam[1], s.cam[2], focalOf(s, W), f[0], f[1], f[2], s.time, r[0], r[1], r[2], FAR, u[0], u[1], u[2], hmax + 2,
+      uf.set([s.cam[0], s.cam[1], s.cam[2], focalOf(s, W, H), f[0], f[1], f[2], s.time, r[0], r[1], r[2], FAR, u[0], u[1], u[2], hmax + 2,
         W, H, s.dt, s.dtPred ?? s.dt, s.slot, sprites.length, Math.min(s.beams.length, MAX_BEAM), Math.min(s.rects.length, MAX_RECT),
         rows, s.crosshair, s.marker, s.hurt, nbox, ngroup, Number(s.sides) || 0, s.ceiling || 400,
-        ...bounds, s.graph ? 1 : 0, ...radar]);
+        ...bounds, s.graph ? 1 : 0, ...radar, hs, hudX, hudY, 0]);
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);
@@ -802,7 +715,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       pass.setPipeline(ship);
       pass.draw(6, L.NPLAYER);
       pass.setPipeline(splat);
-      pass.draw(6, L.NPROJ);
+      pass.draw(6, L.NPROJ + sprites.length);
       pass.setPipeline(beam);
       if (nb) pass.draw(6, nb);
       pass.setPipeline(glow);

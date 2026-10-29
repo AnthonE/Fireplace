@@ -142,7 +142,7 @@ export default {
   // rows 0 to 2 (a mode with no sides has the top left to itself): your state, the room's, the chasers
   hud(view, ctx) {
     const h = view.hole();
-    if (h.state === L.H_COUNT) { ctx.put(1, 0, 'EVERYONE AGAINST THE CHASERS', ctx.C.YELLOW); ctx.put(1, 1, 'STAND STILL BY THE DOWNED TO REVIVE', ctx.C.GREY); return; }
+    if (h.state === L.H_COUNT) { ctx.put(1, 0, 'EVERYONE AGAINST THE CHASERS', ctx.C.YELLOW); ctx.put(1, 1, 'STAND STILL BY THE DOWNED', ctx.C.GREY); ctx.put(1, 2, 'TO REVIVE THEM', ctx.C.GREY); return; }
     const e = evadeOf(view);
     const me = ctx.slot >= 0 ? stateOf(view, ctx.slot) : null;
     const who = ctx.watching ? `P${ctx.slot + 1}` : 'YOU';

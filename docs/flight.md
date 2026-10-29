@@ -113,11 +113,12 @@ arrives.
 
 `client/flight.html` is the page, `client/flight-game.mjs` the frontend
 and `client/flight-render.mjs` the renderer: golf's and the arena's look
-(the terrain ray-marched per pixel, boxes ray-traced with their shadows,
-the 3x5 font) through a camera with a full basis rather than a yaw and a
-sheared pitch, so it can look straight down a dive. Each ship is
-ray-traced in a quad round it: a distance field of a fuselage, a canopy,
-swept wings, fins at the tips and an engine, in the ship's own frame,
+(the terrain ray-marched per pixel and drawn low-poly, boxes ray-traced
+with their shadows, the HUD's grid scaled to the screen) through a camera
+with a full basis rather than a yaw and a sheared pitch, so it can look
+straight down a dive. Each ship is ray-traced in a quad round it: a
+distance field of a fuselage, a canopy, swept wings, fins at the tips and
+an engine, in the ship's own frame, flat-shaded in facets,
 banked into the turn its pilot asks for and spun through a roll, its
 engine white while it boosts. Your own ship is the prediction's. The HUD:
 shields and hull, the boost meter, the charge, bombs, brackets on the 32

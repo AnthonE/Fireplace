@@ -556,7 +556,7 @@ test('Evade\'s client module: the chasers, counts and states as AO and the recor
       team: -1, now: 0, t: 1, ...extra });
     return outs;
   };
-  assert.deepEqual(lines(cd, 0), [[0, 'EVERYONE AGAINST THE CHASERS', C.YELLOW], [1, 'STAND STILL BY THE DOWNED TO REVIVE', C.GREY]]);
+  assert.deepEqual(lines(cd, 0), [[0, 'EVERYONE AGAINST THE CHASERS', C.YELLOW], [1, 'STAND STILL BY THE DOWNED', C.GREY], [2, 'TO REVIVE THEM', C.GREY]]);
   const gctx = (g, slot) => ({ role: 'attack', rank: 0, view: g.v, ally: (p, q) => g.v.ally(p, q), slot, t: g.v.tick });
   assert.equal(ed.goal(cd.v, cd.v.fighter(0), gctx(cd, 0)), null, 'nothing to do before play');
 

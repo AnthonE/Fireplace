@@ -5,9 +5,9 @@
 // asked. Passes when the referee checked interval hashes from every session
 // and none differed, someone was shot down, and Chrome kept up. Screenshots
 // go to traces/. --mode k forces every match to mode k (layout.mjs
-// FLIGHT_MODES: 0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 12 Ring Race) through the
+// FLIGHT_MODES: 0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 15 Ring Race) through the
 // relay's seed, and the gate wants it played; in a team mode, both sides dealt pilots.
-//   node net/run-flight.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k]
+//   node net/run-flight.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k] [--res 320x200: the page's]
 //                           [--port 4433: the relay's, its native door the next]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -53,7 +53,7 @@ const browser = await chromium.launch({
   args: ['--no-sandbox', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--autoplay-policy=no-user-gesture-required'],
 });
 const pages = [];
-const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9' });
+const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', res: opt('res', '320x200') });
 const report = { bots: nbots, chrome, seconds, impair: impair || 'none', mode: mode === null ? 'rotation' : modeName(mode).name, seed, screenshots: [], kills: [], errors: [] };
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(0);

@@ -38,19 +38,18 @@ const stage = document.getElementById('stage');
 const note = document.getElementById('note');
 const roomCanvas = document.getElementById('room');
 // The page's half of each game in layout.mjs's FP_SETS, by G_*: its frontend
-// (mount(host, opts), client/host.mjs), the size it draws at (320 x 200 for
-// golf's look, null for the window's) and what its picture lights the room
-// with. A game added to FP_SETS adds its row here.
+// (mount(host, opts), client/host.mjs) and what its picture lights the room
+// with; every game draws at the room's size. A game added to FP_SETS adds its row here.
 const PAGES = [
-  { frontend: './golf-game.mjs', size: [320, 200], light: [0.45, 0.7, 0.45] }, // golf's grass
-  { frontend: './arena-game.mjs', size: [320, 200], light: [0.6, 0.65, 0.6] }, // the arena's grey
-  { frontend: './bumper-game.mjs', size: null, light: [1, 0.85, 0.5] }, // the cheese
-  { frontend: './party-game.mjs', size: null, light: [0.55, 0.75, 1] }, // party's sky
-  { frontend: './flight-game.mjs', size: [320, 200], light: [0.5, 0.65, 0.95] }, // Dogfight's bluer sky
+  { frontend: './golf-game.mjs', light: [0.45, 0.7, 0.45] }, // golf's grass
+  { frontend: './arena-game.mjs', light: [0.6, 0.65, 0.6] }, // the arena's grey
+  { frontend: './bumper-game.mjs', light: [1, 0.85, 0.5] }, // the cheese
+  { frontend: './party-game.mjs', light: [0.55, 0.75, 1] }, // party's sky
+  { frontend: './flight-game.mjs', light: [0.5, 0.65, 0.95] }, // Dogfight's bluer sky
 ];
 if (PAGES.length !== L.FP_SETS.length) throw new Error(`client/fireplace.mjs knows ${PAGES.length} games and FP_SETS has ${L.FP_SETS.length}`);
 // a canvas a game, fireplace.html's or made here
-const canvases = L.GAMES.map((_, k) => document.getElementById(`g${k}`) ?? stage.appendChild(Object.assign(document.createElement('canvas'), { id: `g${k}`, className: PAGES[k].size ? 'lo' : '' })));
+const canvases = L.GAMES.map((_, k) => document.getElementById(`g${k}`) ?? stage.appendChild(Object.assign(document.createElement('canvas'), { id: `g${k}` })));
 const BOT = q.get('bot') === '1';
 const FILM = q.has('film') && q.has('replay') ? Number(q.get('film')) : 0;
 const WATCH = q.get('watch') === '1' || q.has('replay');
@@ -72,8 +71,7 @@ async function main() {
   const [W, H] = fitSize(q, [1600, 1000]);
   roomCanvas.width = W;
   roomCanvas.height = H;
-  // golf, the arena and Dogfight are drawn at their 320 x 200, bumper balls and party at the window's size
-  canvases.forEach((c, k) => { [c.width, c.height] = PAGES[k].size ?? [W, H]; });
+  canvases.forEach((c) => { [c.width, c.height] = [W, H]; });
   const clock = FILM ? filmClock() : null;
   const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;

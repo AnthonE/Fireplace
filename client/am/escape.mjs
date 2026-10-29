@@ -148,13 +148,14 @@ export default {
   // rows 0 to 3 (a mode with no sides has the top left to itself)
   hud(view, ctx) {
     const h = view.hole();
-    if (h.state === L.H_COUNT) { ctx.put(1, 0, 'ONE HUNTER AGAINST THE ROOM', ctx.C.YELLOW); ctx.put(1, 1, 'HACK THE TERMINALS  THE EXITS OPEN', ctx.C.GREY); return; }
+    if (h.state === L.H_COUNT) { ctx.put(1, 0, 'ONE HUNTER AGAINST THE ROOM', ctx.C.YELLOW); ctx.put(1, 1, 'HACK THE TERMINALS', ctx.C.GREY); ctx.put(1, 2, 'THEN RUN FOR THE EXITS', ctx.C.GREY); return; }
     const e = escapeOf(view);
     const me = ctx.slot >= 0 ? stateOf(view, ctx.slot) : null;
     const who = ctx.watching ? `P${ctx.slot + 1}` : 'YOU';
     const flick = (ctx.now >> 8) & 1;
     if (ctx.watching && ctx.mine >= 0 && ['out', 'free'].includes(stateOf(view, ctx.mine).state)) ctx.centre(ctx.rows - 9, `WATCHING P${ctx.slot + 1}`, ctx.C.CYAN);
-    const terms = `TERMINALS ${Math.min(e.hacked, e.need)} OF ${e.need}${e.open ? '  THE EXITS ARE OPEN' : ''}`;
+    // (the top left's lines stop short of the shield bar, 26 columns in)
+    const terms = e.open ? 'THE EXITS ARE OPEN' : `TERMINALS ${Math.min(e.hacked, e.need)} OF ${e.need}`;
     if (me?.hunter) {
       ctx.put(1, 0, me.state === 'down' ? `${who}: THE HUNTER  STUNNED` : `${who}: THE HUNTER`, me.state === 'down' && flick ? ctx.C.WHITE : ctx.C.ORANGE);
       const f = view.fighter(ctx.slot);
@@ -170,8 +171,9 @@ export default {
     else if (me?.state === 'free') ctx.put(1, 0, `${who}: ESCAPED ${nth(me.order)}`, ctx.C.GREEN);
     else if (me?.state === 'out') ctx.put(1, 0, `${who}: OUT`, ctx.C.RED);
     ctx.put(1, 1, terms, e.open ? ctx.C.GREEN : ctx.C.YELLOW);
-    ctx.put(1, 2, `${e.up} UP  ${e.down} DOWN  ${e.free} ESCAPED  ${e.out} OUT`, ctx.C.GREY);
-    if (me?.state === 'up') ctx.put(1, 3, me.time ? `SHOVE IN ${Math.ceil(me.time / 125)}` : 'SHOVE READY  Q', me.time ? ctx.C.GREY : ctx.C.GREEN);
+    ctx.put(1, 2, `${e.up} UP  ${e.down} DOWN`, ctx.C.GREY);
+    ctx.put(1, 3, `${e.free} ESCAPED  ${e.out} OUT`, ctx.C.GREY);
+    if (me?.state === 'up') ctx.put(1, 4, me.time ? `SHOVE IN ${Math.ceil(me.time / 125)}` : 'SHOVE READY  Q', me.time ? ctx.C.GREY : ctx.C.GREEN);
     // the middle: being finished or revived, reviving, hacking
     if (me?.state === 'down') {
       const fin = hunterOver(view, ctx.slot);
