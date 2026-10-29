@@ -233,7 +233,7 @@ async function main() {
       pixelFire(320, 150, 9, t);
       text(TITLE, 320, 178, Math.min(11, Math.floor(620 / (4 * TITLE.length - 1))), '#ffcf6a', 'center');
       text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
-      text(GAMES_LINE, 320, 275, 3, '#8ea0b8', 'center');
+      text(GAMES_LINE, 320, 275, GAMES_LINE.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
       if (KEEP) {
         drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
         const { ball, hat, body } = unpackLook(look);
