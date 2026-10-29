@@ -7,9 +7,12 @@
 // service worker that makes the pages cross-origin isolated where the host
 // cannot send the headers), and an index.html that opens Fireplace's page,
 // its query kept. The map editor's half too: the map compiler and the PNG
-// codec it runs in the page (tools/map-compile.mjs, tools/png-codec.mjs) and
-// the maps it opens (maps/), each also packed for a sim to lay at run time
-// (build/maps/<name>.qgmap, tools/map-compile.mjs packMap): what a page's
+// codec it runs in the page (tools/map-compile.mjs, tools/png-codec.mjs), the
+// readers that bring a Roblox place or a MagicaVoxel model in and the back
+// half they share (tools/rbx-*.mjs, tools/vox-*.mjs, tools/scene-map.mjs, the
+// port brief's tools/zip.mjs), and the maps it opens (maps/), each also
+// packed for a sim to lay at run time (build/maps/<name>.qgmap,
+// tools/map-compile.mjs packMap): what a page's
 // ?map=<name> plays, and what the kit's room pool fetches to start a room on
 // it (net/kit-rooms.mjs). And the studio's (client/studio.html): the sim's
 // WAT (src/), the assembler's pure half and party's AI room (tools/asm-core.mjs,
@@ -32,7 +35,10 @@ const PARTS = [
   ['net', (f) => /\.m?js$/.test(f), false],
   ['harness', (f) => f === 'core.mjs' || f === 'worker.mjs', false],
   ['build', (f) => f === 'game.wasm' || f === 'themes.json' || f === 'manifest.json', true],
-  ['tools', (f) => ['map-compile.mjs', 'png-codec.mjs', 'asm-core.mjs', 'party-play.mjs'].includes(f), false],
+  ['tools', (f) => [
+    'map-compile.mjs', 'png-codec.mjs', 'asm-core.mjs', 'party-play.mjs',
+    'scene-map.mjs', 'rbx-file.mjs', 'rbx-map.mjs', 'rbx-brief.mjs', 'vox-file.mjs', 'vox-map.mjs', 'zip.mjs',
+  ].includes(f), false],
   ['node_modules/wabt', (f) => f === 'index.js' || f === 'LICENSE', false],
   ['maps', (f) => f === 'map.json' || f.endsWith('.png'), true],
 ];
