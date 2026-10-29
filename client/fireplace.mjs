@@ -43,10 +43,10 @@ const roomCanvas = document.getElementById('room');
 // with. A game added to FP_SETS adds its row here.
 const PAGES = [
   { frontend: './golf-game.mjs', size: [640, 400], light: [0.45, 0.7, 0.45] }, // golf's grass
-  { frontend: './arena-game.mjs', size: [320, 200], light: [0.6, 0.65, 0.6] }, // the arena's grey
+  { frontend: './arena-game.mjs', size: [640, 400], light: [0.6, 0.65, 0.6] }, // the arena's grey
   { frontend: './bumper-game.mjs', size: null, light: [1, 0.85, 0.5] }, // the cheese
   { frontend: './party-game.mjs', size: null, light: [0.55, 0.75, 1] }, // party's sky
-  { frontend: './flight-game.mjs', size: [320, 200], light: [0.5, 0.65, 0.95] }, // Dogfight's bluer sky
+  { frontend: './flight-game.mjs', size: [640, 400], light: [0.5, 0.65, 0.95] }, // Dogfight's bluer sky
 ];
 if (PAGES.length !== L.FP_SETS.length) throw new Error(`client/fireplace.mjs knows ${PAGES.length} games and FP_SETS has ${L.FP_SETS.length}`);
 // a canvas a game, fireplace.html's or made here
@@ -72,8 +72,8 @@ async function main() {
   const [W, H] = fitSize(q, [1600, 1000]);
   roomCanvas.width = W;
   roomCanvas.height = H;
-  // golf, the arena and Dogfight are drawn at their fixed sizes, bumper balls and party at the window's
-  canvases.forEach((c, k) => { [c.width, c.height] = PAGES[k].size ?? [W, H]; });
+  // golf, the arena and Dogfight are drawn at their fixed sizes (halved in a room smaller than them), bumper balls and party at the window's
+  canvases.forEach((c, k) => { const s = PAGES[k].size; [c.width, c.height] = !s ? [W, H] : W < s[0] ? s.map((v) => v / 2) : s; });
   const clock = FILM ? filmClock() : null;
   const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;

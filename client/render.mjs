@@ -8,6 +8,7 @@
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
+import { LOWPOLY_WGSL } from './lowpoly.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
@@ -51,12 +52,8 @@ struct U {
 @group(0) @binding(9) var<storage, read> graph: array<vec4f>;
 @group(0) @binding(10) var<storage, read> trees: array<vec4f>; // two a tree: x, ground y, z, size | turn, style, leaf colour (rgba8 bits), 0
 
-const SKY_HOR = vec3f(0.74, 0.87, 0.98);
-const SKY_TOP = vec3f(0.22, 0.5, 0.92);
-const SUN = vec3f(0.55, 0.66, 0.5);
-const SUNC = vec3f(1.0, 0.96, 0.86);
-const AMB = vec3f(0.46, 0.52, 0.62);
 const FOG = 700.0;
+${LOWPOLY_WGSL}
 
 fn hgt(x: f32, z: f32) -> f32 {
   let g = clamp(vec2f(x, z) * 0.5, vec2f(0.0), vec2f(510.99));
@@ -69,75 +66,16 @@ fn hgt(x: f32, z: f32) -> f32 {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-fn hash2(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
-fn vnoise(p: vec2f) -> f32 {
-  let i = floor(p);
-  let f = p - i;
-  let k = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), k.x), mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), k.x), k.y);
-}
-
-// The ground drawn low-poly: flat triangles on a 4 m grid, each lit by its
-// own normal and given its own small tint (w), over the 2 m heights the
-// march (and the sim) follow, so the outline is the course's own.
-fn facet(w: vec2f) -> vec4f {
-  let g = w / 4.0;
-  let c = floor(g);
-  let f = g - c;
-  let p = c * 4.0;
-  let h00 = hgt(p.x, p.y);
-  let h10 = hgt(p.x + 4.0, p.y);
-  let h01 = hgt(p.x, p.y + 4.0);
-  let h11 = hgt(p.x + 4.0, p.y + 4.0);
-  if (f.x + f.y < 1.0) { return vec4f(normalize(vec3f(h00 - h10, 4.0, h00 - h01)), hash2(c * 2.0)); }
-  return vec4f(normalize(vec3f(h01 - h11, 4.0, h10 - h11)), hash2(c * 2.0 + 1.0));
-}
-
-// The surface at w with crisp, smooth edges: of the four surfaces around it,
-// the one with the most bilinear weight (x), and how sure it is (y, 0.25..1).
-fn surfAt(w: vec2f) -> vec2f {
-  let g = clamp(w * 0.5 - 0.5, vec2f(0.0), vec2f(510.0));
-  let i = vec2i(g);
-  let f = g - vec2f(i);
-  let s = array<u32, 4>(textureLoad(smap, i, 0).r, textureLoad(smap, i + vec2i(1, 0), 0).r, textureLoad(smap, i + vec2i(0, 1), 0).r, textureLoad(smap, i + vec2i(1, 1), 0).r);
-  let k = array<f32, 4>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
-  var best = s[0];
-  var bw = 0.0;
-  for (var a = 0; a < 4; a++) {
-    var sum = 0.0;
-    for (var b = 0; b < 4; b++) { if (s[b] == s[a]) { sum += k[b]; } }
-    if (sum > bw) { bw = sum; best = s[a]; }
-  }
-  return vec2f(f32(best), bw);
-}
-
 // fairway mown in stripes across the hole, the rough a tint a facet, sand with a lip, the green in a checker
 fn surfColor(sw: vec2f, w: vec2f, tint: f32) -> vec3f {
   let stripe = select(0.93, 1.07, (i32(floor(dot(w, vec2f(-u.hole.y, u.hole.x)) / 6.0)) & 1) == 0);
   switch u32(sw.x) {
     case 0u: { return vec3f(0.36, 0.74, 0.24) * stripe; }
-    case 1u: { return vec3f(0.22, 0.54, 0.17) * (0.9 + 0.18 * tint); }
+    case 1u: { return vec3f(0.22, 0.54, 0.17) * (0.92 + 0.14 * tint); }
     case 2u: { return select(vec3f(0.98, 0.88, 0.6), vec3f(0.86, 0.74, 0.48), sw.y < 0.62); }
     default: { return vec3f(0.44, 0.84, 0.32) * select(0.97, 1.03, ((i32(floor(w.x / 3.0)) + i32(floor(w.y / 3.0))) & 1) == 0); }
   }
 }
-
-fn sky(d: vec3f) -> vec3f {
-  var c = mix(SKY_HOR, SKY_TOP, pow(clamp(d.y, 0.0, 1.0), 0.6));
-  let sd = max(dot(d, normalize(SUN)), 0.0);
-  c += SUNC * (pow(sd, 8.0) * 0.12 + smoothstep(0.9993, 0.9996, sd) * 2.0);
-  // puffy clouds on a layer 300 m up, white on top and grey-blue under
-  if (d.y > 0.01) {
-    let q = u.cam.xz + d.xz * ((300.0 - u.cam.y) / d.y) + vec2f(u.view.w * 2.0, 0.0);
-    let n = vnoise(q / 160.0) * 0.6 + vnoise(q / 55.0) * 0.28 + vnoise(q / 19.0) * 0.12;
-    let cl = smoothstep(0.52, 0.62, n) * smoothstep(0.0, 0.12, d.y);
-    c = mix(c, mix(vec3f(0.78, 0.84, 0.94), vec3f(1.0), smoothstep(0.55, 0.75, n)), cl * 0.92);
-  }
-  return c;
-}
-
-// far things go the colour of the horizon
-fn fogged(c: vec3f, z: f32) -> vec3f { return mix(c, SKY_HOR, 1.0 - exp(-z / FOG)); }
 
 struct VOut { @builtin(position) pos: vec4f };
 @vertex fn vs_full(@builtin(vertex_index) i: u32) -> VOut {
@@ -169,7 +107,7 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     if (z > u.screen.z) { break; }
   }
   if (!hit) {
-    o.color = vec4f(sky(normalize(vec3f(dir.x, rise, dir.y))), 1.0);
+    o.color = vec4f(sky(normalize(vec3f(dir.x, rise, dir.y)), u.cam.xyz, u.view.w), 1.0);
     o.depth = 1.0;
     return o;
   }
@@ -182,14 +120,12 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   z = b;
   let w = u.cam.xz + dir * z;
-  let fc = facet(w);
+  let fc = facetAt(w, z);
   let n = fc.xyz;
   var c = surfColor(surfAt(w), w, fc.w);
   // steep ground is rock, faceted grey
   c = select(c, vec3f(0.55, 0.53, 0.5) * (0.88 + 0.2 * fc.w), n.y < 0.72);
-  // close up, the grass has a soft grain, gone by 40 m
-  c *= 1.0 + (vnoise(w * 2.5) + vnoise(w * 0.9) - 1.0) * 0.07 * (1.0 - smoothstep(10.0, 40.0, z));
-  c *= AMB * (0.8 + 0.2 * n.y) + SUNC * 0.78 * max(dot(n, normalize(SUN)), 0.0);
+  c *= grain(w, z) * light(n, 1.0);
   // the slipgate: a dark swirl in the green with a lit rim
   let dc = distance(w, u.cup.xz);
   if (dc < 0.62) {
@@ -367,6 +303,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     if ((fl & ${L.PF_LIVE}u) == 0u || p == u32(u.cup.w)) { return o; }
     let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
     center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92, pf(b, ${L.P_PZ}u)) + vel * dt;
+    // a camera standing in one (a spectator's, riding the eyes it watches) doesn't see it from inside
+    if (distance(center.xz, u.cam.xz) < 0.7 && abs(center.y - u.cam.y) < 1.4) { return o; }
     half = vec2f(1.05, 1.0);
     // its figure: heading and aim from its input word (src/view.mjs), legs stepping as fast as it goes, its look's body
     let w = players[(b + ${L.P_IN}u) / 4u];
@@ -431,7 +369,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     color = vec4f(unpack4x8unorm(bitcast<u32>(b.z)).rgb, 1.0);
     if (shadow) {
       // where the top's shadow falls: away from the sun, as far as the top is high
-      let sd = normalize(SUN);
+      let sd = SUN;
       center = a.xyz - vec3f(sd.x, 0.0, sd.z) / sd.y * 3.6 * a.w + vec3f(0.0, 0.3, 0.0);
       o.feet = center;
       half = vec2f(2.6 * a.w);
@@ -457,8 +395,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
 
 // a box's pixel lit as the ground is, with its edges inked
 fn shadeBlock(b: Block) -> vec3f {
-  let lit = AMB * (0.85 + 0.15 * b.n.y) + SUNC * 0.75 * max(dot(b.n, normalize(SUN)), 0.0);
-  return (b.alb * lit + b.glow) * mix(1.0, b.ink, 0.6);
+  return (b.alb * light(b.n, 1.0) + b.glow) * mix(1.0, b.ink, 0.6);
 }
 
 struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };

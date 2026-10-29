@@ -21,6 +21,7 @@ import { Fighter } from './arena-bot.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
+import { gunBoxes, carryBoxes } from './viewmodel.mjs';
 
 const TURN = 16384;
 const ARMS = L.ARMS;
@@ -57,14 +58,14 @@ const SPREES = { 5: 'WARMING UP', 10: 'ON FIRE', 15: 'BLAZING', 20: 'INFERNO' };
 // text would cover another's goes to the nearest height clear of them all,
 // four rows over or under one of them, over before under, inside top..bottom
 // (the band under the score bar and over the feed and bottom lines); with
-// none clear, where it was. Drawing only.
-export function clearOf(placed, x, y, half, top, bottom) {
-  const near = placed.filter((p) => Math.abs(p.x - x) / 4 < p.half + half);
-  const apart = (v) => near.every((p) => Math.abs(p.y - v) >= 24);
+// none clear, where it was; k screen px to a HUD px. Drawing only.
+export function clearOf(placed, x, y, half, top, bottom, k = 1) {
+  const near = placed.filter((p) => Math.abs(p.x - x) / (4 * k) < p.half + half);
+  const apart = (v) => near.every((p) => Math.abs(p.y - v) >= 24 * k);
   if (apart(y)) return y;
   let best = y, bd = Infinity;
   for (const p of near) {
-    for (const v of [p.y - 24, p.y + 24]) {
+    for (const v of [p.y - 24 * k, p.y + 24 * k]) {
       const d = Math.abs(v - y);
       if (v >= top && v <= bottom && apart(v) && (d < bd || (d === bd && v < best))) { best = v; bd = d; }
     }
@@ -328,114 +329,17 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     return ARMS[f.weapon]?.zoom || 1;
   }
 
-  // What a carrier holds in place of a gun (its kit module's carry), as
-  // rectangles at 320x200: the flag (in the colour of the side it was taken
-  // from) on its pole over the shoulder, the skull held out, or the bomb held
-  // out, its light blinking. It bobs and lunges as a gun would.
-  function carryRects(kind, color, now, moving) {
-    const out = [];
-    const s = W / 320;
+  // How the hands move this frame, for what they hold (client/viewmodel.mjs):
+  // a bob as you walk or breathe, down while a gun comes up or reloads (and
+  // away when dead), out with a melee swing, back with a shot's kick.
+  function handMotion(now, moving, w = 0) {
     const t = now / 1000;
-    const bob = moving ? Math.sin(t * 9) * 2.5 : Math.sin(t * 1.5) * 0.8;
-    const drop = Math.max(0, 1 - (now - swapAt) / 350) * 60 + (pme?.dead ? 200 : 0);
-    const lunge = Math.max(0, 1 - (now - meleeAt) / 250);
-    const ox = bob - lunge * 46, oy = Math.abs(bob) + drop - lunge * 14;
-    const rect = (x0, y0, x1, y1, c, a = 1) => out.push([(x0 + ox) * s, (y0 + oy) * s, (x1 + ox) * s, (y1 + oy) * s, c[0], c[1], c[2], a]);
-    if (kind === 'skull') {
-      const bone = [0.92, 0.89, 0.8], dark = [0.1, 0.08, 0.08];
-      rect(238, 136, 290, 178, bone); rect(232, 146, 296, 170, bone); rect(246, 176, 282, 194, bone);
-      rect(244, 152, 258, 164, dark); rect(270, 152, 284, 164, dark); rect(262, 168, 266, 176, dark);
-      for (let k = 0; k < 4; k++) rect(250 + k * 8, 184, 252 + k * 8, 192, [0.5, 0.48, 0.42]);
-      rect(250, 196, 300, 214, [0.55, 0.42, 0.32]);
-    } else if (kind === 'bomb') {
-      // a dark ball lit from above in rows, a steel band round it, a cap with its red light blinking twice a second
-      const cx = 264, cy = 168, r = 28;
-      for (let y = -r; y < r; y += 4) {
-        const w = Math.sqrt(Math.max(0, r * r - (y + 2) ** 2)), lit = 0.42 - 0.3 * (y + r) / (2 * r);
-        rect(cx - w, cy + y, cx + w, cy + y + 4, [lit, lit, lit * 1.08]);
-      }
-      rect(cx - r + 1, cy - 3, cx + r - 1, cy + 3, [0.55, 0.55, 0.5]);
-      rect(cx - 6, cy - r - 6, cx + 6, cy - r + 2, [0.48, 0.48, 0.45]);
-      rect(cx - 3, cy - r - 11, cx + 3, cy - r - 6, now % 500 < 250 ? [1, 0.15, 0.1] : [0.35, 0.06, 0.05]);
-      rect(250, 194, 300, 214, [0.55, 0.42, 0.32]);
-    } else {
-      // the pole up from the bottom right, the cloth hanging off its top in folds
-      for (let k = 0; k < 14; k++) { const y = 214 - k * 8, x = 296 - k * 2.2; rect(x - 2.5, y - 8, x + 2.5, y, [0.78, 0.78, 0.74]); }
-      const top = [266, 100];
-      for (let k = 0; k < 9; k++) {
-        const x = top[0] - k * 6, wave = Math.sin(t * 6 - k * 0.8) * 2.5;
-        const shade = 0.75 + 0.25 * Math.sin(t * 6 - k * 0.8 + 1.2);
-        rect(x - 6, top[1] + wave, x, top[1] + 30 + wave - k * 0.6, color.map((v) => v * shade));
-      }
-      rect(top[0] - 3, top[1] - 6, top[0] + 3, top[1], [1, 0.82, 0.3]);
-    }
-    return out;
-  }
-
-  // The gun in your hands as rectangles, at 320x200, pointing at the centre.
-  function gunRects(w, now, moving) {
-    const out = [];
-    const s = W / 320;
-    const t = now / 1000;
-    const bob = moving ? Math.sin(t * 9) * 2.5 : Math.sin(t * 1.5) * 0.8;
-    const drop = Math.max(0, 1 - (now - swapAt) / 350) * 60 + (pme?.reload ? 26 : 0) + (pme?.dead ? 200 : 0);
-    const lunge = Math.max(0, 1 - (now - meleeAt) / 250);
-    const k = kick * (w === L.W_SNIPER || w === L.W_ROCKET || w === L.W_SHOTGUN ? 2.2 : 1);
-    const ox = bob + k * 5 - lunge * 40 - 16, oy = Math.abs(bob) + k * 7 + drop - lunge * 10 - 8;
-    const rect = (x0, y0, x1, y1, c, a = 1) => out.push([(x0 + ox) * s, (y0 + oy) * s, (x1 + ox) * s, (y1 + oy) * s, c[0], c[1], c[2], a]);
-    // a thick line from (x0, y0) to (x1, y1) as a stair of rects
-    const bar = (x0, y0, x1, y1, wd, c) => {
-      const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 4));
-      for (let i = 0; i < n; i++) {
-        const x = x0 + (x1 - x0) * (i + 0.5) / n, y = y0 + (y1 - y0) * (i + 0.5) / n;
-        const shade = 0.8 + 0.25 * (i / n);
-        rect(x - wd / 2, y - wd / 2, x + wd / 2, y + wd / 2, c.map((v) => v * shade));
-      }
+    const heavy = w === L.W_SNIPER || w === L.W_ROCKET || w === L.W_SHOTGUN;
+    return {
+      t, bob: moving ? Math.sin(t * 9) * 2.5 : Math.sin(t * 1.5) * 0.8,
+      drop: Math.max(0, 1 - (now - swapAt) / 350) * 60 + (w && pme?.reload ? 26 : 0) + (pme?.dead ? 200 : 0),
+      lunge: Math.max(0, 1 - (now - meleeAt) / 250), kick: kick * (heavy ? 2.2 : 1),
     };
-    const flash = now - lastShotAt < 50 && w !== L.W_SWORD;
-    let tip = [205, 142];
-    switch (w) {
-      case L.W_AR:
-        bar(305, 210, 232, 158, 24, [0.3, 0.33, 0.28]); bar(236, 160, 205, 142, 9, [0.15, 0.16, 0.15]);
-        rect(262, 166, 274, 172, [0.3, 0.9, 1]); bar(268, 186, 262, 205, 9, [0.2, 0.22, 0.2]);
-        break;
-      case L.W_BR:
-        bar(305, 210, 230, 158, 22, [0.42, 0.44, 0.46]); bar(232, 159, 200, 140, 8, [0.2, 0.2, 0.22]); bar(270, 168, 238, 150, 8, [0.12, 0.12, 0.14]);
-        tip = [200, 140];
-        break;
-      case L.W_MAGNUM:
-        bar(300, 212, 252, 172, 18, [0.72, 0.74, 0.78]); bar(255, 174, 228, 156, 9, [0.55, 0.57, 0.6]); bar(290, 200, 296, 215, 12, [0.25, 0.22, 0.2]);
-        tip = [228, 156];
-        break;
-      case L.W_SNIPER:
-        bar(310, 214, 236, 160, 20, [0.17, 0.19, 0.19]); bar(238, 161, 178, 126, 6, [0.1, 0.1, 0.1]); bar(282, 176, 240, 152, 11, [0.06, 0.06, 0.07]);
-        tip = [178, 126];
-        break;
-      case L.W_SHOTGUN:
-        bar(312, 214, 262, 180, 22, [0.38, 0.25, 0.15]); bar(265, 182, 206, 146, 12, [0.3, 0.3, 0.32]); bar(250, 178, 222, 160, 9, [0.22, 0.15, 0.1]);
-        tip = [206, 146];
-        break;
-      case L.W_ROCKET:
-        bar(330, 212, 224, 146, 36, [0.28, 0.33, 0.22]); bar(232, 151, 222, 145, 38, [0.15, 0.17, 0.12]); bar(300, 170, 270, 150, 8, [0.12, 0.12, 0.12]);
-        tip = [222, 145];
-        break;
-      case L.W_PLASMA:
-        bar(305, 210, 236, 166, 28, [0.42, 0.3, 0.62]); bar(244, 160, 214, 146, 5, [0.4, 0.85, 1]); bar(246, 174, 216, 156, 5, [0.4, 0.85, 1]);
-        tip = [214, 151];
-        break;
-      case L.W_NEEDLER:
-        bar(305, 210, 238, 166, 26, [0.38, 0.22, 0.45]);
-        for (let i = 0; i < 6; i++) { const x = 290 - i * 9, y = 186 - i * 6; rect(x - 2, y - 12, x + 2, y - 2, [1, 0.45, 0.9]); }
-        tip = [232, 160];
-        break;
-      case L.W_SWORD:
-        bar(300, 214, 272, 186, 14, [0.3, 0.3, 0.33]); bar(270, 186, 222, 104, 6, [0.55, 0.95, 1]); bar(282, 190, 248, 100, 6, [0.55, 0.95, 1]);
-        break;
-      default:
-        bar(300, 214, 262, 180, 16, [0.85, 0.7, 0.55]);
-    }
-    if (flash) { rect(tip[0] - 9, tip[1] - 7, tip[0] + 5, tip[1] + 5, w === L.W_PLASMA ? [0.5, 0.9, 1] : w === L.W_NEEDLER ? [1, 0.5, 0.9] : [1, 0.85, 0.4], 0.95); }
-    return out;
   }
 
   function hudRects(f, now) {
@@ -653,12 +557,15 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (a >= 1) { tracers.splice(k, 1); continue; }
       beams.push({ a: t.a, b: t.b, width: t.width, color: [t.color[0], t.color[1], t.color[2], t.color[3] * (1 - a)] });
     }
-    let rects = [], blips = [], tracker = null;
+    let rects = [], blips = [], tracker = null, inHand = null;
     const playing = st === 2 && f?.live;
     if (playing) {
       const moving = Math.hypot(f.vel[0], f.vel[2]) > 1 && f.ground;
       // a carrier's hands hold what its kit module carries (a flag in the colour of the side it was taken from)
-      if (!WATCH && !f.dead && !f.down) rects = f.carry ? carryRects(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], now, moving) : gunRects(f.weapon, now, moving);
+      if (!WATCH && !f.dead && !f.down) {
+        inHand = f.carry ? carryBoxes(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], handMotion(now, moving))
+          : gunBoxes(f.weapon, handMotion(now, moving, f.weapon), now - lastShotAt < 50 && f.weapon !== L.W_SWORD);
+      }
       if (!f.dead) { const hr = hudRects(f, now); rects.push(...hr.rects); blips = hr.blips; tracker = hr.tracker; }
     }
     const zoom = zoomed && f && !f.dead ? zoomOf() : 1;
@@ -672,13 +579,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       rects = rects.slice(0, Math.max(0, MAX_RECT - mr.length)).concat(mr);
     }
     // a fixed camera is for looking at the map: no HUD
-    if (FIXED) { rects = []; tracker = null; text.fill(0); }
+    if (FIXED) { rects = []; tracker = null; inHand = null; text.fill(0); }
     netGraph.sample(now, hashes, keys);
     const graph = showGraph && st > 0 ? netGraph.build((x, y, s, c) => put(text, COLS, x, y, s, c), C) : null;
     const spread = ARMS[f?.weapon]?.spread || 0;
     last = {
       cam, yaw: camYaw, pitch: camPitch, zoom, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, slot: tgt ? watched : slot < 0 ? 999 : slot,
-      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone,
+      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone,
       crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, cam) ? 8 : 0), gap: spread / 30 + kick * 3,
       tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
     };
@@ -687,11 +594,12 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
   // Waypoints as HUD rects and text: a mark in its colour where the point lands
   // (pulled in to the screen's edge when it's off it or behind), its label
-  // above and the distance in metres below, in text cells (4 x 6 px).
+  // above and the distance in metres below, in text cells (4 x 6 HUD px).
   function markerRects(markers, cv, f) {
     const out = [];
     const s = W / 320;
     const rows = renderer.rows;
+    const cw = 4 * renderer.hudScale, ch = 6 * renderer.hudScale; // a text cell, in screen px
     // the ones placed so far: { x, y, half (its text's half width in cells) }
     const placed = [];
     for (const m of markers) {
@@ -703,7 +611,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       // kept below the score bar (its label two rows up clear of rows 4 and 5) and above the bottom lines
       y = Math.max(48 * s, Math.min(H - 40 * s, y));
       // on the left, its label and distance kept above the kill feed (rows - 16 to rows - 12)
-      if (x < 128 && Math.round(y / 6) + 1 >= rows - 16) y = (rows - 18) * 6;
+      if (x < 128 * s && Math.round(y / ch) + 1 >= rows - 16) y = (rows - 18) * ch;
       const dist = f ? Math.round(Math.hypot(m.pos[0] - f.pos[0], m.pos[1] - f.pos[1], m.pos[2] - f.pos[2])) : 0;
       const label = String(m.label ?? '');
       const ds = `${dist}M`;
@@ -711,7 +619,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       // same way, both sides' VIPs down the gulch) moves clear of them all;
       // the mark stays where its target is
       const half = Math.max(label.length, f ? ds.length : 0) / 2 + 0.5;
-      const ty = clearOf(placed, x, y, half, 48 * s, x < 128 ? Math.min(H - 40 * s, (rows - 18) * 6) : H - 40 * s);
+      const ty = clearOf(placed, x, y, half, 48 * s, x < 128 * s ? Math.min(H - 40 * s, (rows - 18) * ch) : H - 40 * s, renderer.hudScale);
       placed.push({ x, y: ty, half });
       const c = PALETTE[m.color ?? C.WHITE] || PALETTE[0];
       const r = (x0, y0, x1, y1, col = c, a = 0.95) => out.push([x + x0 * s, y + y0 * s, x + x1 * s, y + y1 * s, col[0], col[1], col[2], a]);
@@ -721,9 +629,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       else if (m.kind === 'hill') { r(-4, -1, 4, 1); r(-3, -3, 3, -1, c, 0.5); r(-3, 1, 3, 3, c, 0.5); }
       else if (m.kind === 'skull') { r(-3, -4, 3, 1); r(-2, 1, 2, 3); r(-2, -2, -0.5, -0.5, [0, 0, 0]); r(0.5, -2, 2, -0.5, [0, 0, 0]); }
       else { r(-1, -4, 1, 4); r(-2.5, -2.5, 2.5, 2.5, c, 0.8); r(-4, -1, 4, 1); }
-      const col = Math.round(x / 4), row = Math.round(ty / 6);
-      if (label) put(text, COLS, Math.max(0, Math.min(COLS - label.length, col - (label.length >> 1))), Math.max(0, row - 2), label, m.color ?? C.WHITE);
-      if (f) put(text, COLS, Math.max(0, Math.min(COLS - ds.length, col - (ds.length >> 1))), Math.min(rows - 1, row + 1), ds, C.WHITE);
+      const col = Math.round((x - renderer.hudX) / cw), row = Math.round(ty / ch);
+      // a column clear of either edge, so a glyph's outline isn't cut there
+      if (label) put(text, COLS, Math.max(1, Math.min(COLS - 1 - label.length, col - (label.length >> 1))), Math.max(0, row - 2), label, m.color ?? C.WHITE);
+      if (f) put(text, COLS, Math.max(1, Math.min(COLS - 1 - ds.length, col - (ds.length >> 1))), Math.min(rows - 1, row + 1), ds, C.WHITE);
     }
     return out;
   }
@@ -823,8 +732,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         if (pad && !WATCH && !f.gun.includes(pad.weapon) && ARMS[pad.weapon]) centre(Math.floor(rows / 2) + 5, `E: PICK UP ${ARMS[pad.weapon].name}`, C.WHITE);
         if (f.mag[f.hand] === 0 && f.res[f.hand] > 0 && !f.reload) centre(Math.floor(rows / 2) + 3, 'R: RELOAD', C.RED);
       }
-      // the feed, over the tracker
-      feed.forEach((e, k) => { if (now - e.born < 6000) put(t, COLS, 1, rows - 12 - (feed.length - 1 - k), e.text, e.color); });
+      // the feed, over the tracker, the newest at the bottom: a line that would run into text already on its row (a message in the middle) goes, and the older ones above it
+      for (let k = feed.length - 1, y = rows - 12; k >= 0; k--, y--) {
+        const e = feed[k];
+        if (now - e.born >= 6000) continue;
+        if (t.subarray(y * COLS + 1, y * COLS + 2 + e.text.length).some((c) => (c & 255) > 32)) break;
+        put(t, COLS, 1, y, e.text, e.color);
+      }
     }
     if (banner.until > now) centre(Math.floor(rows / 2) - 6, banner.text, banner.color);
     if (medal.until > now) centre(Math.floor(rows / 2) - 8, medal.text, C.ORANGE);

@@ -576,14 +576,14 @@ test('Lucky Blocks\' client module: the blocks as AO has them; a cube over each 
     lk.hud(g.v, { put: (x, y, s, c) => out.push([y, s, c]), centre() {}, right() {}, rect() {}, rows: 33, C, slot, me: g.v.fighter(slot), team: -1, now: 0, t: 1 });
     return out;
   };
-  assert.deepEqual([blocksOf(cd.v), lines(cd, 0)], [[], [[2, 'SHOOT OR HIT THE BLOCKS FOR LOOT', C.WHITE]]]);
+  assert.deepEqual([blocksOf(cd.v), lines(cd, 0)], [[], [[2, 'HIT THE BLOCKS FOR LOOT', C.WHITE]]]);
   assert.equal(lk.goal(cd.v, cd.v.fighter(0), { slot: 0, t: 0 }), null);
   const g = await room(2);
   const v = g.v;
   const n = blocks(g).length;
-  assert.deepEqual(lines(g, 0), [[2, `FIRST TO ${AC.LK_TARGET}  ${n} OF ${n} BLOCKS UP`, C.GREY]]);
+  assert.deepEqual(lines(g, 0), [[2, `FIRST TO ${AC.LK_TARGET}`, C.GREY], [3, `${n} OF ${n} BLOCKS UP`, C.GREY]]);
   lucky(g, 0, MID, AC.LK_R_FAST);
-  assert.deepEqual(lines(g, 0), [[2, `FIRST TO ${AC.LK_TARGET}  ${n - 1} OF ${n} BLOCKS UP`, C.GREY], [3, `LEGS ${AC.LK_FAST_TICKS / 125}`, C.YELLOW]]);
+  assert.deepEqual(lines(g, 0), [[2, `FIRST TO ${AC.LK_TARGET}`, C.GREY], [3, `${n - 1} OF ${n} BLOCKS UP`, C.GREY], [4, `LEGS ${AC.LK_FAST_TICKS / 125}`, C.YELLOW]]);
   assert.deepEqual(blocksOf(v)[MID].wait, AC.LK_BACK);
   // drawn: a cube over each standing block in its glow; the nearest waypointed for a fighter holding the starter alone
   const draw = (slot, shown = slot) => {

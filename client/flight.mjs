@@ -11,7 +11,7 @@ const canvas = document.getElementById('screen');
 const note = document.getElementById('note');
 
 async function main() {
-  [canvas.width, canvas.height] = (q.get('res') || '320x200').split('x').map(Number);
+  [canvas.width, canvas.height] = (q.get('res') || '640x400').split('x').map(Number);
   const fixed = q.has('cam') ? q.get('cam').split(',').map(Number) : null;
   const h = await createHost({ wasm: '../build/flight/game.wasm', q, watch: q.get('watch') === '1' || !!fixed, arena: true });
   const game = await mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.7), sens: Number(q.get('sens') || 3), fixed,

@@ -638,7 +638,7 @@ test('Escape\'s client module: the terminals, exits, counts and states as AO and
       team: -1, now: 0, t: 1, ...extra });
     return outs;
   };
-  assert.deepEqual(lines(cd, 0), [[0, 'ONE HUNTER AGAINST THE ROOM', C.YELLOW], [1, 'HACK THE TERMINALS  THE EXITS OPEN', C.GREY]]);
+  assert.deepEqual(lines(cd, 0), [[0, 'ONE HUNTER AGAINST THE ROOM', C.YELLOW], [1, 'HACK THE TERMINALS', C.GREY], [2, 'THEN RUN FOR THE EXITS', C.GREY]]);
   const gctx = (g, slot) => ({ role: 'attack', rank: 0, view: g.v, ally: (p, q) => g.v.ally(p, q), slot, t: g.v.tick });
   assert.equal(es.goal(cd.v, cd.v.fighter(0), gctx(cd, 0)), null, 'nothing to do before play');
   assert.deepEqual(AMC[L.M_ESCAPE], es);
@@ -653,10 +653,10 @@ test('Escape\'s client module: the terminals, exits, counts and states as AO and
   const ts = termsOf(v);
   assert.deepEqual(stateOf(v, a), { hunter: false, state: 'up', order: 0, time: 0, help: 0 });
   assert.deepEqual(stateOf(v, h), { hunter: true, state: 'up', stun: 0, calm: 0, fin: 0 });
-  // the HUD: a survivor's and the hunter's
+  // the HUD: a survivor's and the hunter's, each line short of the shield bar (26 columns in)
   put(g, a, ts[0].pos[0] + 1, ts[0].pos[2], ts[0].pos[1]);
   g.step();
-  assert.deepEqual(lines(g, a), [[0, 'YOU: SURVIVOR', C.CYAN], [1, 'TERMINALS 0 OF 2', C.YELLOW], [2, '3 UP  0 DOWN  0 ESCAPED  0 OUT', C.GREY], [3, 'SHOVE READY  Q', C.GREEN],
+  assert.deepEqual(lines(g, a), [[0, 'YOU: SURVIVOR', C.CYAN], [1, 'TERMINALS 0 OF 2', C.YELLOW], [2, '3 UP  0 DOWN', C.GREY], [3, '0 ESCAPED  0 OUT', C.GREY], [4, 'SHOVE READY  Q', C.GREEN],
     ['mid', 'HACKING  HOLD STILL', C.CYAN]]);
   assert.deepEqual(lines(g, h).slice(0, 4).map((l) => l.slice(0, 2)), [[0, 'YOU: THE HUNTER'], [1, 'FINISHED 0  DOWNED 0'], [2, 'NOISE AT 1 TERMINAL'], [3, 'TERMINALS 0 OF 2']]);
   assert.deepEqual(lines(g, b, { watching: true, mine: c })[0][1], `P${b + 1}: SURVIVOR`, 'a watcher sees whose it is');

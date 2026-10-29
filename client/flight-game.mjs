@@ -238,8 +238,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         say(f.owner === f.shot ? `${name(f.shot, slot)} ${f.size === F.KILL_CRASH ? 'CRASHED' : 'BLEW UP'}` : `${name(f.owner, slot)} [${cause}] ${name(f.shot, slot)}`,
           f.owner === slot ? C.GREEN : f.shot === slot ? C.RED : other, now);
         // a fireball, and sparks thrown out
-        glows.push({ pos: f.pos, size: 6, color: [1, 0.55, 0.15, 1], kind: 3, born: now, life: 700, grow: true });
-        glows.push({ pos: f.pos, size: 9, color: [1, 0.8, 0.5, 0.5], kind: 6, born: now, life: 450, grow: true });
+        glows.push({ pos: f.pos, size: 5, color: [1, 1, 1, 1], kind: 7, born: now, life: 900, grow: true });
+        glows.push({ pos: f.pos, size: 8, color: [1, 0.8, 0.5, 0.3], kind: 6, born: now, life: 450, grow: true });
         for (let k = 0; k < 10; k++) {
           const a = k * 2.4, b = (k % 3 - 1) * 0.6;
           glows.push({ pos: [f.pos[0] + Math.cos(a) * 3, f.pos[1] + b * 3, f.pos[2] + Math.sin(a) * 3], size: 0.8, color: [1, 0.7, 0.3, 1], kind: 5, born: now + k * 20, life: 500 });
@@ -291,8 +291,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       case L.FX_BLAST:
         if (f.size < 1) { glows.push({ pos: f.pos, size: 1.4, color: [1, 0.8, 0.4, 1], kind: 5, born: now, life: 250 }); if (mine || f.owner === slot) sound.land(20); }
         else {
-          glows.push({ pos: f.pos, size: f.size, color: f.size > 10 ? [1, 0.45, 0.2, 1] : [0.6, 1, 0.5, 1], kind: 3, born: now, life: 650, grow: true });
-          glows.push({ pos: f.pos, size: f.size * 1.3, color: [1, 1, 0.9, 0.4], kind: 6, born: now, life: 350, grow: true });
+          // a bomb's blast a fireball, a charge shot's a green flash
+          if (f.size > 10) glows.push({ pos: f.pos, size: f.size * 0.8, color: [1, 1, 1, 1], kind: 7, born: now, life: 900, grow: true });
+          else glows.push({ pos: f.pos, size: f.size, color: [0.6, 1, 0.5, 1], kind: 3, born: now, life: 650, grow: true });
+          glows.push({ pos: f.pos, size: f.size * 1.3, color: [1, 1, 0.9, 0.25], kind: 6, born: now, life: 350, grow: true });
           sound.blast(d, f.size);
         }
         break;
@@ -543,7 +545,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     marker *= Math.exp(-ms / 120);
     hurt *= Math.exp(-ms / 400);
 
-    // what glows: blasts, sparks, the charge on the nose
+    // what glows: blasts, sparks, the charge on the nose (and the fireballs, drawn solid)
     const glow = [];
     for (let k = glows.length - 1; k >= 0; k--) {
       const g = glows[k];
@@ -684,7 +686,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         const lead = list[0];
         if (lead && lead.slot !== f.slot) { const lr = view.racer(lead.slot, n); put(t, COLS, 1, 1, `${host.label(lead.slot)} ${lr.done ? 'FINISHED' : `LAP ${lr.lap + 1} GATE ${lr.next + 1}`}`, C.GREY); }
         if (gateAt && !f.dead) {
-          const col = Math.max(0, Math.min(COLS - 6, Math.round(gateAt[0] * S / 4) - 2)), row = Math.round(gateAt[1] * S / 6);
+          const col = Math.max(0, Math.min(COLS - 6, Math.round((gateAt[0] * S - renderer.hudX) / (4 * renderer.hudScale)) - 2)), row = Math.round(gateAt[1] * S / (6 * renderer.hudScale));
           put(t, COLS, col, Math.min(rows - 1, row + 2), `${gateAt[2]}M`, C.YELLOW);
         }
       } else if (m === L.M_JUGGERNAUT) {
