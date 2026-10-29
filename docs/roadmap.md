@@ -18,13 +18,14 @@ What a page downloads, gzipped, everything it imports included:
 
 | Page | Files | Gzipped |
 | --- | --- | --- |
-| `client/party.html` | 54 | 275 KB (wasm 29 KB) |
-| `client/fireplace.html` | 72 | 436 KB (wasm 85 KB, 68 KB of it Box Canyon's height map) |
-| `client/bumper.html` | 38 | 114 KB |
-| `client/arena.html` | 44 | 190 KB (the team modes: 6 files and 31 KB of it) |
+| `client/party.html` | 132 | 741 KB (wasm 80 KB) |
+| `client/fireplace.html` | 167 | 1,132 KB (wasm 251 KB, 35 KB of it Box Canyon's height map and 80 KB Skyways') |
+| `client/bumper.html` | 89 | 256 KB (wasm 10 KB) |
+| `client/arena.html` | 105 | 389 KB (wasm 59 KB; the kit modes: 25 files and 70 KB) |
 
-No textures, models, sound files or fonts: sounds are synthesized, the font is
-3x5 bitmaps, every shape is drawn on the GPU. A Party minigame adds about
+No textures, models, sound files or fonts: sounds are synthesized, the HUD's
+text is the system's sans drawn into an atlas at startup, every shape is
+drawn on the GPU. A Party minigame adds about
 10 KB of client code and 2 to 3 KB of wasm.
 
 Cost a tick at 256 players: 0.2 to 0.4 ms of the sim's 8 ms. Cost a frame on
@@ -60,7 +61,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 40 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War |
+| Party (the ball) | 41 | 60 | Mini Golf; with teams: Fall Ball, Egg Scramble, Tug o' War |
 | Arena (the fighter) | 15 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
