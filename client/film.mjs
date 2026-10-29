@@ -19,7 +19,6 @@ export function filmClock() {
 // the film's output time. While the film skips (live false) only the tune
 // asked for is kept, and it starts when the film goes live again.
 export function filmSound(seconds, { music = true } = {}) {
-  const RATE = 48000;
   const off = new OfflineAudioContext(1, Math.ceil(seconds * RATE), RATE);
   let out = 0, live = false, held = null;
   const ctx = new Proxy(off, { get: (o, k) => (k === 'currentTime' ? out : typeof o[k] === 'function' ? o[k].bind(o) : o[k]) });
@@ -40,18 +39,30 @@ export function filmSound(seconds, { music = true } = {}) {
       live = on;
     },
     // the whole track as a 16-bit WAV, base64
-    async render() {
-      const buf = await off.startRendering();
-      const d = buf.getChannelData(0);
-      const b = new DataView(new ArrayBuffer(44 + 2 * d.length));
-      const str = (o, s) => [...s].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
-      str(0, 'RIFF'); b.setUint32(4, 36 + 2 * d.length, true); str(8, 'WAVEfmt ');
-      b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true); b.setUint32(24, RATE, true);
-      b.setUint32(28, RATE * 2, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); str(36, 'data'); b.setUint32(40, 2 * d.length, true);
-      for (let i = 0; i < d.length; i++) b.setInt16(44 + 2 * i, Math.max(-1, Math.min(1, d[i])) * 32767, true);
-      return base64(new Uint8Array(b.buffer));
-    },
+    render: async () => wav(await off.startRendering()),
   };
+}
+
+// The tune for `key` (client/sound.mjs), looping from 0 for `seconds`, as the
+// games play it: a cut that cuts faster than a round lays one under all of it.
+export async function scoreTrack(key, seconds) {
+  const off = new OfflineAudioContext(1, Math.ceil(seconds * RATE), RATE);
+  const s = createSound({ context: off });
+  s.wake();
+  s.music(key >>> 0, true);
+  return wav(await off.startRendering());
+}
+
+const RATE = 48000;
+function wav(buf) {
+  const d = buf.getChannelData(0);
+  const b = new DataView(new ArrayBuffer(44 + 2 * d.length));
+  const str = (o, s) => [...s].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); b.setUint32(4, 36 + 2 * d.length, true); str(8, 'WAVEfmt ');
+  b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true); b.setUint32(24, RATE, true);
+  b.setUint32(28, RATE * 2, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); str(36, 'data'); b.setUint32(40, 2 * d.length, true);
+  for (let i = 0; i < d.length; i++) b.setInt16(44 + 2 * i, Math.max(-1, Math.min(1, d[i])) * 32767, true);
+  return base64(new Uint8Array(b.buffer));
 }
 
 // A screenshot (a base64 PNG) fitted to W x H on black, a game drawn small

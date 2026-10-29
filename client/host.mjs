@@ -22,7 +22,8 @@ import { slotLabel } from './looks.mjs';
 import { parseImpair } from '../net/impair.js';
 import { relayFor, room } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
-import { savedLook, wearable } from './looks.mjs';
+import { savedLook, wearable, guestLook } from './looks.mjs';
+import { guestAvatar } from './avatar.mjs';
 import { loadTally, gotSet } from './achievements.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
@@ -78,6 +79,11 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   // a slot's Elo Pros avatar (client/avatar.mjs) as the relay sent it once it signed in; ?avatar=<word> wears one on this page
   const myAvatar = q.has('avatar') ? Number(q.get('avatar')) >>> 0 : 0;
   h.avatar = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) && myAvatar ? myAvatar : h.u32[(L.CL_AVATARS >> 2) + p] >>> 0);
+  // a replay keeps no looks (the relay never records them): with ?guests=1 every
+  // seat is dressed as a local room's AI players are, from its slot (the film's "guests")
+  if (q.get('replay') && q.get('guests') === '1') {
+    for (let p = 0; p < L.NPLAYER; p++) { h.u32[(L.CL_LOOKS >> 2) + p] = guestLook(p); h.u32[(L.CL_AVATARS >> 2) + p] = guestAvatar(p); }
+  }
   // the prediction's own instance: it writes only PRED
   h.px = (await WebAssembly.instantiate(module, { env: { mem: memory } })).exports;
   if (map) loadMap(h.px, h.u8, map);
