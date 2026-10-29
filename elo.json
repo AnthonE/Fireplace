@@ -12,8 +12,8 @@
     },
     {
       "id": "fireplace-look",
-      "title": "a ball or a hat for Fireplace",
-      "what": "A new look players can pick on the couch, which everyone in the room sees: one entry at the end of BALLS or HATS in client/looks.mjs (a pattern and two colours, or a hat's style and colour). client/party-render-demo.html?scene=wardrobe shows every one. A new pattern or hat style is a few lines in the bumper and party shaders.",
+      "title": "a ball, a hat or a body for Fireplace",
+      "what": "A new look players can pick on the couch, which everyone in the room sees: one entry at the end of BALLS, HATS or BODIES in client/looks.mjs (a pattern and two colours, a hat's style and colour, or a blocky body's skin and face). client/party-render-demo.html?scene=wardrobe shows every ball and hat, ?scene=blocky every body. A new pattern or hat style is a few lines in the bumper and party shaders.",
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
       "check": "review"
