@@ -170,7 +170,7 @@ async function shoot(cut) {
         else if (!ff.stdin.write(jpg)) await new Promise((ok) => ff.stdin.once('drain', ok));
       }
       n++;
-      if (n % fps === 0) process.stderr.write(`\rfilm: ${(n / fps).toFixed(0)} of ${total} s, ${((Date.now() - t0) / 1000).toFixed(0)} s so far   `);
+      if (n % fps === 0) process.stderr.write(`\rfilm: ${(n / fps).toFixed(0)} of ${total.toFixed(1)} s, ${((Date.now() - t0) / 1000).toFixed(0)} s so far   `);
     }
   };
   // unseen frames at 60 a second: the page mounts the game on now and its scene catches up
