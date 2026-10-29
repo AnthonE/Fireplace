@@ -66,13 +66,14 @@ export default {
   mode: L.M_LUCKY,
   key: 'lucky',
 
-  // rows 2 and 3: the target and the blocks standing; your legs' seconds
+  // rows 2 to 4 (each short of the shield bar): the target, the blocks standing, your legs' seconds
   hud(view, ctx) {
-    if (view.hole().state === L.H_COUNT) { ctx.put(1, 2, 'SHOOT OR HIT THE BLOCKS FOR LOOT', ctx.C.WHITE); return; }
+    if (view.hole().state === L.H_COUNT) { ctx.put(1, 2, 'HIT THE BLOCKS FOR LOOT', ctx.C.WHITE); return; }
     const bs = blocksOf(view);
-    ctx.put(1, 2, `FIRST TO ${AC.LK_TARGET}  ${bs.filter((b) => !b.wait).length} OF ${bs.length} BLOCKS UP`, ctx.C.GREY);
+    ctx.put(1, 2, `FIRST TO ${AC.LK_TARGET}`, ctx.C.GREY);
+    ctx.put(1, 3, `${bs.filter((b) => !b.wait).length} OF ${bs.length} BLOCKS UP`, ctx.C.GREY);
     const legs = ctx.slot >= 0 ? legsOf(view, ctx.slot) : 0;
-    if (legs) ctx.put(1, 3, `LEGS ${Math.ceil(legs / 125)}`, ctx.C.YELLOW);
+    if (legs) ctx.put(1, 4, `LEGS ${Math.ceil(legs / 125)}`, ctx.C.YELLOW);
   },
 
   // The feed: what each block paid, yellow lucky, red unlucky; a banner for your own.

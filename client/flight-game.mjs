@@ -238,8 +238,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         say(f.owner === f.shot ? `${name(f.shot, slot)} ${f.size === F.KILL_CRASH ? 'CRASHED' : 'BLEW UP'}` : `${name(f.owner, slot)} [${cause}] ${name(f.shot, slot)}`,
           f.owner === slot ? C.GREEN : f.shot === slot ? C.RED : other, now);
         // a fireball, and sparks thrown out
-        glows.push({ pos: f.pos, size: 6, color: [1, 0.55, 0.15, 1], kind: 3, born: now, life: 700, grow: true });
-        glows.push({ pos: f.pos, size: 9, color: [1, 0.8, 0.5, 0.5], kind: 6, born: now, life: 450, grow: true });
+        glows.push({ pos: f.pos, size: 5, color: [1, 1, 1, 1], kind: 7, born: now, life: 900, grow: true });
+        glows.push({ pos: f.pos, size: 8, color: [1, 0.8, 0.5, 0.3], kind: 6, born: now, life: 450, grow: true });
         for (let k = 0; k < 10; k++) {
           const a = k * 2.4, b = (k % 3 - 1) * 0.6;
           glows.push({ pos: [f.pos[0] + Math.cos(a) * 3, f.pos[1] + b * 3, f.pos[2] + Math.sin(a) * 3], size: 0.8, color: [1, 0.7, 0.3, 1], kind: 5, born: now + k * 20, life: 500 });
@@ -291,8 +291,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       case L.FX_BLAST:
         if (f.size < 1) { glows.push({ pos: f.pos, size: 1.4, color: [1, 0.8, 0.4, 1], kind: 5, born: now, life: 250 }); if (mine || f.owner === slot) sound.land(20); }
         else {
-          glows.push({ pos: f.pos, size: f.size, color: f.size > 10 ? [1, 0.45, 0.2, 1] : [0.6, 1, 0.5, 1], kind: 3, born: now, life: 650, grow: true });
-          glows.push({ pos: f.pos, size: f.size * 1.3, color: [1, 1, 0.9, 0.4], kind: 6, born: now, life: 350, grow: true });
+          // a bomb's blast a fireball, a charge shot's a green flash
+          if (f.size > 10) glows.push({ pos: f.pos, size: f.size * 0.8, color: [1, 1, 1, 1], kind: 7, born: now, life: 900, grow: true });
+          else glows.push({ pos: f.pos, size: f.size, color: [0.6, 1, 0.5, 1], kind: 3, born: now, life: 650, grow: true });
+          glows.push({ pos: f.pos, size: f.size * 1.3, color: [1, 1, 0.9, 0.25], kind: 6, born: now, life: 350, grow: true });
           sound.blast(d, f.size);
         }
         break;
@@ -306,11 +308,12 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     }
   }
 
-  // ---- HUD pieces, in 320 x 200 units scaled to the screen
-  const S = W / 320;
+  // ---- HUD pieces, in the HUD frame's 320 x 200 units (client/lowpoly.mjs hudFrame): to screen px, and back
+  const S = renderer.hudScale, ux = (x) => renderer.hudX + x * S, uy = (y) => renderer.hudY + y * S;
+  const unit = (x, y) => [(x - renderer.hudX) / S, (y - renderer.hudY) / S];
   function hudRects(f, now, cv, cam) {
     const out = [];
-    const r = (x0, y0, x1, y1, c, a = 1) => out.push([x0 * S, y0 * S, x1 * S, y1 * S, c[0], c[1], c[2], a]);
+    const r = (x0, y0, x1, y1, c, a = 1) => out.push([ux(x0), uy(y0), ux(x1), uy(y1), c[0], c[1], c[2], a]);
     // shields over the hull, top centre under the clock
     const sh = Math.min(100, f.sh);
     const low = f.sh < 25 && Math.floor(now / 150) % 2;
@@ -331,7 +334,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     for (const [dist, half] of [[30, 3.5], [90, 6]]) {
       const [x, y, z] = project(cv, W, H, [0, 1, 2].map((k) => f.drawn[k] + f.nose[k] * dist));
       if (z < 1) continue;
-      const X = x / S, Y = y / S, t = 0.8;
+      const [X, Y] = unit(x, y), t = 0.8;
       r(X - half, Y - half, X + half, Y - half + t, col, 0.9); r(X - half, Y + half - t, X + half, Y + half, col, 0.9);
       r(X - half, Y - half, X - half + t, Y + half, col, 0.9); r(X + half - t, Y - half, X + half, Y + half, col, 0.9);
     }
@@ -353,7 +356,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       if (z < 1 || x < 0 || x > W || y < 0 || y > H) continue;
       const ally = view.ally(f.slot, p);
       const c = p === lock ? [1, 0.9, 0.2] : ally ? [0.35, 0.6, 1] : md.teamed ? SIDE_RGB[sideOf(view, p)] : view.ship(p).jugg ? [1, 0.72, 0.15] : [1, 0.3, 0.25];
-      const X = x / S, Y = y / S, half = Math.max(3, Math.min(10, 600 / Math.max(dd, 1) / S)), t = 0.8, k = half * 0.45;
+      const [X, Y] = unit(x, y), half = Math.max(3, Math.min(10, 600 / Math.max(dd, 1) / S)), t = 0.8, k = half * 0.45;
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
         const cx = X + sx * half, cy = Y + sy * half;
         r(Math.min(cx, cx - sx * k), cy - t / 2, Math.max(cx, cx - sx * k), cy + t / 2, c, 0.9);
@@ -368,12 +371,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       let [x, y, z] = project(cv, W, H, g.pos);
       if (z < 0.3) { x = x < W / 2 ? 0 : W; y = H / 2; }
       // kept over the radar (bottom right) and the bars (bottom left)
-      const X = Math.max(8, Math.min(312, x / S)), Y = Math.max(30, Math.min(150, y / S)), c = [1, 0.85, 0.25];
+      const [gx, gy] = unit(x, y);
+      const X = Math.max(8, Math.min(312, gx)), Y = Math.max(30, Math.min(150, gy)), c = [1, 0.85, 0.25];
       r(X - 1, Y - 5, X + 1, Y + 5, c, 0.95); r(X - 5, Y - 1, X + 5, Y + 1, c, 0.95); r(X - 3, Y - 3, X + 3, Y + 3, c, 0.5);
       gateAt = [X, Y, Math.round(Math.hypot(g.pos[0] - f.drawn[0], g.pos[1] - f.drawn[1], g.pos[2] - f.drawn[2]))];
     }
     // the radar, bottom right: 300 m about you, your heading up
-    const R = 26, cx = W - 34 * S, cy = H - 34 * S;
+    const R = 26, cx = 286, cy = 166;
     const fy = Math.cos(f.heading[0]), fz = Math.sin(f.heading[0]);
     const blips = [];
     for (const [, p, o] of near) {
@@ -381,14 +385,14 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       const dist = Math.hypot(dx, dz);
       if (dist > 300) continue;
       const fwd = dx * fy + dz * fz, right = -dx * fz + dz * fy;
-      const x = cx / S + right / 300 * R, y = cy / S - fwd / 300 * R;
+      const x = cx + right / 300 * R, y = cy - fwd / 300 * R;
       const ally = view.ally(f.slot, p);
       const c = ally ? [0.35, 0.6, 1] : md.teamed ? SIDE_RGB[sideOf(view, p)] : [1, 0.3, 0.25];
       const above = o.pos[1] - f.pos[1];
-      blips.push([(x - 1.5) * S, (y - 1.5) * S, (x + 1.5) * S, (y + 1.5) * S, ...c, 1]);
-      if (Math.abs(above) > 15) blips.push([(x - 0.5) * S, (y + (above > 0 ? -4 : 1.5)) * S, (x + 0.5) * S, (y + (above > 0 ? -1.5 : 4)) * S, ...c, 0.8]);
+      blips.push([ux(x - 1.5), uy(y - 1.5), ux(x + 1.5), uy(y + 1.5), ...c, 1]);
+      if (Math.abs(above) > 15) blips.push([ux(x - 0.5), uy(y + (above > 0 ? -4 : 1.5)), ux(x + 0.5), uy(y + (above > 0 ? -1.5 : 4)), ...c, 0.8]);
     }
-    return { rects: out, blips, radar: [cx, cy, R * S] };
+    return { rects: out, blips, radar: [ux(cx), uy(cy), R * S] };
   }
 
   // Is an enemy close to the nose's line within the lasers' range? For the red reticles.
@@ -543,7 +547,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     marker *= Math.exp(-ms / 120);
     hurt *= Math.exp(-ms / 400);
 
-    // what glows: blasts, sparks, the charge on the nose
+    // what glows: blasts, sparks, the charge on the nose (and the fireballs, drawn solid)
     const glow = [];
     for (let k = glows.length - 1; k >= 0; k--) {
       const g = glows[k];
@@ -684,7 +688,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         const lead = list[0];
         if (lead && lead.slot !== f.slot) { const lr = view.racer(lead.slot, n); put(t, COLS, 1, 1, `${host.label(lead.slot)} ${lr.done ? 'FINISHED' : `LAP ${lr.lap + 1} GATE ${lr.next + 1}`}`, C.GREY); }
         if (gateAt && !f.dead) {
-          const col = Math.max(0, Math.min(COLS - 6, Math.round(gateAt[0] * S / 4) - 2)), row = Math.round(gateAt[1] * S / 6);
+          const col = Math.max(0, Math.min(COLS - 6, Math.round(gateAt[0] / 4) - 2)), row = Math.round(gateAt[1] / 6);
           put(t, COLS, col, Math.min(rows - 1, row + 2), `${gateAt[2]}M`, C.YELLOW);
         }
       } else if (m === L.M_JUGGERNAUT) {

@@ -82,8 +82,7 @@ changed: the relay, referee, keyframes, spectators and replays just see a sim.
 the net and sim workers, the prediction's instance, the sound, one GPU device)
 and each game's frontend (`client/bumper-game.mjs`, `party-game.mjs`,
 `arena-game.mjs`, `golf-game.mjs`) mounted on its own canvas as the room moves
-into it (bumper balls and party at the window's size, golf and the arena at
-320 x 200); `bumper.html`, `party.html` and `arena.html` are the same
+into it, every one at the window's size; `bumper.html`, `party.html` and `arena.html` are the same
 frontends mounted alone. The net worker packs each tick's word in the format
 of the game on now. The room (`client/room-render.mjs`) is drawn like the
 cheese, solved per pixel: a few dozen boxes, two pumpkins and the antenna's

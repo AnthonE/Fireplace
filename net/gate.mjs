@@ -69,7 +69,7 @@ export async function chrome() {
     async open(query, label = 'chrome') {
       const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
       page.on('pageerror', (e) => process.stderr.write(`\n[${label}] ${e.message}\n`));
-      await page.goto(`http://127.0.0.1:${port}/client/index.html?${new URLSearchParams(query)}`);
+      await page.goto(`http://127.0.0.1:${port}/client/index.html?${new URLSearchParams({ res: '320x200', ...query })}`); // software WebGPU: golf's page at its smallest unless asked
       return page;
     },
     state: (page) => page.evaluate(() => window.__qg?.state?.() || null).catch(() => null),

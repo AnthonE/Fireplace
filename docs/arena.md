@@ -85,9 +85,13 @@ frame, and hits and kills a round trip later. Projectiles (rockets, bolts,
 needles, frags) are checked where things are now.
 
 `client/arena.html` is the page: the same net and sim workers, the arena's
-renderer (`client/arena-render.mjs`: golf's ray-marched terrain and splats,
-plus tracers as beams, glowing sprites, and a HUD of rectangles for the gun
-in your hands, shields and health, a motion tracker that shows enemies
+renderer (`client/arena-render.mjs`: golf's ray-marched terrain drawn
+low-poly and its splats, the map's boxes as plastic with studs on top, metal
+in panels and rock in strata, plus tracers as beams, glowing sprites, the
+gun in your hands as boxes ray-traced in the HUD pass like the fighters'
+own (`client/viewmodel.mjs`), all at the window's size (`?res=` to set
+one), and a HUD on a 320 x 200 grid scaled to fit the screen and centred
+(`client/lowpoly.mjs` hudFrame, golf's and Dogfight's too): shields and health, a motion tracker that shows enemies
 within 25 m who move or fire (and your own side in yellow, in a team mode),
 a reticle that turns red over an enemy in range, the scope, the hit marker
 and a kill feed with medals).

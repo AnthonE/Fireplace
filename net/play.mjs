@@ -10,7 +10,7 @@
 // Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill).
 // --flight runs it on flight's sim (build/flight/game.wasm): Dogfight, every
 // fighter a ship over Skyways, with --bots AI pilots (net/bot-host.mjs
-// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 12 Ring Race).
+// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 15 Ring Race).
 // --bumper runs it on bumper balls' sim (build/bumper/game.wasm), with --bots
 // AI balls in it (net/bot-host.mjs --bumper); up to 256 in the room.
 // --party runs it on Party's sim (build/party/game.wasm): a minigame a round,
