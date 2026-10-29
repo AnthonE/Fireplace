@@ -94,7 +94,7 @@
   (local $px f32) (local $py f32) (local $pz f32) (local $vx f32) (local $vy f32) (local $vz f32)
   (local $speed f32) (local $drop f32) (local $h f32) (local $sp f32) (local $scale f32)
 #if ARENA
-  (local $t f32) (local $lo f32) (local $floor f32) (local $ceil f32) (local $went i32) (local $rx f32) (local $rz f32)
+  (local $t f32) (local $lo f32) (local $floor f32) (local $ceil f32) (local $went i32) (local $rx f32) (local $rz f32) (local $gait i32) (local $fast i32)
 #endif
 #if FLIGHT
   ;; a ship (src/flight.wat)
@@ -105,6 +105,9 @@
   (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
   (local.set $in (!at i32 @(PLAYERS + P_IN) (local.get $pb)))
 #if ARENA
+  ;; a map that says how its fighters walk, jump and fall (MAP_RULES: a Roblox
+  ;; place's Humanoid) has them do it its way, below
+  (local.set $gait (i32.and (i32.load (i32.const @(MAP_RULES + RU_FLAGS))) (i32.const @RU_GAIT)))
   ;; the arena's word (layout.mjs): an 11-bit yaw, the bits after it moved down
   (if (i32.and (local.get $fl) (i32.const @PF_DEAD)) (then (call $a_dead (local.get $p) (local.get $d) (local.get $in)) (return)))
   (call $sincos (i32.shl (i32.and (local.get $in) (i32.const 0x7ff)) (i32.const 3)))
@@ -134,7 +137,10 @@
       (local.set $wz (f32.div (local.get $wz) (local.get $len)))
 #if ARENA
       ;; a zombie's legs, or the juggernaut's, or a lucky block's; Evade's downed crawl
-      (local.set $wish (select (f32.const @ZRUN) (f32.const @RUN) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST)))))
+      (local.set $fast (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST))))
+      (local.set $wish (select (f32.const @ZRUN) (f32.const @RUN) (local.get $fast)))
+      (if (local.get $gait)
+        (then (local.set $wish (select (f32.load (i32.const @(MAP_RULES + RU_ZWALK))) (f32.load (i32.const @(MAP_RULES + RU_WALK))) (local.get $fast)))))
       (if (i32.eq (i32.and (local.get $fl) (i32.const @PF_DOWN)) (i32.const @PF_DOWN)) (then (local.set $wish (f32.const @ED_CRAWL))))))
 #else
       (local.set $wish (f32.const @RUN))))
@@ -148,13 +154,24 @@
   (if (i32.and (local.get $fl) (i32.const @PF_GROUND))
     (then
       (local.set $speed (f32.sqrt (f32.add (f32.mul (local.get $vx) (local.get $vx)) (f32.mul (local.get $vz) (local.get $vz)))))
+#if ARENA
+      ;; (a Humanoid has no friction of its own: $a_gait stops it)
+      (if (i32.and (f32.gt (local.get $speed) (f32.const 0)) (i32.eqz (local.get $gait)))
+#else
       (if (f32.gt (local.get $speed) (f32.const 0))
+#endif
         (then
           (local.set $drop (f32.mul (f32.max (local.get $speed) (f32.const @STOP)) (f32.const @FRIC_DT)))
           (local.set $scale (f32.div (f32.max (f32.sub (local.get $speed) (local.get $drop)) (f32.const 0)) (local.get $speed)))
           (local.set $vx (f32.mul (local.get $vx) (local.get $scale)))
           (local.set $vz (f32.mul (local.get $vz) (local.get $scale)))))
+#if ARENA
+      (if (result f32 f32) (local.get $gait)
+        (then (call $a_gait (local.get $vx) (local.get $vz) (local.get $wx) (local.get $wz) (local.get $wish)))
+        (else (call $accel (local.get $vx) (local.get $vz) (local.get $wx) (local.get $wz) (local.get $wish) (local.get $wish))))
+#else
       (call $accel (local.get $vx) (local.get $vz) (local.get $wx) (local.get $wz) (local.get $wish) (local.get $wish))
+#endif
       (local.set $vz) (local.set $vx)
 #if ARENA
       ;; (the downed don't jump)
@@ -165,15 +182,28 @@
         (then
 #if ARENA
           (local.set $vy (select (f32.const @ZJUMP) (f32.const @JUMP) (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST)))))
+          (if (local.get $gait)
+            (then (local.set $vy (select (f32.load (i32.const @(MAP_RULES + RU_ZJUMP))) (f32.load (i32.const @(MAP_RULES + RU_JUMP)))
+                                         (i32.and (local.get $fl) (i32.const @(PF_ZOMBIE | PF_JUGG | PF_FAST)))))))
 #else
           (local.set $vy (f32.const @JUMP))
 #endif
           (local.set $fl (i32.and (local.get $fl) (i32.const @(255 ^ PF_GROUND)))))))
     (else
+#if ARENA
+      ;; a Humanoid steers in the air as on the ground, and falls by the map's gravity
+      (if (result f32 f32) (local.get $gait)
+        (then (call $a_gait (local.get $vx) (local.get $vz) (local.get $wx) (local.get $wz) (local.get $wish)))
+        (else (call $accel (local.get $vx) (local.get $vz) (local.get $wx) (local.get $wz)
+                           (f32.min (local.get $wish) (f32.const @AIRCAP)) (local.get $wish))))
+      (local.set $vz) (local.set $vx)
+      (local.set $vy (f32.sub (local.get $vy) (select (f32.load (i32.const @(MAP_RULES + RU_GRAV))) (f32.const @GP_DT) (local.get $gait))))))
+#else
       (call $accel (local.get $vx) (local.get $vz) (local.get $wx) (local.get $wz)
                    (f32.min (local.get $wish) (f32.const @AIRCAP)) (local.get $wish))
       (local.set $vz) (local.set $vx)
       (local.set $vy (f32.sub (local.get $vy) (f32.const @GP_DT)))))
+#endif
   (local.set $sp (!dot3 (local.get $vx) (local.get $vy) (local.get $vz) (local.get $vx) (local.get $vy) (local.get $vz)))
   (if (f32.gt (local.get $sp) (f32.const @PVMAX2))
     (then

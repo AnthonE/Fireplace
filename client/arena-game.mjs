@@ -11,6 +11,7 @@
 //   opts: { canvas, lockTarget, bot, skill, sens, fixed (a spectator's held camera: x, y, z, yaw, pitch in degrees), present, showGraph,
 //           external (the slots are driven from outside, as Fireplace's guest does: the camera follows them) }
 import * as L from '../src/layout.mjs';
+import * as AC from '../src/am/consts.mjs';
 import { arenaWord, unpackArena, boxRay } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, PALETTE, project } from './arena-render.mjs';
 import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
@@ -31,7 +32,7 @@ const COLOR = { // per weapon: tracer colour, viewmodel body
 };
 const SHORT = { [L.W_AR]: 'AR', [L.W_BR]: 'BR', [L.W_MAGNUM]: 'MAGNUM', [L.W_SNIPER]: 'SNIPER', [L.W_SHOTGUN]: 'SHOTGUN', [L.W_ROCKET]: 'ROCKET',
   [L.W_PLASMA]: 'PLASMA', [L.W_NEEDLER]: 'SEEKER', [L.W_SWORD]: 'SWORD', [L.KILL_GREN]: 'FRAG', [L.KILL_MELEE]: 'MELEE', [L.KILL_BEHIND]: 'ASSASSINATION',
-  [L.KILL_SUPER]: 'OVERLOAD', [L.KILL_FALL]: 'FALL' };
+  [L.KILL_SUPER]: 'OVERLOAD', [L.KILL_FALL]: 'FALL', [AC.CX_KILL_BALL]: 'SUPERBALL' };
 const CROSS = { [L.W_AR]: 0, [L.W_BR]: 1, [L.W_MAGNUM]: 1, [L.W_SNIPER]: 1, [L.W_SHOTGUN]: 2, [L.W_ROCKET]: 3, [L.W_PLASMA]: 4, [L.W_NEEDLER]: 4, [L.W_SWORD]: 5 };
 const RUNGS = L.LADDER.length;
 // How a fighter stands under the match's mode, higher is better: the sim's $a_key, for the board while play goes on.

@@ -137,12 +137,13 @@ of a room plays `ARENA_MODES[k % 15]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
 Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, Escape, and round
 again: a free-for-all, then two [team modes](#teams), and the three kit modes
-without sides last. So a room
+without sides last. A sixteenth, [Crossroads](#crossroads), is in no
+rotation: a map that names it plays it every match. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it (see Fireplace). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
@@ -289,6 +290,48 @@ stunned hunter are `PF_DOWN`, so the prediction runs every crawl. Matches of 8
 or 16 AI fighters run 57 to 144 s, 2 of 7 to 13 of 15 survivors escaping;
 online with 64, 28 escaped in 90 s (5,623 hashes, all equal).
 `test/arena-escape.test.mjs` (13 tests).
+
+### Crossroads
+
+Crossroads (mode 15) is Roblox's Crossroads as its place played it, ported
+from its brief ([roblox.md](roblox.md)): everyone for itself with Roblox's
+classic gear. You spawn with the sword out, the rocket launcher in the other
+hand and a superball to throw (G), on a Humanoid's 100 health with no
+shields. Health comes back a point a second (Roblox's Health script: 1% a
+second), with no wait after a hit. The sword's swing takes 30 (the
+LinkedSword's lunge, from its script: 5 a touch, a slash 10, a lunge 30), so
+four kill; the rocket is the arena's. The superball is the place's own
+script in the arena's terms: thrown at 56 m/s (200 studs/s), it falls under
+Roblox's gravity and bounces keeping 75% of its speed into a surface and all
+of its speed along it. The first body it touches takes 55, halved for each
+bounce before, and nothing once that is under 2. A touch within 0.1 s of the
+last counts for nothing. It's gone 5 s after the throw, and the next is in
+hand 2 s after. The sword never runs out and the rockets' reserve stays
+full. There's no melee but the sword's (the rifle butt does nothing), and no
+frags. You're back 5 s after a death (Players.RespawnTime). The board says
+KOS and WIPEOUTS, as the place's leaderboard did. The most KOs at 10 minutes
+win: the place never ends, the arena's matches do.
+
+No rotation plays it. A map's `"mode": "crossroads"` plays it every match,
+and `tools/roblox.mjs` writes that for any place whose StarterPack holds the
+Linked gear. `maps/crossroads/` has it, so `node net/play.mjs --arena --map
+crossroads` is Crossroads, moving as Roblox's Humanoid moves (below,
+[A map's own movement](#a-maps-own-movement)). How it fits: a kit mode with
+no sides (`src/am/crossroads.wat`, with the optional spawn and hurt hooks).
+`OWN_HEALTH` keeps the core's shield and health recharge off for it, and
+its tick hook heals, refills and puts the superball back in hand (A_GRENS 0
+or 1, its wait in MODE_REC). The superball is a projectile kind of its own
+(7, `$cx_ball`), stepped on either bank like a frag; the throw reads
+`AH_MODE` from the bank's own header, so the prediction throws it as the
+confirmed world will. Flight's Ring Race moved to 16 to make room.
+`test/arena-crossroads.test.mjs` (9 tests): the loadout and no sides; no
+shields, health a point every 125 ticks of the clock; four sword swings and a
+butt that does nothing; the respawn; a superball's speed, its 55, the
+reload; a bounce keeping 75% of the fall, a quarter after two bounces,
+nothing after five, nothing in its quiet, gone at 5 s; the prediction bit for
+bit through throws, swings, swaps and runs; places by KOs; the map naming
+it; 8 AI fighters for 12,000 ticks on Box Canyon and on Crossroads (17 and 38
+KOs) on the debug build, the same hash every tick on 1 and 4 threads.
 
 ## Teams
 
@@ -553,7 +596,10 @@ QG_MAP=mymap npm run build                # or build it in, as the build's own: 
   'blue', at }]`; `ball`, Oddball's skull, `{ at }`; `hills`, King of the
   Hill's, `[{ at, radius }]` (`at` as a spawn's: `[x, z]` or `[x, z, top]`);
   `void`, a height in metres below which a fighter dies by falling (left
-  out, none). A structure may `move` ([Moving boxes](#moving-boxes)). Left out, the flags stand an eighth in from each end of the
+  out, none); `movement`, how its fighters walk, jump and fall
+  ([A map's own movement](#a-maps-own-movement)); `mode`, the mode every
+  match on it plays (a key: `crossroads`, `lucky`, `ctf`...; left out, the
+  rotation). A structure may `move` ([Moving boxes](#moving-boxes)). Left out, the flags stand an eighth in from each end of the
   bounds' longer side, the skull in the middle, and three hills in the
   middle and halfway to each flag. Materials: `metal`, `rock`, `dark`,
   `red`, `blue`, `light`, `plain`, or a colour of the box's own over one of
@@ -626,6 +672,38 @@ one plank, a tower at each end with a lift. Online, 7 AI fighters and
 Chrome for 40 s on it (`net/run-arena.mjs --map lifts`): 305 interval
 hashes checked by the referee, all equal; 64 AI fighters for 60 s (a CI
 step): 3,702, all equal.
+
+### A map's own movement
+
+A map may move its fighters its own way rather than Quake's. `"movement":
+{ "walk": 4.48, "jump": 2.016, "gravity": 54.936 }` is Roblox's Humanoid at
+0.28 m a stud (WalkSpeed 16, JumpHeight 7.2, Gravity 196.2), and
+`tools/roblox.mjs` writes it from the place itself. `walk` is m/s, `jump`
+how high a standing jump goes in metres, `gravity` m/s^2, and `accel`
+(m/s^2, 10 times `walk` by default) how fast the speed across turns toward
+where the keys point. The compiler packs them as the sim reads them
+(`MAP_RULES`: the speeds, the jump's speed up, sqrt(2 g h), and gravity a
+tick) with the fast legs a quarter faster and jumping half as high again,
+as `ZRUN` and `ZJUMP` are to `RUN` and `JUMP`. `$move` then runs
+`$a_gait` on the ground and in the air alike: the speed across goes toward
+where the keys point at `walk`, by at most `accel` a tick. There's no
+friction, no air strafing past `walk` and no bunny hop: a Humanoid stops
+when you let go (in a tenth of a second) and turns round in mid-air. What a
+blast gave it, it loses at the same rate. Falling is the map's gravity.
+Everything else (steps, the snap to the ground, boxes, movers) is as above.
+A map without `movement` lays nothing there, and `$move` takes the path it
+always has.
+
+On Roblox's numbers the fighter walks 4.48 m/s, gets there in 13 ticks and
+stops as fast, jumps 2.0 m, stays 0.54 s in the air, turns from full speed
+one way to full speed the other in 26 ticks without landing, and makes a
+7-stud ledge (1.96 m) that the arena's 1.2 m jump can't. map_load checks the
+block like the rest (its flags, its mode, every speed over 0 and at most
+100), and the hello's hash covers it with the map. `test/arena-gait.test.mjs`
+(6 tests): compiled and laid at run time as built in, bad rules refused; the
+walk; the jump, the air time, turning in mid-air, the ledge; the prediction
+bit for bit through 600 ticks of it; a map naming a mode playing it match
+after match, and a forced seed still winning.
 
 A Roblox place makes a map too: `node tools/roblox.mjs place.rbxl`, or
 open it in the map editor ([docs/roblox.md](roblox.md)); so does a

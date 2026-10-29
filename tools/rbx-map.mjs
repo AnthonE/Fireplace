@@ -18,12 +18,14 @@
 // moving platform's) is its "move" as it stands; the rest stand still in the
 // map for a port to set going, and the brief lists them.
 //
-// A stud is 0.28 m (Roblox's own figure; `scale`). The arena's fighter is
-// 1.8 m and jumps 1.2 m; a Roblox character is about 5 studs (1.4 m) and
-// jumps 7.2 (2 m), so a ledge built to be jumped to may need a step.
+// A stud is 0.28 m (Roblox's own figure; `scale`). The map moves its
+// fighters as the place's characters move (map.json "movement": its walk
+// speed, jump and gravity at that scale, steering in the air), so a ledge
+// built to be jumped to is jumped to; a place that hands everyone Roblox's
+// classic gear plays the arena's Crossroads mode ("mode").
 import { ancestor, path, readRoblox } from './rbx-file.mjs';
-import { weaponOf } from './rbx-brief.mjs';
-import { SURFACES, SURFACE_RGB } from './map-compile.mjs';
+import { weaponOf, humanoidOf, classicGear } from './rbx-brief.mjs';
+import { SURFACES, SURFACE_RGB, movement } from './map-compile.mjs';
 import { hex, solid, sceneToMap } from './scene-map.mjs';
 import * as L from '../src/layout.mjs';
 
@@ -360,9 +362,25 @@ export function robloxToMap(doc, opts = {}) {
     return `nothing to stand on: ${o.from || 'the Workspace'} has no solid parts and no terrain${scripts ? ` (its ${scripts} scripts may build the level when the game runs; --from takes a model from storage)` : ''}`;
   };
 
-  return sceneToMap({
+  const out = sceneToMap({
     objs, terrain, spawns: spawnParts, pads, count, notes, report, empty, maxMovers: MAX_MOVERS,
     name: o.name || doc.meta?.name || 'Roblox Place',
     words: { unit: `${s} m a stud`, void: 'Roblox\'s void', spawns: 'spawn locations', unnamed: 'parts', from: `a Roblox place, ${s} m a stud (tools/roblox.mjs)` },
   }, o);
+  // how its characters move, in metres; out of the range a map takes, the arena's own
+  const hum = humanoidOf(doc), round = (v) => Math.round(v * 1e4) / 1e4;
+  const mv = { walk: round(hum.walk * s), jump: round(hum.height * s), gravity: round(hum.gravity * s) };
+  try {
+    movement(mv);
+    out.spec.movement = mv;
+    out.report.push(`moves as the place's characters: walking ${hum.walk} studs/s, jumping ${hum.height.toFixed(1)} studs, ${hum.gravity} studs/s^2 (${mv.walk} m/s, ${mv.jump} m, ${mv.gravity} m/s^2)`);
+  } catch (e) {
+    out.report.push(`keeps the arena's movement: the place's (${hum.walk} studs/s, a ${hum.height.toFixed(1)}-stud jump, ${hum.gravity} studs/s^2) is out of range (${e.message})`);
+  }
+  if (classicGear(doc)) {
+    out.spec.mode = 'crossroads';
+    out.report.push('everyone spawns with Roblox\'s classic gear: the map plays the arena\'s Crossroads mode');
+  }
+  out.scale = s;
+  return out;
 }

@@ -107,8 +107,10 @@ View.prototype.pads = function pads() {
 // modes' objectives (MAP_OBJ: the flags' stands, red's then blue's, and the
 // skull's spot as [x, z, top], the hills as [x, z, top, radius]; tops as
 // spawns', -1000 the ground). A group that moves has its `move` (moverAt
-// says where it is at a tick). Read once per world and kept: the map never
-// changes after init.
+// says where it is at a tick). movement is the map's own (RU_*: walk and
+// zwalk m/s, accel, jump and zjump m/s, grav m/s a tick), or null for the
+// arena's; mode the M_* it plays every match, or -1. Read once per world and
+// kept: the map never changes after init.
 View.prototype.map = function map() {
   const d = this.dv;
   const key = `${d.getUint32(L.HDR_SEED, true)}:${d.getUint32(L.MAP_NBOX, true)}:${d.getUint32(L.MAP_NGROUP, true)}`;
@@ -139,7 +141,11 @@ View.prototype.map = function map() {
   const ball = [0, 4, 8].map((o) => f(L.MAP_BALL + o));
   const hills = [];
   for (let k = 0; k < Math.min(L.NHILL, d.getUint32(L.MAP_NHILL, true)); k++) hills.push([0, 4, 8, 12].map((o) => f(L.MAP_HILLS + 16 * k + o)));
-  this._map = { key, bounds: [0, 1, 2, 3].map((k) => f(L.MAP_BOUNDS + 4 * k)), groups, boxes, teleporters, spawns, flags, ball, hills };
+  // the map's rules (MAP_RULES): how its fighters walk, jump and fall, if its own, and the mode it plays, if it names one
+  const r = L.MAP_RULES, gait = d.getUint32(r + L.RU_FLAGS, true) & L.RU_GAIT;
+  const movement = gait ? { walk: f(r + L.RU_WALK), zwalk: f(r + L.RU_ZWALK), accel: f(r + L.RU_ACCEL), jump: f(r + L.RU_JUMP), zjump: f(r + L.RU_ZJUMP), grav: f(r + L.RU_GRAV) } : null;
+  const mode = d.getUint32(r + L.RU_MODE, true) - 1;
+  this._map = { key, bounds: [0, 1, 2, 3].map((k) => f(L.MAP_BOUNDS + 4 * k)), groups, boxes, teleporters, spawns, flags, ball, hills, movement, mode };
   return this._map;
 };
 

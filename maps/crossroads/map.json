@@ -1,6 +1,12 @@
 {
   "name": "Crossroads",
   "from": "a Roblox place, 0.28 m a stud (tools/roblox.mjs)",
+  "movement": {
+    "walk": 4.48,
+    "jump": 1.7839,
+    "gravity": 54.936
+  },
+  "mode": "crossroads",
   "bounds": [455, 568, 456, 569],
   "terrain": {
     "origin": [446, 448],

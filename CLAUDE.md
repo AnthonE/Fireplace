@@ -100,8 +100,8 @@ shell whose own command line contains the name: it kills that shell.
 - The arena's match modes (`M_*`: Fiesta, Infection, gun game, Juggernaut,
   and the team modes Team Slayer, Capture the Flag, Oddball, King of the
   Hill, Headhunter, Territories, VIP, Assault, and the kit modes without
-  sides Lucky Blocks, Evade and Escape) are picked per match at run
-  time, not built: `AH_MODE` to `AH_END`
+  sides Lucky Blocks, Evade and Escape, and Crossroads, which only a map
+  naming it plays) are picked per match at run time, not built: `AH_MODE` to `AH_END`
   at `REGION + 0x48..0x74` (the team modes' scores, target and winner
   included), a side in `P_FL` (`PF_ZOMBIE`, `PF_JUGG`, `PF_BLUE`, and
   `PF_CARRY` for a flag's, the skull's or the bomb's carrier, `PF_FAST` for
@@ -129,7 +129,9 @@ shell whose own command line contains the name: it kills that shell.
   NET alone; a hello's hash covers the map (`wasmPrefix(wasm, map)`).
   Anything that reads the map reads it from memory, never from a
   `MAPSEG_*`/`MAPIMG_*`/`MAP_CEIL` constant outside `$arena_gen`'s
-  built-in half.
+  built-in half. A map's rules (`MAP_RULES`: map.json `movement`, a Roblox
+  place's Humanoid that `$move` runs through `$a_gait`, and `mode`, played
+  every match) are 0 for a map without them, so `$move` takes its old path.
   fighter's goal), its tests `test/arena-<key>.test.mjs`. A kit mode with
   `team: 0` in `MODES` has no sides; an AM entry may name optional hooks
   (`strike`, `spawn`, `hurt`). The map's
@@ -146,7 +148,7 @@ shell whose own command line contains the name: it kills that shell.
   mode, Ring Race (`M_RACE`, 12), sits past the arena's `MODES` so the
   centre. It always builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
   drawn by `tools/skyways.mjs`); `MAP_CEILING` holds its ceiling. Its own
-  mode, Ring Race (`M_RACE`, 15: `MODES.length`, its news past every kit
+  mode, Ring Race (`M_RACE`, 16: `MODES.length`, its news past every kit
   mode's MX codes, which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
   arena's build never sees it: its clock is `FLIGHT_TICKS`, its course the
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships

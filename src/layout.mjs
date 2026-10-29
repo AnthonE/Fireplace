@@ -481,6 +481,28 @@ export const MV_ON = 1;
 export const MV_EASE = 2; // eased in and out (3f^2 - 2f^3) rather than at one speed
 export const MV_TICKS_MAX = 1000000; // each way, waiting, or the phase: 2 h 13 min
 export const MV_STEP_MAX = 0.2; // m a tick a mover may go (25 m/s): under PHYS.SNAP, so what rides one down stays on it
+// The map's rules (map.json "movement" and "mode", tools/map-compile.mjs),
+// after the movers' rows: u32 flags (RU_GAIT: a fighter walks, jumps and
+// falls by the f32s below, not by PHYS's Quake numbers: a Roblox place's
+// Humanoid, as tools/rbx-map.mjs reads it); u32 a mode every match on the map
+// plays, + 1 (0: the room's rotation); f32 the walking speed (m/s) and the
+// fast legs' (zombies', the juggernaut's, a lucky block's), the most the
+// speed across may change in a tick toward where the keys point (on the
+// ground and in the air alike), the jump's speed up (m/s) and the fast legs',
+// and gravity a tick (m/s). A map without them leaves all 0, and $move goes
+// on as it always has.
+export const MAP_RULES = MAP_MOVE_END;
+export const MAP_RULES_SIZE = 32;
+export const RU_GAIT = 1;
+export const RU_FLAGS = 0; // byte offsets in MAP_RULES
+export const RU_MODE = 4;
+export const RU_WALK = 8;
+export const RU_ZWALK = 12;
+export const RU_ACCEL = 16;
+export const RU_JUMP = 20;
+export const RU_ZJUMP = 24;
+export const RU_GRAV = 28;
+export const RU_MAX = 100; // map_load takes each of the six f32s over 0 and at most this
 export const NBOX = 2048; // a place brought from Roblox (tools/roblox.mjs) wants hundreds to thousands
 // A map from outside the build, packed (tools/map-compile.mjs packMap) for the
 // arena's and flight's map_load export: a head, then the bytes a build's own
@@ -491,7 +513,7 @@ export const MAPPACK_HEAD = 80;
 // u32 fields of the head: the magic, the bytes after it, where each part of
 // the map is in them and how big (as MAPSEG_* name them in a build), the
 // images' place and size in samples (MAPIMG_*); then f32 the ceiling; then
-// where the movers' rows are and how many bytes (0, none)
+// where the movers' rows are and how many bytes (0, none), and the rules'
 export const MP_MAGIC = 0;
 export const MP_BYTES = 4;
 export const MP_GROUPS = 8;
@@ -510,6 +532,8 @@ export const MP_HT = 56;
 export const MP_CEIL = 60;
 export const MP_MOVE = 64;
 export const MP_NMOVEB = 68;
+export const MP_RULES = 72; // where the map's rules are (MAP_RULES_SIZE bytes) and how many bytes (0, none)
+export const MP_NRULESB = 76;
 export const MAP_STAGE = 0x0a0000; // SNAP0
 export const MAP_STAGE_MAX = 0x100000; // to DVX
 export const NGROUP = 64;
@@ -639,6 +663,14 @@ export const M_EVADE = 13;
 //   it finishes; hack the terminals, the exits open, escape. Its constants in
 //   src/am/escape.mjs.
 export const M_ESCAPE = 14;
+// Crossroads, on the kit with no sides, never in the rotation: a map that
+// names it plays it (map.json "mode", as tools/roblox.mjs writes it for a
+// place that hands everyone Roblox's classic gear), or a forced seed.
+//   M_CROSSROADS: Roblox's Crossroads' rules: the classic sword, rocket
+//   launcher and superball, a Humanoid's 100 health and no shields, healing
+//   1 a second, 5 s to respawn; the most KOs at the clock win. Its constants
+//   in src/am/crossroads.mjs.
+export const M_CROSSROADS = 15;
 // name is what a player sees (the M_* and FIESTA names are only the code's)
 export const MODES = [
   { name: FIESTA ? 'GRAB BAG' : 'FREE FOR ALL', rules: FIESTA ? 'RANDOM GUNS  MOST KILLS IN 10 MIN' : `${FRAG_LIMIT} KILLS WIN`, ticks: MATCH_TICKS },
@@ -656,6 +688,7 @@ export const MODES = [
   { name: 'LUCKY BLOCKS', rules: 'BREAK THE BLOCKS FOR LOOT  15 KILLS WIN', ticks: 37500, team: 0 },
   { name: 'EVADE', rules: 'RUN FROM THE CHASERS  REVIVE THE DOWNED  SURVIVE', ticks: 26250, team: 0 },
   { name: 'ESCAPE', rules: 'HACK THE TERMINALS  REACH AN EXIT  OUTRUN THE HUNTER', ticks: 30000, team: 0 },
+  { name: 'CROSSROADS', rules: 'SWORD  ROCKET  SUPERBALL  MOST KOS IN 10 MIN', ticks: 75000, team: 0 },
 ];
 export const MODE_TICKS = MODES.map((m) => m.ticks);
 // a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks, Evade and Escape before it comes round
@@ -663,6 +696,8 @@ export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, 
 export const FORCE_MODE = 0xa8;
 export const TEAMED = MODES.reduce((b, m, k) => (m.team ? b | (1 << k) : b), 0); // red against blue
 export const PAD_MODES = MODES.reduce((b, m, k) => (m.pads ? b | (1 << k) : b), 0); // the FIESTA build lays the map's pads for these
+// modes that keep a fighter's health their own way (Crossroads' Humanoid): the core recharges no shields and no health in them
+export const OWN_HEALTH = 1 << M_CROSSROADS;
 export const TEAM_MODES = (1 << M_INFECTION) | (1 << M_JUGGERNAUT) | TEAMED | (1 << M_EVADE) | (1 << M_ESCAPE); // modes with sides: no hurting your own (Evade's one side, everyone; Escape's hunters and survivors)
 export const LADDER = [W_AR, W_BR, W_MAGNUM, W_SHOTGUN, W_PLASMA, W_NEEDLER, W_SNIPER, W_ROCKET, W_SWORD];
 export const JUGG_POINTS = 10;
@@ -734,6 +769,7 @@ export const AM = [
   { mode: M_LUCKY, key: 'lucky', prefix: 'lk', hooks: ['strike', 'spawn'] },
   { mode: M_EVADE, key: 'evade', prefix: 'ed', hooks: ['strike', 'spawn'] },
   { mode: M_ESCAPE, key: 'escape', prefix: 'es', hooks: ['spawn', 'hurt'] },
+  { mode: M_CROSSROADS, key: 'crossroads', prefix: 'cx', hooks: ['spawn', 'hurt'] },
 ];
 export const AM_HOOKS = ['start', 'tick', 'kill', 'bar']; // every mode on the kit has these
 export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on the kit, sides or none

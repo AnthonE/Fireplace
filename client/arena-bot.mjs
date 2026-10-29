@@ -455,6 +455,8 @@ export class Fighter {
       if (d < 2.2 && me.cool === 0) this.melee ^= 1;
       else if (me.weapon === L.W_SWORD && d < 4.5 && t - this.lastFire > arm.refire) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
       if (d > 10 && d < 30 && me.grens > 0 && me.cool === 0 && this.rand() < 0.004) this.gren ^= 1;
+      // Crossroads' superball goes where it's aimed, fast: thrown at whoever is near and in front, once it's in hand
+      else if (mode === L.M_CROSSROADS && d > 3 && d < 18 && off < 200 && me.grens > 0 && me.cool === 0 && this.rand() < 0.2) this.gren ^= 1;
       // strafe, close in or back off
       if (t >= this.strafeUntil) { this.strafe = this.rand() < 0.5 ? 4 : 8; this.strafeUntil = t + 60 + Math.floor(this.rand() * 120); }
       const close = me.weapon === L.W_SWORD || me.weapon === L.W_SHOTGUN;

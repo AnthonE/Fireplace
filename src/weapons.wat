@@ -176,6 +176,7 @@
 #if FLIGHT
         (if (i32.ge_u (local.get $kind) (i32.const @K_CHARGE)) (then (call $f_proj (local.get $jb) (local.get $d)) (br $skip)))
 #endif
+        (if (i32.eq (local.get $kind) (i32.const @CX_K_BALL)) (then (call $cx_ball (local.get $jb) (local.get $d)) (br $skip)))
         (if (i32.ge_u (local.get $kind) (i32.const @K_BOLT)) (then (call $a_bolt (local.get $jb) (local.get $d)) (br $skip)))
 #endif
         (if (i32.eq (local.get $kind) (i32.const @K_ROCKET))
