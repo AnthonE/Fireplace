@@ -24,14 +24,6 @@
       "path": "client/themes/grandma.json"
     },
     {
-      "id": "haunted",
-      "kind": "theme",
-      "name": "Haunted",
-      "by": "AnthonE",
-      "about": "A green fire, purple walls, pumpkins, and a clear night with a pale moon.",
-      "path": "client/themes/haunted.json"
-    },
-    {
       "id": "summer-rain",
       "kind": "theme",
       "name": "Summer Rain",
