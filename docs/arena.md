@@ -332,6 +332,9 @@ nothing after five, nothing in its quiet, gone at 5 s; the prediction bit for
 bit through throws, swings, swaps and runs; places by KOs; the map naming
 it; 8 AI fighters for 12,000 ticks on Box Canyon and on Crossroads (17 and 38
 KOs) on the debug build, the same hash every tick on 1 and 4 threads.
+Online on its own map, laid at run time with its movement (`net/run-arena.mjs
+--map crossroads`, a CI step): 64 AI fighters for 60 s, every hash the
+referee checked equal, 524 KOs, 0.15 ms a step.
 
 ## Teams
 
