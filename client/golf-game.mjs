@@ -32,6 +32,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   let locked = document.pointerLockElement === lockTarget;
   let touch = null; // the touch controls, on a phone
   let watched = -1;
+  let specYaw = 0; // a spectator's camera, easing round to the way the one it watches faces
   const nextLive = (from, step) => {
     for (let k = 1; k <= L.NPLAYER; k++) {
       const p = (((from + step * k) % L.NPLAYER) + L.NPLAYER) % L.NPLAYER;
@@ -149,8 +150,18 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     else if (me?.live) cam = [me.pos[0] + me.vel[0] * dt, me.pos[1] + me.vel[1] * dt + 1.6, me.pos[2] + me.vel[2] * dt];
     else cam = [h.tee[0] - h.dir[0] * 25, h.tee[1] + 12, h.tee[2] - h.dir[1] * 25];
     const eyes = pme ? null : tgt || me;
-    const camYaw = pme ? yaw / 16384 * 2 * Math.PI : eyes ? (eyes.input & 0x3fff) / 16384 * 2 * Math.PI : Math.atan2(h.dir[1], h.dir[0]);
-    const camPitch = pme ? (pitch - 512) / 1024 * Math.PI : eyes ? (((eyes.input >>> 14) & 0x3ff) - 512) / 1024 * Math.PI : -0.12;
+    let camYaw = pme ? yaw / 16384 * 2 * Math.PI : eyes ? (eyes.input & 0x3fff) / 16384 * 2 * Math.PI : Math.atan2(h.dir[1], h.dir[0]);
+    let camPitch = pme ? (pitch - 512) / 1024 * Math.PI : eyes ? (((eyes.input >>> 14) & 0x3ff) - 512) / 1024 * Math.PI : -0.12;
+    if (tgt) {
+      // a spectator rides behind and above the one it watches: a golfer aims its
+      // blasts at the turf behind its ball, so its own eyes show a screen of grass.
+      // The way it faces, eased, and a look down that never goes past the course.
+      specYaw += Math.atan2(Math.sin(camYaw - specYaw), Math.cos(camYaw - specYaw)) * Math.min(1, ms / 400);
+      camYaw = specYaw;
+      camPitch = Math.max(-0.2, Math.min(0.1, camPitch)) - 0.08;
+      const back = [cam[0] - Math.cos(camYaw) * 7, cam[2] - Math.sin(camYaw) * 7];
+      cam = [back[0], Math.max(cam[1] + 2.4, view.height(back[0], back[1]) + 2), back[1]];
+    } else specYaw = camYaw;
 
     const show = (f) => {
       const d = Math.hypot(f.pos[0] - cam[0], f.pos[1] - cam[1], f.pos[2] - cam[2]);

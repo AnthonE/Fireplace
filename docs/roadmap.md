@@ -210,9 +210,9 @@ crediting who made what (every theme is one). Next, in order:
    `/api/face/{wallet}` once the page knows a wallet (below).
 2. Skins. Built: looks (`client/looks.mjs`), a ball, a hat and a body each
    player picks, which the relay carries beside the sim to everyone in the
-   room (hello flag 4), ten balls, seven hats and five bodies (the round
+   room (hello flag 4), fourteen balls, eight hats and five bodies (the round
    rider, three blocky, a robot: `client/rider.mjs`, the arena's fighters the
-   same figure), four of them earned with the page's achievements
+   same figure), ten of them earned with the page's achievements
    (`client/achievements.mjs`), and four emotes in the word's top byte.
    Built too: the Elo Pros avatar, a word any game can draw (a 32-colour
    palette and the figure's six parts at 5 bits each, a face bit), set on a

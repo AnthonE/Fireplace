@@ -28,7 +28,7 @@ import { GOLFER } from './brain.mjs';
 import { readClock } from './clock.mjs';
 import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
-import { filmClock, filmSound, compose } from './film.mjs';
+import { filmClock, filmSound, scoreTrack, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 import { touchWanted } from './touch.mjs';
 
@@ -231,7 +231,7 @@ async function main() {
       pixelFire(320, 150, 9, t);
       text(TITLE, 320, 178, Math.min(11, Math.floor(620 / (4 * TITLE.length - 1))), '#ffcf6a', 'center');
       text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
-      text(GAMES_LINE, 320, 275, 3, '#8ea0b8', 'center');
+      text(GAMES_LINE, 320, 275, GAMES_LINE.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
       if (KEEP) {
         drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
         const { ball, hat, body } = unpackLook(look);
@@ -421,7 +421,7 @@ async function main() {
     state: () => {
       const g = view.dv.getUint32(L.FP_GAME, true);
       const slot = get(L.CL_SLOT);
-      return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), state: view.hole().state, scene, zoom, games: gamesSeen,
+      return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), mg: g === L.G_PARTY ? L.MINIGAMES[view.dv.getUint32(L.PG_GAME, true)]?.name ?? null : null, state: view.hole().state, scene, zoom, games: gamesSeen,
         mallows: slot >= 0 ? view.dv.getUint16(L.FP_MALLOWS + 2 * slot, true) : 0, card, me: frontend?.state?.().me ?? null,
         look, achievements: Object.keys(tally.got), opened,
         pool: { ...pool, local: !!host.local },
@@ -473,7 +473,15 @@ async function main() {
       async theme(id) { room.setTheme(await loadTheme(id)); },
       // back on the couch, the TV's title up (the film's last shot)
       couch() { scene = 'couch'; zoomBy(0, performance.now()); },
+      // a cut: straight into the game on now, the zoom done, unless its end is
+      // held (the room's standings are what is on then)
+      snap() {
+        if (scene === 'couch' || view.dv.getUint32(L.FP_STAGE, true) === 1) return;
+        scene = 'in'; zoom = zoomFrom = zoomTo = 1; zoomAt = -1e9; cardMix = cardTo = 0;
+      },
       audio: () => track.render(),
+      // one tune for the whole cut, under every room's sound (a cut with "score")
+      score: (key, seconds) => scoreTrack(key, seconds),
     };
   } else {
     if (BOT || WATCH || q.get('auto') === '1') { scene = 'couch'; setTimeout(sitDown, 1500); }

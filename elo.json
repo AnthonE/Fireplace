@@ -187,37 +187,44 @@
       {
         "id": "CHAIR",
         "name": "Pull up a chair",
-        "desc": "Play a game in the room"
+        "desc": "Play a game in the room",
+        "icon": "chair"
       },
       {
         "id": "TOASTED",
         "name": "Toasted",
-        "desc": "Finish in the top three"
+        "desc": "Finish in the top three",
+        "icon": "toasted"
       },
       {
         "id": "GOLDEN",
         "name": "Golden brown",
-        "desc": "Win a game"
+        "desc": "Win a game",
+        "icon": "trophy"
       },
       {
         "id": "ROLL",
         "name": "On a roll",
-        "desc": "Win two games in a row"
+        "desc": "Win two games in a row",
+        "icon": "rolling"
       },
       {
         "id": "HATTRICK",
         "name": "Hat trick",
-        "desc": "Win three games in a row"
+        "desc": "Win three games in a row",
+        "icon": "laurels"
       },
       {
         "id": "PODIUM",
         "name": "Every step",
-        "desc": "Finish first, second and third"
+        "desc": "Finish first, second and third",
+        "icon": "podium"
       },
       {
         "id": "BAG",
         "name": "A bag of them",
         "desc": "25 marshmallows in all",
+        "icon": "bag",
         "progress": {
           "stat": "mallows",
           "max": 25
@@ -227,6 +234,7 @@
         "id": "CAMPFIRE",
         "name": "Campfire",
         "desc": "100 marshmallows in all",
+        "icon": "campfire",
         "progress": {
           "stat": "mallows",
           "max": 100
@@ -236,6 +244,7 @@
         "id": "REGULAR",
         "name": "A regular",
         "desc": "Play 25 games",
+        "icon": "sofa",
         "progress": {
           "stat": "games",
           "max": 25
@@ -244,22 +253,104 @@
       {
         "id": "PLAYLIST",
         "name": "The whole playlist",
-        "desc": "Play golf, the arena, bumper balls and party"
+        "desc": "Play golf, the arena, bumper balls and party",
+        "icon": "tv"
       },
       {
         "id": "ALLROUND",
         "name": "All-rounder",
-        "desc": "Win golf, the arena, bumper balls and party"
+        "desc": "Win golf, the arena, bumper balls and party",
+        "icon": "medal"
       },
       {
         "id": "CROWD",
         "name": "A full house",
-        "desc": "Play a game with 32 or more in it"
+        "desc": "Play a game with 32 or more in it",
+        "icon": "crowd"
       },
       {
         "id": "ACE",
         "name": "Ace",
-        "desc": "Win a Dogfight"
+        "desc": "Win a Dogfight",
+        "icon": "jet"
+      },
+      {
+        "id": "SURFER",
+        "name": "Channel surfer",
+        "desc": "Play all five games on the tv",
+        "icon": "gamepad"
+      },
+      {
+        "id": "HOUSE",
+        "name": "House champion",
+        "desc": "Win all five games on the tv",
+        "icon": "fireplace"
+      },
+      {
+        "id": "FORE",
+        "name": "Fore!",
+        "desc": "Win a hole of golf",
+        "icon": "golf"
+      },
+      {
+        "id": "SHARP",
+        "name": "Sharpshooter",
+        "desc": "Win an arena match",
+        "icon": "target"
+      },
+      {
+        "id": "CHEESE",
+        "name": "Big cheese",
+        "desc": "Win bumper balls",
+        "icon": "cheese"
+      },
+      {
+        "id": "LIFE",
+        "name": "Life of the party",
+        "desc": "Win a game of party",
+        "icon": "popper"
+      },
+      {
+        "id": "ONFIRE",
+        "name": "On fire",
+        "desc": "Win five games in a row",
+        "icon": "meteor"
+      },
+      {
+        "id": "CHAMP",
+        "name": "Champion",
+        "desc": "Win 10 games",
+        "icon": "cup",
+        "progress": {
+          "stat": "wins",
+          "max": 10
+        }
+      },
+      {
+        "id": "BONFIRE",
+        "name": "Bonfire",
+        "desc": "250 marshmallows in all",
+        "icon": "bonfire",
+        "progress": {
+          "stat": "mallows",
+          "max": 250
+        }
+      },
+      {
+        "id": "FIXTURE",
+        "name": "A fixture",
+        "desc": "Play 100 games",
+        "icon": "rocking",
+        "progress": {
+          "stat": "games",
+          "max": 100
+        }
+      },
+      {
+        "id": "PACKED",
+        "name": "Packed house",
+        "desc": "Play a game with 100 or more in it",
+        "icon": "packed"
       }
     ],
     "boards": [

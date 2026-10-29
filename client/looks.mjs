@@ -33,6 +33,10 @@ export const BALLS = [
   { key: 'eight', name: 'EIGHT BALL', pattern: PATTERN.EIGHT, a: [0.06, 0.06, 0.07], b: [0.97, 0.97, 0.94], unlock: 'toasted' },
   { key: 'gold', name: 'GOLD', pattern: PATTERN.METAL, a: [1.0, 0.76, 0.22], b: [1.0, 0.76, 0.22], unlock: 'golden' },
   { key: 'mallow', name: 'MARSHMALLOW', pattern: PATTERN.STRIPES, a: [0.98, 0.95, 0.88], b: [0.78, 0.5, 0.24], unlock: 'campfire' },
+  { key: 'swiss', name: 'SWISS CHEESE', pattern: PATTERN.SOLID, a: [1.0, 0.82, 0.3], b: [1.0, 0.82, 0.3], unlock: 'cheese' },
+  { key: 'ember', name: 'EMBER', pattern: PATTERN.METAL, a: [1.0, 0.38, 0.1], b: [1.0, 0.38, 0.1], unlock: 'onfire' },
+  { key: 'smore', name: "S'MORE", pattern: PATTERN.RIBS, a: [0.98, 0.95, 0.88], b: [0.42, 0.24, 0.12], unlock: 'bonfire' },
+  { key: 'platinum', name: 'PLATINUM', pattern: PATTERN.METAL, a: [0.86, 0.88, 0.92], b: [0.86, 0.88, 0.92], unlock: 'house' },
 ];
 
 // color: the hat's (null: the ball's colour, as the cap has always been)
@@ -44,6 +48,7 @@ export const HATS = [
   { key: 'none', name: 'NO HAT', style: STYLE.NONE, color: null },
   { key: 'pumpkin', name: 'PUMPKIN HEAD', style: STYLE.PUMPKIN, color: [1.0, 0.56, 0.12], unlock: 'chair' },
   { key: 'crown', name: 'CROWN', style: STYLE.CROWN, color: [1.0, 0.8, 0.22], unlock: 'roll' },
+  { key: 'pilot', name: 'FLIGHT HELMET', style: STYLE.HELMET, color: [0.4, 0.46, 0.3], unlock: 'ace' },
 ];
 
 // The rider's body (client/rider.mjs): the round one the riders have always
