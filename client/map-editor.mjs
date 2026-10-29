@@ -1208,6 +1208,16 @@ function selectionPanel(sel) {
         out.push(row(el('label', { textContent: 'turn' }), pick1(['0', '90', '180', '270'], String(s.turn || 0), (v) => { s.turn = Number(v); })));
       }
       for (const [from, to] of Object.entries(s.tint || {})) out.push(row(el('label', { textContent: `${from} as` }), pick1(MATERIALS, to, (v) => { s.tint[from] = v; })));
+      // a mover (map.json "move"): back and forth along `by` from where it is built
+      if (s.move) {
+        const m = s.move;
+        out.push(h3('Moves'));
+        out.push(row(...['x', 'y', 'z'].map((c, k) => num(`by ${c}`, () => m.by[k], (v) => { m.by[k] = v; }))));
+        out.push(row(num('seconds', () => m.seconds ?? 4, (v) => { m.seconds = v; }), num('wait', () => m.wait ?? 1, (v) => { m.wait = v; }), num('phase', () => m.phase ?? 0, (v) => { m.phase = v; })));
+        out.push(row(el('label', { textContent: 'speed' }), pick1(['even', 'eased'], m.ease ? 'eased' : 'even', (v) => { m.ease = v === 'eased'; }),
+          btn('stand still', () => { step(); delete s.move; endStep(); changed(); renderSide(); })));
+        out.push(hint(`It moves that far (turned with the structure) in that many seconds, waits, comes back and waits again; phase starts it that many seconds later. A fighter on it rides it, and one in its way is pushed. At most ${L.MV_STEP_MAX * L.TICK_HZ} m/s.`));
+      } else out.push(row(btn('make it move', () => { step(); s.move = { by: [0, 4, 0], seconds: 3, wait: 1 }; endStep(); changed(); renderSide(); }, 'a lift: up 4 m and back')));
       if (b) {
         const w = place(b, at, s.turn || 0);
         out.push(h3(`Box ${sel.b + 1} of ${list.length}`));

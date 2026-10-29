@@ -38,6 +38,9 @@
       (memory.init $map (i32.const @MAP_GROUPS) (i32.const @MAPSEG_GROUPS) (i32.const @MAPSEG_NGROUPB))
       (memory.init $map (i32.const @MAP_BOXES) (i32.const @MAPSEG_BOXES) (i32.const @MAPSEG_NBOXB))
       (memory.init $map (i32.const @MAP_OBJ) (i32.const @MAPSEG_OBJ) (i32.const @MAP_OBJ_SIZE))
+      ;; the movers' rows, up to the last group that moves (none: all stand still)
+      (memory.fill (i32.const @MAP_MOVE) (i32.const 0) (i32.const @(MAP_MOVE_END - MAP_MOVE)))
+      (memory.init $map (i32.const @MAP_MOVE) (i32.const @MAPSEG_MOVE) (i32.const @MAPSEG_NMOVEB))
       (!for $z (i32.const 0) (i32.const @MAPIMG_H)
         (local.set $k (i32.add (i32.mul (i32.add (local.get $z) (i32.const @MAPIMG_Z0)) (i32.const @GRID)) (i32.const @MAPIMG_X0)))
         (memory.init $map (i32.add (i32.const @TERRAIN_H) (i32.shl (local.get $k) (i32.const 1)))
@@ -102,7 +105,7 @@
 ;; number the sim reads as a place is finite and in reach, before anything is
 ;; written: 0 when it is in place, else what was wrong (1 its head, 2 a count,
 ;; 3 a part outside the bytes, 4 the images outside the world, 5 a group or a
-;; box, 6 the ceiling or the void, 7 a place), and nothing changed. The
+;; box, 6 the ceiling or the void, 7 a place, 8 a mover), and nothing changed. The
 ;; mountains past the images grow from $terrain_gen's seed 0, so the static
 ;; world is the map's alone, whatever seed a room plays.
 (func (export "map_load") (param $src i32) (param $len i32) (result i32)
@@ -157,6 +160,27 @@
                       (i32.or (i32.gt_u (i32.add (i32.load offset=@MP_OBJ (local.get $src)) (i32.const @MAP_OBJ_SIZE)) (local.get $n))
                               (i32.gt_u (i32.add (i32.load offset=@MP_RACE (local.get $src)) (i32.load offset=@MP_NRACEB (local.get $src))) (local.get $n)))))
     (then (return (i32.const 3))))
+  ;; the movers' rows: inside the bytes, whole rows, no more than the groups
+  (local.set $a (i32.load offset=@MP_NMOVEB (local.get $src)))
+  (if (i32.or (i32.gt_u (i32.load offset=@MP_MOVE (local.get $src)) (local.get $n))
+              (i32.gt_u (i32.add (i32.load offset=@MP_MOVE (local.get $src)) (local.get $a)) (local.get $n)))
+    (then (return (i32.const 3))))
+  (if (i32.or (i32.and (local.get $a) (i32.const @(MOVE_SIZE - 1))) (i32.gt_u (local.get $a) (i32.shl (local.get $ng) (i32.const 5))))
+    (then (return (i32.const 8))))
+  ;; each row still (flags 0) or moving: its ticks in range, its way a place in reach
+  (local.set $o (i32.add (local.get $d) (i32.load offset=@MP_MOVE (local.get $src))))
+  (!for $i (i32.const 0) (i32.shr_u (local.get $a) (i32.const 5))
+    (local.set $g (i32.add (local.get $o) (i32.shl (local.get $i) (i32.const 5))))
+    (local.set $z (i32.load offset=24 (local.get $g)))
+    (if (local.get $z)
+      (then
+        (if (i32.or (i32.or (i32.ne (i32.and (local.get $z) (i32.const @MV_ON)) (i32.const @MV_ON))
+                            (i32.and (local.get $z) (i32.const @(~(MV_ON | MV_EASE)))))
+                    (i32.or (i32.or (i32.eqz (i32.load offset=12 (local.get $g))) (i32.gt_u (i32.load offset=12 (local.get $g)) (i32.const @MV_TICKS_MAX)))
+                            (i32.or (i32.gt_u (i32.load offset=16 (local.get $g)) (i32.const @MV_TICKS_MAX))
+                                    (i32.or (i32.gt_u (i32.load offset=20 (local.get $g)) (i32.const @MV_TICKS_MAX))
+                                            (i32.eqz (call $a_inreach (local.get $g) (i32.const 3) (i32.const 1)))))))
+          (then (return (i32.const 8)))))))
   ;; the race: none, or a count and that many gates
   (local.set $a (i32.load offset=@MP_NRACEB (local.get $src)))
   (if (local.get $a)
@@ -177,8 +201,10 @@
       (then (return (i32.const 5))))
     (if (i32.eqz (call $a_ordered (local.get $a))) (then (return (i32.const 5)))))
   (local.set $g (i32.add (local.get $d) (i32.load offset=@MP_BOXES (local.get $src))))
+  ;; (and in a group the map has: a box's group finds its mover's row)
   (!for $i (i32.const 0) (local.get $nb)
-    (if (i32.eqz (call $a_ordered (i32.add (local.get $g) (i32.shl (local.get $i) (i32.const 5))))) (then (return (i32.const 5)))))
+    (if (i32.eqz (call $a_ordered (i32.add (local.get $g) (i32.shl (local.get $i) (i32.const 5))))) (then (return (i32.const 5))))
+    (if (i32.ge_u (i32.load offset=28 (i32.add (local.get $g) (i32.shl (local.get $i) (i32.const 5)))) (local.get $ng)) (then (return (i32.const 5)))))
   ;; the ceiling, and the void under it (0, none)
   (local.set $c (f32.load offset=@MP_CEIL (local.get $src)))
   (local.set $v (f32.load offset=@(MAP_VOID - MAP) (local.get $d)))
@@ -214,6 +240,8 @@
   (memory.copy (i32.const @MAP_GROUPS) (i32.add (local.get $d) (i32.load offset=@MP_GROUPS (local.get $src))) (i32.shl (local.get $ng) (i32.const 5)))
   (memory.copy (i32.const @MAP_BOXES) (i32.add (local.get $d) (i32.load offset=@MP_BOXES (local.get $src))) (i32.shl (local.get $nb) (i32.const 5)))
   (memory.copy (i32.const @MAP_OBJ) (i32.add (local.get $d) (i32.load offset=@MP_OBJ (local.get $src))) (i32.const @MAP_OBJ_SIZE))
+  (memory.fill (i32.const @MAP_MOVE) (i32.const 0) (i32.const @(MAP_MOVE_END - MAP_MOVE)))
+  (memory.copy (i32.const @MAP_MOVE) (i32.add (local.get $d) (i32.load offset=@MP_MOVE (local.get $src))) (i32.load offset=@MP_NMOVEB (local.get $src)))
 #if FLIGHT
   ;; the race's gates, as flight's own map's are (the arena has no race)
   (memory.fill (i32.const @MAP_RACE) (i32.const 0) (i32.const @(MAP_RACE_END - MAP_RACE)))
@@ -276,7 +304,7 @@
 (func $stand (param $x f32) (param $z f32) (param $top f32) (result f32)
   (call $ground (local.get $x) (local.get $z))
   (drop) (drop) (drop) (drop)
-  (call $hull_y (local.get $x) (local.get $z) (local.get $top) (f32.const 1e9))
+  (call $hull_y (local.get $x) (local.get $z) (local.get $top) (f32.const 1e9) (i32.load (i32.const @HDR_TICK)))
   (drop)
   (f32.max))
 
@@ -284,6 +312,51 @@
 ;; bounds it touches, the group's boxes in order, so it meets them in the
 ;; same order on every machine. A box or group record starts with its
 ;; bounds: f32 x0, y0, z0, x1, y1, z1.
+;;
+;; A group may move (layout.mjs MAP_MOVE): its boxes are where they are built
+;; plus $mv's offset at the tick of the bank asking (t), and its bounds hold
+;; its whole path. A query meets a moving group's boxes in their own frame,
+;; itself shifted back by the offset, and only then: a group standing still
+;; is met as it always was, bit for bit.
+
+;; Does group g move?
+(func $moves (param $g i32) (result i32)
+  (i32.and (i32.load offset=@(MAP_MOVE + 24) (i32.shl (local.get $g) (i32.const 5))) (i32.const @MV_ON)))
+
+;; Where group g's boxes are at tick t, from where they are built. Its cycle:
+;; it waits at the near end, goes out, waits at the far end, comes back; k
+;; the ticks along the way from the near end, f the share of the way.
+(func $mv (param $g i32) (param $t i32) (result f32 f32 f32)
+  (local $a i32) (local $tr i32) (local $pa i32) (local $ph i32) (local $k i32) (local $f f32)
+  (local.set $a (i32.add (i32.const @MAP_MOVE) (i32.shl (local.get $g) (i32.const 5))))
+  (local.set $tr (i32.load offset=12 (local.get $a)))
+  (local.set $pa (i32.load offset=16 (local.get $a)))
+  (local.set $ph (i32.rem_u (i32.add (local.get $t) (i32.load offset=20 (local.get $a)))
+                            (i32.shl (i32.add (local.get $tr) (local.get $pa)) (i32.const 1))))
+  (local.set $k (i32.sub (local.get $ph) (local.get $pa)))
+  (if (i32.lt_s (local.get $k) (i32.const 0)) (then (local.set $k (i32.const 0))))
+  (if (i32.gt_s (local.get $k) (local.get $tr))
+    (then
+      ;; past the way out: waiting at the far end, then the way back
+      (local.set $k (i32.sub (i32.shl (i32.add (local.get $tr) (local.get $pa)) (i32.const 1)) (local.get $ph)))
+      (if (i32.gt_s (local.get $k) (local.get $tr)) (then (local.set $k (local.get $tr))))))
+  (local.set $f (f32.div (f32.convert_i32_u (local.get $k)) (f32.convert_i32_u (local.get $tr))))
+  (if (i32.and (i32.load offset=24 (local.get $a)) (i32.const @MV_EASE))
+    (then (local.set $f (f32.mul (f32.mul (local.get $f) (local.get $f)) (f32.sub (f32.const 3) (f32.add (local.get $f) (local.get $f)))))))
+  (f32.mul (f32.load (local.get $a)) (local.get $f))
+  (f32.mul (f32.load offset=4 (local.get $a)) (local.get $f))
+  (f32.mul (f32.load offset=8 (local.get $a)) (local.get $f)))
+
+;; Field k (a byte offset: 0 x0, 4 y0 ... 20 z1) of the box at b where it is at tick t.
+(func $bc (param $b i32) (param $k i32) (param $t i32) (result f32)
+  (local $g i32) (local $ox f32) (local $oy f32) (local $oz f32) (local $j i32)
+  (local.set $g (i32.load offset=28 (local.get $b)))
+  (if (i32.eqz (call $moves (local.get $g))) (then (return (f32.load (i32.add (local.get $b) (local.get $k))))))
+  (call $mv (local.get $g) (local.get $t))
+  (local.set $oz) (local.set $oy) (local.set $ox)
+  (local.set $j (i32.rem_u (local.get $k) (i32.const 12)))
+  (f32.add (f32.load (i32.add (local.get $b) (local.get $k)))
+           (select (local.get $ox) (select (local.get $oy) (local.get $oz) (i32.eq (local.get $j) (i32.const 4))) (i32.eqz (local.get $j)))))
 
 ;; Does the record at b overlap the box (x0, y0, z0)..(x1, y1, z1)? Touching isn't overlapping.
 (func $touch (param $b i32) (param $x0 f32) (param $y0 f32) (param $z0 f32) (param $x1 f32) (param $y1 f32) (param $z1 f32) (result i32)
@@ -293,11 +366,13 @@
 
 ;; A body moving along one axis (a: 0 for x, 8 for z, the byte offset of its
 ;; field) from `from` to `to`, the other axis at o, its feet-to-head band
-;; [lo, hi): how far it gets. A box it was clear of on that side stops it a
-;; body's radius short; one it already overlaps doesn't.
-(func $hull_axis (param $a i32) (param $from f32) (param $to f32) (param $o f32) (param $lo f32) (param $hi f32) (result f32)
+;; [lo, hi), the boxes where they are at tick t: how far it gets. A box it was
+;; clear of on that side stops it a body's radius short; one it already
+;; overlaps doesn't.
+(func $hull_axis (param $a i32) (param $from f32) (param $to f32) (param $o f32) (param $lo f32) (param $hi f32) (param $t i32) (result f32)
   (local $g i32) (local $ga i32) (local $k i32) (local $end i32) (local $b i32) (local $mn f32) (local $mx f32)
   (local $x0 f32) (local $x1 f32) (local $z0 f32) (local $z1 f32)
+  (local $m i32) (local $sa f32) (local $ox f32) (local $oy f32) (local $oz f32) (local $fr f32) (local $ts f32) (local $ll f32) (local $hh f32) (local $cut i32)
   (!for $g (i32.const 0) (i32.load (i32.const @MAP_NGROUP))
     (local.set $x0 (select (f32.sub (local.get $to) (f32.const @P_R)) (f32.sub (local.get $o) (f32.const @P_R)) (i32.eqz (local.get $a))))
     (local.set $x1 (select (f32.add (local.get $to) (f32.const @P_R)) (f32.add (local.get $o) (f32.const @P_R)) (i32.eqz (local.get $a))))
@@ -306,29 +381,55 @@
     (local.set $ga (i32.add (i32.const @MAP_GROUPS) (i32.shl (local.get $g) (i32.const 5))))
     (if (call $touch (local.get $ga) (local.get $x0) (local.get $lo) (local.get $z0) (local.get $x1) (local.get $hi) (local.get $z1))
       (then
+        ;; a mover: the body in the group's own frame (fr, ts, its band ll..hh)
+        (local.set $m (call $moves (local.get $g)))
+        (local.set $fr (local.get $from))
+        (local.set $ts (local.get $to))
+        (local.set $ll (local.get $lo))
+        (local.set $hh (local.get $hi))
+        (local.set $cut (i32.const 0))
+        (if (local.get $m)
+          (then
+            (call $mv (local.get $g) (local.get $t))
+            (local.set $oz) (local.set $oy) (local.set $ox)
+            (local.set $sa (select (local.get $ox) (local.get $oz) (i32.eqz (local.get $a))))
+            (local.set $fr (f32.sub (local.get $from) (local.get $sa)))
+            (local.set $ts (f32.sub (local.get $to) (local.get $sa)))
+            (local.set $ll (f32.sub (local.get $lo) (local.get $oy)))
+            (local.set $hh (f32.sub (local.get $hi) (local.get $oy)))
+            (local.set $x0 (f32.sub (local.get $x0) (local.get $ox)))
+            (local.set $x1 (f32.sub (local.get $x1) (local.get $ox)))
+            (local.set $z0 (f32.sub (local.get $z0) (local.get $oz)))
+            (local.set $z1 (f32.sub (local.get $z1) (local.get $oz)))))
         (local.set $end (i32.add (i32.load offset=24 (local.get $ga)) (i32.load offset=28 (local.get $ga))))
         (!for $k (i32.load offset=24 (local.get $ga)) (local.get $end)
           (local.set $b (i32.add (i32.const @MAP_BOXES) (i32.shl (local.get $k) (i32.const 5))))
-          (if (call $touch (local.get $b) (local.get $x0) (local.get $lo) (local.get $z0) (local.get $x1) (local.get $hi) (local.get $z1))
+          (if (call $touch (local.get $b) (local.get $x0) (local.get $ll) (local.get $z0) (local.get $x1) (local.get $hh) (local.get $z1))
             (then
               (local.set $mn (f32.load (i32.add (local.get $b) (local.get $a))))
               (local.set $mx (f32.load offset=12 (i32.add (local.get $b) (local.get $a))))
-              (if (f32.le (f32.add (local.get $from) (f32.const @P_R)) (f32.add (local.get $mn) (f32.const 0.001)))
-                (then (local.set $to (f32.sub (local.get $mn) (f32.const @P_R))))
+              (if (f32.le (f32.add (local.get $fr) (f32.const @P_R)) (f32.add (local.get $mn) (f32.const 0.001)))
+                (then (local.set $ts (f32.sub (local.get $mn) (f32.const @P_R))) (local.set $cut (i32.const 1)))
                 (else
-                  (if (f32.ge (f32.sub (local.get $from) (f32.const @P_R)) (f32.sub (local.get $mx) (f32.const 0.001)))
-                    (then (local.set $to (f32.add (local.get $mx) (f32.const @P_R)))))))
+                  (if (f32.ge (f32.sub (local.get $fr) (f32.const @P_R)) (f32.sub (local.get $mx) (f32.const 0.001)))
+                    (then (local.set $ts (f32.add (local.get $mx) (f32.const @P_R))) (local.set $cut (i32.const 1))))))
               ;; the clamp moved the body: the rest of the boxes see where it is now
-              (local.set $x0 (select (f32.sub (local.get $to) (f32.const @P_R)) (local.get $x0) (i32.eqz (local.get $a))))
-              (local.set $x1 (select (f32.add (local.get $to) (f32.const @P_R)) (local.get $x1) (i32.eqz (local.get $a))))
-              (local.set $z0 (select (local.get $z0) (f32.sub (local.get $to) (f32.const @P_R)) (i32.eqz (local.get $a))))
-              (local.set $z1 (select (local.get $z1) (f32.add (local.get $to) (f32.const @P_R)) (i32.eqz (local.get $a))))))))))
+              (local.set $x0 (select (f32.sub (local.get $ts) (f32.const @P_R)) (local.get $x0) (i32.eqz (local.get $a))))
+              (local.set $x1 (select (f32.add (local.get $ts) (f32.const @P_R)) (local.get $x1) (i32.eqz (local.get $a))))
+              (local.set $z0 (select (local.get $z0) (f32.sub (local.get $ts) (f32.const @P_R)) (i32.eqz (local.get $a))))
+              (local.set $z1 (select (local.get $z1) (f32.add (local.get $ts) (f32.const @P_R)) (i32.eqz (local.get $a)))))))
+        ;; back out of a mover's frame, only if its boxes stopped the body
+        (if (local.get $m)
+          (then (if (local.get $cut) (then (local.set $to (f32.add (local.get $ts) (local.get $sa))))))
+          (else (local.set $to (local.get $ts)))))))
   (local.get $to))
 
-;; Under and over a body at (x, z): the highest box top no higher than
-;; `reach`, and the lowest box bottom no lower than `top` (-1e9 and 1e9 for none).
-(func $hull_y (param $x f32) (param $z f32) (param $reach f32) (param $top f32) (result f32 f32)
+;; Under and over a body at (x, z), the boxes where they are at tick t: the
+;; highest box top no higher than `reach`, and the lowest box bottom no lower
+;; than `top` (-1e9 and 1e9 for none).
+(func $hull_y (param $x f32) (param $z f32) (param $reach f32) (param $top f32) (param $t i32) (result f32 f32)
   (local $g i32) (local $ga i32) (local $k i32) (local $end i32) (local $b i32) (local $floor f32) (local $ceil f32) (local $v f32)
+  (local $m i32) (local $ox f32) (local $oy f32) (local $oz f32) (local $qx f32) (local $qz f32)
   (local.set $floor (f32.const -1e9))
   (local.set $ceil (f32.const 1e9))
   (!for $g (i32.const 0) (i32.load (i32.const @MAP_NGROUP))
@@ -336,15 +437,26 @@
     (if (call $touch (local.get $ga) (f32.sub (local.get $x) (f32.const @P_R)) (f32.const -1e9) (f32.sub (local.get $z) (f32.const @P_R))
                                      (f32.add (local.get $x) (f32.const @P_R)) (f32.const 1e9) (f32.add (local.get $z) (f32.const @P_R)))
       (then
+        (local.set $m (call $moves (local.get $g)))
+        (local.set $qx (local.get $x))
+        (local.set $qz (local.get $z))
+        (if (local.get $m)
+          (then
+            (call $mv (local.get $g) (local.get $t))
+            (local.set $oz) (local.set $oy) (local.set $ox)
+            (local.set $qx (f32.sub (local.get $x) (local.get $ox)))
+            (local.set $qz (f32.sub (local.get $z) (local.get $oz)))))
         (local.set $end (i32.add (i32.load offset=24 (local.get $ga)) (i32.load offset=28 (local.get $ga))))
         (!for $k (i32.load offset=24 (local.get $ga)) (local.get $end)
           (local.set $b (i32.add (i32.const @MAP_BOXES) (i32.shl (local.get $k) (i32.const 5))))
-          (if (call $touch (local.get $b) (f32.sub (local.get $x) (f32.const @P_R)) (f32.const -1e9) (f32.sub (local.get $z) (f32.const @P_R))
-                                          (f32.add (local.get $x) (f32.const @P_R)) (f32.const 1e9) (f32.add (local.get $z) (f32.const @P_R)))
+          (if (call $touch (local.get $b) (f32.sub (local.get $qx) (f32.const @P_R)) (f32.const -1e9) (f32.sub (local.get $qz) (f32.const @P_R))
+                                          (f32.add (local.get $qx) (f32.const @P_R)) (f32.const 1e9) (f32.add (local.get $qz) (f32.const @P_R)))
             (then
               (local.set $v (f32.load offset=16 (local.get $b)))
+              (if (local.get $m) (then (local.set $v (f32.add (local.get $v) (local.get $oy)))))
               (if (f32.le (local.get $v) (local.get $reach)) (then (local.set $floor (f32.max (local.get $floor) (local.get $v)))))
               (local.set $v (f32.load offset=4 (local.get $b)))
+              (if (local.get $m) (then (local.set $v (f32.add (local.get $v) (local.get $oy)))))
               (if (f32.ge (local.get $v) (local.get $top)) (then (local.set $ceil (f32.min (local.get $ceil) (local.get $v)))))))))))
   (local.get $floor)
   (local.get $ceil))
@@ -376,42 +488,114 @@
   (local.set $t1) (local.set $t0)
   (select (local.get $t0) (f32.add (local.get $tmax) (f32.const 1)) (f32.le (local.get $t0) (local.get $t1))))
 
-;; How far the ray o + t d goes before a box, out to tmax.
-(func $box_ray (param $ox f32) (param $oy f32) (param $oz f32) (param $dx f32) (param $dy f32) (param $dz f32) (param $tmax f32) (result f32)
+;; How far the ray o + t d goes before a box (where it is at tick t), out to tmax.
+(func $box_ray (param $ox f32) (param $oy f32) (param $oz f32) (param $dx f32) (param $dy f32) (param $dz f32) (param $tmax f32) (param $t i32) (result f32)
   (local $g i32) (local $ga i32) (local $k i32) (local $end i32) (local $best f32)
+  (local $qx f32) (local $qy f32) (local $qz f32) (local $mx f32) (local $my f32) (local $mz f32)
   (local.set $best (local.get $tmax))
   (!for $g (i32.const 0) (i32.load (i32.const @MAP_NGROUP))
     (local.set $ga (i32.add (i32.const @MAP_GROUPS) (i32.shl (local.get $g) (i32.const 5))))
     (if (f32.le (call $slab (local.get $ga) (local.get $ox) (local.get $oy) (local.get $oz) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $best)) (local.get $best))
       (then
+        (local.set $qx (local.get $ox))
+        (local.set $qy (local.get $oy))
+        (local.set $qz (local.get $oz))
+        (if (call $moves (local.get $g))
+          (then
+            (call $mv (local.get $g) (local.get $t))
+            (local.set $mz) (local.set $my) (local.set $mx)
+            (local.set $qx (f32.sub (local.get $ox) (local.get $mx)))
+            (local.set $qy (f32.sub (local.get $oy) (local.get $my)))
+            (local.set $qz (f32.sub (local.get $oz) (local.get $mz)))))
         (local.set $end (i32.add (i32.load offset=24 (local.get $ga)) (i32.load offset=28 (local.get $ga))))
         (!for $k (i32.load offset=24 (local.get $ga)) (local.get $end)
           (local.set $best (f32.min (local.get $best)
             (call $slab (i32.add (i32.const @MAP_BOXES) (i32.shl (local.get $k) (i32.const 5)))
-                        (local.get $ox) (local.get $oy) (local.get $oz) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $best))))))))
+                        (local.get $qx) (local.get $qy) (local.get $qz) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $best))))))))
   (local.get $best))
 
-;; 1 if nothing stands between a and b.
-(func $clear (param $ax f32) (param $ay f32) (param $az f32) (param $bx f32) (param $by f32) (param $bz f32) (result i32)
+;; 1 if nothing stands between a and b at tick t.
+(func $clear (param $ax f32) (param $ay f32) (param $az f32) (param $bx f32) (param $by f32) (param $bz f32) (param $t i32) (result i32)
   (f32.ge (call $box_ray (local.get $ax) (local.get $ay) (local.get $az)
-                         (f32.sub (local.get $bx) (local.get $ax)) (f32.sub (local.get $by) (local.get $ay)) (f32.sub (local.get $bz) (local.get $az)) (f32.const 1))
+                         (f32.sub (local.get $bx) (local.get $ax)) (f32.sub (local.get $by) (local.get $ay)) (f32.sub (local.get $bz) (local.get $az)) (f32.const 1) (local.get $t))
           (f32.const 1)))
 
-;; The first box (its address) that the point is inside, grown by r on every side, or 0.
-(func $box_in (param $x f32) (param $y f32) (param $z f32) (param $r f32) (result i32)
+;; The first box (its address) that the point is inside at tick t, grown by r
+;; on every side, or 0 ($bc reads where its corners are then).
+(func $box_in (param $x f32) (param $y f32) (param $z f32) (param $r f32) (param $t i32) (result i32)
   (local $g i32) (local $ga i32) (local $k i32) (local $end i32) (local $b i32)
+  (local $qx f32) (local $qy f32) (local $qz f32) (local $mx f32) (local $my f32) (local $mz f32)
   (!for $g (i32.const 0) (i32.load (i32.const @MAP_NGROUP))
     (local.set $ga (i32.add (i32.const @MAP_GROUPS) (i32.shl (local.get $g) (i32.const 5))))
     (if (call $touch (local.get $ga) (f32.sub (local.get $x) (local.get $r)) (f32.sub (local.get $y) (local.get $r)) (f32.sub (local.get $z) (local.get $r))
                                      (f32.add (local.get $x) (local.get $r)) (f32.add (local.get $y) (local.get $r)) (f32.add (local.get $z) (local.get $r)))
       (then
+        (local.set $qx (local.get $x))
+        (local.set $qy (local.get $y))
+        (local.set $qz (local.get $z))
+        (if (call $moves (local.get $g))
+          (then
+            (call $mv (local.get $g) (local.get $t))
+            (local.set $mz) (local.set $my) (local.set $mx)
+            (local.set $qx (f32.sub (local.get $x) (local.get $mx)))
+            (local.set $qy (f32.sub (local.get $y) (local.get $my)))
+            (local.set $qz (f32.sub (local.get $z) (local.get $mz)))))
         (local.set $end (i32.add (i32.load offset=24 (local.get $ga)) (i32.load offset=28 (local.get $ga))))
         (!for $k (i32.load offset=24 (local.get $ga)) (local.get $end)
           (local.set $b (i32.add (i32.const @MAP_BOXES) (i32.shl (local.get $k) (i32.const 5))))
-          (if (call $touch (local.get $b) (f32.sub (local.get $x) (local.get $r)) (f32.sub (local.get $y) (local.get $r)) (f32.sub (local.get $z) (local.get $r))
-                                          (f32.add (local.get $x) (local.get $r)) (f32.add (local.get $y) (local.get $r)) (f32.add (local.get $z) (local.get $r)))
+          (if (call $touch (local.get $b) (f32.sub (local.get $qx) (local.get $r)) (f32.sub (local.get $qy) (local.get $r)) (f32.sub (local.get $qz) (local.get $r))
+                                          (f32.add (local.get $qx) (local.get $r)) (f32.add (local.get $qy) (local.get $r)) (f32.add (local.get $qz) (local.get $r)))
             (then (return (local.get $b))))))))
   (i32.const 0))
+
+;; What the movers do to a body at (x, y, z) on its bank's tick t, as x and z
+;; to put it at (and 1), or 0 for nothing: a mover under it (on the ground,
+;; its feet on a box's top where the box was the tick before) carries it as
+;; far as the mover went; a mover that came into it this tick pushes it clear
+;; of the box (a body's radius and a millimetre), out the side the mover came
+;; at it from. Up and down, the ground's snap carries it ($move).
+(func $a_ride (param $x f32) (param $y f32) (param $z f32) (param $on i32) (param $t i32) (result f32 f32 i32)
+  (local $g i32) (local $ga i32) (local $k i32) (local $end i32) (local $b i32)
+  (local $px f32) (local $py f32) (local $pz f32) (local $qx f32) (local $qy f32) (local $qz f32) (local $dx f32) (local $dz f32)
+  (!for $g (i32.const 0) (i32.load (i32.const @MAP_NGROUP))
+    (if (call $moves (local.get $g))
+      (then
+        (call $mv (local.get $g) (i32.sub (local.get $t) (i32.const 1)))
+        (local.set $pz) (local.set $py) (local.set $px)
+        (call $mv (local.get $g) (local.get $t))
+        (local.set $qz) (local.set $qy) (local.set $qx)
+        (local.set $dx (f32.sub (local.get $qx) (local.get $px)))
+        (local.set $dz (f32.sub (local.get $qz) (local.get $pz)))
+        (if (i32.or (f32.ne (local.get $dx) (f32.const 0)) (f32.ne (local.get $dz) (f32.const 0)))
+          (then
+            (local.set $ga (i32.add (i32.const @MAP_GROUPS) (i32.shl (local.get $g) (i32.const 5))))
+            (local.set $end (i32.add (i32.load offset=24 (local.get $ga)) (i32.load offset=28 (local.get $ga))))
+            (!for $k (i32.load offset=24 (local.get $ga)) (local.get $end)
+              (local.set $b (i32.add (i32.const @MAP_BOXES) (i32.shl (local.get $k) (i32.const 5))))
+              ;; standing on it: its footprint over the box as it was, its feet on that top
+              (if (i32.and (i32.ne (local.get $on) (i32.const 0))
+                           (i32.and (call $touch (local.get $b) (f32.sub (f32.sub (local.get $x) (local.get $px)) (f32.const @P_R)) (f32.const -1e9) (f32.sub (f32.sub (local.get $z) (local.get $pz)) (f32.const @P_R))
+                                                                (f32.add (f32.sub (local.get $x) (local.get $px)) (f32.const @P_R)) (f32.const 1e9) (f32.add (f32.sub (local.get $z) (local.get $pz)) (f32.const @P_R)))
+                                    (f32.lt (f32.abs (f32.sub (f32.add (f32.load offset=16 (local.get $b)) (local.get $py)) (local.get $y))) (f32.const 0.01))))
+                (then (return (f32.add (local.get $x) (local.get $dx)) (f32.add (local.get $z) (local.get $dz)) (i32.const 1))))
+              ;; in it now, and not the tick before: out the side it came from
+              (if (i32.and (call $touch (local.get $b) (f32.sub (f32.sub (local.get $x) (local.get $qx)) (f32.const @P_R)) (f32.sub (f32.add (local.get $y) (f32.const 0.01)) (local.get $qy)) (f32.sub (f32.sub (local.get $z) (local.get $qz)) (f32.const @P_R))
+                                                   (f32.add (f32.sub (local.get $x) (local.get $qx)) (f32.const @P_R)) (f32.sub (f32.add (local.get $y) (f32.const @P_TOP)) (local.get $qy)) (f32.add (f32.sub (local.get $z) (local.get $qz)) (f32.const @P_R)))
+                           (i32.eqz (call $touch (local.get $b) (f32.sub (f32.sub (local.get $x) (local.get $px)) (f32.const @P_R)) (f32.sub (f32.add (local.get $y) (f32.const 0.01)) (local.get $py)) (f32.sub (f32.sub (local.get $z) (local.get $pz)) (f32.const @P_R))
+                                                             (f32.add (f32.sub (local.get $x) (local.get $px)) (f32.const @P_R)) (f32.sub (f32.add (local.get $y) (f32.const @P_TOP)) (local.get $py)) (f32.add (f32.sub (local.get $z) (local.get $pz)) (f32.const @P_R)))))
+                (then
+                  (if (f32.ge (f32.abs (local.get $dx)) (f32.abs (local.get $dz)))
+                    (then
+                      (return (select (f32.add (f32.add (f32.load offset=12 (local.get $b)) (local.get $qx)) (f32.const 0.501))
+                                      (f32.sub (f32.add (f32.load (local.get $b)) (local.get $qx)) (f32.const 0.501))
+                                      (f32.gt (local.get $dx) (f32.const 0)))
+                              (local.get $z) (i32.const 1))))
+                  (return (local.get $x)
+                          (select (f32.add (f32.add (f32.load offset=20 (local.get $b)) (local.get $qz)) (f32.const 0.501))
+                                  (f32.sub (f32.add (f32.load offset=8 (local.get $b)) (local.get $qz)) (f32.const 0.501))
+                                  (f32.gt (local.get $dz) (f32.const 0)))
+                          (i32.const 1))))))))))
+  (local.get $x) (local.get $z) (i32.const 0))
 
 ;; A fighter of bank d whose feet reach a teleporter's pad comes out at its
 ;; other end, moving as it was: the position, and 1 if it went through.
@@ -838,7 +1022,7 @@
       (local.set $t (f32.add (local.get $t) (f32.const 0.5)))
       (br $march)))
   ;; the map's boxes: walls, roofs, rock
-  (local.set $best (call $box_ray (local.get $ox) (local.get $oy) (local.get $oz) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $best)))
+  (local.set $best (call $box_ray (local.get $ox) (local.get $oy) (local.get $oz) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $best) (i32.load (i32.const @HDR_TICK))))
   (local.set $who (i32.const -1))
   (local.set $a (f32.add (f32.mul (local.get $dx) (local.get $dx)) (f32.mul (local.get $dz) (local.get $dz))))
   (!for $q (i32.const 0) (i32.const @NPLAYER)
@@ -1024,7 +1208,7 @@
                              (f32.mul (local.get $cone) (f32.max (local.get $dist) (f32.const 0.01)))))
           (then
             ;; not through a wall
-            (if (call $clear (local.get $px) (f32.add (local.get $py) (f32.const 1.2)) (local.get $pz) (local.get $qx) (f32.add (local.get $qy) (f32.const 1.2)) (local.get $qz))
+            (if (call $clear (local.get $px) (f32.add (local.get $py) (f32.const 1.2)) (local.get $pz) (local.get $qx) (f32.add (local.get $qy) (f32.const 1.2)) (local.get $qz) (i32.load offset=@HDR_TICK (local.get $d)))
               (then (local.set $best (local.get $dist)) (local.set $who (local.get $q)))))))))
   (local.get $who)
   (local.get $best))
@@ -1150,7 +1334,7 @@
         ;; a wall between the blast and the body takes it all
         (if (i32.and (f32.lt (local.get $dist) (local.get $r))
                      (call $clear (local.get $x) (local.get $y) (local.get $z)
-                                  (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $qb)) (f32.const 0.9)) (!at f32 @(PLAYERS + P_PZ) (local.get $qb))))
+                                  (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $qb)) (f32.const 0.9)) (!at f32 @(PLAYERS + P_PZ) (local.get $qb)) (i32.load (i32.const @HDR_TICK))))
           (then
             ;; full within the inner 35%, falling to nothing at the edge
             (local.set $f (f32.mul (local.get $dmg) (!clamp (f32.div (f32.sub (local.get $r) (local.get $dist)) (f32.mul (local.get $r) (f32.const 0.65))) (f32.const 0) (f32.const 1))))
@@ -1194,7 +1378,7 @@
         (else (!put u8 @(PROJ + J_HOME) (local.get $jb) (i32.const 0))))))
   (!for $k (i32.const 0) (i32.const 2)
     (if (call $box_in (!madd (local.get $vx) (f32.const 0.004) (local.get $px)) (!madd (local.get $vy) (f32.const 0.004) (local.get $py))
-                      (!madd (local.get $vz) (f32.const 0.004) (local.get $pz)) (f32.const 0))
+                      (!madd (local.get $vz) (f32.const 0.004) (local.get $pz)) (f32.const 0) (i32.load offset=@HDR_TICK (local.get $d)))
       (then
         (call $fx (local.get $d) (i32.const @FX_BLAST) (local.get $owner) (!at u16 @(PROJ + J_SHOT) (local.get $jb)) (local.get $px) (local.get $py) (local.get $pz) (f32.const 0.4))
         (memory.fill (i32.add (i32.const @PROJ) (local.get $jb)) (i32.const 0) (i32.const @JSIZE))

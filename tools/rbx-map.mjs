@@ -13,6 +13,11 @@
 // anything else columns, big flat blocks with nothing under them the
 // ground, where there is none a void, the whole fit to the budget.
 //
+// What a script tweens, or a physical mover drives, is a structure of its own
+// (moverParts): a tween that repeats for ever and reverses (a lift's, a
+// moving platform's) is its "move" as it stands; the rest stand still in the
+// map for a port to set going, and the brief lists them.
+//
 // A stud is 0.28 m (Roblox's own figure; `scale`). The arena's fighter is
 // 1.8 m and jumps 1.2 m; a Roblox character is about 5 studs (1.4 m) and
 // jumps 7.2 (2 m), so a ledge built to be jumped to may need a step.
@@ -37,6 +42,9 @@ const VEHICLE = new Set(['VehicleSeat', 'SkateboardPlatform']);
 const PARTS = new Set(['Part', 'WedgePart', 'CornerWedgePart', 'TrussPart', 'SpawnLocation', 'Seat', 'VehicleSeat', 'SkateboardPlatform',
   'MeshPart', 'UnionOperation', 'IntersectOperation', 'PartOperation', 'FlagStand', 'Platform']);
 const SCRIPTS = new Set(['Script', 'LocalScript', 'ModuleScript']);
+// what drives a part by physics: the part it is in moves
+const DRIVERS = new Set(['BodyPosition', 'BodyVelocity', 'AlignPosition', 'LinearVelocity', 'PrismaticConstraint']);
+const MAX_MOVERS = 24; // structures of their own, of the map's NGROUP
 
 // Roblox's Enum.Material by number, to the box looks: metal's panels, rock's
 // grain, neon's glow (light), the rest a plain colour
@@ -184,6 +192,75 @@ export function terrainColumns(grid) {
   return cols;
 }
 
+// ---- what moves
+
+// The arguments of the call whose "(" is at i in src, as text, split at its
+// own commas: [args, the index after its ")"], or null if it never closes.
+function callArgs(src, i) {
+  const out = [];
+  let depth = 0, from = i + 1;
+  for (let k = i; k < src.length; k++) {
+    const c = src[k];
+    if (c === '(' || c === '{' || c === '[') depth++;
+    else if (c === ')' || c === '}' || c === ']') {
+      if (--depth === 0) { out.push(src.slice(from, k).trim()); return [out.filter((a, n) => a || n), k + 1]; }
+    } else if (c === ',' && depth === 1) { out.push(src.slice(from, k).trim()); from = k + 1; }
+  }
+  return null;
+}
+const NUM = '(-?\\d+(?:\\.\\d+)?)';
+// A script's tween of its part, if it reads plainly: TweenInfo.new(seconds,
+// style, direction, repeats, reverses, delay) and a goal of its Position plus
+// a Vector3, or its CFrame times (or plus) a CFrame.new / Vector3.new, in
+// numbers. { seconds, ease (any style but Linear), repeats, reverses, delay,
+// by (studs), local (in the part's own axes: CFrame times) } or null.
+export function tweenOf(src) {
+  const at = src.search(/TweenInfo\.new\s*\(/);
+  if (at < 0) return null;
+  const got = callArgs(src, src.indexOf('(', at));
+  if (!got) return null;
+  const a = got[0];
+  const num = (v, d) => (v === undefined || v === '' ? d : /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : NaN);
+  const info = { seconds: num(a[0], 1), ease: !/Linear/.test(a[1] ?? ''), repeats: num(a[3], 0), reverses: /^true$/.test(a[4] ?? ''), delay: num(a[5], 0) };
+  if (![info.seconds, info.repeats, info.delay].every(Number.isFinite)) return null;
+  const goal = new RegExp(`\\b(Position|CFrame)\\s*=\\s*[\\w.:()\\[\\]"']+\\s*([+*])\\s*(Vector3|CFrame)\\.new\\s*\\(\\s*${NUM}\\s*,\\s*${NUM}\\s*,\\s*${NUM}\\s*\\)`).exec(src);
+  if (!goal) return null;
+  if (goal[1] === 'Position' && (goal[2] !== '+' || goal[3] !== 'Vector3')) return null;
+  return { ...info, by: [Number(goal[4]), Number(goal[5]), Number(goal[6])], local: goal[2] === '*' };
+}
+
+// The parts that move: Map(part -> { key, name, why, move (map.json's, or
+// null) }). A script with a tween moves its parent (a part, or every part of
+// a model); a physical driver moves the part it is in. s: metres a stud.
+export function moverParts(doc, under, s) {
+  const movers = new Map();
+  const partsOf = (x) => { const out = []; const walk = (y) => { if (PARTS.has(y.class)) out.push(y); y.children.forEach(walk); }; walk(x); return out; };
+  for (const sc of doc.instances) {
+    const src = sc.props.Source;
+    if (!SCRIPTS.has(sc.class) || typeof src !== 'string' || !/TweenService/.test(src) || !/:Create\s*\(/.test(src)) continue;
+    const t = sc.parent;
+    if (!t || !under(t) || !(PARTS.has(t.class) || t.class === 'Model')) continue;
+    const parts = partsOf(t);
+    if (!parts.length) continue;
+    const tw = tweenOf(src);
+    let move = null;
+    // a tween that repeats for ever and reverses: back and forth, as the map's movers go
+    if (tw && tw.repeats < 0 && tw.reverses && tw.by.some((v) => v)) {
+      const r = (PARTS.has(t.class) ? t : parts[0]).props.CFrame?.r;
+      const by = (tw.local && r ? [0, 1, 2].map((i) => r[3 * i] * tw.by[0] + r[3 * i + 1] * tw.by[1] + r[3 * i + 2] * tw.by[2]) : tw.by).map((v) => Math.round(v * s * 100) / 100);
+      // no faster than a mover may go (layout.mjs MV_STEP_MAX)
+      const most = (Math.hypot(...by) * (tw.ease ? 1.5 : 1)) / (L.MV_STEP_MAX * L.TICK_HZ);
+      move = { by, seconds: Math.max(Math.round(tw.seconds * 100) / 100, Math.ceil(most * 100) / 100), wait: Math.max(0, tw.delay), ...(tw.ease ? { ease: true } : {}) };
+    }
+    for (const p of parts) if (!movers.has(p)) movers.set(p, { key: path(t), name: t.name, why: `tweened by ${path(sc)}`, move });
+  }
+  for (const x of doc.instances) {
+    if (!DRIVERS.has(x.class) || !x.parent || !PARTS.has(x.parent.class) || !under(x.parent) || movers.has(x.parent)) continue;
+    movers.set(x.parent, { key: path(x.parent), name: x.parent.name, why: `driven by its ${x.class}`, move: null });
+  }
+  return movers;
+}
+
 // ---- the conversion
 
 export function robloxToMap(doc, opts = {}) {
@@ -204,7 +281,8 @@ export function robloxToMap(doc, opts = {}) {
   // an unanchored part in a model with a seat to drive is a vehicle, which moves
   const isVehicle = (x) => { for (let p = x.parent; p && p !== ws; p = p.parent) if (p.class === 'Model' && p.children.some((k) => VEHICLE.has(k.class))) return true; return VEHICLE.has(x.class); };
 
-  // the parts that are the place's solid ground and walls
+  // the parts that are the place's solid ground and walls, and which of them move
+  const movers = moverParts(doc, under, s);
   const objs = [], spawnParts = [];
   for (const inst of doc.instances) {
     if (!PARTS.has(inst.class)) continue;
@@ -224,7 +302,7 @@ export function robloxToMap(doc, opts = {}) {
     const lk = look(p.Material ?? 256);
     const model = ancestor(inst.parent, 'Model');
     const spawn = inst.class === 'SpawnLocation';
-    const obj = { pos, neg, colour, look: lk, surface: surfaceOf(p.Material ?? 256, colour), key: `${lk}${hex(colour)}`, model: model ? model.name : '', spawn };
+    const obj = { pos, neg, colour, look: lk, surface: surfaceOf(p.Material ?? 256, colour), key: `${lk}${hex(colour)}`, model: model ? model.name : '', spawn, mover: movers.get(inst) || null };
     objs.push(obj);
     if (spawn && p.Enabled !== false) {
       const team = p.Neutral === false ? p.TeamColor : null;
@@ -283,7 +361,7 @@ export function robloxToMap(doc, opts = {}) {
   };
 
   return sceneToMap({
-    objs, terrain, spawns: spawnParts, pads, count, notes, report, empty,
+    objs, terrain, spawns: spawnParts, pads, count, notes, report, empty, maxMovers: MAX_MOVERS,
     name: o.name || doc.meta?.name || 'Roblox Place',
     words: { unit: `${s} m a stud`, void: 'Roblox\'s void', spawns: 'spawn locations', unnamed: 'parts', from: `a Roblox place, ${s} m a stud (tools/roblox.mjs)` },
   }, o);

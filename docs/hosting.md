@@ -111,6 +111,18 @@ Fireplace's own page keeps its relay; nor does a page off https (a dev
 server) unless its pool is set (`?pool=`, or a `relay.pool` other than the
 default), and `?pool=0` turns the offer off.
 
+The arena's and flight's pages go online on a map too. `tools/site.mjs`
+packs every map in `maps/` into `build/maps/<name>.qgmap` on the site, a
+page opened with `?map=<name>` plays it, and its **play online with
+friends** asks for `{game, map, map_sha256}` beside the wasm's: the pool
+fetches the map from the site as it fetches the wasm, has the sim's own
+`map_load` check it (`mapRefusal`, `net/sim-check.mjs`), and starts the
+relay with `--map`. A room is its wasm's and its map's hashes together, so a
+copy's map, a Roblox place among them ([roblox.md](roblox.md)), gets a room
+the way its wasm does, and the invite keeps `?map=`. A map the site does not
+serve (the map editor's own, not yet saved and published) can't go online:
+the line says so.
+
 ```sh
 node net/kit-rooms.mjs net/kit-rooms.example.json   # on the game box, from the repo, beside rooms.mjs
 ```
@@ -131,9 +143,10 @@ certificate is stopped. The relays listen on `ports` (61300-61315 in the
 example, UDP, open in the firewall); the API listens on `listen`, behind nginx.
 
 The wasm is someone else's. It is fetched with no redirects, at most
-`max_wasm_bytes` (2 MiB; Fireplace's is 291 KiB), within `fetch_timeout_s`,
+`max_wasm_bytes` (2 MiB; Fireplace's is 291 KiB), a map at most
+`max_map_bytes` (1 MiB, what `map_load` takes), within `fetch_timeout_s`,
 only from `fetch_from` (`https://*.github.io`), and written only to
-`wasm_dir/<sha256>.wasm` for the relay to read; it runs only in the referee,
+`wasm_dir/<sha256>.wasm` (a map `<sha256>.qgmap`) for the relay to read; it runs only in the referee,
 which gives it its shared memory and nothing else. No JavaScript from a copy
 runs on the box, so a pool room has no AI players; that is why a page
 starts in its local room, with bots, and goes online only when asked. The caps:
@@ -142,7 +155,8 @@ starts in its local room, with bots, and goes online only when asked. The caps:
 matches an open room's joins that room whatever its site. A wasm whose rooms
 end `refuse_after` times (3) with a refusal or a referee behind (exit 2 or 3)
 within `refuse_s` (an hour) is refused by its sha256 until an hour after the
-last. A room with nobody in it and no seat held (`hold_s`, a seat for each
+last; on a map, the wasm and the map together, so one bad map doesn't refuse
+its game. A room with nobody in it and no seat held (`hold_s`, a seat for each
 answer until its player comes) stops after `idle_s` (120 s).
 
 What it costs, from the numbers above (Fireplace's wasm on a 4-core box): a
@@ -151,4 +165,5 @@ room 115 MB resident, 5% of a core empty and 16% with 4 in, so the example's
 step slower; the referee watchdog ends a room whose sim falls 10 s behind.
 `node net/run-kit-rooms.mjs` is the gate: a fake Pages host, the pool, a
 page going online at the button, a second meeting it by invite, bots at the
-door, the refusals and the caps.
+door, the arena's page doing the same on a map the site publishes, the
+refusals and the caps.

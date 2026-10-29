@@ -15,10 +15,16 @@
 //     blocked, say), plays a local room and says why;
 //   · the room closes once it has sat empty for idle_s, and an invite to it
 //     then gets another room, saying so;
+//   · the arena's page on a map the site publishes (?map=crossroads) goes
+//     online the same way: a room on the site's wasm and that map, pinned by
+//     both hashes; its invite keeps the map and lands a second page in the
+//     same room, the two stepping the same world as the referee;
 //   · the pool refuses, each with its why: a site off its fetch_from, a wasm
 //     over max_wasm_bytes, one importing more than its memory, one lacking an
 //     export the referee calls, a redirect, a page whose wasm is not the
-//     site's, an unknown game; a wasm whose rooms end (exit 3, a sim that
+//     site's, an unknown game; a map for a game that takes none, one named
+//     as a path, one the site doesn't serve, one map_load refuses, a page
+//     whose map is not the site's; a wasm whose rooms end (exit 3, a sim that
 //     never returns) refuse_after times, by its sha256; and its caps, one
 //     copy's rooms and the pool's.
 //   node net/run-kit-rooms.mjs [--seconds 60]
@@ -67,7 +73,7 @@ const BAD = {
 
 // ── a static host like Pages: the files and their types, no isolation headers ──
 // /good/ is the site; /<bad>/build/fireplace/game.wasm the wasm above; /moved/ redirects;
-// /p1/ /p2/ /p3/ are the site again, for the caps
+// /p1/ /p2/ /p3/ are the site again, for the caps; /m1/ for the map's room; /warped/ with a map no sim lays
 const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json' };
 const fetched = [];
 const pages = createServer(async (req, res) => {
@@ -76,7 +82,8 @@ const pages = createServer(async (req, res) => {
   if (rest.endsWith('game.wasm')) fetched.push(path);
   if (BAD[top] && rest === 'build/fireplace/game.wasm') { res.writeHead(200, { 'Content-Type': 'application/wasm' }).end(BAD[top]); return; }
   if (top === 'moved') { res.writeHead(302, { Location: `/good/${rest}` }).end(); return; }
-  if (!['good', 'p1', 'p2', 'p3'].includes(top)) { res.writeHead(404).end(); return; }
+  if (top === 'warped' && rest === 'build/maps/crossroads.qgmap') { res.writeHead(200).end(Buffer.alloc(200, 0xff)); return; }
+  if (!['good', 'p1', 'p2', 'p3', 'm1', 'warped'].includes(top)) { res.writeHead(404).end(); return; }
   const file = normalize(join(out, rest.endsWith('/') || !rest ? join(rest, 'index.html') : rest));
   if (!file.startsWith(out)) { res.writeHead(403).end(); return; }
   let body;
@@ -297,6 +304,39 @@ try {
   await refuse('a wasm whose rooms ended twice, by sha256', { site: site('stuck') }, 503, /ended 2 times .*fell behind \(exit 3\).*refused until/);
   const stuckSha = createHash('sha256').update(BAD.stuck).digest('hex');
   await refuse('  and by its sha256 alone, from any site', { site: site('good'), sha256: stuckSha }, 503, /refused until/);
+
+  // ── a map the site publishes: the arena's page takes it online, on that map ──
+  const mapSha = createHash('sha256').update(readFileSync(join(out, 'build/maps/crossroads.qgmap'))).digest('hex');
+  const ARENA = '&bot=1&present=0&res=320x200&music=0';
+  const ma = await open(`${site('m1')}client/arena.html?map=crossroads${ARENA}`, 'ma');
+  await ma.waitForSelector('#online', { state: 'visible', timeout: 60000 });
+  await Promise.all([ma.waitForURL(/arena\.html\?room=/, { timeout: 30000 }), ma.click('#online')]);
+  let sm = null;
+  await until(async () => playing(sm = await stateOf(ma)) && sm.pool?.id && sm.hashes.length > 0, 60000, 500);
+  const mroom = sm?.pool?.id;
+  const minfo = mroom ? await ask(null, { method: 'GET', path: `rooms/${mroom}` }) : {};
+  check('the arena\'s page on a site map goes online: a room on the site\'s wasm and that map', playing(sm) && !sm.pool.local
+    && minfo.json?.game === 'arena' && minfo.json.map === 'crossroads' && minfo.json.map_sha256 === mapSha && /^online room /.test(sm.line || ''), JSON.stringify({ pool: sm?.pool, line: sm?.line, room: minfo.json }));
+  const minvite = sm?.pool?.invite || '';
+  check('its invite keeps the map', minvite === `${site('m1')}client/arena.html?room=${mroom}&map=crossroads`, minvite);
+  const mb = await open(`${minvite}${ARENA}`, 'mb');
+  let smb = null;
+  await until(async () => playing(smb = await stateOf(mb)) && smb.pool?.id && smb.hashes.length > 4, 60000, 500);
+  check('a page opened from it lands in the same room', playing(smb) && smb.pool.id === mroom && !smb.pool.why && smb.slot !== sm.slot, JSON.stringify(smb && { slot: smb.slot, pool: smb.pool }));
+  await sleep(8000);
+  [sm, smb] = [await stateOf(ma), await stateOf(mb)];
+  const mgrade = grader((sm?.hashes || []).map(([t, h]) => [t, h]))(smb?.hashes);
+  const mst = minfo.json?.url ? statusOf(portOf(minfo.json.url)) : null;
+  check('the two step the same world, and the referee on the map agrees', mgrade.compared >= 4 && mgrade.wrong === 0 && mst?.hashes_checked > 0 && mst.hashes_differed === 0 && mst.referee_errors === 0,
+    JSON.stringify({ grade: mgrade, status: mst }));
+  await ma.context().close();
+  await mb.context().close();
+  await refuse('a map for a game that takes none', { site: site('m1'), game: 'fireplace', map: 'crossroads' }, 400, /only arena and flight take a map/);
+  await refuse('a map named as a path', { site: site('m1'), game: 'arena', map: '../x' }, 400, /a map's name as the site publishes it/);
+  await refuse('a map the site doesn\'t publish', { site: site('m1'), game: 'arena', map: 'nowhere' }, 502, /nowhere\.qgmap: HTTP 404/);
+  await refuse('a map map_load refuses', { site: site('warped'), game: 'arena', map: 'crossroads' }, 422, /map crossroads: the map was refused/);
+  await refuse('a page whose map is not the site\'s', { site: site('m1'), game: 'arena', map: 'crossroads', map_sha256: '0'.repeat(64) }, 409, /map crossroads is not the one/);
+  check('the map\'s room closes once empty', await until(() => pool.rooms.size === 0, 40000), String(pool.rooms.size));
 
   // the caps: one copy's rooms (per_site_rooms 1), then the pool's (max_rooms 2)
   const golf = await ask({ site: site('p1'), game: 'golf' });

@@ -45,6 +45,7 @@ line). `tools/rbx-map.mjs` makes the map:
 | a tool lying in the Workspace (a gear giver) | a weapon pad with the arena's nearest gun, by its name: a sword, a rocket launcher, a sniper rifle |
 | sky under the place | a pit, and `"void"`: a fighter below 3 m under the lowest ground dies by falling |
 | unanchored parts | kept: a classic place's bricks are held by joints, not anchors (`--anchored` leaves them out) |
+| a part a script tweens (the script in it, or in its model), or one a physical mover drives (BodyPosition, AlignPosition, PrismaticConstraint...) | a structure of its own, never fused; a tween that repeats for ever and reverses (a lift's, a moving platform's: its Position plus a Vector3, or its CFrame times a CFrame) is its `move` as in the place ([arena.md](arena.md), "Moving boxes"), no faster than 25 m/s; the rest stand still, listed in the brief |
 
 Left out, and counted: parts no one collides with (CanCollide off), invisible
 ones (walls and triggers), characters, tools, vehicles, anything outside the
@@ -135,8 +136,9 @@ writes, from the same file:
   arena's nearest gun), the teams, the leaderboard's stats, every remote
   with the scripts that fire or hear it (in lockstep each becomes a field
   of the input word or nothing), data stores, game passes and developer
-  products (a sold edge does not come over), and the Roblox services each
-  script leans on, with what stands for each here;
+  products (a sold edge does not come over), what moves (each mover's
+  structure, going or for the port to set going), and the Roblox services
+  each script leans on, with what stands for each here;
 - `assets.json`: every asset id the place names and where, for the
   licence check: sounds, meshes and images are on Roblox's servers, and its
   licensed audio is only for Roblox.
@@ -152,14 +154,21 @@ What porting a game takes beyond the brief:
 1. **Its rules, written fresh** on a kit here (the arena's modes, Party's
    minigames), by an agent from the brief. The part that can't be
    mechanical.
-2. ~~Maps chosen at run time~~: done. A converted map plays the minute it
-   is made: the editor's **play it here**, or `net/play.mjs --arena --map
-   <it>` online, the map laid in every machine's sim at run time and named
-   in the room's hash (docs/arena.md, "Maps at run time"). What's left is
-   the room pool taking a map by its hash, so a player's map gets a room
-   on the store's servers as a copy's wasm does.
-3. **Moving parts** (doors, lifts, obbies' platforms): boxes are static.
-   A moving box is gameplay state in the region, stepped by the sim.
+2. ~~Maps chosen at run time, and a room for one~~: done. A converted map
+   plays the minute it is made: the editor's **play it here**, or
+   `net/play.mjs --arena --map <it>` online, the map laid in every
+   machine's sim at run time and named in the room's hash (docs/arena.md,
+   "Maps at run time"). On a copy of this kit, save it into `maps/<name>/`
+   and push: the site publishes it packed, `client/arena.html?map=<name>`
+   plays it, and **play online with friends** gets a room on the store's
+   servers running that wasm on that map, the invite keeping the map
+   ([hosting.md](hosting.md), "Rooms for the kit's copies").
+3. ~~Moving parts~~: done for what goes back and forth ([arena.md](arena.md),
+   "Moving boxes"). A lift or a platform whose script tweens it to and fro
+   moves in the map as it did in the place; what else a script or a
+   physical mover moves is a structure of its own, standing still, which
+   the brief lists for the port to give a `move`. What moves only when a
+   player does something (a door on a touch, a trap) is a mode's rule.
 4. **Meshes**, for a place built of them: their shapes are on Roblox's
    servers, so the owner exports them from Studio (as `.obj`), and a mesh
    reader turns them into boxes the way a turned part is.
@@ -176,7 +185,8 @@ What porting a game takes beyond the brief:
 - Unions saved before Roblox kept their parts in the file (no `ChildData`)
   are their bounds.
 - Nothing of the game comes over: its scripts, sounds, guis, tools and
-  data. Bringing a game's rules is a port, written fresh
+  data. Of what moves, only a tween that goes back and forth for ever is
+  read, and only when its numbers are written plainly in the script. Bringing a game's rules is a port, written fresh
   ([docs/roadmap.md](roadmap.md), "Bringing maps and games in").
 
 Only bring a place that is yours, or that its owner has licensed for reuse

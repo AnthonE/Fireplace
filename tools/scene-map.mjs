@@ -131,7 +131,9 @@ function rasterize(obj, c, rise) {
 // metres with y up:
 //   objs: { pos, neg (solids), colour [r, g, b], look, key, model (a name for
 //     structures), surface (its surface if it is the ground), spawn (a spawn
-//     stands on it: never fused or dropped) };
+//     stands on it: never fused or dropped), mover (null, or { key, name,
+//     why, move }: it moves, so it is a structure of its own, never fused or
+//     dropped, with map.json's "move" if the front knows it) };
 //   terrain: null, or { boxes (each column's top, for the extent), at(x, z):
 //     [top, surface] or undefined };
 //   spawns: { obj, team (any key, or null), rgb (the team's colour) };
@@ -143,7 +145,8 @@ function rasterize(obj, c, rise) {
 //   words: { unit ("0.28 m a stud"), void ("Roblox's void"), spawns ("spawn
 //     locations"), unnamed (a structure no model names), from (map.json's
 //     "from") };
-//   name, and empty(): the error when there is nothing to stand on.
+//   name, and empty(): the error when there is nothing to stand on;
+//   maxMovers: how many movers may have structures of their own (0).
 // Options: cell, rise, groundArea, budget (OPTIONS in tools/rbx-map.mjs).
 export function sceneToMap(scene, o) {
   const { objs, terrain, spawns: spawnParts, count, words } = scene;
@@ -241,8 +244,8 @@ export function sceneToMap(scene, o) {
       while (list.length > 48 && c < 8) { c *= 2; r = Math.min(0.5, r * 2); list = rasterize(ob, c, r); }
       count.cut++;
     }
-    const keep = !!ob.spawn; // what a spawn stands on is never fused or dropped
-    for (const b of list) if (inCut(b) && b[3] - b[0] > 1e-3 && b[4] - b[1] > 1e-3 && b[5] - b[2] > 1e-3) boxes.push({ b: b.map(tidy), key: ob.key, colour: ob.colour, look: ob.look, model: ob.model, keep });
+    const keep = !!ob.spawn || !!ob.mover; // what a spawn stands on, and what moves, is never fused or dropped
+    for (const b of list) if (inCut(b) && b[3] - b[0] > 1e-3 && b[4] - b[1] > 1e-3 && b[5] - b[2] > 1e-3) boxes.push({ b: b.map(tidy), key: ob.key, colour: ob.colour, look: ob.look, model: ob.model, keep, mover: ob.mover || null });
   }
   const raw = boxes.length;
   const kept = boxes.filter((x) => x.keep);
@@ -347,18 +350,33 @@ export function sceneToMap(scene, o) {
     split(sorted.slice(0, at), h);
     split(sorted.slice(at), n - h);
   };
-  split(placed, Math.min(L.NGROUP, Math.max(1, Math.ceil(placed.length / 8))));
+  // A mover's boxes are a structure of their own (up to maxMovers of them;
+  // past that they stand with the rest), so its "move" moves only it
+  const moverKeys = [...new Set(placed.filter((x) => x.mover).map((x) => x.mover.key))];
+  const own = new Set(moverKeys.slice(0, scene.maxMovers ?? 0));
+  const still = placed.filter((x) => !(x.mover && own.has(x.mover.key)));
+  split(still, Math.min(L.NGROUP - own.size, Math.max(1, Math.ceil(still.length / 8))));
   const used = new Map();
+  const named = (top) => { used.set(top, (used.get(top) || 0) + 1); return used.get(top) > 1 ? `${top} ${used.get(top)}` : top; };
+  const boxesOf = (list) => list.map((x) => [...x.w, x.look === 'plain' ? hex(x.colour) : `${x.look}${hex(x.colour)}`]);
   const structures = leaves.filter((l) => l.length).map((list) => {
     const names = new Map();
     for (const x of list) if (x.model) names.set(x.model, (names.get(x.model) || 0) + 1);
     const top = [...names.entries()].sort((p, q) => q[1] - p[1])[0]?.[0] || words.unnamed;
-    used.set(top, (used.get(top) || 0) + 1);
-    return {
-      name: used.get(top) > 1 ? `${top} ${used.get(top)}` : top,
-      boxes: list.map((x) => [...x.w, x.look === 'plain' ? hex(x.colour) : `${x.look}${hex(x.colour)}`]),
-    };
+    return { name: named(top), boxes: boxesOf(list) };
   });
+  const movers = [];
+  for (const key of own) {
+    const list = placed.filter((x) => x.mover?.key === key), mv = list[0].mover;
+    const name = named(mv.name || words.unnamed);
+    structures.push({ name, boxes: boxesOf(list), ...(mv.move ? { move: mv.move } : {}) });
+    movers.push({ name, why: mv.why, move: mv.move });
+  }
+  if (movers.length) {
+    const going = movers.filter((m) => m.move).length;
+    notes.push(`${movers.length} thing${movers.length === 1 ? '' : 's'} that move${movers.length === 1 ? 's are' : ' are'} structures of ${movers.length === 1 ? 'its' : 'their'} own: ${going} move${going === 1 ? 's' : ''} as in the place (a tween that repeats and reverses), ${movers.length - going} stand${movers.length - going === 1 ? 's' : ''} still for a port to set going (the brief lists them)`);
+  }
+  if (moverKeys.length > own.size) notes.push(`${moverKeys.length - own.size} more things that move stand still with the rest (at most ${own.size} have structures of their own)`);
 
   const spec = {
     name: scene.name,
@@ -393,6 +411,7 @@ export function sceneToMap(scene, o) {
     images: { height: { width: W, height: H, channels: 1, depth: 16, data: h16 }, surface: { width: W, height: H, channels: 3, depth: 8, data: surface } },
     report,
     count,
+    movers,
   };
 }
 

@@ -475,8 +475,9 @@ bounce off its faces, and a blast, a melee lunge or a blast's knockback
 doesn't reach through one. The boxes sit in groups, each with the box that
 bounds it, so a query that misses a building costs one test for all of
 it. They change nothing about the netcode: the map is static, built into the
-wasm, so a room's peers have the same one or the relay turns them away for
-a different build.
+wasm (or laid from outside it and named in the room's hash), so a room's
+peers have the same one or the relay turns them away; a box that moves is
+where the tick puts it ([Moving boxes](#moving-boxes)).
 
 Box Canyon is two bases, 20 m by 18 m with 4 m walls and a door in every
 side, a room inside, twelve steps up the inside wall to a hatch, a roof with
@@ -552,7 +553,7 @@ QG_MAP=mymap npm run build                # or build it in, as the build's own: 
   'blue', at }]`; `ball`, Oddball's skull, `{ at }`; `hills`, King of the
   Hill's, `[{ at, radius }]` (`at` as a spawn's: `[x, z]` or `[x, z, top]`);
   `void`, a height in metres below which a fighter dies by falling (left
-  out, none). Left out, the flags stand an eighth in from each end of the
+  out, none). A structure may `move` ([Moving boxes](#moving-boxes)). Left out, the flags stand an eighth in from each end of the
   bounds' longer side, the skull in the middle, and three hills in the
   middle and halfway to each flag. Materials: `metal`, `rock`, `dark`,
   `red`, `blue`, `light`, `plain`, or a colour of the box's own over one of
@@ -576,6 +577,56 @@ the arena's own renderer (`client/map-view.mjs`) on what is being edited,
 from a camera that orbits the 2D view's middle; drag turns it, right-drag
 moves it, the wheel zooms. Picking is the 2D view's.
 
+### Moving boxes
+
+A structure with a `move` goes back and forth for ever: lifts, platforms
+over a pit, a wall sweeping a lane, an obby's floor.
+
+```json
+{ "name": "lift", "boxes": [[464, 19.5, 484, 468, 20, 492, "metal"]],
+  "move": { "by": [0, 12, 0], "seconds": 3, "wait": 2, "phase": 0, "ease": true } }
+```
+
+`by` is where its far end is, in metres from where it is built (turned with
+the structure); `seconds` each way (4 if left out), `wait` at each end (1),
+`phase` the seconds it runs late (0), `ease` to start and stop gently
+(3f^2 - 2f^3) rather than at one speed. At most 25 m/s at its fastest (half
+again the mean, eased), so what rides one down stays on it. The map editor
+sets one from a box's panel (**make it move**), and its 3D view runs them.
+
+Where a mover is, is the tick's and nothing else's: `$mv` (`src/arena.wat`)
+takes the room's tick and the structure's row (`layout.mjs` `MAP_MOVE`, a
+row a group) to the offset, in f32, with no state of its own, so every
+machine, the referee and the prediction place it alike, and it is in no
+record and no hash. Every query of the boxes (a fighter's hull, the ground
+under it, a ray, a rocket's or a frag's box test, a blast's line of sight)
+takes the tick of the bank asking and meets a moving group's boxes in their
+own frame: the query shifted back by the offset, only for a group that
+moves, so a map without movers steps to the same bits it always did. A
+group's bounds cover its whole path, so a query that misses it costs one
+test wherever on the path it is.
+
+A fighter on the ground whose feet are on a mover's top (where it was the
+tick before) rides it: carried as far as it went, through the other boxes as
+its own steps go, and up and down by the ground's snap. A mover that comes
+into a fighter this tick pushes it clear, out the side it came from; a wall
+against it holds it there. The AI fighters steer by the boxes where they
+are built, so they walk Lifts' plank rather than its platforms.
+
+**Results.** `test/arena-move.test.mjs`: the rows compiled and laid at run
+time byte for byte as built in, and a bad row refused; a lift's rider's
+feet on its top every tick of a cycle, 20.5 m to 26.5 m and back; a
+platform carrying a fighter 8 m, eased; a ram never inside the fighter it
+pushes, and a wall holding it; a fighter dropped onto a lift at the top
+landing on it; the prediction equal to the confirmed world bit for bit
+through 600 ticks of riding, walking off and jumping on three movers; two
+sims on them equal tick for tick. `maps/lifts/` (`node tools/lifts.mjs`)
+is a small arena of them: a pit crossed by three platforms a lane each and
+one plank, a tower at each end with a lift. Online, 7 AI fighters and
+Chrome for 40 s on it (`net/run-arena.mjs --map lifts`): 305 interval
+hashes checked by the referee, all equal; 64 AI fighters for 60 s (a CI
+step): 3,702, all equal.
+
 A Roblox place makes a map too: `node tools/roblox.mjs place.rbxl`, or
 open it in the map editor ([docs/roblox.md](roblox.md)); so does a
 MagicaVoxel model, `node tools/vox.mjs model.vox` ([docs/vox.md](vox.md)).
@@ -585,8 +636,8 @@ MagicaVoxel model, `node tools/vox.mjs model.vox` ([docs/vox.md](vox.md)).
 A build carries its own map (Box Canyon; Skyways for flight), and the
 arena's and flight's builds also take one from outside, the same minute it
 is made, with nothing rebuilt. `packMap` (`tools/map-compile.mjs`) packs a
-compiled map: a 64-byte head (`MP_*` in layout.mjs: where each part of the
-bytes is, the images' place and size, the ceiling), then the bytes a
+compiled map: an 80-byte head (`MP_*` in layout.mjs: where each part of the
+bytes is, the images' place and size, the ceiling, the movers' rows), then the bytes a
 build's own map segment holds. The host writes it in the keyframe slots
 (`MAP_STAGE`, unused before init) and calls the `map_load` export once,
 before init. A map may be anyone's, so map_load checks every count, offset
@@ -610,6 +661,10 @@ the referee's sim and the bots' world; `net/play.mjs --map` and
 `net/run-arena.mjs --map` pack it into `build/maps/` and hand it to all
 three. On Crossroads, laid this way, 64 AI fighters for 60 s online: 3,702
 interval hashes, all equal, 439 kills, 0.3 ms a step.
+The static site (`tools/site.mjs`) packs every map in `maps/` into
+`build/maps/<name>.qgmap`, so `?map=<name>` plays one by its name, and on a
+copy's site the kit's room pool starts a room on it ([hosting.md](hosting.md),
+"Rooms for the kit's copies").
 
 `tools/canyon.mjs` is how Box Canyon was drawn: the ground painted by
 code into the two images, the rest written to `map.json`. Open it in the

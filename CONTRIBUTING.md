@@ -231,7 +231,9 @@ Start from Box Canyon, Skyways or an empty square. Raise, lower, flatten
 and smooth the ground and paint it grass, rock, sand or metal; drag out
 boxes for walls, floors and roofs; place spawns, weapon pads, teleporters,
 the two flags, the skull, King of the Hill's hills and, for Dogfight, the
-race's gates. The panel checks the map with the build's own compiler as you
+race's gates. Pick a box and **make it move** for a lift or a platform that
+goes back and forth (how far, how long each way, how long it waits). The
+panel checks the map with the build's own compiler as you
 go and says what it would refuse. **3D** (or **both**) shows it as the game
 draws it: drag to turn, right-drag to move, the wheel to zoom. Save writes the three files: in Chrome,
 pick a new folder in `maps/`; elsewhere they download and you put them
@@ -267,6 +269,30 @@ reaches everyone when it is merged and a game is built on it. Each game
 builds one map today; several in one build is on the roadmap.
 `docs/arena.md`'s "Making a map" has the format, for editing `map.json` by
 hand.
+
+## A Roblox game
+
+A game, not only its map: a Roblox place that is yours, or that its owner
+has licensed for reuse (Roblox's 31 open-source levels are MIT), playing on
+Fireplace. The map comes over by itself; the rules are written fresh.
+
+```sh
+node tools/roblox.mjs place.rbxl --brief   # maps/<name>/, and port/<name>/: its scripts and port.md
+node net/play.mjs --arena --map <name>      # its map with bots
+```
+
+`port.md` is the brief: the players (speed, jump, health, what they carry),
+the teams and the leaderboard, every remote and the scripts that use it,
+saved data and what it sells, what moves (a lift or platform its script
+tweens to and fro already moves in the map; anything else that moves is a
+structure of its own for you to give a `move`), and the Roblox services the
+scripts lean on, with what stands for each here. Write the rules as an
+arena mode (`src/am/<key>.wat`, four hooks; docs/arena.md) or a Party
+minigame (`node tools/new-mg.mjs`; docs/party.md), whichever the game is
+closest to. What a player paid for on Roblox does not come over as an edge.
+Send the map in `maps/` and the mode or minigame with its tests, a log for
+the determinism matrix and an online gate, as a new mode needs (CLAUDE.md).
+[docs/roblox.md](docs/roblox.md) has what comes over and what a port takes.
 
 ## Anything else
 

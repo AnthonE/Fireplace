@@ -9,6 +9,9 @@
 //   relay.hash_url  or an https URL that serves that hash, for a relay whose 13-day
 //                   certificate rotates (the host must allow this page's origin, CORS)
 //   relay.pool      the room pool, POOL unless set; "" for none (?pool= for this visit, 0 for none)
+// A page on a map from outside the build (?map=, the arena's and flight's)
+// goes online on it when the site publishes it (build/maps/<name>.qgmap,
+// tools/site.mjs): the pool fetches the same bytes and starts the room on them.
 export const kit = await fetch(new URL('./kit.json', import.meta.url), { cache: 'no-cache' })
   .then((r) => (r.ok ? r.json() : {}))
   .catch(() => ({}));
@@ -18,6 +21,21 @@ const text = (url) => fetch(url, { cache: 'no-cache' }).then((r) => (r.ok ? r.te
 const isHash = (s) => { try { return atob(s).length === 32; } catch { return false; } };
 
 export const POOL = 'https://game.elopros.com/kit/';
+const MAP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+const SITE_MAPS = new URL('../build/maps/', import.meta.url).href;
+// ?map=: a map's name as the site publishes it, or any URL (the map editor's blob, net/play.mjs's file)
+export const mapUrl = (m) => (MAP_NAME.test(m) ? `${SITE_MAPS}${m}.qgmap` : new URL(m, location.href).href);
+
+// The name the site publishes this page's map under, '' for none; throws for
+// one the site doesn't serve (the map editor's own): a room can't lay a map it
+// can't fetch.
+function siteMapName(q) {
+  if (!q.get('map')) return '';
+  const url = mapUrl(q.get('map'));
+  const name = url.startsWith(SITE_MAPS) && /^([A-Za-z0-9_-]{1,64})\.qgmap$/.exec(url.slice(SITE_MAPS.length))?.[1];
+  if (!name) throw new Error('this map is not one the site publishes, so a room can\'t lay it: save it into maps/ and publish the site');
+  return name;
+}
 // the pool's room, once it has given one: its id and a link that opens it; or why the room is local
 export const room = { id: '', invite: '', why: '' };
 
@@ -43,9 +61,10 @@ function poolBase(q) {
 // net/rooms.mjs: game.elopros.com's rooms), else the page's own host on 4433
 // (node net/play.mjs); with ?room=<id> (an invite),
 // that room from the pool, for this page's wasm (opts.wasm, its bytes
-// opts.bytes). None of those, or a pool that can't give the room: null, and
-// the page plays a local room with AI players, room.why saying why. A relay
-// named with no hash to pin is an error.
+// opts.bytes) on its map (?map=, its bytes opts.map). None of those, or a
+// pool that can't give the room: null, and the page plays a local room with
+// AI players, room.why saying why. A relay named with no hash to pin is an
+// error.
 export async function relayFor(q, opts = {}) {
   if (q.get('local') === '1') return null;
   const r = kit.relay || {};
@@ -63,7 +82,7 @@ export async function relayFor(q, opts = {}) {
   const base = poolBase(q);
   if (!q.get('room') || !base || !opts.wasm) return null;
   try {
-    const a = await ask(base, opts, q.get('room'));
+    const a = await ask(base, q, opts, q.get('room'));
     Object.assign(room, { id: a.room, invite: inviteTo(a.room, q).href, why: a.why || '' });
     return { url: a.url, hash: a.hash, pool: true };
   } catch (e) { room.why = String(e.message || e); return null; }
@@ -96,7 +115,7 @@ export async function canGoOnline(q) {
 export async function goOnline(q, opts) {
   const base = poolBase(q);
   if (!base) throw new Error('no room pool for this page');
-  const a = await ask(base, opts);
+  const a = await ask(base, q, opts);
   const to = inviteTo(a.room, q);
   for (const [k, v] of q) if (!to.searchParams.has(k) && k !== 'local') to.searchParams.set(k, v);
   return to.href;
@@ -104,24 +123,26 @@ export async function goOnline(q, opts) {
 
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-// the invite to a room: Fireplace's page by the site's front door (its index keeps the query), any other page as it is
+// the invite to a room: Fireplace's page by the site's front door (its index keeps the query), any other page as it is, on its map
 function inviteTo(id, q) {
   const site = new URL('..', import.meta.url).href;
   const link = new URL(location.pathname.endsWith('/client/fireplace.html') ? site : location.origin + location.pathname);
   link.searchParams.set('room', id);
-  if (q.has('pool')) link.searchParams.set('pool', q.get('pool'));
+  for (const k of ['map', 'pool']) if (q.has(k)) link.searchParams.set(k, q.get(k));
   return link;
 }
 
-// POST <pool>rooms for this site's game (the room id's, if given): the pool's answer, or throws why not
-async function ask(base, { wasm, bytes }, id) {
+// POST <pool>rooms for this site's game on the page's map (the room id's, if given): the pool's answer, or throws why not
+async function ask(base, q, { wasm, bytes, map }, id) {
   const site = new URL('..', import.meta.url).href;
   const game = /\/build\/([a-z]+)\/game\.wasm$/.exec(new URL(wasm, location.href).pathname)?.[1] || 'golf';
   const sha256 = bytes ? hex(await crypto.subtle.digest('SHA-256', bytes)) : undefined;
+  const name = siteMapName(q);
+  const onMap = name ? { map: name, ...(map ? { map_sha256: hex(await crypto.subtle.digest('SHA-256', map)) } : {}) } : {};
   let res;
   try {
     res = await fetch(new URL('rooms', base), { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ site, game, sha256, ...(id ? { room: id } : {}) }), cache: 'no-store', signal: AbortSignal.timeout(30000) });
+      body: JSON.stringify({ site, game, sha256, ...onMap, ...(id ? { room: id } : {}) }), cache: 'no-store', signal: AbortSignal.timeout(30000) });
   } catch (e) { throw new Error(`the room pool is out of reach (${e.message || e})`); }
   const a = await res.json().catch(() => ({}));
   if (!res.ok || !a.url || !isHash(a.hash)) throw new Error(a.why || `the room pool answered HTTP ${res.status}`);

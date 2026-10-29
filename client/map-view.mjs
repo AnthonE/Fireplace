@@ -66,7 +66,7 @@ export async function createMapView(canvas, { present = true } = {}) {
     map(result) {
       boxes = {
         boxes: result.boxes.map((b) => ({ box: b.box, material: b.material })),
-        groups: result.groups.map((g) => ({ box: g.bound, first: g.first, count: g.count })),
+        groups: result.groups.map((g) => ({ box: g.bound, first: g.first, count: g.count, ...(g.move ? { move: g.move } : {}) })),
       };
       mapSent = false;
     },
@@ -83,7 +83,8 @@ export async function createMapView(canvas, { present = true } = {}) {
       const cp = Math.cos(pitch), sp = Math.sin(pitch);
       const cam = [target[0] - Math.cos(yaw) * cp * dist, target[1] - sp * dist, target[2] - Math.sin(yaw) * cp * dist];
       const s = {
-        cam, yaw, pitch, zoom: 1, time: performance.now() / 1000, dt: 0, dtPred: 0, proj: L.PROJ, slot: 999,
+        // the movers run on the wall clock, a tick each 8 ms
+        cam, yaw, pitch, zoom: 1, time: performance.now() / 1000, tick: performance.now() * L.TICK_HZ / 1000, dt: 0, dtPred: 0, proj: L.PROJ, slot: 999,
         solid: marks.solid, glow: marks.glow, beams: [], rects: [], tracker: null, text, graph: null, marker: 0, hurt: 0,
         scope: false, sides: 0, zone: marks.zone, crosshair: 7, gap: 0,
       };

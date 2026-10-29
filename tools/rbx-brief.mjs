@@ -122,6 +122,19 @@ export function robloxBrief(doc, { map = null, name = 'the place' } = {}) {
   if (board.length) lines.push(`- the leaderboard (leaderstats): ${board.join(', ')}. The arena counts kills, deaths and a mode's points.`);
   lines.push('');
 
+  // what moves: the movers the map made, going or standing still for the port to set going
+  if (map?.movers?.length) {
+    lines.push('## What moves', '',
+      'Each is a structure of its own in map.json. A structure\'s "move" ({ by: [dx, dy, dz] metres, seconds each way, wait at each end, phase, ease }) takes it there and back for ever; a fighter on it rides it and one in its way is pushed (docs/arena.md, "Moving boxes"). Something that moves only when a player does something (a door, a trap) is a mode\'s rule, not a "move".', '');
+    const m3 = (v) => `[${v.join(', ')}]`;
+    for (const mv of map.movers) {
+      lines.push(mv.move
+        ? `- "${mv.name}" (${mv.why}): moves by ${m3(mv.move.by)} m in ${mv.move.seconds} s, waiting ${mv.move.wait} s${mv.move.ease ? ', eased' : ''}, as in the place`
+        : `- "${mv.name}" (${mv.why}): stands still in the map; give it a "move" once its script says where it goes`);
+    }
+    lines.push('');
+  }
+
   // the network: remotes are the game's messages; here the only message is input
   lines.push('## Between server and clients', '');
   if (remotes.size) {

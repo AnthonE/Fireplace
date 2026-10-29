@@ -12,6 +12,7 @@
 // end and a bomb's blast solid fireballs, flashes and sparks blended sprites. The map's edge shows as a red grid as you near it. Ships and
 // projectiles come straight from shared memory; everything else from the
 // main thread each frame. Nothing here is hashed.
+import { moverBoxes, drawnTick } from './movers.mjs';
 import * as L from '../src/layout.mjs';
 import * as F from '../src/flight.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
@@ -598,6 +599,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const boxBuf = storage(L.NBOX * 32);
   const groupBuf = storage(L.NGROUP * 32);
+  let movers = null; // the map's moving boxes (client/movers.mjs), rewritten each frame
   let nbox = 0, ngroup = 0, bounds = [0, 1024, 0, 1024];
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -665,6 +667,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       map.groups.forEach((x, k) => g.set([x.box[0], x.box[1], x.box[2], x.first, x.box[3], x.box[4], x.box[5], x.count], 8 * k));
       device.queue.writeBuffer(boxBuf, 0, b);
       device.queue.writeBuffer(groupBuf, 0, g);
+      movers = moverBoxes(map);
       nbox = map.boxes.length;
       ngroup = map.groups.length;
       bounds = map.bounds;
@@ -677,6 +680,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     //      crosshair (0 none, 1 the aim's ring), marker, hurt, text, graph, radar ([x, y, r] px, or null),
     //      sides (0 colour by slot, 1 one side against the rest, 2 red and blue), tints }
     frame(u8, s, target) {
+      // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
+      if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
       if (!ctx && !target) return;
       const sprites = s.glow.slice(0, MAX_SPRITE);
       const { f, r, u } = s.basis;

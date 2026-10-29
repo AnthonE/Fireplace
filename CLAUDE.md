@@ -55,7 +55,9 @@ shell whose own command line contains the name: it kills that shell.
   and those are Jacobi so any split gives the same bits.
 - All gameplay state lives in the 512 KiB region (`src/layout.mjs`), which is
   hashed in 128 slices and snapshotted whole. Scratch outside it must be
-  rebuilt from the region (or be per-call), never carried tick to tick.
+  rebuilt from the region (or be per-call), never carried tick to tick. A
+  moving box is the map's row (`MAP_MOVE`) and the tick's: every box query
+  takes the asking bank's tick (`$mv`), and never writes where a box is.
 - Player and projectile accesses take a bank offset `d`: 0 the confirmed
   world, `PRED_D` the prediction's copy. Code the prediction runs (`$move`,
   `$b_move`, ...) writes only its own record and its bank's FX ring; anything

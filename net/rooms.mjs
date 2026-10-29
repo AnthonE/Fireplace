@@ -38,7 +38,8 @@ const readJson = (path) => { try { return JSON.parse(readFileSync(path, 'utf8'))
 export const certAge = () => { try { return statSync('certs/cert.pem').mtimeMs; } catch { return 0; } };
 const writeWhole = (path, text) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
 
-// One room: a relay (net/relay.ts) on port for c.wasm, its status in
+// One room: a relay (net/relay.ts) on port for c.wasm (on c.map, a packed
+// map, when given), its status in
 // c.status_dir/<port>.json and its roster in <port>.online.json, its native door at port + c.native_offset (none
 // at 0). onEnd(code, why) once it has ended and its status is gone: why is
 // what made it a failure (a refusal, exit 2; a referee behind, exit 3; a room
@@ -48,7 +49,8 @@ export function startRoom(c, port, onEnd) {
   const args = ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts',
     '--port', String(port), '--host', c.bind, '--native-port', String(c.native_offset ? port + c.native_offset : 0),
     '--wasm', c.wasm, '--game', c.game, '--max-players', String(c.max_players),
-    '--status', `${c.status_dir}/${port}.json`, '--online', `${c.status_dir}/${port}.online.json`, '--quiet', ...c.relay_args];
+    '--status', `${c.status_dir}/${port}.json`, '--online', `${c.status_dir}/${port}.online.json`, '--quiet',
+    ...(c.map ? ['--map', c.map] : []), ...c.relay_args];
   const p = spawn(DENO, args, { stdio: ['ignore', 'ignore', 'inherit'] });
   const r = { p, port, cert: certAge(), started: Date.now(), emptySince: Date.now(), stopping: false, exited: false };
   p.on('exit', (code) => {

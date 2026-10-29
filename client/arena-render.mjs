@@ -10,6 +10,7 @@
 // the gun in your hands, the shield and health bars, the crosshair, the scope
 // and the hit marker. Fighters and projectiles come straight from shared memory;
 // everything else from the main thread each frame. Nothing here is hashed.
+import { moverBoxes, drawnTick } from './movers.mjs';
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
@@ -724,6 +725,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const boxBuf = storage(L.NBOX * 32);
   const groupBuf = storage(L.NGROUP * 32);
+  let movers = null; // the map's moving boxes (client/movers.mjs), rewritten each frame
   const vmBuf = storage(MAX_VM * 48);
   let nbox = 0, ngroup = 0;
   device.queue.writeBuffer(fontBuf, 0, fontAll);
@@ -791,6 +793,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       map.groups.forEach((x, k) => g.set([x.box[0], x.box[1], x.box[2], x.first, x.box[3], x.box[4], x.box[5], x.count], 8 * k));
       device.queue.writeBuffer(boxBuf, 0, b);
       device.queue.writeBuffer(groupBuf, 0, g);
+      movers = moverBoxes(map);
       nbox = map.boxes.length;
       ngroup = map.groups.length;
     },
@@ -802,6 +805,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     //      zone (null, or { x, z, r, y, h, color: [r,g,b], pulse }: a disc painted on the terrain and box tops within h of y, any height
     //      without y; or a list of up to MAX_ZONE of them, all in the first one's band) }
     frame(u8, s, target) {
+      // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
+      if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
       if (!ctx && !target) return;
       const { focal, horizon } = lens(s, W, H);
       const sprites = [...s.solid, ...s.glow].slice(0, MAX_SPRITE);

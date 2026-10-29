@@ -106,7 +106,8 @@ View.prototype.pads = function pads() {
 // boxes in their groups, the teleporters, the spawn points and the team
 // modes' objectives (MAP_OBJ: the flags' stands, red's then blue's, and the
 // skull's spot as [x, z, top], the hills as [x, z, top, radius]; tops as
-// spawns', -1000 the ground). Read once per world and kept: the map never
+// spawns', -1000 the ground). A group that moves has its `move` (moverAt
+// says where it is at a tick). Read once per world and kept: the map never
 // changes after init.
 View.prototype.map = function map() {
   const d = this.dv;
@@ -117,7 +118,10 @@ View.prototype.map = function map() {
   const groups = [], boxes = [], teleporters = [], spawns = [];
   for (let g = 0; g < d.getUint32(L.MAP_NGROUP, true); g++) {
     const a = L.MAP_GROUPS + 32 * g;
-    groups.push({ box: box(a), first: d.getUint32(a + 24, true), count: d.getUint32(a + 28, true) });
+    const g1 = { box: box(a), first: d.getUint32(a + 24, true), count: d.getUint32(a + 28, true) };
+    const m = L.MAP_MOVE + L.MOVE_SIZE * g, fl = d.getUint32(m + 24, true);
+    if (fl & L.MV_ON) g1.move = { by: [f(m), f(m + 4), f(m + 8)], travel: d.getUint32(m + 12, true), wait: d.getUint32(m + 16, true), phase: d.getUint32(m + 20, true), ease: !!(fl & L.MV_EASE) };
+    groups.push(g1);
   }
   for (let k = 0; k < d.getUint32(L.MAP_NBOX, true); k++) {
     const a = L.MAP_BOXES + L.BOX_SIZE * k;
@@ -138,6 +142,21 @@ View.prototype.map = function map() {
   this._map = { key, bounds: [0, 1, 2, 3].map((k) => f(L.MAP_BOUNDS + 4 * k)), groups, boxes, teleporters, spawns, flags, ball, hills };
   return this._map;
 };
+
+// Where a moving group is at tick t, from where it is built: the sim's $mv in
+// f32 (a JS double rounded once is the f32 answer for each of these steps).
+// t may have a fraction, for drawing between ticks.
+export function moverAt(mv, t) {
+  const f = Math.fround;
+  const cycle = 2 * (mv.travel + mv.wait);
+  const whole = Math.floor(t), frac = t - whole;
+  const ph = (((whole + mv.phase) >>> 0) % cycle) + frac;
+  let k = Math.max(0, ph - mv.wait);
+  if (k > mv.travel) k = Math.min(mv.travel, cycle - ph);
+  let s = f(k / mv.travel);
+  if (mv.ease) s = f(f(s * s) * f(3 - f(s + s)));
+  return mv.by.map((v) => f(v * s));
+}
 
 // Where a fighter put down at (x, z) stands: on the highest box top under its
 // footprint no higher than `top`, else the ground (the sim's $stand, for drawing and steering).

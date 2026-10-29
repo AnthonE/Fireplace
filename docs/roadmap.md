@@ -90,15 +90,18 @@ only of your own body), physics sandboxes, open worlds.
 2. The champion, grid and vehicle kits. The champion and vehicle kits draw
    with `client/party-render.mjs` (its decals are the telegraphs of a
    top-down game); the grid kit wants a small board renderer.
-3. The arena: several maps in one build chosen at run time, boxes that move
-   (obbies), new maps. A map now comes from the map editor
+3. The arena: several maps in one build chosen at run time, ~~boxes that
+   move~~ (done: a structure's `move`, docs/arena.md "Moving boxes", and
+   `maps/lifts/`), new maps. A map now comes from the map editor
    (`client/map-editor.html`) and from a Roblox place (`tools/roblox.mjs`)
    as well as from code. Maps at run time are done (docs/arena.md, "Maps
    at run time"): a packed map laid by the `map_load` export, every number
    in it checked first, the page's `?map=`, the relay's and bot host's
    `--map`, and the hello's hash naming the map with the build. Left:
-   - the kit's room pool by map: a room asked for by its wasm's and map's
-     hashes, the map fetched by the pool as the wasm is;
+   - ~~the kit's room pool by map~~: done. A room is asked for by its
+     wasm's and map's hashes, the map fetched by the pool from the copy's
+     site (`build/maps/<name>.qgmap`, which `tools/site.mjs` packs) as the
+     wasm is ([hosting.md](hosting.md));
    - a replay that names its map's bytes beside the wasm's (its prefix
      already covers both);
    - a map cycle: a list of map hashes the room walks, beside `PLAYLIST`,
@@ -170,7 +173,8 @@ building there is the store's: read an engine's export folder (Unity's
 
 A converted map plays the minute it is made, in the editor's **play it
 here** or online with `net/play.mjs --map`, laid at run time (Engine work,
-3); what's left is the room pool taking maps by hash.
+3), and on a copy's site the room pool gives it a room on the store's
+servers ([hosting.md](hosting.md)).
 
 ## FFA ARAM (the champion kit's first game)
 

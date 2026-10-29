@@ -5,8 +5,10 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { originMatch, siteOf, fetchWasm } from '../net/kit-rooms.mjs';
-import { simRefusal } from '../net/sim-check.mjs';
+import { originMatch, siteOf, fetchWasm, MAP_NAME } from '../net/kit-rooms.mjs';
+import { simRefusal, mapRefusal } from '../net/sim-check.mjs';
+import { compileMap } from '../tools/map.mjs';
+import { packMap } from '../tools/map-compile.mjs';
 
 test('origins match by scheme, host and port, *. for any subdomain', () => {
   const pages = 'https://*.github.io';
@@ -73,4 +75,17 @@ test('the referee\'s check: memory only, every export it calls', async () => {
     try { bytes = readFileSync(f); } catch { continue; } // npm run build makes them
     assert.equal(await simRefusal(bytes, 2), null, f);
   }
+});
+
+test('a map is checked by the sim\'s own map_load, as the referee will lay it', async (t) => {
+  let arena, fireplace;
+  try { [arena, fireplace] = ['build/arena/game.wasm', 'build/fireplace/game.wasm'].map((f) => readFileSync(f)); } catch { return t.skip('npm run build makes them'); }
+  const crossroads = packMap(compileMap('maps/crossroads'));
+  assert.equal(await mapRefusal(arena, crossroads), null);
+  assert.match(await mapRefusal(arena, new Uint8Array(200).fill(0xff)), /the map was refused/);
+  assert.match(await mapRefusal(fireplace, crossroads), /takes no map/);
+  assert.match(await mapRefusal(new Uint8Array([1, 2, 3]), crossroads), /would not start/);
+  // a name is what the site publishes as build/maps/<name>.qgmap, never a path
+  for (const ok of ['crossroads', 'my-map_2']) assert.ok(MAP_NAME.test(ok), ok);
+  for (const no of ['', '../x', 'a/b', 'x.qgmap', 'x'.repeat(65)]) assert.ok(!MAP_NAME.test(no), no);
 });

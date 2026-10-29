@@ -20,7 +20,7 @@ import { loadMap } from '../harness/core.mjs';
 import { createSound } from './sound.mjs';
 import { slotLabel } from './looks.mjs';
 import { parseImpair } from '../net/impair.js';
-import { relayFor, room } from './kit.mjs';
+import { relayFor, room, mapUrl } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { savedLook, wearable, guestLook } from './looks.mjs';
 import { guestAvatar } from './avatar.mjs';
@@ -46,15 +46,16 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   const bytes = await (await fetch(wasm)).arrayBuffer();
   const module = await WebAssembly.compile(bytes);
   // ?map=<url>: a map from outside the build (tools/map-compile.mjs packMap:
-  // the map editor's play button, net/play.mjs --map), laid in the shared
-  // memory before the sim starts; the hello's hash names it, so a room on
-  // another map turns the page away
-  const map = q.get('map') ? new Uint8Array(await (await fetch(q.get('map'))).arrayBuffer()) : null;
+  // the map editor's play button, net/play.mjs --map), or ?map=<name>, one the
+  // site publishes (client/kit.mjs mapUrl), laid in the shared memory before
+  // the sim starts; the hello's hash names it, so a room on another map turns
+  // the page away
+  const map = q.get('map') ? new Uint8Array(await (await fetch(mapUrl(q.get('map')))).arrayBuffer()) : null;
   const prefix = await wasmPrefix(bytes, map);
   const memory = new WebAssembly.Memory({ initial: L.PAGES, maximum: L.PAGES, shared: true });
   const i32 = new Int32Array(memory.buffer);
   const h = {
-    q, watch, module, bytes, prefix, memory,
+    q, watch, module, bytes, map, prefix, memory,
     u8: new Uint8Array(memory.buffer), i32, u32: new Uint32Array(memory.buffer), f32: new Float32Array(memory.buffer), f64: new Float64Array(memory.buffer),
     view: new View(memory.buffer), pview: new View(memory.buffer, L.PRED_D),
     set: (a, v) => Atomics.store(i32, a >> 2, v),
@@ -98,7 +99,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     h.connected = true;
     const replay = q.get('replay');
     let relay = null;
-    try { relay = replay ? null : await relayFor(q, { wasm, bytes }); } catch (e) { h.error = e.message; throw e; }
+    try { relay = replay ? null : await relayFor(q, { wasm, bytes, map }); } catch (e) { h.error = e.message; throw e; }
     const cores = navigator.hardwareConcurrency || 4;
     const threads = Number(q.get('threads') || (cores >= 8 ? 2 : 1));
     const open = (relay) => {
