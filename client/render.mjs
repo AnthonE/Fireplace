@@ -8,7 +8,7 @@
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
@@ -38,7 +38,7 @@ struct U {
   hole: vec4f,     // hole direction x, z, highest ground, flash count
   me: vec4u,       // nballs, my ball (or 0xffffffff), hud rows, sunk-ball count
   pred: vec4f,     // extrapolate my projectiles (s): they come from the prediction, at its own clock; the net graph shown (1)
-  hudv: vec4f,     // the HUD's scale (screen px a HUD px), the text block's left (px), trees
+  hudv: vec4f,     // the HUD's scale (screen px a HUD px), its left (px), trees, its top (px)
 };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var hmap: texture_2d<f32>;
@@ -467,7 +467,7 @@ struct SH { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   return o;
 }
 
-// ---- HUD: COLS x rows cells of 4 x 6 HUD px (u.hudv.x screen px each); each cell a char (low 8 bits) and a colour (bits 8-11)
+// ---- HUD: COLS x rows cells of 4 x 6 HUD px (u.hudv.x screen px each, client/lowpoly.mjs hudFrame); each cell a char (low 8 bits) and a colour (bits 8-11)
 var<private> PALETTE: array<vec3f, 8> = array<vec3f, 8>(vec3f(1.0), vec3f(1.0, 0.85, 0.25), vec3f(1.0, 0.35, 0.3), vec3f(0.4, 1.0, 0.4),
   vec3f(0.6), vec3f(0.5, 0.85, 1.0), vec3f(1.0, 0.6, 0.2), vec3f(0.8, 0.55, 1.0));
 
@@ -522,7 +522,7 @@ ${HUD_FONT_WGSL}
   // the crosshair, in HUD px from the screen's centre
   let d = vec2i(floor((q.xy - floor(vec2f(u.screen.x, u.screen.y) * 0.5)) / u.hudv.x));
   if ((d.x == 0 && abs(d.y) >= 2 && abs(d.y) <= 4) || (d.y == 0 && abs(d.x) >= 2 && abs(d.x) <= 4)) { return vec4f(1.0, 1.0, 1.0, 0.9); }
-  let hp = (q.xy - vec2f(u.hudv.y, 0.0)) / u.hudv.x;
+  let hp = (q.xy - u.hudv.yw) / u.hudv.x;
   let p = vec2i(floor(hp));
   // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
   let roundOn = font[64u] != 0u;
@@ -586,8 +586,7 @@ function plantTrees(hf, surf) {
 
 // present: false draws nothing to the canvas (only capture() renders), for
 // headless browsers, where presenting a WebGPU canvas loses the device.
-// hudScale: screen px a HUD px, by default as many as fit 320 x 200 whole.
-export async function createRenderer(canvas, { present = true, hudScale = 0, device: shared = null } = {}) {
+export async function createRenderer(canvas, { present = true, device: shared = null } = {}) {
   // a page with several renderers (Fireplace) gives them one device, so one can draw into another's texture
   let device = shared;
   if (!device) {
@@ -600,9 +599,8 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
   const ctx = present ? canvas.getContext('webgpu') : null;
   ctx?.configure({ device, format, alphaMode: 'opaque' });
   const W = canvas.width, H = canvas.height;
-  const hs = hudScale || Math.max(1, Math.floor(Math.min(W / 320, H / 200)));
-  const rows = Math.floor(H / hs / 6);
-  const hudX = Math.max(0, Math.floor((W / hs - COLS * 4) / 2)) * hs; // the text block, centred
+  const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
+  const rows = Math.floor(200 / 6);
   const module = device.createShaderModule({ code: WGSL });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
@@ -664,7 +662,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
   let ntree = 0;
 
   return {
-    rows, width: W, height: H, hudScale: hs, hudX,
+    rows, width: W, height: H, hudScale: hs, hudX, hudY,
     // The terrain, once per room: heights (1/256 m) and surfaces out of shared memory, and the trees from them.
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
@@ -685,13 +683,13 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
     // Drawn to the canvas, or to `target` (a texture) when given.
     frame(u8, s, target) {
       if (!ctx && !target) return;
-      const focal = W * 0.75;
+      const focal = focalFor(W, H, 0.75);
       uf.set([s.cam[0], s.cam[1], s.cam[2], focal, Math.cos(s.yaw), Math.sin(s.yaw), H / 2 + Math.tan(Math.max(-1.35, Math.min(1.35, s.pitch))) * focal, s.time,
         W, H, FAR, s.dt, s.cup[0], s.cup[1], s.cup[2], s.slot, s.dir[0], s.dir[1], hmax + 2, Math.min(s.flashes.length, MAX_FLASH)]);
       uu[20] = s.nballs; uu[21] = s.myBall < 0 ? 0xffffffff : s.myBall; uu[22] = rows; uu[23] = 0;
       uf[24] = s.dtPred ?? s.dt;
       uf[25] = s.graph ? 1 : 0;
-      uf.set([hs, hudX, ntree, 0], 28);
+      uf.set([hs, hudX, ntree, hudY], 28);
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       const n = s.nballs;

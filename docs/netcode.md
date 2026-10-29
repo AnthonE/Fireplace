@@ -77,9 +77,9 @@ writing a client of your own, and [hosting.md](hosting.md) runs rooms.
   rebuilds the prediction every frame on its own instance of game.wasm (the
   sampled inputs, then the tick in progress with the input as it is now),
   eases corrections in over 100 ms, and draws with WebGPU straight from
-  shared memory: the terrain ray-marched per pixel at 640x400 (`?res=`),
-  bodies as splats, your own player and shots from the prediction, a HUD on
-  a 320 x 200 grid scaled up.
+  shared memory: the terrain ray-marched per pixel at the window's size
+  (`?res=`), bodies as splats, your own player and shots from the
+  prediction, a HUD on a 320 x 200 grid scaled to fit.
   `?bot=1` hands the controls to `client/bot.mjs`, which plans every shot on a
   private copy of the sim.
 - `net/relay.ts` also has a native door, `--native-port` (4434): the same

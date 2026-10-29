@@ -73,9 +73,9 @@ the confirmed world will. Bumps, blasts, rockets and orbs are the confirmed
 world's, and arrive a round trip later, eased in like any correction.
 
 `client/bumper.html` is the page: the same net and sim workers, and its
-own renderer (`client/bumper-render.mjs`), drawn for the web, unlike golf's
-and the arena's fixed 640x400. It renders at the window's own resolution (up to about
-1600 x 1000; `?res=320x200` for the old look) with 4x multisampling, lit by a
+own renderer (`client/bumper-render.mjs`), drawn for the web. Like every
+game here it renders at the window's own resolution (up to about
+1600 x 1000; `?res=320x200` for the old look), with 4x multisampling, lit by a
 sun and the sky and tone-mapped. A heightfield can't overhang, so nothing here
 is ray-marched: the cheese is a disc with holes, solved exactly per pixel. The
 top face has little eyes and the rounded lip of every hole. The rind has bigger

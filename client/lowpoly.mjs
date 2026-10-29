@@ -7,6 +7,19 @@
 // (metres); the box half (BOXES_WGSL) also wants `boxes`, `groups` and
 // u.map. Drawing only, like everything a renderer does.
 
+// The HUD's frame on a W x H screen: the 320 x 200 grid these games' HUDs
+// are laid out on (text in cells of 4 x 6, every bar and mark in the same
+// units), scaled to fit the screen whole and centred on it: hudScale screen
+// px a unit, its corner at (hudX, hudY).
+export function hudFrame(W, H) {
+  const hudScale = Math.min(W / 320, H / 200);
+  return { hudScale, hudX: (W - 320 * hudScale) / 2, hudY: (H - 200 * hudScale) / 2 };
+}
+// The focal length (px) a W x H screen sees through, k of its width up to a
+// 16:10 screen and of 1.6 times its height past that, so a wide screen
+// shows more at the sides, not less up and down (party's and bumper's rule).
+export const focalFor = (W, H, k = 0.62) => Math.min(W, H * 1.6) * k;
+
 export const LOWPOLY_WGSL = /* wgsl */ `
 const SKY_HOR = vec3f(0.74, 0.87, 0.98);
 const SKY_TOP = vec3f(0.22, 0.5, 0.92);

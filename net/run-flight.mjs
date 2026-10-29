@@ -5,7 +5,7 @@
 // asked. Passes when the referee checked interval hashes from every session
 // and none differed, someone was shot down, and Chrome kept up. Screenshots
 // go to traces/. --mode k forces every match to mode k (layout.mjs
-// FLIGHT_MODES: 0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 12 Ring Race) through the
+// FLIGHT_MODES: 0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 15 Ring Race) through the
 // relay's seed, and the gate wants it played; in a team mode, both sides dealt pilots.
 //   node net/run-flight.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k] [--res 320x200: the page's]
 //                           [--port 4433: the relay's, its native door the next]

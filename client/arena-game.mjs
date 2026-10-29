@@ -52,20 +52,20 @@ const BLIPS = 32;
 const MEDALS = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'QUAD KILL', 'HIGH FIVE', 'SIX PACK', 'LUCKY SEVEN'];
 const SPREES = { 5: 'WARMING UP', 10: 'ON FIRE', 15: 'BLAZING', 20: 'INFERNO' };
 
-// A waypoint's height on screen clear of those placed before it ({ x, y,
-// half: its text's half width in 4 px cells }): its label two rows over its
-// mark and its distance a row under take four rows (24 px), so one whose
+// A waypoint's height in the HUD's units clear of those placed before it ({ x, y,
+// half: its text's half width in 4-unit cells }): its label two rows over its
+// mark and its distance a row under take four rows (24 units), so one whose
 // text would cover another's goes to the nearest height clear of them all,
 // four rows over or under one of them, over before under, inside top..bottom
 // (the band under the score bar and over the feed and bottom lines); with
-// none clear, where it was; k screen px to a HUD px. Drawing only.
-export function clearOf(placed, x, y, half, top, bottom, k = 1) {
-  const near = placed.filter((p) => Math.abs(p.x - x) / (4 * k) < p.half + half);
-  const apart = (v) => near.every((p) => Math.abs(p.y - v) >= 24 * k);
+// none clear, where it was. Drawing only.
+export function clearOf(placed, x, y, half, top, bottom) {
+  const near = placed.filter((p) => Math.abs(p.x - x) / 4 < p.half + half);
+  const apart = (v) => near.every((p) => Math.abs(p.y - v) >= 24);
   if (apart(y)) return y;
   let best = y, bd = Infinity;
   for (const p of near) {
-    for (const v of [p.y - 24 * k, p.y + 24 * k]) {
+    for (const v of [p.y - 24, p.y + 24]) {
       const d = Math.abs(v - y);
       if (v >= top && v <= bottom && apart(v) && (d < bd || (d === bd && v < best))) { best = v; bd = d; }
     }
@@ -80,6 +80,9 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const W = canvas.width, H = canvas.height;
   const renderer = host.renderers.get('arena') || await createRenderer(canvas, { present, device: host.device });
   host.renderers.set('arena', renderer);
+  // the HUD's frame (client/lowpoly.mjs hudFrame): its 320 x 200 units to screen px, and a rect in them
+  const HS = renderer.hudScale, ux = (x) => renderer.hudX + x * HS, uy = (y) => renderer.hudY + y * HS;
+  const urect = (x0, y0, x1, y1, r, g, b, a = 1) => [ux(x0), uy(y0), ux(x1), uy(y1), r, g, b, a];
   const { on, off } = listeners();
   const epoch = () => performance.timeOrigin + performance.now();
 
@@ -344,8 +347,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
   function hudRects(f, now) {
     const out = [];
-    const s = W / 320;
-    const r = (x0, y0, x1, y1, c, a = 1) => out.push([x0 * s, y0 * s, x1 * s, y1 * s, c[0], c[1], c[2], a]);
+    const r = (x0, y0, x1, y1, c, a = 1) => out.push(urect(x0, y0, x1, y1, c[0], c[1], c[2], a));
     // shields over health, top centre under the clock
     const low = f.sh < 25 && !f.zombie && Math.floor(now / 150) % 2;
     const sh = Math.min(100, f.sh);
@@ -359,7 +361,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     }
     // the motion tracker: enemies within 25 m that move or shoot; in a team mode your side too, still or not, in yellow
     // (Halo's): the nearest BLIPS, apart from the bars
-    const R = 26, cx = 32 * s, cy = (H / s - 32) * s;
+    const R = 26, cx = 32, cy = 168;
     const fy = Math.cos(camYaw), fz = Math.sin(camYaw);
     const teamed = view.teamed();
     const near = [];
@@ -379,10 +381,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     near.sort((a, b) => a[0] - b[0]);
     const blips = near.slice(0, BLIPS).map(([, dx, dz, ally]) => {
       const fwd = dx * fy + dz * fz, right = -dx * fz + dz * fy;
-      const x = cx / s + right / 25 * R, y = cy / s - fwd / 25 * R;
-      return [(x - 1.5) * s, (y - 1.5) * s, (x + 1.5) * s, (y + 1.5) * s, ...(ally ? [1, 0.85, 0.25] : [1, 0.25, 0.2]), 1];
+      const x = cx + right / 25 * R, y = cy - fwd / 25 * R;
+      return urect(x - 1.5, y - 1.5, x + 1.5, y + 1.5, ...(ally ? [1, 0.85, 0.25] : [1, 0.25, 0.2]), 1);
     });
-    return { rects: out, blips, tracker: [cx, cy, R * s] };
+    return { rects: out, blips, tracker: [ux(cx), uy(cy), R * HS] };
   }
 
   // Is the crosshair over an enemy within the gun's range (a carrier's swing's 2.4 m)? For the red reticle.
@@ -594,24 +596,24 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
   // Waypoints as HUD rects and text: a mark in its colour where the point lands
   // (pulled in to the screen's edge when it's off it or behind), its label
-  // above and the distance in metres below, in text cells (4 x 6 HUD px).
+  // above and the distance in metres below, in text cells (4 x 6 units),
+  // all in the HUD's units: the marks reach the screen's edges, the text its frame's.
   function markerRects(markers, cv, f) {
     const out = [];
-    const s = W / 320;
     const rows = renderer.rows;
-    const cw = 4 * renderer.hudScale, ch = 6 * renderer.hudScale; // a text cell, in screen px
+    const x0 = -renderer.hudX / HS, x1 = (W - renderer.hudX) / HS; // the screen's edges, in units
     // the ones placed so far: { x, y, half (its text's half width in cells) }
     const placed = [];
     for (const m of markers) {
       const [px, py, depth] = project(cv, W, H, m.pos);
-      let x = px, y = py;
+      let x = (px - renderer.hudX) / HS, y = (py - renderer.hudY) / HS;
       // behind the eye (or level with it): the edge on the side it's on, halfway down
-      if (depth < 0.3) { x = px < W / 2 ? 0 : W - 1; y = H / 2; }
-      x = Math.max(8 * s, Math.min(W - 8 * s, x));
+      if (depth < 0.3) { x = px < W / 2 ? x0 : x1; y = 100; }
+      x = Math.max(x0 + 8, Math.min(x1 - 8, x));
       // kept below the score bar (its label two rows up clear of rows 4 and 5) and above the bottom lines
-      y = Math.max(48 * s, Math.min(H - 40 * s, y));
+      y = Math.max(48, Math.min(160, y));
       // on the left, its label and distance kept above the kill feed (rows - 16 to rows - 12)
-      if (x < 128 * s && Math.round(y / ch) + 1 >= rows - 16) y = (rows - 18) * ch;
+      if (x < 128 && Math.round(y / 6) + 1 >= rows - 16) y = (rows - 18) * 6;
       const dist = f ? Math.round(Math.hypot(m.pos[0] - f.pos[0], m.pos[1] - f.pos[1], m.pos[2] - f.pos[2])) : 0;
       const label = String(m.label ?? '');
       const ds = `${dist}M`;
@@ -619,17 +621,17 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       // same way, both sides' VIPs down the gulch) moves clear of them all;
       // the mark stays where its target is
       const half = Math.max(label.length, f ? ds.length : 0) / 2 + 0.5;
-      const ty = clearOf(placed, x, y, half, 48 * s, x < 128 * s ? Math.min(H - 40 * s, (rows - 18) * ch) : H - 40 * s, renderer.hudScale);
+      const ty = clearOf(placed, x, y, half, 48, x < 128 ? Math.min(160, (rows - 18) * 6) : 160);
       placed.push({ x, y: ty, half });
       const c = PALETTE[m.color ?? C.WHITE] || PALETTE[0];
-      const r = (x0, y0, x1, y1, col = c, a = 0.95) => out.push([x + x0 * s, y + y0 * s, x + x1 * s, y + y1 * s, col[0], col[1], col[2], a]);
+      const r = (a0, b0, a1, b1, col = c, a = 0.95) => out.push(urect(x + a0, y + b0, x + a1, y + b1, col[0], col[1], col[2], a));
       // a diamond (a flag's pennant, a skull's dot, a hill's ring, a crown's band and points by kind)
       if (m.kind === 'flag') { r(-0.5, -6, 0.5, 2); r(0.5, -6, 5, -2.5); }
       else if (m.kind === 'crown') { r(-4, -1, 4, 2); r(-4, -4, -2.5, -1); r(-0.75, -5, 0.75, -1); r(2.5, -4, 4, -1); }
       else if (m.kind === 'hill') { r(-4, -1, 4, 1); r(-3, -3, 3, -1, c, 0.5); r(-3, 1, 3, 3, c, 0.5); }
       else if (m.kind === 'skull') { r(-3, -4, 3, 1); r(-2, 1, 2, 3); r(-2, -2, -0.5, -0.5, [0, 0, 0]); r(0.5, -2, 2, -0.5, [0, 0, 0]); }
       else { r(-1, -4, 1, 4); r(-2.5, -2.5, 2.5, 2.5, c, 0.8); r(-4, -1, 4, 1); }
-      const col = Math.round((x - renderer.hudX) / cw), row = Math.round(ty / ch);
+      const col = Math.round(x / 4), row = Math.round(ty / 6);
       // a column clear of either edge, so a glyph's outline isn't cut there
       if (label) put(text, COLS, Math.max(1, Math.min(COLS - 1 - label.length, col - (label.length >> 1))), Math.max(0, row - 2), label, m.color ?? C.WHITE);
       if (f) put(text, COLS, Math.max(1, Math.min(COLS - 1 - ds.length, col - (ds.length >> 1))), Math.min(rows - 1, row + 1), ds, C.WHITE);
@@ -670,9 +672,9 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       put(t, COLS, x0 + `${SIDE[0]} ${rs}  `.length, 4, String(md.target || ''), C.WHITE);
       put(t, COLS, x0 + line.length - `${bs} ${SIDE[1]}`.length, 4, `${bs} ${SIDE[1]}`, SIDE_C[1]);
       // in 320 x 200 units: red's bar grows left from x 159, blue's right from 161, full at the target
-      const k = W / 320, full = 48;
+      const full = 48;
       const fill = (n) => Math.min(1, md.target ? n / md.target : 0) * full;
-      const bar = (a, b, c, alpha = 1, grow = 0) => kitRects.push([(a - grow) * k, (31 - grow) * k, (b + grow) * k, (34 + grow) * k, c[0], c[1], c[2], alpha]);
+      const bar = (a, b, c, alpha = 1, grow = 0) => kitRects.push(urect(a - grow, 31 - grow, b + grow, 34 + grow, c[0], c[1], c[2], alpha));
       if (team >= 0) bar(team ? 161 : 159 - full, team ? 161 + full : 159, [1, 1, 1], 0.8, 1);
       bar(159 - full, 159, [0.06, 0.06, 0.08], 0.75); bar(161, 161 + full, [0.06, 0.06, 0.08], 0.75);
       bar(159 - fill(rs), 159, SIDE_RGB[0]); bar(161, 161 + fill(bs), SIDE_RGB[1]);
@@ -681,8 +683,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       // your side and kills; the mode's own lines below them, from its kit module
       put(t, COLS, 1, 0, `${who}: ${SIDE[team] ?? ''}`, SIDE_C[team] ?? C.YELLOW);
       put(t, COLS, 1, 1, `${f.kills} KILL${f.kills === 1 ? '' : 'S'}  ${f.deaths} DEATH${f.deaths === 1 ? '' : 'S'}`, C.GREY);
-      const s = W / 320;
-      kit?.hud(view, { put: (x, y, str, c) => put(t, COLS, x, y, str, c), centre, right, rect: (x0, y0, x1, y1, r, g, b, a = 1) => kitRects.push([x0 * s, y0 * s, x1 * s, y1 * s, r, g, b, a]),
+      kit?.hud(view, { put: (x, y, str, c) => put(t, COLS, x, y, str, c), centre, right, rect: (...a) => kitRects.push(urect(...a)),
         rows, C, slot, me: f, team, now, t: playT });
     } else if (f?.live && m === L.M_INFECTION) {
       put(t, COLS, 1, 0, f.zombie ? `${who}: ZOMBIE  ${f.points} INFECTED` : `${who}: HUMAN`, f.zombie ? C.GREEN : C.YELLOW);
@@ -706,8 +707,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         else if (list[1]) put(t, COLS, 1, 1, `${host.label(list[1].slot)} ${list[1].kills}`, C.GREY);
       }
       // a kit mode without sides: its own lines under them (rows 2 to 4; with kit.own, 0 to 4)
-      const s = W / 320;
-      kit?.hud(view, { put: (x, y, str, c) => put(t, COLS, x, y, str, c), centre, right, rect: (x0, y0, x1, y1, r, g, b, a = 1) => kitRects.push([x0 * s, y0 * s, x1 * s, y1 * s, r, g, b, a]),
+      kit?.hud(view, { put: (x, y, str, c) => put(t, COLS, x, y, str, c), centre, right, rect: (...a) => kitRects.push(urect(...a)),
         rows, C, slot, me: f, team: -1, now, t: playT, watching: WATCH || slot !== get(L.CL_SLOT), mine: WATCH ? -1 : get(L.CL_SLOT) });
     }
     if (f?.live) {

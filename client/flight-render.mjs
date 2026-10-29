@@ -16,7 +16,7 @@ import * as L from '../src/layout.mjs';
 import * as F from '../src/flight.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 384;
@@ -39,7 +39,7 @@ export function basis(yaw, pitch, roll = 0) {
 }
 
 // The focal length (px) of a frame state's camera on a W x H screen.
-export const focalOf = (s, W) => W * 0.62 * (s.zoom || 1);
+export const focalOf = (s, W, H) => focalFor(W, H) * (s.zoom || 1);
 
 // Where world point q lands on the screen through frame state s ({ cam,
 // basis }), as the shader's project() puts it: [x, y, depth ahead of the eye
@@ -48,7 +48,7 @@ export function project(s, W, H, q) {
   const { f, r, u } = s.basis;
   const d = [q[0] - s.cam[0], q[1] - s.cam[1], q[2] - s.cam[2]];
   const zf = d[0] * f[0] + d[1] * f[1] + d[2] * f[2];
-  const k = focalOf(s, W) / Math.max(zf, 0.01);
+  const k = focalOf(s, W, H) / Math.max(zf, 0.01);
   return [W / 2 + (d[0] * r[0] + d[1] * r[1] + d[2] * r[2]) * k, H / 2 - (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) * k, zf];
 }
 
@@ -64,7 +64,7 @@ struct U {
   map: vec4f,     // boxes, groups, sides (0 none, 1 one against the rest, 2 red and blue), the ceiling (m)
   bounds: vec4f,  // the map's edge: x0, x1, z0, z1
   fx: vec4f,      // net graph shown, the radar's centre x, y and radius (px)
-  hudv: vec4f,    // the HUD's scale (screen px a HUD px), the text block's left (px)
+  hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px) (client/lowpoly.mjs hudFrame)
 };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var hmap: texture_2d<f32>;
@@ -531,7 +531,7 @@ ${HUD_FONT_WGSL}
   }
   // where the mouse aims: a small open ring (1), or nothing (0)
   if (u.hud.y > 0.5 && abs(r - 3.5) < 0.6) { return vec4f(1.0, 1.0, 1.0, 0.7); }
-  let hp = (q.xy - vec2f(u.hudv.y, 0.0)) / hs;
+  let hp = (q.xy - u.hudv.yz) / hs;
   let p = vec2i(floor(hp));
   // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
   let roundOn = font[64u] != 0u;
@@ -565,8 +565,7 @@ ${HUD_FONT_WGSL}
 }
 `;
 
-// hudScale: screen px a HUD px, by default as many as fit 320 x 200 whole.
-export async function createRenderer(canvas, { present = true, hudScale = 0, device: shared = null } = {}) {
+export async function createRenderer(canvas, { present = true, device: shared = null } = {}) {
   let device = shared;
   if (!device) {
     const adapter = await navigator.gpu?.requestAdapter();
@@ -578,9 +577,8 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
   const ctx = present ? canvas.getContext('webgpu') : null;
   ctx?.configure({ device, format, alphaMode: 'opaque' });
   const W = canvas.width, H = canvas.height;
-  const hs = hudScale || Math.max(1, Math.floor(Math.min(W / 320, H / 200)));
-  const rows = Math.floor(H / hs / 6);
-  const hudX = Math.max(0, Math.floor((W / hs - COLS * 4) / 2)) * hs; // the text block, centred
+  const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
+  const rows = Math.floor(200 / 6);
   const module = device.createShaderModule({ code: WGSL });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
@@ -649,7 +647,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
   let hmax = 100;
 
   return {
-    rows, width: W, height: H, hudScale: hs, hudX,
+    rows, width: W, height: H, hudScale: hs, hudX, hudY,
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
       const hf = new Float32Array(512 * 512);
@@ -683,10 +681,10 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
       const sprites = s.glow.slice(0, MAX_SPRITE);
       const { f, r, u } = s.basis;
       const radar = s.radar || [0, 0, 0];
-      uf.set([s.cam[0], s.cam[1], s.cam[2], focalOf(s, W), f[0], f[1], f[2], s.time, r[0], r[1], r[2], FAR, u[0], u[1], u[2], hmax + 2,
+      uf.set([s.cam[0], s.cam[1], s.cam[2], focalOf(s, W, H), f[0], f[1], f[2], s.time, r[0], r[1], r[2], FAR, u[0], u[1], u[2], hmax + 2,
         W, H, s.dt, s.dtPred ?? s.dt, s.slot, sprites.length, Math.min(s.beams.length, MAX_BEAM), Math.min(s.rects.length, MAX_RECT),
         rows, s.crosshair, s.marker, s.hurt, nbox, ngroup, Number(s.sides) || 0, s.ceiling || 400,
-        ...bounds, s.graph ? 1 : 0, ...radar, hs, hudX, 0, 0]);
+        ...bounds, s.graph ? 1 : 0, ...radar, hs, hudX, hudY, 0]);
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);

@@ -16,7 +16,7 @@ import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
 import { VIEWMODEL_WGSL, MAX_VM } from './viewmodel.mjs';
 
 export const COLS = 80;
@@ -39,7 +39,7 @@ const vec3 = (c) => `vec3f(${c.map((v) => v.toFixed(3)).join(', ')})`;
 // sees through: the focal length (px) and the horizon's row, the pitch a
 // vertical shear as golf's.
 export function lens(s, W, H) {
-  const focal = W * 0.62 * (s.zoom || 1);
+  const focal = focalFor(W, H) * (s.zoom || 1);
   return { focal, horizon: H / 2 + Math.tan(Math.max(-1.35, Math.min(1.35, s.pitch))) * focal };
 }
 
@@ -64,7 +64,8 @@ struct U {
   fx: vec4f,      // damage flash (0..1), scope (1), net graph shown (1), crosshair gap (px)
   pred: vec4f,    // extrapolate my projectiles (s); the motion tracker's centre x, y and radius (px)
   map: vec4f,     // boxes, groups, sides (0 none, 1 one against the rest, 2 red and blue), the zones' height band (m)
-  zn: vec4f,      // how many zones, the HUD's scale (screen px a HUD px), the text block's left (px), boxes in my hands
+  zn: vec4f,      // how many zones, boxes in my hands
+  hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px), the focal length unzoomed (px) (client/lowpoly.mjs)
   zones: array<vec4f, ${2 * MAX_ZONE}>, // two a zone, a disc painted on the ground: centre x, z, radius, the height it's at | its colour, how hard it pulses (0..1)
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -629,7 +630,7 @@ fn cross(d: vec2f, kind: u32, gap: f32) -> bool {
 ${HUD_FONT_WGSL}
 ${VIEWMODEL_WGSL}
 @fragment fn fs_hud(@builtin(position) q: vec4f) -> @location(0) vec4f {
-  let hs = u.zn.y;
+  let hs = u.hudv.x;
   let c = vec2f(u.screen.x, u.screen.y) * 0.5;
   let d = q.xy - c - vec2f(0.5);
   let dh = d / hs; // in HUD px
@@ -650,7 +651,7 @@ ${VIEWMODEL_WGSL}
   let td = q.xy - u.pred.yz;
   let tr = length(td);
   if (u.pred.w > 0.0 && (abs(tr - u.pred.w) < 0.7 * hs || (tr < u.pred.w && (abs(td.x) < 0.4 * hs || abs(td.y) < 0.4 * hs)))) { return vec4f(0.5, 0.8, 1.0, 0.7); }
-  let hp = (q.xy - vec2f(u.zn.z, 0.0)) / hs;
+  let hp = (q.xy - u.hudv.yz) / hs;
   let p = vec2i(floor(hp));
   // the rounder font (client/hudfont.mjs) when the page has its atlas, else the 3x5 font with a shadow
   let roundOn = font[64u] != 0u;
@@ -673,8 +674,8 @@ ${VIEWMODEL_WGSL}
     }
   }
   // what I hold, under every rect, at the lens's focal length unzoomed
-  if (u.zn.w > 0.0 && q.x > u.screen.x * 0.3 && q.y > u.screen.y * 0.15) {
-    let g = viewModel(q.xy, u32(u.zn.w), u.screen.x * 0.62);
+  if (u.zn.y > 0.0 && q.x > u.screen.x * 0.3 && q.y > u.screen.y * 0.15) {
+    let g = viewModel(q.xy, u32(u.zn.y), u.hudv.w);
     if (g.a > 0.0) { return g; }
   }
   // the tracker's face, and the sweep going round it
@@ -690,8 +691,7 @@ ${VIEWMODEL_WGSL}
 }
 `;
 
-// hudScale: screen px a HUD px, by default as many as fit 320 x 200 whole.
-export async function createRenderer(canvas, { present = true, hudScale = 0, device: shared = null } = {}) {
+export async function createRenderer(canvas, { present = true, device: shared = null } = {}) {
   // a page with several renderers (Fireplace) gives them one device, so one can draw into another's texture
   let device = shared;
   if (!device) {
@@ -704,15 +704,14 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
   const ctx = present ? canvas.getContext('webgpu') : null;
   ctx?.configure({ device, format, alphaMode: 'opaque' });
   const W = canvas.width, H = canvas.height;
-  const hs = hudScale || Math.max(1, Math.floor(Math.min(W / 320, H / 200)));
-  const rows = Math.floor(H / hs / 6);
-  const hudX = Math.max(0, Math.floor((W / hs - COLS * 4) / 2)) * hs; // the text block, centred
+  const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
+  const rows = Math.floor(200 / 6);
   const module = device.createShaderModule({ code: WGSL });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
 
-  const ubuf = device.createBuffer({ size: 4 * (36 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 4 * (40 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, its look word, its avatar
   const projBuf = storage(L.NPROJ * L.JSIZE);
@@ -766,7 +765,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
   const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
   const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
 
-  const uf = new Float32Array(36 + 8 * MAX_ZONE);
+  const uf = new Float32Array(40 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);
   const spriteData = new Float32Array(MAX_SPRITE * 12);
   const beamData = new Float32Array(MAX_BEAM * 12);
@@ -774,7 +773,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
   let hmax = 100;
 
   return {
-    rows, width: W, height: H, hudScale: hs, hudX,
+    rows, width: W, height: H, hudScale: hs, hudX, hudY,
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
       const hf = new Float32Array(512 * 512);
@@ -811,9 +810,9 @@ export async function createRenderer(canvas, { present = true, hudScale = 0, dev
       uf.set([s.cam[0], s.cam[1], s.cam[2], focal, Math.cos(s.yaw), Math.sin(s.yaw), horizon, s.time,
         W, H, FAR, s.dt, s.slot, sprites.length, hmax + 2, Math.min(s.beams.length, MAX_BEAM),
         rows, Math.min(s.rects.length, MAX_RECT), s.crosshair, s.marker, s.hurt, s.scope ? 1 : 0, s.graph ? 1 : 0, s.gap, s.dtPred ?? s.dt, ...(s.tracker || [0, 0, 0]),
-        nbox, ngroup, Number(s.sides) || 0, z ? (z.y === undefined ? 1e9 : z.h ?? 2) : 0, zs.length, hs, hudX, s.viewmodel ? Math.min(MAX_VM, s.viewmodel.length / 12) : 0]);
+        nbox, ngroup, Number(s.sides) || 0, z ? (z.y === undefined ? 1e9 : z.h ?? 2) : 0, zs.length, s.viewmodel ? Math.min(MAX_VM, s.viewmodel.length / 12) : 0, 0, 0, hs, hudX, hudY, focalFor(W, H)]);
       if (s.viewmodel?.length) device.queue.writeBuffer(vmBuf, 0, s.viewmodel.subarray(0, MAX_VM * 12));
-      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 36 + 8 * k));
+      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 40 + 8 * k));
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);
