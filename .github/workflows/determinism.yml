@@ -254,6 +254,8 @@ jobs:
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 13
       - name: The arena's Escape online (64 AI fighters, every hash checked)
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 14
+      - name: The arena on a map laid at run time (maps/crossroads, Roblox's, through map_load in the referee and the bot host; 64 AI fighters, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --map crossroads
       - name: Flight online, full (a relay on flight's sim, 256 AI pilots through its native door, every hash checked), and its team, juggernaut and race modes
         run: |
           node net/run-flight.mjs --chrome 0 --bots 256 --seconds 40

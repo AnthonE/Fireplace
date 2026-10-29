@@ -180,6 +180,7 @@ export function compileSpec(spec, images, name = 'map.json') {
   head.setUint32(rel(L.MAP_NSPAWN), spawns.length, true);
   head.setUint32(rel(L.MAP_NPAD), pads.length, true);
   bounds.forEach((v, k) => head.setFloat32(rel(L.MAP_BOUNDS) + 4 * k, v, true));
+  head.setFloat32(rel(L.MAP_VOID), voidY ?? 0, true);
   spawns.forEach((s, k) => {
     head.setFloat32(rel(L.MAP_SPAWN) + 8 * k, s.x, true);
     head.setFloat32(rel(L.MAP_SPAWN) + 8 * k + 4, s.z, true);
@@ -223,7 +224,7 @@ export function compileSpec(spec, images, name = 'map.json') {
     // folded into the arena's WAT as @MAPSEG_* and @MAPIMG_*
     consts: {
       MAPSEG_GROUPS: offs[1], MAPSEG_NGROUPB: gbytes.byteLength, MAPSEG_BOXES: offs[2], MAPSEG_NBOXB: bbytes.byteLength,
-      MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling, MAP_VOID: voidY ?? -1e9,
+      MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling,
       MAPSEG_RACE: race.length ? offs[6] : bytes.length, MAPSEG_NRACEB: race.length ? 16 + 16 * race.length : 0,
     },
     ceiling, void: voidY,
@@ -269,3 +270,21 @@ export function dataSegment(bytes, name = '$map') {
   for (const b of bytes) s += /[A-Za-z0-9]/.test(String.fromCharCode(b)) ? String.fromCharCode(b) : '\\' + b.toString(16).padStart(2, '0');
   return `(data ${name} "${s}")`;
 }
+
+// A compiled map packed for the arena's and flight's map_load export, which
+// takes a map from outside the build: a head of MAPPACK_HEAD bytes (layout.mjs
+// MP_*: where each part of `bytes` is, the images' place and size, the
+// ceiling), then the bytes as a build's own map segment holds them.
+export function packMap(m) {
+  const c = m.consts, out = new Uint8Array(L.MAPPACK_HEAD + m.bytes.length), dv = new DataView(out.buffer);
+  const u32 = { MP_MAGIC: L.MAPPACK_MAGIC, MP_BYTES: m.bytes.length, MP_GROUPS: c.MAPSEG_GROUPS, MP_NGROUPB: c.MAPSEG_NGROUPB, MP_BOXES: c.MAPSEG_BOXES,
+    MP_NBOXB: c.MAPSEG_NBOXB, MP_H: c.MAPSEG_H, MP_S: c.MAPSEG_S, MP_OBJ: c.MAPSEG_OBJ, MP_RACE: c.MAPSEG_RACE, MP_NRACEB: c.MAPSEG_NRACEB,
+    MP_X0: c.MAPIMG_X0, MP_Z0: c.MAPIMG_Z0, MP_W: c.MAPIMG_W, MP_HT: c.MAPIMG_H };
+  for (const [k, v] of Object.entries(u32)) dv.setUint32(L[k], v, true);
+  dv.setFloat32(L.MP_CEIL, m.ceiling, true);
+  out.set(m.bytes, L.MAPPACK_HEAD);
+  return out;
+}
+// What map_load's codes mean
+export const MAP_LOAD_ERRORS = ['', 'not a packed map (its head)', 'a count past the build\'s limits', 'a part outside its bytes',
+  'its images outside the world', 'a group or a box (out of range, inside out, or not a number)', 'its ceiling or void', 'a place that is not a number in reach'];

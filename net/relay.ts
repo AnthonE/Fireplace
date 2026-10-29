@@ -29,7 +29,7 @@
 //
 //   .tools/deno run --unstable-net -A net/relay.ts [--port 4433] [--native-port 4434] [--duration 70] [--cc low-latency|default] [--seed N] [--host 127.0.0.1]
 //                  [--upstream host:native-port[,host:native-port...]] [--standby] [--watchers 4096] [--replays dir]
-//                  [--max-players 256] [--status file] [--online file] [--game name] [--tap-mask 0x10000000] [--hold-mask 0x0f000000] [--referee-lag 10]
+//                  [--map build/maps/<name>.qgmap] [--max-players 256] [--status file] [--online file] [--game name] [--tap-mask 0x10000000] [--hold-mask 0x0f000000] [--referee-lag 10]
 // With --status, the room's state goes to a JSON file every STATUS_MS, for a
 // page host to serve as the room's status_url: players, max_players,
 // spectators, the sim tick and its rate. The file is written whole (a temp
@@ -109,7 +109,11 @@ const key = await Deno.readTextFile('certs/key.pem');
 // hash, so a client of another sim never meets the room
 const wasmPath = opt('wasm', 'build/game.wasm');
 const wasm = await Deno.readFile(wasmPath);
-const prefix = await W.wasmPrefix(wasm);
+// --map: a map from outside the build (tools/map-compile.mjs packMap, the
+// arena's or flight's), laid in the referee's sim; the hello's hash names it too
+const mapPath = opt('map', '');
+const map = mapPath ? await Deno.readFile(mapPath) : null;
+const prefix = await W.wasmPrefix(wasm, map);
 // the name the status gives: build/<game>/game.wasm's directory, and golf's own is build/game.wasm
 const game = opt('game', ((d) => (d && d !== 'build' ? d : 'golf'))(wasmPath.split('/').slice(-2, -1)[0]));
 // The sim may be someone else's: the referee gives it the shared memory and
@@ -250,7 +254,7 @@ const stats = {
 
 // The referee: closed ticks go to it in batches; interval hashes and packed keyframes come back.
 const referee = new Worker(new URL('./referee-worker.mjs', import.meta.url).href, { type: 'module' });
-referee.postMessage({ wasm, threads: refereeThreads, results: rated });
+referee.postMessage({ wasm, threads: refereeThreads, results: rated, map });
 let toReferee: Uint8Array[][] = [];
 let refRoom = 0; // the referee's generation: a room's start, or an edge's restart from a keyframe
 const refIntervals = new Map<number, { hash: bigint; digests: Uint8Array }>(); // sim tick -> the referee's

@@ -11,6 +11,10 @@ export const JOB_QUIT = 0x0c0;
 export const JOB_NA = 0x0c4; // awake balls this tick
 export const JOB_NB = 0x0c8; // 4-ball blocks with an awake ball
 export const JOB_ABORT = 0x0cc; // set by any thread that fails; every barrier gives up
+// 1 when the arena's map came from outside the build (the map_load export):
+// here, where init clears nothing, so init leaves the map and the ground it
+// laid (MAP to NET) as they are
+export const MAP_HOSTED = 0x100;
 export const ERR_CODE = 0x240;
 export const ERR_INDEX = 0x244;
 export const ERR_TICK = 0x248;
@@ -24,6 +28,7 @@ export const GRID_TICK = 0x310;
 export const GRID_N = 0x314;
 export const GRID_OK = 0x318;
 export const SORT_ON = 0x31c; // 1 when tick_begin built this tick's sorted copy (SBOUND...) for contacts
+
 export const DIGESTS = 0x400; // u64[128], slice s digested at tick K+s+1; the interval closes at K+128
 export const INBOX = 0x1000; // u32 count, then records
 export const INBOX_REC = 0x1010;
@@ -432,6 +437,7 @@ export const MAP_NTELE = MAP + 8;
 export const MAP_NSPAWN = MAP + 12;
 export const MAP_NPAD = MAP + 16;
 export const MAP_CEILING = MAP + 20; // f32 flight's ceiling (tools/map.mjs), written by its init; 0 in the arena's
+export const MAP_VOID = MAP + 24; // f32 a fighter whose feet are below it dies by falling (map.json "void"); 0 none
 export const MAP_BOUNDS = MAP + 32; // f32 x0, x1, z0, z1: where fighters can go
 export const MAP_SPAWN = MAP + 0x40; // 32 x 8 B: f32 x, z; a fighter spawns on what is under (x, z) from MAP_SPAWNY up
 export const MAP_SPAWNY = MAP + 0x140; // 32 x f32: the highest feet a spawn may stand at (-1000: the ground)
@@ -458,6 +464,33 @@ export const MAP_END = MAP_OBJ + MAP_OBJ_SIZE;
 export const MAP_RACE = MAP_END;
 export const MAP_RACE_END = MAP_RACE + 16 + 16 * 16;
 export const NBOX = 2048; // a place brought from Roblox (tools/roblox.mjs) wants hundreds to thousands
+// A map from outside the build, packed (tools/map-compile.mjs packMap) for the
+// arena's and flight's map_load export: a head, then the bytes a build's own
+// map segment holds. The host writes it at MAP_STAGE, the keyframe slots,
+// which nothing uses before init, so at most MAP_STAGE_MAX bytes.
+export const MAPPACK_MAGIC = 0x314d4751; // "QGM1"
+export const MAPPACK_HEAD = 64;
+// u32 fields of the head: the magic, the bytes after it, where each part of
+// the map is in them and how big (as MAPSEG_* name them in a build), the
+// images' place and size in samples (MAPIMG_*); then f32 the ceiling
+export const MP_MAGIC = 0;
+export const MP_BYTES = 4;
+export const MP_GROUPS = 8;
+export const MP_NGROUPB = 12;
+export const MP_BOXES = 16;
+export const MP_NBOXB = 20;
+export const MP_H = 24;
+export const MP_S = 28;
+export const MP_OBJ = 32;
+export const MP_RACE = 36;
+export const MP_NRACEB = 40;
+export const MP_X0 = 44;
+export const MP_Z0 = 48;
+export const MP_W = 52;
+export const MP_HT = 56;
+export const MP_CEIL = 60;
+export const MAP_STAGE = 0x0a0000; // SNAP0
+export const MAP_STAGE_MAX = 0x100000; // to DVX
 export const NGROUP = 64;
 export const NTELE = 16;
 export const BOX_SIZE = 32;

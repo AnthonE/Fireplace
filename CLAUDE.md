@@ -31,7 +31,7 @@ node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the ki
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
 node tools/roblox.mjs place.rbxl [maps/<name>] [--brief]   # a Roblox place (.rbxl/.rbxlx) as a map, --brief its scripts and port.md (docs/roblox.md); the editor opens one too
-node net/play.mjs --arena --map <name>      # build the arena on it and play (--flight --map for Dogfight's)
+node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -119,6 +119,13 @@ shell whose own command line contains the name: it kills that shell.
   imports nothing from Node, because the map editor
   (`client/map-editor.html`) runs it in the page to check a map as it is
   drawn; `tools/map.mjs` and `tools/png.mjs` give it the disk and zlib.
+  The arena's and flight's builds also take a map at run time: `packMap`,
+  then the `map_load` export before init (`loadMap` in harness/core.mjs),
+  which checks everything in it and sets `MAP_HOSTED` so init leaves MAP to
+  NET alone; a hello's hash covers the map (`wasmPrefix(wasm, map)`).
+  Anything that reads the map reads it from memory, never from a
+  `MAPSEG_*`/`MAPIMG_*`/`MAP_CEIL` constant outside `$arena_gen`'s
+  built-in half.
   fighter's goal), its tests `test/arena-<key>.test.mjs`. A kit mode with
   `team: 0` in `MODES` has no sides; an AM entry may name optional hooks
   (`strike`, `spawn`, `hurt`). The map's

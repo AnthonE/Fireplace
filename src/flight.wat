@@ -27,7 +27,7 @@
   (local $n i32) (local $pts i32) (local $a i32) (local $tx f32) (local $tz f32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
   (!put f32 @(PLAYERS + P_PY) (local.get $pb)
-    (f32.min (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.const @SPAWN_ALT)) (f32.const @(MAP_CEIL - 5))))
+    (f32.min (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.const @SPAWN_ALT)) (f32.sub (f32.load (i32.const @MAP_CEILING)) (f32.const 5))))
   (local.set $tx (f32.mul (f32.add (f32.load (i32.const @MAP_BOUNDS)) (f32.load (i32.const @(MAP_BOUNDS + 4)))) (f32.const 0.5)))
   (local.set $tz (f32.mul (f32.add (f32.load (i32.const @(MAP_BOUNDS + 8))) (f32.load (i32.const @(MAP_BOUNDS + 12)))) (f32.const 0.5)))
   (local.set $n (i32.load (i32.const @MAP_RACE)))
@@ -189,7 +189,7 @@
   (if (f32.gt (local.get $px) (f32.load (i32.const @(MAP_BOUNDS + 4)))) (then (local.set $px (f32.load (i32.const @(MAP_BOUNDS + 4)))) (local.set $vx (f32.min (local.get $vx) (f32.const 0)))))
   (if (f32.lt (local.get $pz) (f32.load (i32.const @(MAP_BOUNDS + 8)))) (then (local.set $pz (f32.load (i32.const @(MAP_BOUNDS + 8)))) (local.set $vz (f32.max (local.get $vz) (f32.const 0)))))
   (if (f32.gt (local.get $pz) (f32.load (i32.const @(MAP_BOUNDS + 12)))) (then (local.set $pz (f32.load (i32.const @(MAP_BOUNDS + 12)))) (local.set $vz (f32.min (local.get $vz) (f32.const 0)))))
-  (if (f32.gt (local.get $py) (f32.const @MAP_CEIL)) (then (local.set $py (f32.const @MAP_CEIL)) (local.set $vy (f32.min (local.get $vy) (f32.const 0)))))
+  (if (f32.gt (local.get $py) (f32.load (i32.const @MAP_CEILING))) (then (local.set $py (f32.load (i32.const @MAP_CEILING))) (local.set $vy (f32.min (local.get $vy) (f32.const 0)))))
   ;; a box: back where it was, the speed across the face it came through
   ;; turned and halved (a top or an underside if neither side face)
   (local.set $b (call $box_in (local.get $px) (local.get $py) (local.get $pz) (f32.const @FL_R)))

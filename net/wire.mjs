@@ -699,8 +699,13 @@ export function bufferedReader(reader) {
   };
 }
 
-export async function wasmPrefix(bytes) {
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)).subarray(0, 8);
+// What a hello names its sim by: the wasm's sha256, or with a map from outside
+// the build (tools/map-compile.mjs packMap), the wasm's bytes and then the
+// map's, so a room is a build on a map and a client on another map never meets it.
+export async function wasmPrefix(bytes, map = null) {
+  let all = bytes;
+  if (map) { all = new Uint8Array(bytes.byteLength + map.byteLength); all.set(new Uint8Array(bytes), 0); all.set(map, bytes.byteLength); }
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', all)).subarray(0, 8);
 }
 
 export function percentile(sorted, p) {

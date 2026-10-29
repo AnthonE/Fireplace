@@ -3,8 +3,9 @@
 // (map.json, height.png, surface.png; tools/map.mjs has the format), and runs
 // the build's own compiler (tools/map-compile.mjs) on every change, so what
 // it calls fine is what `npm run build` takes. The sim never sees the page:
-// a map reaches a game by being built in, `node net/play.mjs --arena --map
-// <folder>` to play it with bots.
+// play it packs the map (packMap) and opens the arena's page on it, a local
+// room with AI fighters, which lays it in its sim (map_load); `node
+// net/play.mjs --arena --map <folder>` plays a saved one online with bots.
 //
 // The ground is held as the compiler holds it, a u16 a sample in 1/256 m
 // (16-bit height.png, scale 1/256, base 0), with a surface index beside it.
@@ -12,7 +13,7 @@
 import * as L from '../src/layout.mjs';
 import {
   compileSpec, place, placePoint, half, SURFACES, SURFACE_RGB, MATERIALS, WEAPONS, GROUND,
-  formatSpec, defaultFlags, defaultBall, defaultHills, materialWord, materialOf,
+  formatSpec, defaultFlags, defaultBall, defaultHills, materialWord, materialOf, packMap,
 } from '../tools/map-compile.mjs';
 import { decode, encode } from '../tools/png-codec.mjs';
 import { readRoblox } from '../tools/rbx-file.mjs';
@@ -1054,12 +1055,26 @@ function renderSide() {
   // playing it
   const f = st.folder, race = (sp.race || []).length;
   side.append(h3('Play it'));
-  side.append(hint(`Save into Fireplace's maps/${f}/ (or download the files and put them there), then from the repo:`));
+  side.append(row(btn('play it here', () => playHere('arena'), 'the arena on this map, you and AI fighters, in a new tab'),
+    ...(race ? [btn('fly it', () => playHere('flight'), 'Dogfight\'s Ring Race on this map')] : [])));
+  side.append(hint('Online with friends and bots: save it into Fireplace\'s maps/' + f + '/ (or download the files and put them there), then from the repo:'));
   side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --arena --map ${f}` })));
   if (race) side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --flight --mode 12 --map ${f}` })), hint('flies its Ring Race.'));
   side.append(hint('Open the URL it prints: that is your map with bots on it. --bots N for more, --mode k for one mode (5 Capture the Flag, 6 Oddball, 7 King of the Hill).'));
   side.append(row(btn('download the files', download)));
   side.append(hint('To have it played on Fireplace for everyone, send it as a pull request: CONTRIBUTING.md, "A map".'));
+}
+
+// The map as it is now, packed (packMap) and handed to the arena's page (or
+// Dogfight's) in a new tab: a local room with AI players, which lays the map
+// in its sim before the first tick (?map=, client/host.mjs). The blob lives as
+// long as this page does.
+function playHere(game) {
+  if (!st.result) { say(`not yet: ${st.error || 'the map is still being checked'}`); return; }
+  const url = URL.createObjectURL(new Blob([packMap(st.result)]));
+  const q = new URLSearchParams({ local: '1', map: url, ...(game === 'flight' ? { mode: String(L.FLIGHT_CONSTS.M_RACE) } : {}) });
+  open(`./${game}.html?${q}`, '_blank');
+  say(`opened ${st.spec.name || 'the map'} in ${game === 'flight' ? 'Dogfight' : 'the arena'}, in a new tab`);
 }
 
 function selectionPanel(sel) {

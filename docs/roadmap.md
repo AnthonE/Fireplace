@@ -93,18 +93,18 @@ only of your own body), physics sandboxes, open worlds.
 3. The arena: several maps in one build chosen at run time, boxes that move
    (obbies), new maps. A map now comes from the map editor
    (`client/map-editor.html`) and from a Roblox place (`tools/roblox.mjs`)
-   as well as from code, so maps chosen at run time are the step that lets
-   players' maps into rooms. What that takes:
-   - the map's sizes and offsets read from its own head in memory, not
-     compiled in (`$arena_gen`'s `MAPIMG_*` and `MAPSEG_*`, flight's
-     `MAP_CEIL`), so its bytes can come from outside the build;
-   - the map as the room's choice: lockstep needs every machine on the same
-     bytes, so the room names a map by its sha256 and each client fetches and
-     checks it before the first tick;
-   - the bytes checked again before they reach memory, since the limits are
-     enforced only by `tools/map-compile.mjs` at build time today;
-   - a replay that names its map's sha256 beside the wasm's;
-   - a map cycle: a list of map hashes the room walks, beside `PLAYLIST`.
+   as well as from code. Maps at run time are done (docs/arena.md, "Maps
+   at run time"): a packed map laid by the `map_load` export, every number
+   in it checked first, the page's `?map=`, the relay's and bot host's
+   `--map`, and the hello's hash naming the map with the build. Left:
+   - the kit's room pool by map: a room asked for by its wasm's and map's
+     hashes, the map fetched by the pool as the wasm is;
+   - a replay that names its map's bytes beside the wasm's (its prefix
+     already covers both);
+   - a map cycle: a list of map hashes the room walks, beside `PLAYLIST`,
+     which means laying a map between matches, not only before the first
+     init;
+   - Fireplace taking one (its playlist builds each game's world itself).
 4. Fireplace: a vote for the next game, then a board between games (dice,
    stars, coins) over the minigames.
 5. Pipelines compiled before a Fireplace switch: on SwiftShader the first
@@ -166,8 +166,9 @@ building there is the store's: read an engine's export folder (Unity's
 `Build/*.loader.js`, Godot's `.pck` beside its `index.html`) and write the
 `elo.json` for it.
 
-A converted map plays today by being built in (`--map`). Players' own maps
-in rooms wait on maps chosen at run time (Engine work, 3).
+A converted map plays the minute it is made, in the editor's **play it
+here** or online with `net/play.mjs --map`, laid at run time (Engine work,
+3); what's left is the room pool taking maps by hash.
 
 ## FFA ARAM (the champion kit's first game)
 

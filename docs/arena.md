@@ -519,12 +519,13 @@ hills and flight's race gates placed and dragged. It runs the build's own
 compiler (`tools/map-compile.mjs`, the part of `tools/map.mjs` with no Node
 in it) on every change and shows what it refuses, and saves the three files
 into a folder (Chrome writes them in place; elsewhere it downloads them).
-Then build the arena with it and play:
+**play it here** opens the arena on the map as it stands, in a new tab, you
+and AI fighters, with nothing built (below). To play a saved one online:
 
 ```sh
 node tools/map.mjs maps/mymap            # checks it and says what it holds
-node net/play.mjs --arena --map mymap     # builds with it, relay and bots; open the URL it prints
-QG_MAP=mymap npm run build                # or just build: node tools/asm.mjs --map mymap
+node net/play.mjs --arena --map mymap     # relay, bots and page on it, no build; open the URL it prints
+QG_MAP=mymap npm run build                # or build it in, as the build's own: node tools/asm.mjs --map mymap
 ```
 
 - `height.png`: grey, 8 or 16 bits, 2 m a pixel, placed at
@@ -564,6 +565,37 @@ moves it, the wheel zooms. Picking is the 2D view's.
 
 A Roblox place makes a map too: `node tools/roblox.mjs place.rbxl`, or
 open it in the map editor ([docs/roblox.md](roblox.md)).
+
+### Maps at run time
+
+A build carries its own map (Box Canyon; Skyways for flight), and the
+arena's and flight's builds also take one from outside, the same minute it
+is made, with nothing rebuilt. `packMap` (`tools/map-compile.mjs`) packs a
+compiled map: a 64-byte head (`MP_*` in layout.mjs: where each part of the
+bytes is, the images' place and size, the ceiling), then the bytes a
+build's own map segment holds. The host writes it in the keyframe slots
+(`MAP_STAGE`, unused before init) and calls the `map_load` export once,
+before init. A map may be anyone's, so map_load checks every count, offset
+and size against the build's limits, and every number the sim reads as a
+place is finite and within 100 km, before it writes anything, and answers
+with what was wrong (`MAP_LOAD_ERRORS`). Then it lays the map where the
+built-in one goes, the ground included (the mountains past the images from
+$terrain_gen's seed 0, so the static world is the map's alone), and sets
+`MAP_HOSTED` (in CTRL, which init never clears). Init then clears only up to
+`MAP` and leaves the map and the ground as they are, through any number of
+inits on any seeds. The same map laid this way and built in give the same
+map area, ground and region, byte for byte, and a match on either steps to
+the same hashes (`test/map-load.test.mjs`).
+
+Every machine in a room must lay the same bytes, so a hello names the map
+with the build: its hash is SHA-256 of the wasm and then the map
+(`wasmPrefix` in `net/wire.mjs`), and a client on another map is turned
+away as a client of another build is. The page takes it as `?map=<url>`
+(`client/host.mjs`), the relay and the bot host as `--map <file>`, laid in
+the referee's sim and the bots' world; `net/play.mjs --map` and
+`net/run-arena.mjs --map` pack it into `build/maps/` and hand it to all
+three. On Crossroads, laid this way, 64 AI fighters for 60 s online: 3,702
+interval hashes, all equal, 439 kills, 0.3 ms a step.
 
 `tools/canyon.mjs` is how Box Canyon was drawn: the ground painted by
 code into the two images, the rest written to `map.json`. Open it in the

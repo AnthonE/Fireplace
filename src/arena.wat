@@ -26,39 +26,32 @@
 ;; climbing from the images' edge.
 (!mapdata)
 
+;; The static world: the map's parts copied into place, the images into the
+;; ground and the mountains round them, then what each match starts from (the
+;; spawns on whatever is under them, the pads). A map from outside the build
+;; (map_load, below) is already in place, so only the second half runs.
 (func $arena_gen (param $seed i32)
-  (local $x i32) (local $z i32) (local $k i32) (local $i i32) (local $ex i32) (local $ez i32) (local $dx i32) (local $dz i32)
-  (local $d f32) (local $h f32) (local $a i32) (local $sx f32) (local $sz f32)
-  (memory.init $map (i32.const @MAP) (i32.const 0) (i32.const @MAP_HEAD))
-  (memory.init $map (i32.const @MAP_GROUPS) (i32.const @MAPSEG_GROUPS) (i32.const @MAPSEG_NGROUPB))
-  (memory.init $map (i32.const @MAP_BOXES) (i32.const @MAPSEG_BOXES) (i32.const @MAPSEG_NBOXB))
-  (memory.init $map (i32.const @MAP_OBJ) (i32.const @MAPSEG_OBJ) (i32.const @MAP_OBJ_SIZE))
-  (!for $z (i32.const 0) (i32.const @MAPIMG_H)
-    (local.set $k (i32.add (i32.mul (i32.add (local.get $z) (i32.const @MAPIMG_Z0)) (i32.const @GRID)) (i32.const @MAPIMG_X0)))
-    (memory.init $map (i32.add (i32.const @TERRAIN_H) (i32.shl (local.get $k) (i32.const 1)))
-                      (i32.add (i32.const @MAPSEG_H) (i32.mul (local.get $z) (i32.const @(MAPIMG_W * 2)))) (i32.const @(MAPIMG_W * 2)))
-    (memory.init $map (i32.add (i32.const @TERRAIN_S) (local.get $k))
-                      (i32.add (i32.const @MAPSEG_S) (i32.mul (local.get $z) (i32.const @MAPIMG_W))) (i32.const @MAPIMG_W)))
-  ;; outside the images: the nearest edge sample, plus half the noise's relief
-  ;; faded in over 40 m, plus a rise of a quarter metre a sample
-  (!for $z (i32.const 0) (i32.const @GRID)
-    (!for $x (i32.const 0) (i32.const @GRID)
-      (local.set $ex (select (i32.const @MAPIMG_X0) (local.get $x) (i32.lt_s (local.get $x) (i32.const @MAPIMG_X0))))
-      (local.set $ex (select (i32.const @(MAPIMG_X0 + MAPIMG_W - 1)) (local.get $ex) (i32.gt_s (local.get $ex) (i32.const @(MAPIMG_X0 + MAPIMG_W - 1)))))
-      (local.set $ez (select (i32.const @MAPIMG_Z0) (local.get $z) (i32.lt_s (local.get $z) (i32.const @MAPIMG_Z0))))
-      (local.set $ez (select (i32.const @(MAPIMG_Z0 + MAPIMG_H - 1)) (local.get $ez) (i32.gt_s (local.get $ez) (i32.const @(MAPIMG_Z0 + MAPIMG_H - 1)))))
-      (local.set $dx (i32.sub (local.get $x) (local.get $ex)))
-      (local.set $dz (i32.sub (local.get $z) (local.get $ez)))
-      (if (i32.or (local.get $dx) (local.get $dz))
-        (then
-          (local.set $k (i32.add (i32.shl (local.get $z) (i32.const 9)) (local.get $x)))
-          (local.set $d (f32.sqrt (f32.convert_i32_s (i32.add (i32.mul (local.get $dx) (local.get $dx)) (i32.mul (local.get $dz) (local.get $dz))))))
-          (local.set $h (f32.add (f32.add (f32.convert_i32_u (!ld u16 @TERRAIN_H (i32.add (i32.shl (local.get $ez) (i32.const 9)) (local.get $ex))))
-                                          (f32.mul (f32.mul (f32.convert_i32_u (i32.sub (!ld u16 @TERRAIN_H (local.get $k)) (i32.const 4096))) (f32.const 0.5))
-                                                   (f32.min (f32.mul (local.get $d) (f32.const 0.05)) (f32.const 1))))
-                                 (f32.mul (local.get $d) (f32.const 64))))
-          (!st u16 @TERRAIN_H (local.get $k) (i32.trunc_sat_f32_u (f32.min (f32.add (local.get $h) (f32.const 0.5)) (f32.const 65535))))
-          (!st u8 @TERRAIN_S (local.get $k) (i32.const 0))))))
+  (local $z i32) (local $k i32) (local $i i32) (local $a i32) (local $sx f32) (local $sz f32)
+  (if (i32.eqz (i32.load (i32.const @MAP_HOSTED)))
+    (then
+      (memory.init $map (i32.const @MAP) (i32.const 0) (i32.const @MAP_HEAD))
+      (memory.init $map (i32.const @MAP_GROUPS) (i32.const @MAPSEG_GROUPS) (i32.const @MAPSEG_NGROUPB))
+      (memory.init $map (i32.const @MAP_BOXES) (i32.const @MAPSEG_BOXES) (i32.const @MAPSEG_NBOXB))
+      (memory.init $map (i32.const @MAP_OBJ) (i32.const @MAPSEG_OBJ) (i32.const @MAP_OBJ_SIZE))
+      (!for $z (i32.const 0) (i32.const @MAPIMG_H)
+        (local.set $k (i32.add (i32.mul (i32.add (local.get $z) (i32.const @MAPIMG_Z0)) (i32.const @GRID)) (i32.const @MAPIMG_X0)))
+        (memory.init $map (i32.add (i32.const @TERRAIN_H) (i32.shl (local.get $k) (i32.const 1)))
+                          (i32.add (i32.const @MAPSEG_H) (i32.mul (local.get $z) (i32.const @(MAPIMG_W * 2)))) (i32.const @(MAPIMG_W * 2)))
+        (memory.init $map (i32.add (i32.const @TERRAIN_S) (local.get $k))
+                          (i32.add (i32.const @MAPSEG_S) (i32.mul (local.get $z) (i32.const @MAPIMG_W))) (i32.const @MAPIMG_W)))
+      (call $a_skirt (i32.const @MAPIMG_X0) (i32.const @MAPIMG_Z0) (i32.const @MAPIMG_W) (i32.const @MAPIMG_H))
+#if FLIGHT
+      ;; how high a ship may fly, for the sim, the page and the bots, and the
+      ;; race's gates, if the map has a race
+      (f32.store (i32.const @MAP_CEILING) (f32.const @MAP_CEIL))
+      (memory.init $map (i32.const @MAP_RACE) (i32.const @MAPSEG_RACE) (i32.const @MAPSEG_NRACEB))
+#endif
+      ))
   ;; spawn points: on whatever is under them, up to the map's top for each
   (!for $i (i32.const 0) (i32.load (i32.const @MAP_NSPAWN))
     (local.set $sx (f32.load (i32.add (i32.const @MAP_SPAWN) (i32.shl (local.get $i) (i32.const 3)))))
@@ -72,13 +65,194 @@
 #endif
   (f32.store (i32.const @HDR_TEE) (f32.const 512))
   (f32.store (i32.const @(HDR_TEE + 8)) (f32.const 512))
-#if FLIGHT
-  ;; how high a ship may fly, for the page and the bots (the sim folds it in),
-  ;; and the race's gates, if the map has a race
-  (f32.store (i32.const @MAP_CEILING) (f32.const @MAP_CEIL))
-  (memory.init $map (i32.const @MAP_RACE) (i32.const @MAPSEG_RACE) (i32.const @MAPSEG_NRACEB))
-#endif
   (f32.store (i32.const @HDR_DIR) (f32.const 1)))
+
+;; Outside the images (w x h samples at x0, z0): the nearest edge sample,
+;; plus half the noise's relief faded in over 40 m, plus a rise of a quarter
+;; metre a sample.
+(func $a_skirt (param $x0 i32) (param $z0 i32) (param $w i32) (param $h i32)
+  (local $x i32) (local $z i32) (local $k i32) (local $ex i32) (local $ez i32) (local $dx i32) (local $dz i32)
+  (local $x1 i32) (local $z1 i32) (local $d f32) (local $hh f32)
+  (local.set $x1 (i32.sub (i32.add (local.get $x0) (local.get $w)) (i32.const 1)))
+  (local.set $z1 (i32.sub (i32.add (local.get $z0) (local.get $h)) (i32.const 1)))
+  (!for $z (i32.const 0) (i32.const @GRID)
+    (!for $x (i32.const 0) (i32.const @GRID)
+      (local.set $ex (select (local.get $x0) (local.get $x) (i32.lt_s (local.get $x) (local.get $x0))))
+      (local.set $ex (select (local.get $x1) (local.get $ex) (i32.gt_s (local.get $ex) (local.get $x1))))
+      (local.set $ez (select (local.get $z0) (local.get $z) (i32.lt_s (local.get $z) (local.get $z0))))
+      (local.set $ez (select (local.get $z1) (local.get $ez) (i32.gt_s (local.get $ez) (local.get $z1))))
+      (local.set $dx (i32.sub (local.get $x) (local.get $ex)))
+      (local.set $dz (i32.sub (local.get $z) (local.get $ez)))
+      (if (i32.or (local.get $dx) (local.get $dz))
+        (then
+          (local.set $k (i32.add (i32.shl (local.get $z) (i32.const 9)) (local.get $x)))
+          (local.set $d (f32.sqrt (f32.convert_i32_s (i32.add (i32.mul (local.get $dx) (local.get $dx)) (i32.mul (local.get $dz) (local.get $dz))))))
+          (local.set $hh (f32.add (f32.add (f32.convert_i32_u (!ld u16 @TERRAIN_H (i32.add (i32.shl (local.get $ez) (i32.const 9)) (local.get $ex))))
+                                           (f32.mul (f32.mul (f32.convert_i32_u (i32.sub (!ld u16 @TERRAIN_H (local.get $k)) (i32.const 4096))) (f32.const 0.5))
+                                                    (f32.min (f32.mul (local.get $d) (f32.const 0.05)) (f32.const 1))))
+                                  (f32.mul (local.get $d) (f32.const 64))))
+          (!st u16 @TERRAIN_H (local.get $k) (i32.trunc_sat_f32_u (f32.min (f32.add (local.get $hh) (f32.const 0.5)) (f32.const 65535))))
+          (!st u8 @TERRAIN_S (local.get $k) (i32.const 0)))))))
+
+;; ---- a map from outside the build: the map_load export. The host writes a
+;; packed map (tools/map-compile.mjs packMap: MAPPACK_HEAD bytes of head, then
+;; the bytes a build's own map segment holds) at src, below MAP_STAGE_MAX
+;; bytes, before init, and calls this once. A map may be anyone's, so every
+;; count, offset and size is checked against this build's limits, and every
+;; number the sim reads as a place is finite and in reach, before anything is
+;; written: 0 when it is in place, else what was wrong (1 its head, 2 a count,
+;; 3 a part outside the bytes, 4 the images outside the world, 5 a group or a
+;; box, 6 the ceiling or the void, 7 a place), and nothing changed. The
+;; mountains past the images grow from $terrain_gen's seed 0, so the static
+;; world is the map's alone, whatever seed a room plays.
+(func (export "map_load") (param $src i32) (param $len i32) (result i32)
+  (local $d i32) (local $n i32) (local $i i32) (local $a i32) (local $g i32) (local $o i32) (local $z i32)
+  (local $nb i32) (local $ng i32) (local $ns i32) (local $np i32) (local $nt i32) (local $x0 i32) (local $z0 i32) (local $w i32) (local $h i32)
+  (local $c f32) (local $v f32)
+  (if (i32.or (i32.lt_u (local.get $len) (i32.const @(MAPPACK_HEAD + MAP_HEAD))) (i32.gt_u (local.get $len) (i32.const @MAP_STAGE_MAX)))
+    (then (return (i32.const 1))))
+  (if (i32.or (i32.ne (i32.load offset=@MP_MAGIC (local.get $src)) (i32.const @MAPPACK_MAGIC))
+              (i32.ne (i32.add (i32.load offset=@MP_BYTES (local.get $src)) (i32.const @MAPPACK_HEAD)) (local.get $len)))
+    (then (return (i32.const 1))))
+  (local.set $d (i32.add (local.get $src) (i32.const @MAPPACK_HEAD)))
+  (local.set $n (i32.load offset=@MP_BYTES (local.get $src)))
+  ;; the head's counts, against the build's
+  (local.set $nb (i32.load offset=@(MAP_NBOX - MAP) (local.get $d)))
+  (local.set $ng (i32.load offset=@(MAP_NGROUP - MAP) (local.get $d)))
+  (local.set $nt (i32.load offset=@(MAP_NTELE - MAP) (local.get $d)))
+  (local.set $ns (i32.load offset=@(MAP_NSPAWN - MAP) (local.get $d)))
+  (local.set $np (i32.load offset=@(MAP_NPAD - MAP) (local.get $d)))
+  (if (i32.or (i32.or (i32.gt_u (local.get $nb) (i32.const @NBOX)) (i32.gt_u (local.get $ng) (i32.const @NGROUP)))
+              (i32.or (i32.gt_u (local.get $nt) (i32.const @NTELE))
+                      (i32.or (i32.gt_u (local.get $np) (i32.const @NPAD))
+                              (i32.or (i32.eqz (local.get $ns)) (i32.gt_u (local.get $ns) (i32.const @NSPAWN))))))
+    (then (return (i32.const 2))))
+  ;; the images: inside the world, a sample in from its edge
+  (local.set $x0 (i32.load offset=@MP_X0 (local.get $src)))
+  (local.set $z0 (i32.load offset=@MP_Z0 (local.get $src)))
+  (local.set $w (i32.load offset=@MP_W (local.get $src)))
+  (local.set $h (i32.load offset=@MP_HT (local.get $src)))
+  (if (i32.or (i32.or (i32.lt_u (local.get $x0) (i32.const 1)) (i32.lt_u (local.get $z0) (i32.const 1)))
+              (i32.or (i32.or (i32.lt_u (local.get $w) (i32.const 2)) (i32.lt_u (local.get $h) (i32.const 2)))
+                      (i32.or (i32.gt_u (local.get $w) (i32.const @(GRID - 2))) (i32.gt_u (local.get $h) (i32.const @(GRID - 2))))))
+    (then (return (i32.const 4))))
+  (if (i32.or (i32.gt_u (i32.add (local.get $x0) (local.get $w)) (i32.const @(GRID - 1)))
+              (i32.gt_u (i32.add (local.get $z0) (local.get $h)) (i32.const @(GRID - 1))))
+    (then (return (i32.const 4))))
+  ;; each part inside the bytes, each the size its count says (sizes are all
+  ;; under 2^20 here, so no sum overflows)
+  (if (i32.or (i32.or (i32.ne (i32.load offset=@MP_NGROUPB (local.get $src)) (i32.shl (local.get $ng) (i32.const 5)))
+                      (i32.ne (i32.load offset=@MP_NBOXB (local.get $src)) (i32.shl (local.get $nb) (i32.const 5))))
+              (i32.or (i32.gt_u (i32.load offset=@MP_GROUPS (local.get $src)) (local.get $n))
+                      (i32.or (i32.gt_u (i32.load offset=@MP_BOXES (local.get $src)) (local.get $n))
+                              (i32.or (i32.gt_u (i32.load offset=@MP_H (local.get $src)) (local.get $n))
+                                      (i32.or (i32.gt_u (i32.load offset=@MP_S (local.get $src)) (local.get $n))
+                                              (i32.or (i32.gt_u (i32.load offset=@MP_OBJ (local.get $src)) (local.get $n))
+                                                      (i32.gt_u (i32.load offset=@MP_RACE (local.get $src)) (local.get $n))))))))
+    (then (return (i32.const 3))))
+  (if (i32.or (i32.or (i32.gt_u (i32.add (i32.load offset=@MP_GROUPS (local.get $src)) (i32.shl (local.get $ng) (i32.const 5))) (local.get $n))
+                      (i32.gt_u (i32.add (i32.load offset=@MP_BOXES (local.get $src)) (i32.shl (local.get $nb) (i32.const 5))) (local.get $n)))
+              (i32.or (i32.or (i32.gt_u (i32.add (i32.load offset=@MP_H (local.get $src)) (i32.shl (i32.mul (local.get $w) (local.get $h)) (i32.const 1))) (local.get $n))
+                              (i32.gt_u (i32.add (i32.load offset=@MP_S (local.get $src)) (i32.mul (local.get $w) (local.get $h))) (local.get $n)))
+                      (i32.or (i32.gt_u (i32.add (i32.load offset=@MP_OBJ (local.get $src)) (i32.const @MAP_OBJ_SIZE)) (local.get $n))
+                              (i32.gt_u (i32.add (i32.load offset=@MP_RACE (local.get $src)) (i32.load offset=@MP_NRACEB (local.get $src))) (local.get $n)))))
+    (then (return (i32.const 3))))
+  ;; the race: none, or a count and that many gates
+  (local.set $a (i32.load offset=@MP_NRACEB (local.get $src)))
+  (if (local.get $a)
+    (then
+      (local.set $i (i32.load (i32.add (local.get $d) (i32.load offset=@MP_RACE (local.get $src)))))
+      (if (i32.or (i32.gt_u (local.get $i) (i32.const @NGATE)) (i32.ne (local.get $a) (i32.add (i32.const 16) (i32.shl (local.get $i) (i32.const 4)))))
+        (then (return (i32.const 3))))))
+  ;; the hills: at most NHILL
+  (if (i32.gt_u (i32.load (i32.add (local.get $d) (i32.add (i32.load offset=@MP_OBJ (local.get $src)) (i32.const @(MAP_NHILL - MAP_OBJ))))) (i32.const @NHILL))
+    (then (return (i32.const 2))))
+  ;; each group's boxes are boxes the map has; each box's corners in order
+  ;; (a NaN fails), the whole thing within reach
+  (local.set $g (i32.add (local.get $d) (i32.load offset=@MP_GROUPS (local.get $src))))
+  (!for $i (i32.const 0) (local.get $ng)
+    (local.set $a (i32.add (local.get $g) (i32.shl (local.get $i) (i32.const 5))))
+    (if (i32.or (i32.gt_u (i32.load offset=24 (local.get $a)) (local.get $nb))
+                (i32.gt_u (i32.load offset=28 (local.get $a)) (i32.sub (local.get $nb) (i32.load offset=24 (local.get $a)))))
+      (then (return (i32.const 5))))
+    (if (i32.eqz (call $a_ordered (local.get $a))) (then (return (i32.const 5)))))
+  (local.set $g (i32.add (local.get $d) (i32.load offset=@MP_BOXES (local.get $src))))
+  (!for $i (i32.const 0) (local.get $nb)
+    (if (i32.eqz (call $a_ordered (i32.add (local.get $g) (i32.shl (local.get $i) (i32.const 5))))) (then (return (i32.const 5)))))
+  ;; the ceiling, and the void under it (0, none)
+  (local.set $c (f32.load offset=@MP_CEIL (local.get $src)))
+  (local.set $v (f32.load offset=@(MAP_VOID - MAP) (local.get $d)))
+  (if (i32.eqz (i32.and (i32.and (f32.gt (local.get $c) (f32.const 0)) (f32.lt (local.get $c) (f32.const 400)))
+                        (i32.or (f32.eq (local.get $v) (f32.const 0)) (i32.and (f32.gt (local.get $v) (f32.const 0)) (f32.lt (local.get $v) (local.get $c))))))
+    (then (return (i32.const 6))))
+  ;; every place the sim reads: the bounds, spawns and their tops, pads,
+  ;; teleporters, the flags, the skull and the hills, the race's gates
+  (if (i32.eqz (i32.and (i32.and (call $a_inreach (i32.add (local.get $d) (i32.const @(MAP_BOUNDS - MAP))) (i32.const 4) (i32.const 1))
+                                 (call $a_inreach (i32.add (local.get $d) (i32.const @(MAP_SPAWN - MAP))) (i32.shl (local.get $ns) (i32.const 1)) (i32.const 1)))
+                        (i32.and (call $a_inreach (i32.add (local.get $d) (i32.const @(MAP_SPAWNY - MAP))) (local.get $ns) (i32.const 1))
+                                 (call $a_inreach (i32.add (local.get $d) (i32.const @(MAP_PADS - MAP))) (local.get $np) (i32.const 4)))))
+    (then (return (i32.const 7))))
+  (!for $i (i32.const 0) (local.get $np)
+    (local.set $a (i32.load offset=@(MAP_PADS - MAP + 12) (i32.add (local.get $d) (i32.shl (local.get $i) (i32.const 4)))))
+    (if (i32.or (i32.eqz (local.get $a)) (i32.gt_u (local.get $a) (i32.const @W_SWORD))) (then (return (i32.const 7)))))
+  (!for $i (i32.const 0) (local.get $nt)
+    (if (i32.eqz (call $a_inreach (i32.add (local.get $d) (i32.add (i32.const @(MAP_TELE - MAP)) (i32.mul (local.get $i) (i32.const @TELE_SIZE)))) (i32.const 7) (i32.const 1)))
+      (then (return (i32.const 7)))))
+  (local.set $o (i32.add (local.get $d) (i32.load offset=@MP_OBJ (local.get $src))))
+  (if (i32.eqz (i32.and (call $a_inreach (i32.add (local.get $o) (i32.const @(MAP_FLAGS - MAP_OBJ))) (i32.const 3) (i32.const 1))
+                        (i32.and (call $a_inreach (i32.add (local.get $o) (i32.const @(MAP_FLAGS + 16 - MAP_OBJ))) (i32.const 3) (i32.const 1))
+                                 (i32.and (call $a_inreach (i32.add (local.get $o) (i32.const @(MAP_BALL - MAP_OBJ))) (i32.const 3) (i32.const 1))
+                                          (call $a_inreach (i32.add (local.get $o) (i32.const @(MAP_HILLS - MAP_OBJ))) (i32.load (local.get $o)) (i32.const 4))))))
+    (then (return (i32.const 7))))
+  (if (i32.load offset=@MP_NRACEB (local.get $src))
+    (then
+      (local.set $a (i32.add (local.get $d) (i32.load offset=@MP_RACE (local.get $src))))
+      (if (i32.eqz (call $a_inreach (i32.add (local.get $a) (i32.const 16)) (i32.shl (i32.load (local.get $a)) (i32.const 2)) (i32.const 1)))
+        (then (return (i32.const 7))))))
+  ;; all well: in place, as the build's own map would be
+  (memory.copy (i32.const @MAP) (local.get $d) (i32.const @MAP_HEAD))
+  (memory.copy (i32.const @MAP_GROUPS) (i32.add (local.get $d) (i32.load offset=@MP_GROUPS (local.get $src))) (i32.shl (local.get $ng) (i32.const 5)))
+  (memory.copy (i32.const @MAP_BOXES) (i32.add (local.get $d) (i32.load offset=@MP_BOXES (local.get $src))) (i32.shl (local.get $nb) (i32.const 5)))
+  (memory.copy (i32.const @MAP_OBJ) (i32.add (local.get $d) (i32.load offset=@MP_OBJ (local.get $src))) (i32.const @MAP_OBJ_SIZE))
+#if FLIGHT
+  ;; the race's gates, as flight's own map's are (the arena has no race)
+  (memory.fill (i32.const @MAP_RACE) (i32.const 0) (i32.const @(MAP_RACE_END - MAP_RACE)))
+  (memory.copy (i32.const @MAP_RACE) (i32.add (local.get $d) (i32.load offset=@MP_RACE (local.get $src))) (i32.load offset=@MP_NRACEB (local.get $src)))
+#endif
+  (call $terrain_gen (i32.const 0))
+  (!for $z (i32.const 0) (local.get $h)
+    (local.set $a (i32.add (i32.mul (i32.add (local.get $z) (local.get $z0)) (i32.const @GRID)) (local.get $x0)))
+    (memory.copy (i32.add (i32.const @TERRAIN_H) (i32.shl (local.get $a) (i32.const 1)))
+                 (i32.add (i32.add (local.get $d) (i32.load offset=@MP_H (local.get $src))) (i32.shl (i32.mul (local.get $z) (local.get $w)) (i32.const 1)))
+                 (i32.shl (local.get $w) (i32.const 1)))
+    (memory.copy (i32.add (i32.const @TERRAIN_S) (local.get $a))
+                 (i32.add (i32.add (local.get $d) (i32.load offset=@MP_S (local.get $src))) (i32.mul (local.get $z) (local.get $w)))
+                 (local.get $w)))
+  (call $a_skirt (local.get $x0) (local.get $z0) (local.get $w) (local.get $h))
+#if FLIGHT
+  (f32.store (i32.const @MAP_CEILING) (local.get $c))
+#endif
+  (i32.store (i32.const @MAP_HOSTED) (i32.const 1))
+  (i32.const 0))
+
+;; A box at a (f32 x0, y0, z0, x1, y1, z1): each corner before the other on
+;; its axis, and within 100 km (so no NaN and no infinity).
+(func $a_ordered (param $a i32) (result i32)
+  (i32.and (i32.and (i32.and (f32.lt (f32.load (local.get $a)) (f32.load offset=12 (local.get $a)))
+                             (f32.lt (f32.load offset=4 (local.get $a)) (f32.load offset=16 (local.get $a))))
+                    (f32.lt (f32.load offset=8 (local.get $a)) (f32.load offset=20 (local.get $a))))
+           (call $a_inreach (local.get $a) (i32.const 6) (i32.const 1))))
+
+;; n places of f32s at a, each `stride` f32s from the last (only the first
+;; three of each, if stride is 4: a pad's weapon, a hill's radius is checked
+;; too as a number): each finite and within 100 km. 1 if all are.
+(func $a_inreach (param $a i32) (param $n i32) (param $stride i32) (result i32)
+  (local $i i32) (local $k i32) (local $v f32)
+  (!for $i (i32.const 0) (local.get $n)
+    (!for $k (i32.const 0) (select (i32.const 3) (i32.const 1) (i32.eq (local.get $stride) (i32.const 4)))
+      (local.set $v (f32.load (i32.add (local.get $a) (i32.shl (i32.add (i32.mul (local.get $i) (local.get $stride)) (local.get $k)) (i32.const 2)))))
+      (if (i32.eqz (f32.lt (f32.abs (local.get $v)) (f32.const 100000))) (then (return (i32.const 0))))))
+  (i32.const 1))
 
 ;; The map's weapon pads laid out, each with its gun there: at init in slayer
 ;; (FIESTA 0), and in Fiesta's build as a match of a mode with pads is picked.
@@ -1184,9 +1358,9 @@
               (then (call $a_pickup (local.get $p))))
 #endif
             ))
-        ;; below the map's void (map.json "void": a Roblox place's sky, tools/roblox.mjs): dead by falling
+        ;; below the map's void (map.json "void": a Roblox place's sky, tools/roblox.mjs; 0 none): dead by falling
         (if (i32.and (i32.and (i32.eqz (i32.and (local.get $fl) (i32.const @PF_DEAD))) (i32.eq (local.get $state) (i32.const @H_PLAY)))
-                     (f32.lt (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.const @MAP_VOID)))
+                     (f32.lt (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.load (i32.const @MAP_VOID))))
           (then (call $a_kill (local.get $p) (local.get $p) (i32.const @KILL_FALL))))
         (!put u8 @(PLAYERS + A_ACT) (local.get $pb) (i32.and (!at u8 @(PLAYERS + A_ACT) (local.get $pb)) (i32.const @(255 ^ AB_USE)))))))
   (!for $k (i32.const 0) (i32.const @NPAD)

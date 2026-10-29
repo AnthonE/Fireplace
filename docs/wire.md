@@ -54,7 +54,7 @@ player for 2 s takes them as gone.
 
 | message | bytes | layout |
 | --- | --- | --- |
-| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 avatars) · u8 slot · 2 B 0 |
+| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm), or with a map from outside the build SHA-256(game.wasm then the packed map) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 avatars) · u8 slot · 2 B 0 |
 | welcome | 32 | `0x11` · u8 slot · u16 server max datagram · u32 join_tick · u32 seed · u32 server_tick · u32 tick_us · u8 send_every · u8 nb · u16 np · u32 room_start · u32 token |
 | watching | 32 | `0x17`, then as a welcome with slot 0: you're a spectator |
 | reject | 4 | `0x1f` · u8 reason · 2 B 0 |
