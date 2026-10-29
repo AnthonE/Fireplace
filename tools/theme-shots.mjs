@@ -4,7 +4,7 @@
 // traces/themes/<id>.png: what a theme pull request looks like, for whoever
 // reviews it (CI keeps them as an artifact). Run npm run build first: it
 // bundles the list.
-//   node tools/theme-shots.mjs [--themes grandma,haunted] [--res 960x600]
+//   node tools/theme-shots.mjs [--themes grandma,summer-rain] [--res 960x600]
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { serve } from './serve.mjs';
