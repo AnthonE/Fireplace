@@ -33,6 +33,14 @@
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
       "check": "machine"
+    },
+    {
+      "id": "fireplace-roblox-port",
+      "title": "a Roblox game, ported",
+      "what": "A Roblox game whose place is yours or licensed for reuse (Roblox's 31 open-source levels are MIT), playing on Fireplace. node tools/roblox.mjs place.rbxl --brief makes its map (a lift or platform its script tweens to and fro moves as it did) and port/<name>/port.md: its scripts, remotes, data stores and what moves. Write its rules fresh from the brief as an arena mode (src/am/<key>.wat) or a Party minigame (node tools/new-mg.mjs), with the map in maps/. Its tests, the determinism matrix and the online gate must pass in CI.",
+      "deliverable": "PR: accepted into AnthonE/Fireplace",
+      "read_first": "docs/roblox.md",
+      "check": "machine"
     }
   ],
   "mods": [

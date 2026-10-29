@@ -192,18 +192,18 @@
   (if (f32.gt (local.get $py) (f32.load (i32.const @MAP_CEILING))) (then (local.set $py (f32.load (i32.const @MAP_CEILING))) (local.set $vy (f32.min (local.get $vy) (f32.const 0)))))
   ;; a box: back where it was, the speed across the face it came through
   ;; turned and halved (a top or an underside if neither side face)
-  (local.set $b (call $box_in (local.get $px) (local.get $py) (local.get $pz) (f32.const @FL_R)))
+  (local.set $b (call $box_in (local.get $px) (local.get $py) (local.get $pz) (f32.const @FL_R) (i32.load offset=@HDR_TICK (local.get $d))))
   (if (local.get $b)
     (then
-      (if (i32.or (f32.le (local.get $ox) (f32.sub (f32.load (local.get $b)) (f32.const @FL_R)))
-                  (f32.ge (local.get $ox) (f32.add (f32.load offset=12 (local.get $b)) (f32.const @FL_R))))
+      (if (i32.or (f32.le (local.get $ox) (f32.sub (call $bc (local.get $b) (i32.const 0) (i32.load offset=@HDR_TICK (local.get $d))) (f32.const @FL_R)))
+                  (f32.ge (local.get $ox) (f32.add (call $bc (local.get $b) (i32.const 12) (i32.load offset=@HDR_TICK (local.get $d))) (f32.const @FL_R))))
         (then
           (local.set $vn (f32.abs (local.get $vx)))
           (local.set $px (local.get $ox))
           (local.set $vx (f32.mul (local.get $vx) (f32.const -0.5))))
         (else
-          (if (i32.or (f32.le (local.get $oz) (f32.sub (f32.load offset=8 (local.get $b)) (f32.const @FL_R)))
-                      (f32.ge (local.get $oz) (f32.add (f32.load offset=20 (local.get $b)) (f32.const @FL_R))))
+          (if (i32.or (f32.le (local.get $oz) (f32.sub (call $bc (local.get $b) (i32.const 8) (i32.load offset=@HDR_TICK (local.get $d))) (f32.const @FL_R)))
+                      (f32.ge (local.get $oz) (f32.add (call $bc (local.get $b) (i32.const 20) (i32.load offset=@HDR_TICK (local.get $d))) (f32.const @FL_R))))
             (then
               (local.set $vn (f32.abs (local.get $vz)))
               (local.set $pz (local.get $oz))
@@ -367,7 +367,7 @@
           (br $out)))
       (local.set $t (f32.add (local.get $t) (f32.const 1)))
       (br $march)))
-  (local.set $best (call $box_ray (local.get $ox) (local.get $oy) (local.get $oz) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $best)))
+  (local.set $best (call $box_ray (local.get $ox) (local.get $oy) (local.get $oz) (local.get $dx) (local.get $dy) (local.get $dz) (local.get $best) (i32.load (i32.const @HDR_TICK))))
   (local.set $who (i32.const -1))
   (!for $q (i32.const 0) (i32.const @NPLAYER)
     (if (i32.and (i32.and (i32.eq (i32.and (i32.load8_u offset=@(PLAYERS + P_FL) (i32.shl (local.get $q) (i32.const 6))) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
@@ -497,7 +497,7 @@
         (else (!put u8 @(PROJ + J_HOME) (local.get $jb) (i32.const 0))))))
   (!for $k (i32.const 0) (i32.const 2)
     (if (call $box_in (!madd (local.get $vx) (f32.const 0.004) (local.get $px)) (!madd (local.get $vy) (f32.const 0.004) (local.get $py))
-                      (!madd (local.get $vz) (f32.const 0.004) (local.get $pz)) (f32.const 0))
+                      (!madd (local.get $vz) (f32.const 0.004) (local.get $pz)) (f32.const 0) (i32.load offset=@HDR_TICK (local.get $d)))
       (then (call $f_blast (local.get $jb) (local.get $d) (local.get $px) (local.get $py) (local.get $pz)) (return)))
     (local.set $px (!madd (local.get $vx) (f32.const 0.004) (local.get $px)))
     (local.set $py (!madd (local.get $vy) (f32.const 0.004) (local.get $py)))
@@ -555,7 +555,7 @@
         (local.set $dist (f32.sqrt (!dot3 (local.get $dx) (local.get $dy) (local.get $dz) (local.get $dx) (local.get $dy) (local.get $dz))))
         (if (i32.and (f32.lt (local.get $dist) (local.get $r))
                      (call $clear (local.get $x) (local.get $y) (local.get $z)
-                                  (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (!at f32 @(PLAYERS + P_PY) (local.get $qb)) (!at f32 @(PLAYERS + P_PZ) (local.get $qb))))
+                                  (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (!at f32 @(PLAYERS + P_PY) (local.get $qb)) (!at f32 @(PLAYERS + P_PZ) (local.get $qb)) (i32.load (i32.const @HDR_TICK))))
           (then
             (local.set $f (f32.mul (local.get $dmg) (!clamp (f32.div (f32.sub (local.get $r) (local.get $dist)) (f32.mul (local.get $r) (f32.const 0.65))) (f32.const 0) (f32.const 1))))
             (if (i32.eq (local.get $q) (local.get $owner)) (then (local.set $f (f32.mul (local.get $f) (f32.const 0.5)))))

@@ -84,6 +84,24 @@ export function compileSpec(spec, images, name = 'map.json') {
   }
   // ---- structures: a group of boxes each
   const prefabs = spec.prefabs || {};
+  // a structure's "move": { by: [dx, dy, dz] (turned with the structure),
+  // seconds each way, wait at each end (1 s), phase (0 s), ease } as the sim's
+  // row reads it (layout.mjs MAP_MOVE): ticks at 125 Hz
+  const ticks = (v, what, min) => {
+    const n = Math.round(v * L.TICK_HZ);
+    if (typeof v !== 'number' || !(n >= min && n <= L.MV_TICKS_MAX)) fail(`${what}: ${min ? 'over 0' : '0 or more'} seconds, at most ${L.MV_TICKS_MAX / L.TICK_HZ}`);
+    return n;
+  };
+  const mover = (m, turn, name) => {
+    if (!Array.isArray(m.by) || m.by.length !== 3 || m.by.some((v) => typeof v !== 'number' || !(Math.abs(v) <= 1000))) fail(`${name}: move.by is [dx, dy, dz], each within 1000 m`);
+    const by = placePoint(m.by, [0, 0, 0], turn).map(round);
+    const travel = ticks(m.seconds ?? 4, `${name}: move.seconds`, 1);
+    const wait = ticks(m.wait ?? 1, `${name}: move.wait`, 0), phase = ticks(m.phase ?? 0, `${name}: move.phase`, 0);
+    // its fastest tick: the mean, or half again eased
+    const step = Math.hypot(...by) / travel * (m.ease ? 1.5 : 1);
+    if (step > L.MV_STEP_MAX) fail(`${name}: move goes ${(step * L.TICK_HZ).toFixed(1)} m/s at its fastest, at most ${L.MV_STEP_MAX * L.TICK_HZ} (more seconds, or a shorter move)`);
+    return { by, travel, wait, phase, ease: !!m.ease };
+  };
   const groups = [], boxes = [], teleporters = [];
   const mat = (name, tint, ctx) => {
     const m = materialWord((tint && tint[name]) || name || 'metal');
@@ -103,7 +121,11 @@ export function compileSpec(spec, images, name = 'map.json') {
     if (boxes.length === first) continue;
     const mine = boxes.slice(first);
     const bound = [0, 1, 2].map((a) => Math.min(...mine.map((b) => b.box[a]))).concat([3, 4, 5].map((a) => Math.max(...mine.map((b) => b.box[a]))));
-    groups.push({ name, bound, first, count: mine.length });
+    // a mover's group is bounded over its whole path, so a query that misses
+    // the path costs one test, wherever on it the boxes are
+    const move = s.move ? mover(s.move, turn, name) : null;
+    if (move) for (let a = 0; a < 3; a++) { bound[a] = Math.min(bound[a], round(bound[a] + move.by[a])); bound[a + 3] = Math.max(bound[a + 3], round(bound[a + 3] + move.by[a])); }
+    groups.push({ name, bound, first, count: mine.length, ...(move ? { move } : {}) });
     for (const tp of s.teleporters || []) teleporters.push({ from: placePoint(tp.from, at, turn), to: placePoint(tp.to, at, turn), radius: tp.radius ?? 1.2 });
   }
   for (const tp of spec.teleporters || []) teleporters.push({ from: tp.from, to: tp.to, radius: tp.radius ?? 1.2 });
@@ -215,6 +237,17 @@ export function compileSpec(spec, images, name = 'map.json') {
     race.forEach((g, k) => g.forEach((v, i) => rb.setFloat32(16 + 16 * k + 4 * i, v, true)));
     parts.push(new Uint8Array(rb.buffer));
   }
+  // the movers' rows as MAP_MOVE lays them out, up to the last group that
+  // moves, only for a map that has one (the same)
+  const nmove = groups.reduce((n, g, k) => (g.move ? k + 1 : n), 0);
+  const mb = new DataView(new ArrayBuffer(nmove * L.MOVE_SIZE));
+  groups.slice(0, nmove).forEach((g, k) => {
+    if (!g.move) return;
+    const a = k * L.MOVE_SIZE, m = g.move;
+    m.by.forEach((v, i) => mb.setFloat32(a + 4 * i, v, true));
+    [m.travel, m.wait, m.phase, L.MV_ON | (m.ease ? L.MV_EASE : 0)].forEach((v, i) => mb.setUint32(a + 12 + 4 * i, v, true));
+  });
+  if (nmove) parts.push(new Uint8Array(mb.buffer));
   const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   const offs = [];
   parts.reduce((at, p) => { offs.push(at); bytes.set(p, at); return at + p.length; }, 0);
@@ -226,6 +259,7 @@ export function compileSpec(spec, images, name = 'map.json') {
       MAPSEG_GROUPS: offs[1], MAPSEG_NGROUPB: gbytes.byteLength, MAPSEG_BOXES: offs[2], MAPSEG_NBOXB: bbytes.byteLength,
       MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling,
       MAPSEG_RACE: race.length ? offs[6] : bytes.length, MAPSEG_NRACEB: race.length ? 16 + 16 * race.length : 0,
+      MAPSEG_MOVE: nmove ? offs[parts.length - 1] : bytes.length, MAPSEG_NMOVEB: mb.byteLength,
     },
     ceiling, void: voidY,
     bounds, groups, boxes, teleporters, spawns, pads, flags, ball, hills, race, sides, heights, surf, origin: [ox, oz], size: [W, H],
@@ -279,7 +313,7 @@ export function packMap(m) {
   const c = m.consts, out = new Uint8Array(L.MAPPACK_HEAD + m.bytes.length), dv = new DataView(out.buffer);
   const u32 = { MP_MAGIC: L.MAPPACK_MAGIC, MP_BYTES: m.bytes.length, MP_GROUPS: c.MAPSEG_GROUPS, MP_NGROUPB: c.MAPSEG_NGROUPB, MP_BOXES: c.MAPSEG_BOXES,
     MP_NBOXB: c.MAPSEG_NBOXB, MP_H: c.MAPSEG_H, MP_S: c.MAPSEG_S, MP_OBJ: c.MAPSEG_OBJ, MP_RACE: c.MAPSEG_RACE, MP_NRACEB: c.MAPSEG_NRACEB,
-    MP_X0: c.MAPIMG_X0, MP_Z0: c.MAPIMG_Z0, MP_W: c.MAPIMG_W, MP_HT: c.MAPIMG_H };
+    MP_X0: c.MAPIMG_X0, MP_Z0: c.MAPIMG_Z0, MP_W: c.MAPIMG_W, MP_HT: c.MAPIMG_H, MP_MOVE: c.MAPSEG_MOVE, MP_NMOVEB: c.MAPSEG_NMOVEB };
   for (const [k, v] of Object.entries(u32)) dv.setUint32(L[k], v, true);
   dv.setFloat32(L.MP_CEIL, m.ceiling, true);
   out.set(m.bytes, L.MAPPACK_HEAD);
@@ -287,4 +321,5 @@ export function packMap(m) {
 }
 // What map_load's codes mean
 export const MAP_LOAD_ERRORS = ['', 'not a packed map (its head)', 'a count past the build\'s limits', 'a part outside its bytes',
-  'its images outside the world', 'a group or a box (out of range, inside out, or not a number)', 'its ceiling or void', 'a place that is not a number in reach'];
+  'its images outside the world', 'a group or a box (out of range, inside out, or not a number)', 'its ceiling or void', 'a place that is not a number in reach',
+  'a mover (past its groups, its ticks out of range, or its flags)'];

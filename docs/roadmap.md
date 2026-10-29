@@ -90,8 +90,9 @@ only of your own body), physics sandboxes, open worlds.
 2. The champion, grid and vehicle kits. The champion and vehicle kits draw
    with `client/party-render.mjs` (its decals are the telegraphs of a
    top-down game); the grid kit wants a small board renderer.
-3. The arena: several maps in one build chosen at run time, boxes that move
-   (obbies), new maps. A map now comes from the map editor
+3. The arena: several maps in one build chosen at run time, ~~boxes that
+   move~~ (done: a structure's `move`, docs/arena.md "Moving boxes", and
+   `maps/lifts/`), new maps. A map now comes from the map editor
    (`client/map-editor.html`) and from a Roblox place (`tools/roblox.mjs`)
    as well as from code. Maps at run time are done (docs/arena.md, "Maps
    at run time"): a packed map laid by the `map_load` export, every number

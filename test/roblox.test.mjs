@@ -275,3 +275,40 @@ test('the converter is the page\'s too: no Node in its modules', () => {
     assert.ok(!/from 'node:|require\(/.test(src), `${f} imports Node`);
   }
 });
+
+test('what a script tweens, or a physical mover drives, is a structure of its own; a tween that repeats and reverses moves as it did', async () => {
+  const src = (t) => `<ProtectedString name="Source"><![CDATA[${t}]]></ProtectedString>`;
+  const lift = `local TweenService = game:GetService("TweenService")
+local part = script.Parent
+local info = TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 2)
+TweenService:Create(part, info, {Position = part.Position + Vector3.new(0, 20, 0)}):Play()`;
+  const door = `local TweenService = game:GetService("TweenService")
+script.Parent.Touched:Connect(function()
+  TweenService:Create(script.Parent, TweenInfo.new(1), {CFrame = script.Parent.CFrame * CFrame.new(0, 0, 8)}):Play()
+end)`;
+  const out = convert(baseplate, { name: 'Wall', size: [4, 10, 40], at: [30, 5, 0], colour: [200, 0, 0] },
+    { name: 'Lift', size: [8, 1, 8], at: [0, 0.5, 0], colour: [90, 90, 90], kids: [{ cls: 'Script', name: 'Up', props: src(lift) }] },
+    { name: 'Door', size: [8, 10, 1], at: [-20, 5, 0], colour: [0, 0, 200], kids: [{ cls: 'Script', name: 'Open', props: src(door) }] },
+    { name: 'Floater', size: [6, 1, 6], at: [0, 10, 30], anchored: false, kids: [{ cls: 'BodyPosition', name: 'BodyPosition' }] });
+  const byName = Object.fromEntries(out.spec.structures.map((s) => [s.name, s]));
+  // the lift: its own structure, moving 20 studs up in 4 s, waiting 2 at each end, eased
+  assert.deepEqual(byName.Lift.move, { by: [0, 5.6, 0], seconds: 4, wait: 2, ease: true });
+  assert.equal(byName.Lift.boxes.length, 1);
+  // the door (a tween once, on a touch) and the floater (a BodyPosition): their own, standing still
+  assert.ok(byName.Door && !byName.Door.move && byName.Floater && !byName.Floater.move);
+  assert.ok(!out.spec.structures.some((s) => s !== byName.Lift && s.boxes.some((b) => near(b[4], byName.Lift.boxes[0][4]) && near(b[0], byName.Lift.boxes[0][0]))), 'the lift\'s box in no other structure');
+  assert.deepEqual(out.movers.map((m) => [m.name, !!m.move]), [['Lift', true], ['Door', false], ['Floater', false]]);
+  assert.ok(out.report.some((r) => /3 things that move are structures of their own: 1 moves as in the place/.test(r)), out.report.join('\n'));
+  // it compiles, and its row says the same
+  const lift1 = out.map.groups.find((g) => g.name === 'Lift');
+  assert.deepEqual(lift1.move, { by: [0, Math.fround(5.6), 0], travel: 500, wait: 250, phase: 0, ease: true });
+  // the brief lists them
+  const brief = robloxBrief(readRoblox(place(baseplate, { name: 'Lift', size: [8, 1, 8], at: [0, 0.5, 0], kids: [{ cls: 'Script', name: 'Up', props: src(lift) }] })),
+    { map: robloxToMap(readRoblox(place(baseplate, { name: 'Lift', size: [8, 1, 8], at: [0, 0.5, 0], kids: [{ cls: 'Script', name: 'Up', props: src(lift) }] }))) });
+  assert.match(brief.files['port.md'], /## What moves[\s\S]*"Lift" \(tweened by Workspace\.Lift\.Up\): moves by \[0, 5\.6, 0\] m in 4 s, waiting 2 s, eased/);
+  // a tween too fast for a mover is slowed to the most one may go
+  const fast = lift.replace('TweenInfo.new(4,', 'TweenInfo.new(0.1,');
+  const f = convert(baseplate, { name: 'Lift', size: [8, 1, 8], at: [0, 0.5, 0], kids: [{ cls: 'Script', name: 'Up', props: src(fast) }] });
+  const mv = f.spec.structures.find((s) => s.name === 'Lift').move;
+  assert.ok(mv.seconds > 0.1 && Math.hypot(...mv.by) * 1.5 / mv.seconds <= L.MV_STEP_MAX * L.TICK_HZ + 1e-9, JSON.stringify(mv));
+});

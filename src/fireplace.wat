@@ -85,7 +85,7 @@
 ;; (Box Canyon's structures past Skyways' fewer) is never left behind: the
 ;; static world is the game's and the seed's alone, however the sim got there.
 (func $fp_world (param $game i32) (param $seed i32)
-  (memory.fill (i32.const @MAP) (i32.const 0) (i32.const @(MAP_RACE_END - MAP)))
+  (memory.fill (i32.const @MAP) (i32.const 0) (i32.const @(MAP_MOVE_END - MAP)))
   (!fpworld (local.get $game) (local.get $seed))
   (i32.store (i32.const @FP_WORLD) (i32.add (local.get $game) (i32.const 1)))
   (i32.store (i32.const @(FP_WORLD + 4)) (local.get $seed)))

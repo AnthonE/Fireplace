@@ -466,16 +466,32 @@ export const MAP_END = MAP_OBJ + MAP_OBJ_SIZE;
 // A map without one leaves it 0; flight's init copies it out (src/flight.wat).
 export const MAP_RACE = MAP_END;
 export const MAP_RACE_END = MAP_RACE + 16 + 16 * 16;
+// Moving boxes (map.json's structures' "move", tools/map-compile.mjs): a row
+// a group (NGROUP of them, MOVE_SIZE bytes each), a group whose row's flags
+// are 0 standing still. f32 dx, dy, dz: where its far end is from where it is
+// built; u32 the ticks each way (1 or more), the ticks it waits at each end,
+// the ticks added to the room's tick (its phase); u32 flags (MV_ON, MV_EASE);
+// u32 0. Where a mover is is the room's tick and nothing else ($mv in
+// src/arena.wat), so it is in no record and every bank's tick places it.
+export const MAP_MOVE = MAP_RACE_END;
+export const MOVE_SIZE = 32;
+export const MAP_MOVE_END = MAP_MOVE + 64 * MOVE_SIZE; // NGROUP rows
+export const TICK_HZ = 125; // the sim's rate: a second is this many ticks
+export const MV_ON = 1;
+export const MV_EASE = 2; // eased in and out (3f^2 - 2f^3) rather than at one speed
+export const MV_TICKS_MAX = 1000000; // each way, waiting, or the phase: 2 h 13 min
+export const MV_STEP_MAX = 0.2; // m a tick a mover may go (25 m/s): under PHYS.SNAP, so what rides one down stays on it
 export const NBOX = 2048; // a place brought from Roblox (tools/roblox.mjs) wants hundreds to thousands
 // A map from outside the build, packed (tools/map-compile.mjs packMap) for the
 // arena's and flight's map_load export: a head, then the bytes a build's own
 // map segment holds. The host writes it at MAP_STAGE, the keyframe slots,
 // which nothing uses before init, so at most MAP_STAGE_MAX bytes.
-export const MAPPACK_MAGIC = 0x314d4751; // "QGM1"
-export const MAPPACK_HEAD = 64;
+export const MAPPACK_MAGIC = 0x324d4751; // "QGM2": QGM1's head, and the movers
+export const MAPPACK_HEAD = 80;
 // u32 fields of the head: the magic, the bytes after it, where each part of
 // the map is in them and how big (as MAPSEG_* name them in a build), the
-// images' place and size in samples (MAPIMG_*); then f32 the ceiling
+// images' place and size in samples (MAPIMG_*); then f32 the ceiling; then
+// where the movers' rows are and how many bytes (0, none)
 export const MP_MAGIC = 0;
 export const MP_BYTES = 4;
 export const MP_GROUPS = 8;
@@ -492,6 +508,8 @@ export const MP_Z0 = 48;
 export const MP_W = 52;
 export const MP_HT = 56;
 export const MP_CEIL = 60;
+export const MP_MOVE = 64;
+export const MP_NMOVEB = 68;
 export const MAP_STAGE = 0x0a0000; // SNAP0
 export const MAP_STAGE_MAX = 0x100000; // to DVX
 export const NGROUP = 64;

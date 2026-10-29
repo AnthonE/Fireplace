@@ -1,0 +1,132 @@
+{
+  "name": "Lifts",
+  "about": "Platforms slide across a pit and lifts climb two towers: a small arena of moving boxes.",
+  "bounds": [452, 572, 452, 524],
+  "terrain": {
+    "origin": [440, 440],
+    "height": "height.png",
+    "scale": 0.00390625,
+    "base": 0,
+    "surface": "surface.png"
+  },
+  "structures": [
+    {
+      "name": "red tower",
+      "boxes": [
+        [456, 19, 482, 464, 32, 494, "rock"],
+        [463.5, 19, 482, 468.5, 33, 483, "metal"],
+        [463.5, 19, 493, 468.5, 33, 494, "metal"]
+      ]
+    },
+    {
+      "name": "red tower's lift",
+      "boxes": [
+        [464, 19.5, 484, 468, 20, 492, "light#f0c040"]
+      ],
+      "move": {
+        "by": [0, 12, 0],
+        "seconds": 3,
+        "wait": 2,
+        "ease": true
+      }
+    },
+    {
+      "name": "blue tower",
+      "boxes": [
+        [560, 19, 482, 568, 32, 494, "rock"],
+        [555.5, 19, 482, 560.5, 33, 483, "metal"],
+        [555.5, 19, 493, 560.5, 33, 494, "metal"]
+      ]
+    },
+    {
+      "name": "blue tower's lift",
+      "boxes": [
+        [556, 19.5, 484, 560, 20, 492, "light#f0c040"]
+      ],
+      "move": {
+        "by": [0, 12, 0],
+        "seconds": 3,
+        "wait": 2,
+        "ease": true
+      }
+    },
+    {
+      "name": "platform 1",
+      "boxes": [
+        [496, 19.5, 463, 502, 20, 469, "light#40c0f0"]
+      ],
+      "move": {
+        "by": [26, 0, 0],
+        "seconds": 2.5,
+        "wait": 1,
+        "phase": 0
+      }
+    },
+    {
+      "name": "platform 2",
+      "boxes": [
+        [496, 19.5, 485, 502, 20, 491, "light#40c0f0"]
+      ],
+      "move": {
+        "by": [26, 0, 0],
+        "seconds": 2.5,
+        "wait": 1,
+        "phase": 2.333
+      }
+    },
+    {
+      "name": "platform 3",
+      "boxes": [
+        [496, 19.5, 507, 502, 20, 513, "light#40c0f0"]
+      ],
+      "move": {
+        "by": [26, 0, 0],
+        "seconds": 2.5,
+        "wait": 1,
+        "phase": 4.667
+      }
+    },
+    {
+      "name": "plank",
+      "boxes": [
+        [495, 19.6, 520, 529, 20, 522, "dark"]
+      ]
+    },
+    {
+      "name": "crates",
+      "boxes": [
+        [476.5, 20, 460.5, 479.5, 22.5, 463.5, "rock#8a6a40"],
+        [480.5, 20, 498.5, 483.5, 22.5, 501.5, "rock#8a6a40"],
+        [472.5, 20, 514.5, 475.5, 22.5, 517.5, "rock#8a6a40"],
+        [540.5, 20, 474.5, 543.5, 22.5, 477.5, "rock#8a6a40"],
+        [536.5, 20, 510.5, 539.5, 22.5, 513.5, "rock#8a6a40"],
+        [544.5, 20, 460.5, 547.5, 22.5, 463.5, "rock#8a6a40"]
+      ]
+    }
+  ],
+  "spawns": [
+    [458, 460],
+    [458, 516],
+    [470, 470],
+    [470, 506],
+    [566, 460],
+    [566, 516],
+    [554, 470],
+    [554, 506]
+  ],
+  "pads": [
+    {
+      "weapon": "sniper",
+      "at": [460, 488, 33]
+    },
+    {
+      "weapon": "sniper",
+      "at": [564, 488, 33]
+    },
+    {
+      "weapon": "shotgun",
+      "at": [512, 521, 21]
+    }
+  ],
+  "void": 10
+}
