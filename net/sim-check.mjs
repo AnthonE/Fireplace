@@ -1,3 +1,6 @@
+import * as L from '../src/layout.mjs';
+import { loadMap } from '../harness/core.mjs';
+
 // What a room's wasm must be for the referee to run it, checked before it
 // runs: its only import the shared memory (env.mem), so it cannot reach a
 // file or a socket, and every export the referee calls. The relay refuses a
@@ -15,4 +18,16 @@ export async function simRefusal(bytes, threads = 2) {
   const need = ['init', 'step', 'snapshot', 'regrid', ...(threads > 1 ? ['step_mt', 'worker_run'] : [])];
   const missing = need.filter((n) => !have.has(n));
   return missing.length ? `does not export ${missing.join(', ')}` : null;
+}
+
+// Does the sim take this map (tools/map-compile.mjs packMap) as the referee
+// will lay it, before its first init? The same map_load every machine in the
+// room runs, so a map it refuses here no room would start on. Returns null for
+// a map it takes, else why not.
+export async function mapRefusal(bytes, map) {
+  const memory = new WebAssembly.Memory({ initial: L.PAGES, maximum: L.PAGES, shared: true });
+  let x;
+  try { x = (await WebAssembly.instantiate(await WebAssembly.compile(bytes), { env: { mem: memory } })).exports; } catch (e) { return `the game would not start (${e.message || e})`; }
+  try { loadMap(x, new Uint8Array(memory.buffer), map); } catch (e) { return e.message; }
+  return null;
 }

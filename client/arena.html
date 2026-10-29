@@ -6,9 +6,12 @@
 <style>
   html, body { margin: 0; height: 100%; background: #0b0d14; color: #cfd3e0; font: 14px/1.4 ui-monospace, monospace; overflow: hidden; }
   canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; image-rendering: pixelated; }
+  #line { position: fixed; left: 12px; bottom: 10px; right: 12px; font-size: 12px; opacity: 0.75; pointer-events: none; }
+  #line button { pointer-events: auto; font: inherit; color: inherit; background: none; border: 1px solid currentColor; border-radius: 3px; padding: 1px 6px; margin-left: 6px; cursor: pointer; }
   #note { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; }
 </style>
 <canvas id="screen"></canvas>
+<div id="line" hidden><span></span><button id="invite" hidden>copy invite link</button><button id="online" hidden>play online with friends</button></div>
 <div id="note">loading…</div>
 <script src="../coi.js"></script>
 <script type="module" src="./arena.mjs"></script>

@@ -8,7 +8,10 @@
 // cannot send the headers), and an index.html that opens Fireplace's page,
 // its query kept. The map editor's half too: the map compiler and the PNG
 // codec it runs in the page (tools/map-compile.mjs, tools/png-codec.mjs) and
-// the maps it opens (maps/). And the studio's (client/studio.html): the sim's
+// the maps it opens (maps/), each also packed for a sim to lay at run time
+// (build/maps/<name>.qgmap, tools/map-compile.mjs packMap): what a page's
+// ?map=<name> plays, and what the kit's room pool fetches to start a room on
+// it (net/kit-rooms.mjs). And the studio's (client/studio.html): the sim's
 // WAT (src/), the assembler's pure half and party's AI room (tools/asm-core.mjs,
 // tools/party-play.mjs) and wabt's one script (node_modules/wabt/, with its
 // licence). No sources the browser never reads: the relay, tests.
@@ -17,6 +20,8 @@ import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFile
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './main.mjs';
+import { compileMap } from './map.mjs';
+import { packMap } from './map-compile.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -62,6 +67,17 @@ export function buildSite(out = join(ROOT, 'site')) {
       n++;
       bytes += statSync(path).size;
     }
+  }
+  // every map, packed: a map that doesn't compile is left out, and said
+  const maps = join(ROOT, 'maps');
+  mkdirSync(join(out, 'build', 'maps'), { recursive: true });
+  for (const name of readdirSync(maps)) {
+    if (!existsSync(join(maps, name, 'map.json'))) continue;
+    let packed;
+    try { packed = packMap(compileMap(join(maps, name))); } catch (e) { console.error(`site: maps/${name} left out: ${e.message}`); continue; }
+    writeFileSync(join(out, 'build', 'maps', `${name}.qgmap`), packed);
+    n++;
+    bytes += packed.length;
   }
   cpSync(join(ROOT, 'coi.js'), join(out, 'coi.js'));
   writeFileSync(join(out, 'index.html'), INDEX);

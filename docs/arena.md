@@ -610,6 +610,10 @@ the referee's sim and the bots' world; `net/play.mjs --map` and
 `net/run-arena.mjs --map` pack it into `build/maps/` and hand it to all
 three. On Crossroads, laid this way, 64 AI fighters for 60 s online: 3,702
 interval hashes, all equal, 439 kills, 0.3 ms a step.
+The static site (`tools/site.mjs`) packs every map in `maps/` into
+`build/maps/<name>.qgmap`, so `?map=<name>` plays one by its name, and on a
+copy's site the kit's room pool starts a room on it ([hosting.md](hosting.md),
+"Rooms for the kit's copies").
 
 `tools/canyon.mjs` is how Box Canyon was drawn: the ground painted by
 code into the two images, the rest written to `map.json`. Open it in the

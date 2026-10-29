@@ -3,7 +3,10 @@
 //   ?bot=1 hands the controls to an AI fighter (client/arena-bot.mjs)
 //   ?watch=1 spectates; ?cam=x,y,z,yaw,pitch (degrees) holds a spectator's camera
 //   there, for looking over a map; ?url=, ?hash=, ?impair=, ?sens=, ?res= as golf's
+//   ?map=<name> a map the site publishes (build/maps/<name>.qgmap), ?map=<url> any packed map;
+//   the line along the bottom offers to take it online (client/online.mjs)
 import { createHost, fitSize } from './host.mjs';
+import { onlineLine } from './online.mjs';
 import { mount } from './arena-game.mjs';
 
 const q = new URLSearchParams(location.search);
@@ -16,7 +19,8 @@ async function main() {
   const h = await createHost({ wasm: '../build/arena/game.wasm', q, watch: q.get('watch') === '1' || !!fixed, arena: true });
   const game = await mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.7), sens: Number(q.get('sens') || 3), fixed,
     present: q.get('present') !== '0', showGraph: q.get('net') === '1' });
-  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: game.state, capture: game.capture };
+  const line = await onlineLine(h, q, '../build/arena/game.wasm');
+  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool() }), capture: game.capture };
   note.remove();
   const loop = (now) => { requestAnimationFrame(loop); game.frame(now); };
   requestAnimationFrame(loop);

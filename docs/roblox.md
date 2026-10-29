@@ -152,12 +152,15 @@ What porting a game takes beyond the brief:
 1. **Its rules, written fresh** on a kit here (the arena's modes, Party's
    minigames), by an agent from the brief. The part that can't be
    mechanical.
-2. ~~Maps chosen at run time~~: done. A converted map plays the minute it
-   is made: the editor's **play it here**, or `net/play.mjs --arena --map
-   <it>` online, the map laid in every machine's sim at run time and named
-   in the room's hash (docs/arena.md, "Maps at run time"). What's left is
-   the room pool taking a map by its hash, so a player's map gets a room
-   on the store's servers as a copy's wasm does.
+2. ~~Maps chosen at run time, and a room for one~~: done. A converted map
+   plays the minute it is made: the editor's **play it here**, or
+   `net/play.mjs --arena --map <it>` online, the map laid in every
+   machine's sim at run time and named in the room's hash (docs/arena.md,
+   "Maps at run time"). On a copy of this kit, save it into `maps/<name>/`
+   and push: the site publishes it packed, `client/arena.html?map=<name>`
+   plays it, and **play online with friends** gets a room on the store's
+   servers running that wasm on that map, the invite keeping the map
+   ([hosting.md](hosting.md), "Rooms for the kit's copies").
 3. **Moving parts** (doors, lifts, obbies' platforms): boxes are static.
    A moving box is gameplay state in the region, stepped by the sim.
 4. **Meshes**, for a place built of them: their shapes are on Roblox's
