@@ -8,10 +8,9 @@
 #
 # A build whose zip matches the block already committed changes nothing, and
 # `"web": {"off": true}` in elo.json stops this job. The newest three web
-# releases are kept; older ones are deleted with their tags.
-#
-# Fireplace's own repo skips it: its store row is the house's, and a house
-# row's manifest lands only with the house's signature (elo.sig.json).
+# releases are kept; older ones are deleted with their tags. Fireplace's own
+# row is the house's, marked to read this repo's commits the same way
+# (`repo_commits`), so it is hosted at https://fireplace.scryward.online/.
 name: web
 on:
   push:
@@ -23,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   web:
-    if: github.ref_name == github.event.repository.default_branch && github.repository != 'AnthonE/Fireplace'
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

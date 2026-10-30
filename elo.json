@@ -82,14 +82,14 @@
       "id": "map-editor",
       "name": "Map editor",
       "makes": "map",
-      "url": "https://game.elopros.com/fireplace/client/map-editor.html",
+      "url": "https://fireplace.scryward.online/client/map-editor.html",
       "about": "Draw a map for the arena or Dogfight in the browser, play it with bots, and send it in."
     },
     {
       "id": "studio",
       "name": "Studio",
       "makes": "minigame",
-      "url": "https://game.elopros.com/fireplace/client/studio.html",
+      "url": "https://fireplace.scryward.online/client/studio.html",
       "about": "Edit a Party minigame in the browser, build and check it there, play it against AI balls, and send it in."
     }
   ],
