@@ -1,0 +1,95 @@
+# The page, hosted by Elo Pros: every push to the default branch builds the
+# static site (tools/site.mjs), attaches it to a release as site.zip, and
+# writes that zip's address and sha256 into elo.json's `web` block. Once the
+# game is listed on Elo Pros (the dev console lists it from this repo, no
+# wallet needed), the store reads the block, checks every file and serves the
+# game at https://<game>.scryward.online/; players open it from
+# https://elopros.com/games/<game>/play/. Until it is listed the block waits.
+#
+# A build whose zip matches the block already committed changes nothing, and
+# `"web": {"off": true}` in elo.json stops this job. The newest three web
+# releases are kept; older ones are deleted with their tags. Fireplace's own
+# row is the house's, marked to read this repo's commits the same way
+# (`repo_commits`), so it is hosted at https://fireplace.scryward.online/.
+name: web
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: web
+  cancel-in-progress: false
+jobs:
+  web:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Is hosting turned off?
+        id: off
+        run: echo "off=$(jq -r '.web.off // false' elo.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.off.outputs.off != 'true'
+        with:
+          node-version: 22
+      - name: Build the sims and the site
+        if: steps.off.outputs.off != 'true'
+        run: |
+          npm ci
+          npm run build
+          node tools/site.mjs _site
+      - name: Zip it, the same bytes for the same site
+        id: zip
+        if: steps.off.outputs.off != 'true'
+        run: |
+          cd _site
+          find . -type f -exec touch -d '2000-01-01T00:00:00Z' {} +
+          find . -type f | sed 's|^\./||' | LC_ALL=C sort | zip -X -D -q ../site.zip -@
+          cd ..
+          sha=$(sha256sum site.zip | cut -d' ' -f1)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$sha" = "$(jq -r '.web.sha256 // ""' elo.json)" ]; then
+            echo "same=1" >> "$GITHUB_OUTPUT"
+            echo "elo.json already names this build ($sha)."
+          else
+            echo "same=0" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Release it, and point elo.json at it
+        if: steps.off.outputs.off != 'true' && steps.zip.outputs.same == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.zip.outputs.sha }}
+        run: |
+          tag="web-${GITHUB_SHA::12}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" site.zip \
+            --target "$GITHUB_SHA" --latest=false --title "Web build $tag" \
+            --notes "The static site of $GITHUB_SHA, for Elo Pros to host. sha256 $SHA"
+          export URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/site.zip"
+          node -e '
+            const fs = require("fs");
+            const elo = JSON.parse(fs.readFileSync("elo.json", "utf8"));
+            elo.web = { url: process.env.URL, sha256: process.env.SHA, entry: "index.html", frame: false };
+            fs.writeFileSync("elo.json", JSON.stringify(elo, null, 2) + "\n");'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -am "web: elo.json names the site at $tag [skip ci]"
+          for i in 1 2 3; do
+            git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && break
+            sleep 5
+          done
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("web-"))] | sort_by(.createdAt) | reverse | .[3:] | .[].tagName' |
+            while read -r old; do gh release delete "$old" --yes --cleanup-tag; done
+      - name: Ask elopros.com to read the repo again
+        if: steps.off.outputs.off != 'true' && steps.zip.outputs.same == '0'
+        run: |
+          want=$(git show HEAD:elo.json | sha256sum | cut -d' ' -f1)
+          for i in $(seq 1 40); do
+            got=$(curl -fsS "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/HEAD/elo.json" | sha256sum | cut -d' ' -f1)
+            [ "$got" = "$want" ] && break
+            sleep 10
+          done
+          curl -sS -X POST https://elopros.com/api/store/repo/pull \
+            -H 'content-type: application/json' -d "{\"game\": \"$(jq -r .game elo.json)\"}"
+          echo

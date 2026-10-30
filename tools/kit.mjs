@@ -52,6 +52,10 @@ export function repoOf(url) {
 export const EDITOR = { id: 'map-editor', name: 'Map editor', makes: 'map', about: 'Draw a map for the arena or Dogfight in the browser, play it with bots, and send it in.' };
 export const STUDIO = { id: 'studio', name: 'Studio', makes: 'minigame', about: 'Edit a Party minigame in the browser, build and check it there, play it against AI balls, and send it in.' };
 
+// where Elo Pros hosts a listed copy's site (its web block, .github/workflows/web.yml)
+export const HOSTED = 'scryward.online';
+export const hostedUrl = (slug) => `https://${slug}.${HOSTED}/`;
+
 export function pagesUrl(repo) {
   const [owner, name] = repo.split('/');
   const host = `${owner.toLowerCase()}.github.io`;
@@ -81,13 +85,16 @@ export function plan(name, { root = ROOT, slug, repo, blurb, tagline, force = fa
   if (blurb !== undefined || !listing.blurb) listing.blurb = blurb ?? `${name}: a party game for a room of friends in the browser, made from Fireplace.`;
   listing.made_with ??= { parts: [] };
   listing.engine ??= ENGINE;
-  if (repo && !HOME.test(repo)) listing.play_url = pagesUrl(repo);
+  if (!(repo && HOME.test(repo))) listing.play_url = hostedUrl(slug);
   const art = existsSync(join(root, CAPSULE)) ? { art: { capsule: CAPSULE } } : {};
-  // the map editor and the studio on the copy's own site, which the store links beside its mods
-  const tools = listing.play_url ? { tools: [{ ...EDITOR, url: `${listing.play_url}client/map-editor.html` }, { ...STUDIO, url: `${listing.play_url}client/studio.html` }] } : {};
+  // the map editor and the studio on the copy's own site, which the store links beside its mods;
+  // a rename moves them with the page, and any tool the game added itself stays
+  const kitTools = listing.play_url ? [{ ...EDITOR, url: `${listing.play_url}client/map-editor.html` }, { ...STUDIO, url: `${listing.play_url}client/studio.html` }] : [];
+  const ownTools = (was.game === HOME_SLUG ? [] : was.tools || []).filter((t) => t.id !== EDITOR.id && t.id !== STUDIO.id);
+  const tools = kitTools.length || ownTools.length ? { tools: [...kitTools, ...ownTools] } : {};
   const elo = was.game === HOME_SLUG
     ? { elo: 1, game: slug, multiplayer: 'match', listing, ...art, ...tools }
-    : { ...was, game: slug, listing, ...(was.tools ? {} : tools) };
+    : { ...was, game: slug, listing, ...tools };
   const themes = readThemes(join(root, 'client', 'themes'));
   out['elo.json'] = JSON.stringify(withGenerated(elo, themes, readMaps(join(root, 'maps'))), null, 2) + '\n';
 
