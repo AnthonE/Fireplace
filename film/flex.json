@@ -10,6 +10,7 @@
  "guests": true,
  "score": 20,
  "fade": 0.6,
+ "gres": "960x540",
  "shots": [
   {
    "replay": "replays/f1000007-2026-10-29T05-56-54-070Z.qgr",
