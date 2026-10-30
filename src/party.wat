@@ -1,4 +1,4 @@
-;; Party: bumper balls' ball, and every round a different minigame on its own
+;; Party: every player a ball, and every round a different minigame on its own
 ;; stage, built when BUMPER and PARTY are set (build/party/game.wasm).
 ;; bumper.wat keeps the ball's power-ups, bumps, blasts and rockets; this is
 ;; the rest: the round and its rotation, joins, the ball's roll over whatever
@@ -55,6 +55,7 @@
 #include "mg/volley.wat"
 #include "mg/soccer.wat"
 #include "mg/sumo.wat"
+#include "mg/cheese.wat"
 
 ;; ---- the room and the round
 

@@ -2,7 +2,7 @@
 // returns WAT text; the assembler re-scans the output, so macros may nest.
 // Layout constants stay as @NAME here and are folded after expansion.
 import * as layout from './layout.mjs';
-import { AM, AM_HOOKS, ARMS, FP_MATCHES, FP_SETS, GAMES, MINIGAMES } from './layout.mjs';
+import { AM, AM_HOOKS, ARMS, FP_MATCHES, FP_PLAYS, FP_SETS, MINIGAMES } from './layout.mjs';
 
 const SHIFT = { f32: 2, i32: 2, i64: 3, u16: 1, u8: 0, v128: 2 };
 const LOAD = { f32: 'f32.load', i32: 'i32.load', i64: 'i64.load', u16: 'i32.load16_u', u8: 'i32.load8_u', v128: 'v128.load' };
@@ -107,14 +107,14 @@ export function makeMacros({ DEBUG }) {
     // code over them, so a game joins as an entry there.
     // (!fp type fn args...): the game on now (FP_GAME) running its own fn,
     // $<prefix>.fn args; type is a result type, or none.
-    fp: (type, fn, ...args) => fpChain(type, '(i32.load (i32.const @FP_GAME))', [...FP_SETS.keys()], (k) => `(call $${FP_SETS[k].prefix}.${fn}${args.map((a) => ` ${a}`).join('')})`),
+    fp: (type, fn, ...args) => fpChain(type, '(i32.load (i32.const @FP_GAME))', FP_PLAYS, (k) => `(call $${FP_SETS[k].prefix}.${fn}${args.map((a) => ` ${a}`).join('')})`),
     // (!fpwhere field value g): 1 if game g's entry has field === value
     fpwhere: (field, value, g) => {
       const eq = FP_SETS.flatMap((s, k) => (String(s[field]) === value ? [`(i32.eq ${g} (i32.const ${k}))`] : []));
       return eq.length ? eq.reduce((a, b) => `(i32.or ${a} ${b})`) : '(i32.const 0)';
     },
     // (!fpworld g seed): game g's static world built, its generators in order
-    fpworld: (g, seed) => FP_SETS.map((s, k) => `(if (i32.eq ${g} (i32.const ${k})) (then${s.world.map((f) => ` (call $${s.prefix}.${f} ${seed})`).join('')}))`).join('\n'),
+    fpworld: (g, seed) => FP_PLAYS.map((k) => [FP_SETS[k], k]).map(([s, k]) => `(if (i32.eq ${g} (i32.const ${k})) (then${s.world.map((f) => ` (call $${s.prefix}.${f} ${seed})`).join('')}))`).join('\n'),
     // (!fpjoin g rec): an 'ev' game joining the player its EV_JOIN record names
     fpjoin: (g, rec) => fpChain('none', g, FP_SETS.flatMap((s, k) => (s.join === 'ev' ? [k] : [])), (k) => `(call $${FP_SETS[k].prefix}.ev_join ${rec})`),
     // (!fpround g last): a 'round' game laying everyone in out at once
@@ -122,7 +122,7 @@ export function makeMacros({ DEBUG }) {
     // (!fpcuts g): a match of game g cut to its Fireplace length
     fpcuts: (g) => FP_SETS.map((s, k) => (s.ticks ? `(if (i32.eq ${g} (i32.const ${k})) (then (call $fp_cut (i32.const ${s.ticks}))))` : '')).filter(Boolean).join('\n'),
     // (!fpmatches g): how many matches game g plays before the playlist moves on
-    fpmatches: (g) => GAMES.reduceRight((out, _, k) => `(select (i32.const ${FP_MATCHES[k]}) ${out} (i32.eq ${g} (i32.const ${k})))`, '(i32.const 1)'),
+    fpmatches: (g) => FP_PLAYS.reduceRight((out, k) => `(select (i32.const ${FP_MATCHES[k]}) ${out} (i32.eq ${g} (i32.const ${k})))`, '(i32.const 1)'),
 
     // Party: (!mg type hook args...), the minigame on now (PG_GAME) running its
     // hook, $<prefix>_<hook> args: an if-chain over MINIGAMES. type is the

@@ -5,8 +5,8 @@
 // its words landing `delay` ticks after it decides them, seeing the world
 // that old. One leaves and comes back mid-game, and two more drop in late, so
 // the log has the room coming and going across the games' switches.
-// --games n ends it 1500 ticks into the playlist's nth game (6: bumper balls
-// come round again), or at --ticks if that comes first.
+// --games n ends it 1500 ticks into the playlist's nth game (6: party
+// round again), or at --ticks if that comes first.
 //   node tools/genfireplace.mjs [--seed 7] [--bots 12] [--ticks 90000] [--games n] [--delay 6] [--out logs/fireplace.qgl] [--debug]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

@@ -1,4 +1,4 @@
-// A rider on a ball, as bumper's and party's frontends draw it: the round one
+// A rider on a ball, as party's frontend draws it: the round one
 // (a body and a head, two spheres, as the riders have always been) or a blocky
 // one, a figure of boxes standing on the ball and walking it along: legs that
 // step as it rolls, arms that swing against them and go up when it flies, a
@@ -112,7 +112,7 @@ fn blockRay(e: vec3f, d: vec3f, fwd: vec3f, focal: f32, ctr: vec3f, h: vec3f, ya
   return b;
 }
 `;
-// The same for bumper's and party's sprites, from the pixel px and the
+// The same for party's sprites, from the pixel px and the
 // renderer's own camera (u.cam, u.fwd, u.right, u.up, u.screen).
 export const BLOCK_WGSL = BLOCK_RAY_WGSL + /* wgsl */ `
 fn blockAt(px: vec2f, ctr: vec3f, h: vec3f, yaw: f32, pitch: f32, code: u32, c: vec3f) -> Block {
@@ -124,7 +124,7 @@ fn blockAt(px: vec2f, ctr: vec3f, h: vec3f, yaw: f32, pitch: f32, code: u32, c: 
 // Emotes: the look word's top byte, its low four bits the emote and its high
 // four a count, so the same emote twice is a new word (the relay passes a
 // changed word on, client/net.mjs). Acted out for EMOTE_S from when a page
-// first sees the word change. Keys 1 to 4 in bumper and party.
+// first sees the word change. Keys 1 to 4 in party.
 export const EMOTE = { WAVE: 1, CHEER: 2, DANCE: 3, SPIN: 4 };
 export const EMOTE_KEYS = { Digit1: EMOTE.WAVE, Digit2: EMOTE.CHEER, Digit3: EMOTE.DANCE, Digit4: EMOTE.SPIN };
 export const EMOTE_S = 2.5;

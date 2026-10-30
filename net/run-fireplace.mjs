@@ -4,12 +4,12 @@
 // shared by them all) and Chrome on the Fireplace page with a guest at its
 // controls. Passes when the referee checked interval hashes from every
 // session and none differed, the room moved from one game to the next with
-// everyone in it (given time: bumper balls' two rounds come first, then
-// party), Chrome kept up, and each Chrome page's look (client/looks.mjs) went
+// everyone in it (given time: party's three minigames come first, about
+// 4.5 min, then the arena), Chrome kept up, and each Chrome page's look (client/looks.mjs) went
 // round the relay to every page. Screenshots go to traces/. --start k starts
 // the playlist at its entry k (layout.mjs FP_START, through the relay's seed),
 // and the gate wants that entry's game played.
-//   node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 240] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--res 1280x800] [--start k]
+//   node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 360] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--res 1280x800] [--start k]
 //                              [--port 4433: the relay's, its native door the next]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -22,7 +22,7 @@ const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
 const nbots = Number(opt('bots', 15));
 const chrome = Number(opt('chrome', 1));
-const seconds = Number(opt('seconds', 240));
+const seconds = Number(opt('seconds', 360));
 const impair = opt('impair', '');
 const shots = opt('shots', '1') !== '0';
 const port = Number(opt('port', 4433));
@@ -104,9 +104,9 @@ const gate = {
   everyBotIn: !nbots || (!!b && b.joined === nbots && !b.errors.length),
   refereeChecked: !!r && r.compared >= 4 * (nbots + chrome),
   hashesAgree: !!r && (r.mismatches?.length ?? r.mismatches) === 0 && r.agreed === r.compared,
-  // bumper balls' two rounds take three minutes or so: the first switch, into party, comes after
-  switched: seconds < 220 || (report.botHost?.games?.length ?? 0) >= 2 || (report.chromeState || []).some((s) => s.games >= 2),
-  reachedParty: start !== null || seconds < 220 || (report.botHost?.games || []).some((g) => g.game === L.G_PARTY),
+  // party's three minigames take four and a half minutes or so: the first switch, into the arena, comes after
+  switched: seconds < (start === null ? 330 : 220) || (report.botHost?.games?.length ?? 0) >= 2 || (report.chromeState || []).some((s) => s.games >= 2),
+  reachedArena: start !== null || seconds < 330 || (report.botHost?.games || []).some((g) => g.game === L.G_ARENA),
   // started at an entry: its game is the one played first
   startedThere: start === null || (report.botHost?.games?.[0]?.game === L.PLAYLIST[start % L.PLAYLIST.length]),
   chromeKeptUp: (report.chromeState || []).every((s) => !s.behind),

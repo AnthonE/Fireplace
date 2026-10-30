@@ -15,7 +15,7 @@
 // HTTP, under public_base's path (/kit/), CORS for allow_origins:
 //   POST rooms {site, game?, sha256?, map?, map_sha256?, room?}  (or GET rooms?site=...)
 //     site: the copy's page, https://owner.github.io/repo/; game: fireplace
-//     (default), party, arena, flight, bumper or golf; sha256: the page's own wasm's,
+//     (default), party, arena, flight or golf; sha256: the page's own wasm's,
 //     so a page with a stale or newer build is told rather than refused by the
 //     relay; map: for the arena or flight, a map's name as the site publishes
 //     it, map_sha256 the page's copy of it, as sha256; room: an invite's room,
@@ -49,7 +49,7 @@ import { MAP_STAGE_MAX } from '../src/layout.mjs';
 // where each game's wasm is on a site (tools/site.mjs copies build/ as it is)
 export const GAMES = {
   fireplace: 'build/fireplace/game.wasm', party: 'build/party/game.wasm', arena: 'build/arena/game.wasm',
-  flight: 'build/flight/game.wasm', bumper: 'build/bumper/game.wasm', golf: 'build/game.wasm',
+  flight: 'build/flight/game.wasm', golf: 'build/game.wasm',
 };
 // the games that take a map from outside the build, and where a site's map is (tools/site.mjs packs maps/)
 export const MAP_GAMES = ['arena', 'flight'];
@@ -61,7 +61,7 @@ const DEFAULTS = {
   host: 'game.elopros.com', bind: '0.0.0.0', ports: [61300, 61315], native_offset: 0,
   max_rooms: 8, per_site_rooms: 2, max_players: 8, idle_s: 120, hold_s: 20,
   max_wasm_bytes: 2 * 1024 * 1024, max_map_bytes: MAP_STAGE_MAX, fetch_timeout_s: 10,
-  fetch_from: ['https://*.github.io'], allow_origins: ['https://*.github.io'],
+  fetch_from: ['https://*.github.io', 'https://*.scryward.online'], allow_origins: ['https://*.github.io', 'https://*.scryward.online'],
   refuse_after: 3, refuse_s: 3600, per_ip_per_min: 30,
   status_dir: 'traces/kit-rooms', wasm_dir: join(tmpdir(), 'kit-rooms-wasm'), relay_args: [],
 };

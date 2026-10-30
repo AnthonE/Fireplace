@@ -138,7 +138,7 @@ order. The prediction never moves your ship off another's body; a
 collision's bounce reaches its pilot a round trip later, as a blast's push
 does in the arena.
 
-**Results.** `test/flight.test.mjs` (13 tests): the sim's exports and
+**Results.** `test/flight.test.mjs` (14 tests, one of them that Ring Race sits past every arena mode and its news past every kit mode's): the sim's exports and
 Skyways' bounds, boxes and ceiling; a spawn (in the air, its nose level
 toward the middle, the meter full, three bombs) and the countdown's wait;
 the turn rates, the pitch limit and the cruise; the meter running dry and
@@ -199,11 +199,11 @@ towers 57 m tall; a hangar you can fly into and a control tower at each
 end, red west and blue east. 47 boxes in 11 groups, 32 spawns mirrored
 across the middle, the ceiling 147 m (map.json's `ceiling`; a map without
 one gets 60 m over its highest ground inside the bounds). Heights are kept
-to an eighth of a metre so the image packs: flight's wasm is 400 KB,
-100 KB gzipped, 80 KB of that the map. Flight always builds on Skyways
+to an eighth of a metre so the image packs: flight's wasm is 419 KB,
+106 KB gzipped, 80 KB of that the map. Flight always builds on Skyways
 (`FLIGHT_MAP`) unless the build is given `--flight-map <name>`; `node
-net/play.mjs --flight --map <name>` builds Dogfight on that map and flies
-it. The map editor (`client/map-editor.html`, [arena.md](arena.md#making-a-map))
+net/play.mjs --flight --map <name>` flies Dogfight on that map with no build,
+laid at run time (`map_load`). The map editor (`client/map-editor.html`, [arena.md](arena.md#making-a-map))
 places the race's gates in order, with their heights and radii.
 
 Dogfight is on Fireplace's playlist too ([docs/fireplace.md](fireplace.md)):

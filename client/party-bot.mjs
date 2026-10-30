@@ -123,8 +123,8 @@ function roll(x, v, wish, a, d, n) {
 
 export class Partier {
   // skill 0..1: how far ahead it looks, how steady it steers.
-  // slips: a person's, for a room people play against (as bumper's Roller):
-  // its horizon 0.1 s nearer, and now and then (about every 4 s at skill 0.2,
+  // slips: a person's, for a room people play against (a local room's AI, the
+  // bot host's --slips): its horizon 0.1 s nearer, and now and then (about every 4 s at skill 0.2,
   // 9 s at 0.65) 0.3-0.7 s of not paying attention, its last word kept
   // whatever comes.
   constructor(slot, seed = 1, skill = 0.6, { slips = false } = {}) {

@@ -4,6 +4,7 @@
 //   node tools/film.mjs record [--seconds 900] [--bots 64] [--seed 7] [--start k] [--port 4533]   # a room of guests, saved as a replay in replays/
 //   node tools/film.mjs plan REPLAY.qgr                                     # what was on, second by second
 //   node tools/film.mjs shoot CUT.json [--stills 2,7.5] [--to 12] [--replay R.qgr]   # draw the cut: an mp4, or stills
+//   node tools/film.mjs shoot CUT.json --part 2/6 ... then join CUT.json      # the same in parts, each kept on disk as it's done
 //
 // The page (client/fireplace.html?replay=…&film=<seconds>) runs with its own
 // clock held: the replay sits paused, and each frame this moves the sim to the
@@ -18,7 +19,7 @@
 //
 // A cut list (film/*.json):
 //   { "replay": "replays/<file>.qgr", "out": "film/out/<name>.mp4", "size": [1920, 1080], "fps": 30,
-//     "res": "1920x1080",                    the room's (and bumper's and party's) canvas
+//     "res": "1920x1080",                    the room's (and party's) canvas
 //     "theme": "grandma",                    the room's look at the start
 //     "fade": 0.5,                           a fade from and to black at the ends, seconds
 //     "shots": [
@@ -37,10 +38,12 @@
 //   "room": true; "pre" is its unseen run-in, 1 s by default. "score": a tune
 //   key (client/sound.mjs) laid under the whole cut, the rooms' own music off:
 //   a cut faster than a round. "guests": true dresses every seat as a local
-//   room's AI players are (a replay keeps no looks). Its beat is 1.024 s (117 bpm), and every shot
+//   room's AI players are (a replay keeps no looks). "gres": "WxH" draws golf,
+//   the arena and Dogfight at that size (a box with no GPU ray-traces them
+//   slowly at the film's), scaled up smoothly. Its beat is 1.024 s (117 bpm), and every shot
 //   ends on its frame, so shots in whole beats stay on it.
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, renameSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve, relative } from 'node:path';
 import { serve } from './serve.mjs';
@@ -58,6 +61,7 @@ const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 if (cmd === 'record') await record();
 else if (cmd === 'plan' && arg) await plan(arg);
 else if (cmd === 'shoot' && arg) await shoot({ ...JSON.parse(readFileSync(arg, 'utf8')), ...(opt('replay', '') ? { replay: opt('replay', '') } : {}) });
+else if (cmd === 'join' && arg) await join(JSON.parse(readFileSync(arg, 'utf8')));
 else { console.error(readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 6).map((l) => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(2); }
 
 // A relay with --replays and a bot host of Fireplace guests, for --seconds;
@@ -89,7 +93,7 @@ async function record() {
   console.error(`\n${made.length ? made.map((f) => `replays/${f}`).join('\n') : 'no replay was written'}`);
 }
 
-async function open({ replay, res = '960x540', film = 1, theme = '', music = true, guests = false }) {
+async function open({ replay, res = '960x540', gres = '', film = 1, theme = '', music = true, guests = false }) {
   if (!existsSync('build/fireplace/game.wasm')) execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
   const require = createRequire(import.meta.url);
   const { chromium } = require('playwright');
@@ -101,7 +105,7 @@ async function open({ replay, res = '960x540', film = 1, theme = '', music = tru
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   page.on('pageerror', (e) => console.error('page error:', e.message));
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.error('page:', m.text()); });
-  const q = new URLSearchParams({ replay: `/${relative(ROOT, resolve(replay))}`, film: String(film), present: '0', res, ...(theme ? { theme } : {}), ...(music ? {} : { music: '0' }), ...(guests ? { guests: '1' } : {}) });
+  const q = new URLSearchParams({ replay: `/${relative(ROOT, resolve(replay))}`, film: String(film), present: '0', res, ...(theme ? { theme } : {}), ...(music ? {} : { music: '0' }), ...(guests ? { guests: '1' } : {}), ...(gres ? { gres } : {}) });
   await page.goto(`http://127.0.0.1:${port}/client/fireplace.html?${q}`);
   await page.waitForFunction(() => window.__film || window.__qa?.error, null, { timeout: 120000 });
   const err = await page.evaluate(() => window.__qa?.error);
@@ -142,13 +146,22 @@ async function shoot(cut) {
   const rooms = new Map();
   const roomOf = async (replay) => {
     if (!rooms.has(replay)) {
-      const r = await open({ replay, res: cut.res || `${W}x${H}`, film: Math.ceil(total + 2), theme: cut.theme, music: cut.score === undefined, guests: !!cut.guests });
+      const r = await open({ replay, res: cut.res || `${W}x${H}`, film: Math.ceil(total + 2), theme: cut.theme, music: cut.score === undefined, guests: !!cut.guests, gres: cut.gres });
       rooms.set(replay, { ...r, tick: 0, span: null });
     }
     return rooms.get(replay);
   };
+  // --part i/n: only the shots in the i-th of n stretches of about equal length,
+  // on the cut's own timeline (its frames and its sound where they fall in the
+  // whole), into part<i>.mkv and part<i>.wav; join puts the parts together.
+  // A part on disk is a part done: a box that restarts loses one part, not the film.
+  const [pk, pn] = opt('part', '1/1').split('/').map(Number);
+  const parted = opt('part', '') !== '';
+  const ends = cut.shots.reduce((a, s) => [...a, (a.at(-1) ?? 0) + lenOf(s)], []);
+  const inPart = (k) => Math.min(pn, Math.floor((ends[k] - lenOf(cut.shots[k]) / 2) / total * pn) + 1) === pk;
+  const video = parted ? `${work}/part${pk}.mkv` : `${work}/silent.mkv`;
   const ff = stills ? null : spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', `${work}/silent.mkv`], { stdio: ['pipe', 'inherit', 'inherit'] });
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-pix_fmt', 'yuv420p', `${video}.tmp.mkv`], { stdio: ['pipe', 'inherit', 'inherit'] });
   let pageMs = 1000; // the pages' clock: on through every frame, seen or not, in every room
   let n = 0; // frames in the cut so far
   let at = 0; // the cut's time at the end of the shots so far: each ends on its frame, so a cut on the beat stays on it
@@ -182,8 +195,9 @@ async function shoot(cut) {
       await room.page.evaluate((ms) => window.__film.frame(ms), pageMs);
     }
   };
-  for (const shot of cut.shots) {
+  for (const [k, shot] of cut.shots.entries()) {
     if (n >= upTo * fps) break;
+    if (!inPart(k)) { at += lenOf(shot); n = Math.round(at * fps); continue; }
     const room = await roomOf(shot.replay || cut.replay);
     const { page } = room;
     if (shot.theme) await page.evaluate((id) => window.__film.theme(id), shot.theme);
@@ -203,8 +217,11 @@ async function shoot(cut) {
     } else {
       const t = shot.at * TICK;
       if (t - TICK < room.tick) throw new Error(`shot at ${shot.at} s in ${shot.replay || cut.replay} is before its ${(room.tick / TICK).toFixed(1)} s: a room's shots go forward`);
-      room.tick = t - TICK * (shot.pre ?? 1);
-      await page.evaluate((x) => window.__film.seek(x), room.tick);
+      // forward in 30 s steps: a room first opened late in the cut (a part's) starts from the replay's start
+      for (const to = t - TICK * (shot.pre ?? 1); room.tick < to;) {
+        room.tick = Math.min(to, room.tick + 30 * TICK);
+        await page.evaluate((x) => window.__film.seek(x), room.tick);
+      }
       await preroll(room, shot.pre ?? 1, step);
       // a cut lands in the game, not on the zoom into it ("room": true keeps the room's own scene)
       if (!shot.room) await page.evaluate(() => window.__film.snap());
@@ -222,16 +239,58 @@ async function shoot(cut) {
     writeFileSync(`${work}/room${k}.wav`, Buffer.from(await r.page.evaluate(() => window.__film.audio()), 'base64'));
     tracks.push(`${work}/room${k}.wav`);
   }
+  if (parted) {
+    await close();
+    mix(tracks, `${work}/part${pk}.wav`);
+    renameSync(`${video}.tmp.mkv`, video);
+    console.error(`film: part ${pk} of ${pn} in ${video}`);
+    return;
+  }
+  renameSync(`${video}.tmp.mkv`, video);
   if (cut.score !== undefined) {
     const page = rooms.values().next().value.page;
     writeFileSync(`${work}/score.wav`, Buffer.from(await page.evaluate(([k, t]) => window.__film.score(k, t), [cut.score, total + 2]), 'base64'));
     tracks.push(`${work}/score.wav`);
   }
   await close();
-  if (tracks.length === 1) execFileSync('cp', [tracks[0], `${work}/sound.wav`]);
-  else execFileSync('ffmpeg', ['-v', 'error', '-y', ...tracks.flatMap((f) => ['-i', f]), '-filter_complex', `amix=inputs=${tracks.length}:duration=longest:normalize=0`, `${work}/sound.wav`]);
+  mix(tracks, `${work}/sound.wav`);
+  await finish(cut, work, n / fps);
+}
+
+// Sound files laid over each other as they are (no level per input).
+function mix(tracks, to) {
+  if (tracks.length === 1) execFileSync('cp', [tracks[0], to]);
+  else execFileSync('ffmpeg', ['-v', 'error', '-y', ...tracks.flatMap((f) => ['-i', f]), '-filter_complex', `amix=inputs=${tracks.length}:duration=longest:normalize=0`, to]);
+}
+
+// The parts of a cut shot with --part, end to end: their pictures in order,
+// their sounds (each on the whole cut's timeline) over each other with the score.
+async function join(cut) {
+  const fps = cut.fps || 30;
+  const out = cut.out || 'film/out/fireplace.mp4';
+  const work = `${out.replace(/\.mp4$/, '')}.work`;
+  const parts = readdirSync(work).filter((f) => /^part\d+\.mkv$/.test(f)).sort((a, b) => parseInt(a.slice(4)) - parseInt(b.slice(4)));
+  if (!parts.length) throw new Error(`no parts in ${work}/: shoot them with --part i/n`);
+  writeFileSync(`${work}/parts.txt`, parts.map((f) => `file '${f}'`).join('\n') + '\n');
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', `${work}/parts.txt`, '-c', 'copy', `${work}/silent.mkv`], { stdio: 'inherit' });
+  const tracks = parts.map((f) => `${work}/${f.replace('.mkv', '.wav')}`);
+  const frames = Number(execFileSync('ffprobe', ['-v', 'error', '-count_packets', '-select_streams', 'v:0', '-show_entries', 'stream=nb_read_packets', '-of', 'csv=p=0', `${work}/silent.mkv`]).toString().trim());
+  if (cut.score !== undefined) {
+    const total = cut.shots.reduce((a, s) => a + (s.couch ?? s.sit ?? s.len ?? s.back), 0);
+    const { page, close } = await open({ replay: cut.replay, music: false });
+    writeFileSync(`${work}/score.wav`, Buffer.from(await page.evaluate(([k, t]) => window.__film.score(k, t), [cut.score, total + 2]), 'base64'));
+    await close();
+    tracks.push(`${work}/score.wav`);
+  }
+  mix(tracks, `${work}/sound.wav`);
+  await finish(cut, work, frames / fps);
+}
+
+// The film from silent.mkv and sound.wav in the work folder.
+async function finish(cut, work, secs) {
+  const out = cut.out || 'film/out/fireplace.mp4';
   // the sound to -14 LUFS in two passes (linear, not pumped), faded with the picture; the picture in H.264 for the web
-  const secs = n / fps, fade = cut.fade ?? 0.5;
+  const fade = cut.fade ?? 0.5;
   const j = await new Promise((ok) => {
     const p = spawn('ffmpeg', ['-hide_banner', '-nostats', '-i', `${work}/sound.wav`, '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json', '-f', 'null', '-']);
     let e = ''; p.stderr.on('data', (d) => { e += d; }); p.on('close', () => ok(JSON.parse(e.slice(e.lastIndexOf('{')))));

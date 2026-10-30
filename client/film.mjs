@@ -66,7 +66,8 @@ function wav(buf) {
 }
 
 // A screenshot (a base64 PNG) fitted to W x H on black, a game drawn small
-// scaled up in whole pixels first so it stays sharp; a caption in the games'
+// (the old 320 x 200 ones) scaled up in whole pixels first so it stays sharp,
+// a bigger one (a film's ?gres=) smoothly; a caption in the games'
 // 3x5 font low on the right, clear of the games' maps. A JPEG, base64.
 export async function compose(png, W, H, caption = '') {
   const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${png}`)).blob());
@@ -77,7 +78,7 @@ export async function compose(png, W, H, caption = '') {
   const k = Math.min(W / img.width, H / img.height);
   const w = Math.round(img.width * k), h = Math.round(img.height * k);
   let src = img;
-  if (k > 1.5) {
+  if (k > 1.5 && img.height <= 400) {
     const n = Math.ceil(k);
     const big = new OffscreenCanvas(img.width * n, img.height * n);
     const bg = big.getContext('2d');

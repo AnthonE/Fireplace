@@ -10,7 +10,7 @@ import { LADDERS } from '../net/elo.mjs';
 
 const inFont = (s) => [...s].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) <= 95);
 let n = 0;
-const res = (o) => ({ key: `1:${++n}:${o.game ?? L.G_BUMPER}`, game: L.G_BUMPER, place: 5, got: 0, field: 8, ...o });
+const res = (o) => ({ key: `1:${++n}:${o.game ?? L.G_PARTY}`, game: L.G_PARTY, place: 5, got: 0, field: 8, ...o });
 const play = (results, t = emptyTally()) => {
   const opened = [];
   for (const r of results) { const x = record(t, r, 1e12); t = x.tally; opened.push(...x.opened); }
@@ -28,7 +28,7 @@ test('ids unique, names and lines in the font and short enough for the TV', () =
 test('a first game, a marshmallow, a win, then two and three in a row', () => {
   assert.deepEqual(play([res({})]).opened, ['chair']);
   assert.deepEqual(play([res({ place: 3, got: 1 })]).opened, ['chair', 'toasted']);
-  assert.deepEqual(play([res({ place: 1, got: 3 })]).opened, ['chair', 'toasted', 'golden', 'cheese']);
+  assert.deepEqual(play([res({ place: 1, got: 3 })]).opened, ['chair', 'toasted', 'golden', 'life']);
   const { t, opened } = play([res({ place: 1, got: 3 }), res({ place: 1, got: 3 })]);
   assert.ok(opened.includes('roll') && !opened.includes('hattrick'));
   assert.ok(play([res({ place: 1, got: 3 })], t).opened.includes('hattrick'));
@@ -48,12 +48,13 @@ test('a result is counted once, and one this slot was not in is not counted', ()
 });
 
 test('the long ones: every game played and won, every step, a full house, 25 and 100 marshmallows, 25 games', () => {
-  const four = [L.G_GOLF, L.G_ARENA, L.G_BUMPER, L.G_PARTY];
-  let x = play(four.slice(0, 3).map((game) => res({ game, place: 4 })));
+  const three = [L.G_GOLF, L.G_ARENA, L.G_PARTY];
+  let x = play(three.slice(0, 2).map((game) => res({ game, place: 4 })));
   assert.ok(!x.opened.includes('playlist'));
   x = play([res({ game: L.G_PARTY, place: 4 })], x.t);
   assert.deepEqual(x.opened, ['playlist']);
-  assert.ok(play(four.map((game) => res({ game, place: 1, got: 3 }))).opened.includes('allround'));
+  assert.ok(play(three.map((game) => res({ game, place: 1, got: 3 }))).opened.includes('allround'));
+  assert.ok(!play(three.slice(0, 2).map((game) => res({ game, place: 1, got: 3 }))).opened.includes('allround'));
   assert.ok(play([1, 2, 3].map((place) => res({ place }))).opened.includes('podium'));
   assert.ok(!play([1, 2].map((place) => res({ place }))).opened.includes('podium'));
   assert.ok(play([res({ field: 32 })]).opened.includes('crowd'));
@@ -64,24 +65,28 @@ test('the long ones: every game played and won, every step, a full house, 25 and
   assert.ok(play([res({ game: L.G_FLIGHT, place: 1, got: 3 })]).opened.includes('ace'));
   assert.ok(!play([res({ game: L.G_FLIGHT, place: 2, got: 2 })]).opened.includes('ace'));
   const all = ACHIEVEMENTS.map((a) => a.id);
-  assert.deepEqual(Object.keys(play([...[...four, L.G_FLIGHT].map((game) => res({ game, place: 1, got: 3, field: 100 })), res({ place: 2 }), res({ place: 3 }), ...Array.from({ length: 100 }, () => res({ place: 1, got: 3 }))]).t.got).sort(), [...all].sort());
+  assert.deepEqual(Object.keys(play([...[...three, L.G_FLIGHT].map((game) => res({ game, place: 1, got: 3, field: 100 })), res({ place: 2 }), res({ place: 3 }), ...Array.from({ length: 100 }, () => res({ place: 1, got: 3 }))]).t.got).sort(), [...all].sort());
 });
 
-test('all five games, each one won, five in a row, 10 wins, 250 marshmallows, 100 games, 100 in a room', () => {
-  const five = [L.G_GOLF, L.G_ARENA, L.G_BUMPER, L.G_PARTY, L.G_FLIGHT];
-  const keys = { [L.G_GOLF]: 'fore', [L.G_ARENA]: 'sharp', [L.G_BUMPER]: 'cheese', [L.G_PARTY]: 'life', [L.G_FLIGHT]: 'ace' };
-  for (const game of five) {
+test('all four games on the TV, each one won, 3 wins, five in a row, 10 wins, 250 marshmallows, 100 games, 100 in a room', () => {
+  const four = [L.G_GOLF, L.G_ARENA, L.G_PARTY, L.G_FLIGHT];
+  const keys = { [L.G_GOLF]: 'fore', [L.G_ARENA]: 'sharp', [L.G_PARTY]: 'life', [L.G_FLIGHT]: 'ace' };
+  for (const game of four) {
     assert.ok(play([res({ game, place: 1 })]).opened.includes(keys[game]), keys[game]);
     assert.ok(!play([res({ game, place: 2 })]).opened.includes(keys[game]), keys[game]);
   }
-  let x = play(five.slice(0, 4).map((game) => res({ game, place: 4 })));
-  assert.ok(x.opened.includes('playlist') && !x.opened.includes('surfer'), 'the four are the old playlist, not all five');
+  // bumper balls left the playlist: a win there counts as a win, nothing of its own
+  assert.deepEqual(play([res({ game: L.G_BUMPER, place: 1 })]).opened, ['chair', 'golden']);
+  assert.ok(!play([1, 2, 1].map((place) => res({ place }))).opened.includes('cheese'));
+  assert.ok(play([1, 2, 1, 3, 1].map((place) => res({ place }))).opened.includes('cheese'), 'three wins, not in a row');
+  let x = play(four.slice(0, 3).map((game) => res({ game, place: 4 })));
+  assert.ok(x.opened.includes('playlist') && !x.opened.includes('surfer'), 'golf, the arena and party, not all four');
   x = play([res({ game: L.G_FLIGHT, place: 4 })], x.t);
   assert.deepEqual(x.opened, ['surfer']);
-  assert.equal(byId.get('surfer').have(x.t)[0], 5);
-  const won = play(five.map((game) => res({ game, place: 1 })));
+  assert.equal(byId.get('surfer').have(x.t)[0], 4);
+  const won = play([...four, L.G_PARTY].map((game) => res({ game, place: 1 })));
   assert.ok(won.opened.includes('house') && won.opened.includes('onfire'));
-  assert.ok(!play(five.slice(0, 4).map((game) => res({ game, place: 1 }))).opened.includes('house'));
+  assert.ok(!play(four.slice(0, 3).map((game) => res({ game, place: 1 }))).opened.includes('house'));
   assert.ok(!play([1, 1, 1, 1, 2, 1].map((place) => res({ place }))).opened.includes('onfire'), 'a loss breaks the run');
   const ten = play(Array.from({ length: 10 }, (_, i) => res({ place: i % 2 ? 1 : 2 })));
   assert.ok(ten.opened.length && !ten.opened.includes('champ'));

@@ -42,5 +42,6 @@ import dodge from './dodge.mjs';
 import volley from './volley.mjs';
 import soccer from './soccer.mjs';
 import sumo from './sumo.mjs';
+import cheese from './cheese.mjs';
 
-export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw, kart, disaster, slap, trap, parry, mingle, honey, dodge, volley, soccer, sumo];
+export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw, kart, disaster, slap, trap, parry, mingle, honey, dodge, volley, soccer, sumo, cheese];

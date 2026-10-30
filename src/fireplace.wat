@@ -1,7 +1,7 @@
 ;; Fireplace: every game in one module, a playlist the room plays through.
 ;; tools/asm.mjs builds each game of layout.mjs's FP_SETS (golf, the arena,
-;; bumper balls, party and flight's Dogfight) as its own build would be, puts
-;; each under its prefix ($g., $a., $b., $p., $f.) with its exports made
+;; party and flight's Dogfight; bumper balls' entry is retired) as its own
+;; build would be, puts each under its prefix ($g., $a., $p., $f.) with its exports made
 ;; internal, and appends this file, whose game-by-game parts the fp macros
 ;; (src/macros.mjs) write from FP_SETS:
 ;; the module's exports, each sent to the game on now (FP_GAME), and the
@@ -135,8 +135,8 @@
 ;; Everyone into game `next` on seed: the world wiped but for the tick, the
 ;; PRNG and the playlist's own state; the next game's built; the players in
 ;; the room joined into it in slot order (its FP_SETS join), keeping their
-;; input words when the two games read the same word (golf's, which bumper and
-;; party share, or the arena's, which Dogfight shares), else starting from none.
+;; input words when the two games read the same word (golf's, which
+;; party shares, or the arena's, which Dogfight shares), else starting from none.
 (func $fp_switch (param $next i32) (param $seed i32)
   (local $p i32) (local $pb i32) (local $t i32) (local $rng i32) (local $played i32) (local $keep i32) (local $last i32) (local $rec i32)
   (local.set $t (i32.load (i32.const @HDR_TICK)))
@@ -169,7 +169,7 @@
       (then
         (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
         (if (!fpwhere join round (local.get $next))
-          ;; a 'round' game (bumper, party) lays its round out once, for everyone in, below
+          ;; a 'round' game (party) lays its round out once, for everyone in, below
           (then (!put u8 @(PLAYERS + P_FL) (local.get $pb) (i32.const @PF_LIVE)) (local.set $last (local.get $p)))
           (else
             (memory.fill (local.get $rec) (i32.const 0) (i32.const @REC))
@@ -235,11 +235,10 @@
 ;; it, by the game's score in FP_SETS: 'golf', fewest strokes on the hole (with
 ;; the penalty for not finishing); 'arena' (the arena and Dogfight), a Fiesta
 ;; by most kills, then fewest deaths, any other mode by the place it gave
-;; (MR_PLACE, set as the match ended); 'bumper', most rounds won, then KOs,
-;; then hard bumps; 'party', most party points, then minigames won (a ball that
-;; only watched isn't placed in either).
+;; (MR_PLACE, set as the match ended); 'party', most party points, then
+;; minigames won (a ball that only watched isn't placed).
 (func $fp_score (param $game i32) (param $p i32) (result i32)
-  (local $pb i32) (local $k i32) (local $b i32)
+  (local $pb i32) (local $k i32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
   (if (i32.eqz (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_LIVE))) (then (return (i32.const -1))))
   (if (!fpwhere score golf (local.get $game))
@@ -251,17 +250,11 @@
           (local.set $k (i32.load8_u offset=@(MODE_REC + MR_PLACE) (i32.shl (local.get $p) (i32.const 3))))
           (return (select (i32.sub (i32.const 256) (local.get $k)) (i32.const -1) (local.get $k)))))
       (return (i32.sub (i32.mul (!at u16 @(PLAYERS + A_KILLS) (local.get $pb)) (i32.const 0x10000)) (!at u16 @(PLAYERS + A_DEATHS) (local.get $pb))))))
+  ;; party
   (if (i32.eqz (!at u16 @(PLAYERS + B_ROUNDS) (local.get $pb))) (then (return (i32.const -1))))
-  (if (!fpwhere score party (local.get $game))
-    (then
-      (local.set $k (!at u16 @(PLAYERS + PG_PTS) (local.get $pb)))
-      (return (i32.or (i32.shl (select (local.get $k) (i32.const 0x7fff) (i32.lt_u (local.get $k) (i32.const 0x7fff))) (i32.const 16))
-                      (!at u16 @(PLAYERS + B_WINS) (local.get $pb))))))
-  (local.set $k (!at u16 @(PLAYERS + B_KOS) (local.get $pb)))
-  (local.set $b (!at u16 @(PLAYERS + B_BUMPS) (local.get $pb)))
-  (i32.add (i32.add (i32.mul (!at u16 @(PLAYERS + B_WINS) (local.get $pb)) (i32.const 0x100000))
-                    (i32.mul (select (local.get $k) (i32.const 0xff) (i32.lt_u (local.get $k) (i32.const 0xff))) (i32.const 0x1000)))
-           (select (local.get $b) (i32.const 0xfff) (i32.lt_u (local.get $b) (i32.const 0xfff)))))
+  (local.set $k (!at u16 @(PLAYERS + PG_PTS) (local.get $pb)))
+  (i32.or (i32.shl (select (local.get $k) (i32.const 0x7fff) (i32.lt_u (local.get $k) (i32.const 0x7fff))) (i32.const 16))
+          (!at u16 @(PLAYERS + B_WINS) (local.get $pb))))
 
 ;; Places for everyone who played (ties share the better one), and
 ;; marshmallows: 3 for first, 2 for second, 1 for third.

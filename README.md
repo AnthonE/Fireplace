@@ -2,8 +2,8 @@
 
 A party game for up to 256 people in one room, in the browser. You sit down in
 a living room at night, the fire going, snow at the window, and the TV is
-playing whatever the room is on: bumper balls, a Party minigame, an arena
-match, a Dogfight, a hole of golf. Click and the camera closes in until the
+playing whatever the room is on: a Party minigame, an arena match, a
+Dogfight, a hole of golf. Click and the camera closes in until the
 TV fills the screen and you're in it. When a game ends it pulls back to the
 room, hands out marshmallows to the top three and tunes in the next. Come and
 go as you like.
@@ -50,27 +50,43 @@ its own web page, a plan for your game, and Claude to help build it.
    list your game straight from your repo; no wallet needed. A `sell` line
    in `elo.json` sells copies, 100% of the price to you; we hold the money
    until a `wallet` line says where to send it. The store's shelves show a
-   game by its capsule, `elo/capsule.png` (616×353): a copy starts with a
-   frame of bumper balls, so draw your own.
+   game by its capsule, `elo/capsule.png` (616×353): a copy starts with
+   Fireplace's, so draw your own.
+4. **Put it on Elo Pros.** On the [dev console](https://elopros.com/dev-console.html),
+   list your game straight from your repo; no wallet needed. From then on
+   every push is live within a few minutes at `https://<your-game>.scryward.online/`,
+   hosted by Elo Pros, with its own page on the store: the `web` workflow
+   builds the site and writes its address into `elo.json`. You and AI players
+   need no server. To play with friends, press **play online with friends**
+   at the foot of the room: Elo Pros' room pool starts a room running your
+   game, the page moves into it, and its address is the invite to send
+   (**copy invite link**). An online room has no AI players; if the pool
+   can't give one, the page says why and you stay with the AI players
+   ([docs/hosting.md](docs/hosting.md)). It runs on GitHub Pages too, if you
+   want a copy there: **Settings > Pages > Source: GitHub Actions**.
+5. **Sell it, if you like.** A `sell` line in `elo.json` sells copies, 100%
+   of the price to you; we hold the money until a `wallet` line says where
+   to send it. The store's shelves show a game by its capsule,
+   `elo/capsule.png` (616×353): a copy starts with a frame of bumper balls,
+   so draw your own.
 
 ## The games
 
-The room plays a playlist, round and round: bumper balls (two rounds), Party
-(three minigames), the arena (one three-minute match), Party again, a
-three-minute Dogfight, a hole of golf. The top three of each game get 3, 2 and
+The room plays a playlist, round and round: Party (three minigames), the
+arena (one three-minute match), Party again, a three-minute Dogfight, a hole
+of golf. The top three of each game get 3, 2 and
 1 marshmallows.
 
 | | |
 | --- | --- |
-| [**Bumper balls**](docs/bumper.md) | Every player a ball on a wheel of Swiss cheese. Bump the others into the holes and keep out yourself; the rim crumbles, the holes widen, power-ups drop from the sky. Last ball rolling wins. |
-| [**Party**](docs/party.md) | Bumper balls' ball and a different minigame every round, 41 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring. |
+| [**Party**](docs/party.md) | Every player a ball, and a different minigame every round, 42 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring, and Swiss Roll: a wheel of Swiss cheese, bump the others into its holes (once a game of its own, bumper balls). |
 | [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and sixteen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault; and Crossroads, Roblox's own level with its classic sword, rocket launcher and superball, walking and jumping as Roblox does. |
 | [**Dogfight**](docs/flight.md) | The arena with wings: every fighter a ship over Skyways, a valley with a river canyon, spires, arches and ring gates. Lasers, a homing charge shot, bombs, boost, brake and barrel rolls, in a free-for-all, red against blue, the juggernaut or Ring Race, three laps through the gates. |
 | [**Golf**](docs/golf.md) | One course for everyone, rockets and grenades for clubs: a blast just behind your ball drives it 200 m, and every ball ever hit stays in play. |
 
 
 <p>
-<img src="docs/b1-bumper-256.png" width="49%" alt="Bumper balls with 256 players">
+<img src="docs/p6-swiss-roll.png" width="49%" alt="Party's Swiss Roll">
 <img src="docs/p1-chute-128.png" width="49%" alt="Party's Fruit Chute with 128 balls">
 <img src="docs/a5-ctf.png" width="49%" alt="Capture the Flag in the arena">
 <img src="docs/a3-box-canyon.png" width="49%" alt="Box Canyon">
@@ -94,16 +110,15 @@ node net/play.mjs --fireplace --bots 0   # just people
 
 Click (or Enter) to sit down; then each game's own controls. While the room is
 in view, T changes the theme, B, H and P your ball, hat and body, L your
-achievements. In bumper balls and Party, 1 to 4 wave, cheer, dance and spin.
+achievements. In Party, 1 to 4 wave, cheer, dance and spin.
 `?watch=1` spectates, `?bot=1` sits an AI guest at your controls, F goes
 fullscreen. Each game also runs alone, with its own page:
 
 ```sh
-node net/play.mjs --bumper               # client/bumper.html, 15 AI balls
 node net/play.mjs --party [--mg k]       # client/party.html, the rotation or minigame k
 node net/play.mjs --arena [--mode k]     # client/arena.html, the modes in turn or mode k
 node net/play.mjs --flight [--mode k]    # client/flight.html, Dogfight
-node net/play.mjs --fireplace --start 4  # Fireplace from the playlist's entry 4 (Dogfight) on
+node net/play.mjs --fireplace --start 3  # Fireplace from the playlist's entry 3 (Dogfight) on
 node net/play.mjs                        # golf, client/index.html
 ```
 
@@ -143,8 +158,8 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
 
 - **Hand-written WebAssembly.** The whole simulation, every game, is WAT
   written by hand (`src/`), folded by a small macro assembler
-  (`tools/asm.mjs`) and assembled with wabt. No compiler, no engine. All five
-  games build into one 788 KB module, `build/fireplace/game.wasm`, 251 KB
+  (`tools/asm.mjs`) and assembled with wabt. No compiler, no engine. All four
+  games build into one 768 KB module, `build/fireplace/game.wasm`, 252 KB
   gzipped, of which 35 KB is Box Canyon's height map and 80 KB Skyways'.
 - **Deterministic lockstep at 125 Hz.** Only input words cross the network,
   one 32-bit word per player per tick. Every machine steps the same bits, so
@@ -173,7 +188,7 @@ protocol, for writing a client in any language, and
 
 | | |
 | --- | --- |
-| `src/` | the sim: the engine and golf (`game.wat` and friends), the arena (`arena.wat`, its team modes in `am/`), flight (`flight.wat`), bumper balls (`bumper.wat`), Party (`party.wat`, a minigame a file in `mg/`), the playlist (`fireplace.wat`), and `layout.mjs`, the one memory map everything reads |
+| `src/` | the sim: the engine and golf (`game.wat` and friends), the arena (`arena.wat`, its team modes in `am/`), flight (`flight.wat`), Party (`bumper.wat`'s ball, `party.wat`, a minigame a file in `mg/`), the playlist (`fireplace.wat`), and `layout.mjs`, the one memory map everything reads |
 | `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, the map editor (`map-editor.html`), and the studio (`studio.html`), where a Party minigame is edited, built, checked and played in the page |
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
@@ -187,8 +202,8 @@ protocol, for writing a client in any language, and
 
 ```sh
 npm run build                            # every sim; prints each wasm's sha256
-npm test                                 # every test, about 10 minutes; prints its own count
-node --test test/bumper.test.mjs         # one file
+npm test                                 # 1,035 tests, about 24 minutes on 4 cores
+node --test test/party.test.mjs          # one file
 node tools/genfireplace.mjs --bots 12 --ticks 145000 --out logs/fireplace.qgl
 node harness/matrix.mjs --ticks 145000 --log logs/fireplace.qgl --wasm build/fireplace/game.wasm
 node net/run-fireplace.mjs               # online: relay, bots, headless Chrome, every hash checked

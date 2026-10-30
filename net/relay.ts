@@ -99,7 +99,7 @@ const statusPath = opt('status', '');
 const onlinePath = opt('online', '');
 // A missing player's word: the tap bits clear on every tick it's missing (so
 // a jump or a press fires once), the held bits after HOLD_TICKS of them (so a
-// player who drops stops walking). Golf's layout, which arena and bumper keep;
+// player who drops stops walking). Golf's layout, which the arena and party keep;
 // a game whose input word differs passes its own.
 const TAP_MASK = Number(opt('tap-mask', String(W.JUMP_BIT))) >>> 0;
 const HOLD_MASK = Number(opt('hold-mask', String(W.MOVE_BITS))) >>> 0;

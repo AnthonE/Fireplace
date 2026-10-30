@@ -1,7 +1,7 @@
 # Contributing to Fireplace
 
 Fireplace is a living room with a TV that plays a playlist of games: golf,
-bumper balls, the arena, Dogfight and Party's minigames. It is on the Elo Pros store as
+the arena, Dogfight and Party's minigames. It is on the Elo Pros store as
 Fireplace, and this repo is its source (CC0). Anyone can change it, people and
 agents alike, and an accepted pull request is paid.
 
@@ -132,7 +132,7 @@ platform over the sea; bump the others off, the last ball on wins) and wires
 it into the lists that name every minigame:
 
 ```sh
-node tools/new-mg.mjs <key> <prefix> "<NAME>"     # e.g. node tools/new-mg.mjs snowball sb "SNOWBALL"
+node tools/new-mg.mjs <key> <prefix> "<NAME>"     # e.g. node tools/new-mg.mjs marbles mb "MARBLE RUN"
 npm run build && node --test test/mg-<key>.test.mjs test/party.test.mjs
 node net/play.mjs --party --mg <id> --bots 7      # play it: open the URL it prints
 ```
@@ -156,7 +156,7 @@ crate, `rust/mg/<key>/src/lib.rs`, and `node tools/rust.mjs` turns it into
 `src/mg/<key>.wat` after each change (docs/rust.md; SUMO RING is the worked
 example).
 
-Then make it yours. The forty others in `src/mg/` are worked examples, and
+Then make it yours. The forty-two in `src/mg/` are worked examples, and
 the top of `src/party.wat` and `client/party-game.mjs` says what each hook is
 given and may do. The rules every machine must agree on are CLAUDE.md's "The
 sim's rules", and the build refuses some of them outright. The ones that bite
@@ -186,8 +186,8 @@ node net/run-party.mjs --mg <id>                           # online: a relay, bo
 Matrix and online runs need Deno (`sh tools/install-deno.sh`) and Chrome
 (Playwright's).
 
-A minigame changes the party and Fireplace builds; golf, the arena and bumper
-balls must stay bit-identical (compare the sha256s `npm run build` prints
+A minigame changes the party and Fireplace builds; golf, the arena and
+Dogfight must stay bit-identical (compare the sha256s `npm run build` prints
 before and after).
 
 ## A ball, a hat or a body
@@ -215,8 +215,8 @@ node --test test/looks.test.mjs test/rider.test.mjs
 ```
 
 A new pattern or hat style is code: a case in the ball's or the head's
-shader, in both `client/bumper-render.mjs` and `client/party-render.mjs`
-(`lookBall`, `lookHat`), and the test checks both have it. On a blocky body
+shader, in `client/party-render.mjs` (`lookBall`, `lookHat`), and the test
+checks it has it. On a blocky body
 a hat is boxes, in `rider()` in `client/rider.mjs`.
 
 ## A map
@@ -244,7 +244,7 @@ there. Then play it with bots:
 
 ```sh
 node net/play.mjs --arena --map <folder>                # open the URL it prints
-node net/play.mjs --flight --mode 15 --map <folder>     # Dogfight's Ring Race, on a map with gates
+node net/play.mjs --flight --mode 16 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
 
 A Roblox place makes a map too: in the editor, **open… > a Roblox place…**

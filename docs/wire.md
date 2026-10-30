@@ -14,7 +14,7 @@ Two working clients to read beside this page:
 
 | | |
 | --- | --- |
-| [`net/tiny-client.mjs`](../net/tiny-client.mjs) | the smallest whole client, 128 lines of JavaScript: joins, steps, plays, reports |
+| [`net/tiny-client.mjs`](../net/tiny-client.mjs) | the smallest whole client, 129 lines of JavaScript: joins, steps, plays, reports |
 | [`client/net.mjs`](../client/net.mjs) and [`client/sim.mjs`](../client/sim.mjs) | the browser's: steered lead, playout clock, prediction, failover |
 
 `net/wire.mjs` is the reference encoder and decoder for everything below.

@@ -2,7 +2,7 @@
 
 ![Fruit Chute with 128 balls: the belt carrying everyone down, fruit rolling down the lanes](p1-chute-128.png)
 
-Bumper balls' ball, and every round a different minigame: forty-one of them,
+Every player a ball, and every round a different minigame: forty-two of them,
 after Mario Party, Mario Kart's battle mode, Fall Guys, Squid Game and Roblox, up to 256 in a room.
 `src/` built with `BUMPER` and `PARTY` set (`build/party/game.wasm`), with the
 same lockstep, relays, keyframes, prediction, spectators and replays.
@@ -13,8 +13,9 @@ node net/play.mjs --party --mg 3        # every round Red Light (a minigame's nu
 node net/play.mjs --party --bots 255    # a full room
 ```
 
-The controls are bumper balls': the mouse turns you, WASD rolls, Space hops,
-a click uses what you hold, Tab shows the standings. A round is a 6 s title
+The mouse turns you, WASD rolls, Space hops, a click (or E) uses the
+power-up you hold, Tab shows the standings, F goes fullscreen, M the music,
+N the net graph. A round is a 6 s title
 card (the minigame's name, how it plays, how it's won), the round, and 5 s of
 its result; the next minigame is drawn from the room's PRNG, never one of the
 last two. A win is 10 party points and last place 1, in even steps between;
@@ -64,11 +65,33 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 38 | VOLLEYBALL | the first side to the target | red against blue on a court split by a net 3 m high that no ball crosses (7.5 m deep for up to 6 balls, 32 m² a ball past that, to 18 m deep and then wider), walled round; a volleyball for every 8 balls, 1.2 m in radius and falling 9 m/s², served in turn from each back line over the net; roll into one and it goes up 6 m/s and on the way you roll, faster the faster you roll (1.5 m/s standing, straight at the net, to 5); hop into one (the hop is 8 m/s here, your top clears the net) to spike it, 10 to 18 m/s, flatter but from up high, at least three quarters toward the net, unless it comes in faster than 6.5 m/s (then it's a dig, a bump); it comes off the net's face, its top edge and the walls at any height; down on a side's floor it's the other side's point, two of its own to the ball that sent it there, and the scorer serves again 2 s on; a side's fourth touch in a row is the other side's point; every touch is a point of your own, which places the losers; first to 15 (4 more for each volleyball past the first) or the most at 120 s; draws allowed |
 | 39 | SOCCER | the first side to the target | red against blue on a walled pitch half as long again as wide (600 m² and 100 more a ball to 16, 30 past that: 34.6 by 23.1 m for 2, 118.7 by 79.2 for 256), its corners cut at 45 degrees; at each end a goal, its mouth 0.44 of the width and 4 m high, with a net box 3 m deep you can roll into, and a penalty box in front; a football for every 16 balls, 1.8 m across, rolling far and bouncing off the walls, the frame, the nets and each other; roll into one and it goes on the way you roll, 1.5 times the speed you close at (a walk dribbles it, flat out sends it 15 m/s); hop into it and it's a chip, up to 8 m/s up; in your own box on your goal's side of it, a keeper's clear, at least 6 m/s and up, and a save on one coming at the mouth; all the way past the line is a goal, 5 of your own to your side's last toucher, or an own goal, nobody's; the football is gone 2 s, then back on its spot, held 1 s; with one football everyone is put back on their own half and held for that second; a touch is a point of your own, a save 3; first to 5 (one more for each football past the first) or the most at 120 s; draws allowed |
 | 40 | SUMO RING | last one in | a round ring over the sea sized for the crowd, bumps on; posts orbit it, swinging 12 s one way and then back, and knock any ball they meet away at 9 m/s and up; from 20 s the ring shrinks over 50 s to 35% of its size (6 m at least); balls that go off together share the win. Written in Rust (`rust/mg/sumo/`, [rust.md](rust.md)) |
+| 41 | SWISS ROLL | last one in | bumper balls' round: a wheel of Swiss cheese over the sea, 16 m plus 3.5 m times the root of the balls in (80 m at most), with four holes and one more for every 70 m² of it (64 at most), 2.6 to 6 m across, never within 7 m of the middle; a ball whose centre rolls over a hole or off the rim drops down its shaft and is out; over 60 s the rim crumbles in to 9 m and every hole widens by half; power-ups fall from the sky onto it, one every 4 s and one more for every 24 balls in; bumps on; 90 s, then everyone still rolling shares the win |
+
+**The ball** (`src/bumper.wat`: it began as bumper balls, a game of its own,
+whose wheel of cheese is SWISS ROLL now) rolls up to 10 m/s with a slippery
+drag (1.1/s), a third of the push in the air, and hops 0.9 m; a minigame's
+setup can turn any of that (`PG_ACC`, `PG_DRAG`, `PG_IDLE`, `PG_HOP`). A bump
+is elastic with a 5 m/s kick on top, shared by weight, so a ball rolling flat
+out into a still one sends it off at 12.5 m/s and bounces back at 2.5. 14 m
+under the floor a ball is out (or down), and if a ball bumped it (or blasted
+it) in the 3 s before, that one gets the KO. A ball is a player record: its
+position is the bottom of the ball, and the fields golf keeps for strokes
+and holes hold the power-up, MEGA's clock, wins, KOs, bumps and who bumped it
+last. The input word is golf's (yaw, the keys, the hop, and the shot counter
+as the use counter); pitch never changes, so a still ball costs nothing on
+the wire. The power-ups, where a minigame hands them out:
+
+| Power-up | Does |
+| --- | --- |
+| MEGA | 1.6 times the size and three times the weight for 8 s: shoved a third as far, a little slower to get going |
+| DASH | 20 m/s where you face, at once |
+| POW | golf's rocket blast round you: everyone within 11 m shoved away and up, 18 m/s at the middle |
+| ROCKET | golf's club: a rocket flying level where you face, 30 m/s, its blast shoving everyone within 5 m |
+| SPRING | a 13 m/s jump (4 m up): it saves a ball tipping into a hole, and the landing shoves everyone within 6 m |
 
 **How it fits on the engine.** `src/party.wat` is the framework: the rounds,
 the rotation, joins, the ball's roll over any stage, outs, places and points.
-bumper.wat's ball, power-ups, bumps and blasts stay; its cheese and its round
-are behind `#if !PARTY`, so bumper balls' own build is bit for bit what it was.
+`src/bumper.wat` keeps the ball's power-ups, bumps, blasts and rockets.
 Each minigame is its own file, `src/mg/<key>.wat` (its constants in
 `src/mg/<key>.mjs`, gathered into `src/layout.mjs`'s `MG_CONSTS` for the
 assembler), and supplies nine hooks under its prefix: `setup` lays the
@@ -87,7 +110,7 @@ the crowd, bumps on, the last ball on wins) and appends it to the five lists
 that name them all (`MINIGAMES` and its constants in `src/layout.mjs`, the
 `#include` in `src/party.wat`, `client/mg/index.mjs`, the registry check in
 `test/party.test.mjs`). As written it builds, its two tests pass, and so does
-`npm test` with it in; golf, the arena and bumper balls keep their bytes.
+`npm test` with it in; golf, the arena and Dogfight keep their bytes.
 CONTRIBUTING.md takes it from there.
 
 Every stage moves on a schedule: what a ball meets (a falling tile, a bar,
@@ -102,7 +125,7 @@ later, eased in like any correction. The minigames' tests check the
 prediction bit for bit against the confirmed ball through each hazard.
 
 `client/party.html` is the page (`client/party-game.mjs`), and
-`client/party-render.mjs` its renderer: bumper balls' look made general. The
+`client/party-render.mjs` its renderer: the look bumper balls had, made general. The
 stage is instanced solids (boxes, cylinders, hex prisms, spheres, each turned
 by a yaw and a roll, so a table tips and a drum lies on its side) in ten
 looks (matte, plastic, ice that cracks, metal, hazard stripes, glow, paint,
@@ -117,11 +140,11 @@ the stage. `client/party-bot.mjs` is the AI ball: it rolls its own ball ahead
 danger, its goal and the room from rivals, and lets a minigame steer outright
 (Red Light's brakes). 255 of them take 1.2 to 2.1 ms a tick.
 
-**Results.** `test/party.test.mjs` (16 tests) covers the framework: the other
+**Results.** `test/party.test.mjs` (17 tests) covers the framework: the other
 builds' bytes unchanged, rounds laid out for 1 to 256 balls, the rotation, a
 forced minigame, both kinds of end, places and points, late joiners, the
 prediction, and rounds of AI balls equal on every tick on 1 and 4 threads.
-Each minigame has its own file (`test/mg-<key>.test.mjs`, 491 tests in all):
+Each minigame has its own file (`test/mg-<key>.test.mjs`, more than 550 tests in all):
 its stage for 1, 8, 64 and 256 balls, each rule, the prediction through its
 hazards, and rounds of 8 and 64 AI balls on the debug build, equal on 1 and 4
 threads. Every minigame's recorded log, 20,000 ticks of 16 AI balls, replays
@@ -147,7 +170,7 @@ recorded log of 16 AI balls equal in all 27 configurations; and each forced
 online with Chrome and 15 AI balls and with 127, every hash equal (about 930
 hashes at 16 and 7,400 at 128 apiece). Snowball's balls grow, so Party's
 build reads a ball's radius and weight from its record when a round sets
-`PGF_SIZE` (bumper balls' bytes unchanged, and every other minigame's logs
+`PGF_SIZE` (bumper balls' bytes, as they were, unchanged, and every other minigame's logs
 replay as they did); Rising Lava and Maze Run keep a ball that finished or
 burnt out of play and let it watch the rest (`outForGood`). A tick of 256
 balls costs 0.17 to 0.28 ms in each; Party's wasm is 120 KB, 51 KB gzipped.
@@ -248,5 +271,26 @@ equal), the build played in party's page against AI balls, and the changed
 files sent in through GitHub's upload page. Unchanged, a minigame builds to
 `npm run build`'s bytes, in about 5 s here; edited constants reach the sim,
 not yet the client module that draws it and steers the AI.
+
+![Swiss Roll: sixteen balls on the wheel, its holes cut through, the rim crumbling in](p6-swiss-roll.png)
+
+**Swiss Roll.** Bumper balls' round (41), made a minigame so the room plays
+it among the rest; bumper balls' own build, page and gates are gone, and
+Fireplace's playlist has no bumper balls entry (its number, 2, is kept,
+retired: `FP_SETS`). `src/mg/cheese.wat` is the old game's cheese behind the
+hooks. `setup` sizes the wheel, lays its holes out in `PG_S` and finds the
+spiral's points clear of them; `ground` is the cheese under a ball's centre
+on bank d's tick (the squeeze is a function of it), so the prediction drops
+your ball through a hole on the tick the confirmed world does; `push` holds a
+ball going through in its hole's shaft (or off the rim from outside), as
+bumper's move did, till it is under the cheese; `tick` drops the power-ups.
+Party's renderer gained a look for it, `LOOK.CHEESE`: the wheel is one
+cylinder whose pixels inside any of its holes are discarded, each hole a
+cylinder after it, mirrored so its inside is drawn, open at both ends, cut
+where it leaves the wheel or meets another hole. 17 tests (the prediction bit
+for bit down a shaft, with the rim crumbling under it and through MEGA, DASH
+and SPRING, AI rounds of 8 and 64 equal on 1 and 4 threads, and the ball's
+own, moved here from bumper balls' tests: a bump, a KO, each power-up); its log of 16 AI balls in the matrix; forced
+online with Chrome and 15 AI balls, every hash equal.
 
 Not done yet: power-ups in more of the minigames.

@@ -1,6 +1,6 @@
 // Party's frontend: what the page draws and how it plays, mounted on a host
-// (client/host.mjs) that owns the memory, the workers and the GPU. Bumper
-// balls' controls and prediction (the same word, the same ball), drawn by
+// (client/host.mjs) that owns the memory, the workers and the GPU. The
+// ball's controls and prediction (golf's word, bumper.wat's ball), drawn by
 // client/party-render.mjs; the stage is the minigame's (client/mg/<key>.mjs,
 // MG[view.party().game]): each frame its draw() fills the Scene, its frame()
 // says where the action is (the shadow map's square, the minimap, the

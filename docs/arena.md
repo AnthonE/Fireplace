@@ -7,7 +7,8 @@ match is a Grab Bag: ten minutes, everyone spawns with two guns drawn at
 random, the most kills at the end wins; the matches after it go round the
 [modes](#modes), a free-for-all and then two [red against blue](#teams): Team
 Deathmatch, Skull Hunt, Zombies, Capture the Flag, Territories, gun game, Keep
-Away, VIP, Juggernaut, King of the Hill, Assault. All of them are on
+Away, VIP, Juggernaut, King of the Hill, Assault, then Lucky Blocks, Evade
+and Escape. All of them are on
 [Box Canyon](#box-canyon-structures-and-maps): a canyon walled all round with
 a base at each end you can walk into and up onto, a teleporter behind each, a
 cave through the north ridge, boulders for cover. (Set `FIESTA = 0` in
@@ -144,7 +145,7 @@ again: a free-for-all, then two [team modes](#teams), and the three kit modes
 without sides last. A sixteenth, [Crossroads](#crossroads), is in no
 rotation: a map that names it plays it every match. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
-the room draws for it (see Fireplace). A seed whose top byte is `0xA8` plays
+the room draws for it ([fireplace.md](fireplace.md)). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
 8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
@@ -346,7 +347,8 @@ Red against blue, in eight more modes on the same build: Team Slayer, Capture
 the Flag, Oddball, King of the Hill, Headhunter, Territories, VIP and Assault.
 Two of them follow each free-for-all in the rotation (`ARENA_MODES`: Fiesta,
 Team Slayer, Headhunter, Infection, Capture the Flag, Territories, gun game,
-Oddball, VIP, Juggernaut, King of the Hill, Assault) and Fireplace draws them
+Oddball, VIP, Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade,
+Escape) and Fireplace draws them
 too; `node net/play.mjs --arena --mode 5` is a room of Capture
 the Flag only.
 
@@ -787,6 +789,4 @@ bundle fits one datagram again. The late inputs and the relay's few stalls
 are this one machine running the relay, the referee, 255 bots and a headless
 Chrome at once.
 
-Not done yet: vehicles, dropped weapons, a manual reload while firing,
-and a second map (though [making one](#making-a-map) is now a paint program
-and a text editor away).
+Not done yet: vehicles, dropped weapons, and a manual reload while firing.

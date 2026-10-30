@@ -14,8 +14,7 @@
 // frames) and every bot an AI pilot (client/flight-bot.mjs);
 // the summary has each match's mode, how it ended (a team mode's scores and
 // winner), and each fighter's side.
-// With --bumper it is bumper balls' (build/bumper/game.wasm) and every bot an
-// AI ball (client/bumper-bot.mjs). With --party it is Party's
+// With --party it is Party's
 // (build/party/game.wasm), a minigame a round, and every bot an AI ball that
 // asks the minigame what is safe (client/party-bot.mjs). With --fireplace it is Fireplace's
 // (build/fireplace/game.wasm), every game in turn, and every bot a guest who
@@ -27,7 +26,7 @@
 // Given several relays, a session whose relay goes away tries the next, a few
 // times a second for up to 10 s, asking for its slot back (a resume): a
 // standby relay that has taken the room over holds it (net/relay.ts --standby).
-//   node net/bot-host.mjs [--relay 127.0.0.1:4434[,host:port...]] [--bots 250] [--seconds 0] [--rate 50] [--genome qg2:...] [--arena | --flight | --bumper | --party | --fireplace [--skill 0.6] [--slips]]
+//   node net/bot-host.mjs [--relay 127.0.0.1:4434[,host:port...]] [--bots 250] [--seconds 0] [--rate 50] [--genome qg2:...] [--arena | --flight | --party | --fireplace [--skill 0.6] [--slips]]
 //                         [--impair delay=60,jitter=10,loss=0.02] [--out traces/bot-host.json] [--watch] [--signin domain]
 // --seconds 0 plays until Ctrl-C; --rate: sessions opened a second. The summary
 // (--out, else stdout) holds every session's delivery and inputs, and the
@@ -49,7 +48,6 @@ import { Fighter } from '../client/arena-bot.mjs';
 import { AMC } from '../client/am/index.mjs';
 import { Pilot } from '../client/flight-bot.mjs';
 import { modeName as flightMode } from '../src/flight-view.mjs';
-import { Roller } from '../client/bumper-bot.mjs';
 import { Partier } from '../client/party-bot.mjs';
 import '../src/bumper-view.mjs';
 import '../src/party-view.mjs';
@@ -69,7 +67,6 @@ const outPath = opt('out', '');
 const watch = argv.includes('--watch');
 const flight = argv.includes('--flight');
 const arena = argv.includes('--arena') || flight; // flight is the arena's sim with ships: its words, frames and matches
-const bumper = argv.includes('--bumper');
 const fireplace = argv.includes('--fireplace');
 const party = argv.includes('--party');
 const skill = Number(opt('skill', 0.6));
@@ -79,10 +76,10 @@ const genome = opt('genome', GOLFER);
 const HOLE_TICKS = 56; // client/sim.mjs: a repair can come until a hole is 64 ticks old
 const TARGET_SLACK = (W.SEND_EVERY + 1) * W.TICK_MS; // net/bot.mjs: a lost input's repeat must still land
 
-const bytes = readFileSync(join(ROOT, flight ? 'build/flight/game.wasm' : arena ? 'build/arena/game.wasm' : bumper ? 'build/bumper/game.wasm' : party ? 'build/party/game.wasm' : fireplace ? 'build/fireplace/game.wasm' : 'build/game.wasm'));
-// a golfer, or in the arena a fighter (in bumper balls and party a ball) of a skill about --skill
+const bytes = readFileSync(join(ROOT, flight ? 'build/flight/game.wasm' : arena ? 'build/arena/game.wasm' : party ? 'build/party/game.wasm' : fireplace ? 'build/fireplace/game.wasm' : 'build/game.wasm'));
+// a golfer, or in the arena a fighter (in party a ball) of a skill about --skill
 const skilled = () => Math.max(0.1, Math.min(1, skill + (Math.random() - 0.5) * 0.4));
-const makeBot = (slot) => (flight ? new Pilot(slot, (Math.random() * 1e9) | 0, skilled(), { slips }) : arena ? new Fighter(slot, (Math.random() * 1e9) | 0, skilled(), { slips }) : bumper ? new Roller(slot, (Math.random() * 1e9) | 0, skilled(), { slips })
+const makeBot = (slot) => (flight ? new Pilot(slot, (Math.random() * 1e9) | 0, skilled(), { slips }) : arena ? new Fighter(slot, (Math.random() * 1e9) | 0, skilled(), { slips })
   : party ? new Partier(slot, (Math.random() * 1e9) | 0, skilled(), { slips })
   : fireplace ? new Guest(slot, (Math.random() * 1e9) | 0, skilled(), genome, { slips }) : new BrainBot(slot, genome, { lag: 8 }));
 // --map: a map from outside the build (tools/map-compile.mjs packMap), as the relay's --map
@@ -432,7 +429,7 @@ class Session {
     // ticks between deciding an input and seeing what it did, in the shared world
     this.bot.lag = Math.max(2, this.nextTick - at());
     while (this.nextTick <= predicted) {
-      const word = !world.started ? 0 : arena || bumper || party || fireplace ? this.bot.think(world.view, this.nextTick - world.roomStart, this.nextTick - at() + 1) : this.bot.think(world.view);
+      const word = !world.started ? 0 : arena || party || fireplace ? this.bot.think(world.view, this.nextTick - world.roomStart, this.nextTick - at() + 1) : this.bot.think(world.view);
       this.words.set(this.nextTick, word);
       this.nextTick++;
     }
@@ -483,7 +480,6 @@ const wall = (performance.now() - t0) / 1000;
 const v = world.view;
 const players = sessions.filter((s) => s.joined && !s.watch).map((s) => {
   if (arena) { const f = v.fighter(s.slot); return { slot: s.slot, kills: f.kills, deaths: f.deaths, zombie: f.zombie, rung: f.rung, points: f.points, team: f.team, carry: f.carry, aux: f.aux }; }
-  if (bumper) { const b = v.bumper(s.slot); return { slot: s.slot, wins: b.wins, kos: b.kos, bumps: b.bumps, rounds: b.rounds }; }
   if (party) { const b = v.partier(s.slot); return { slot: s.slot, pts: b.pts, wins: b.wins, kos: b.kos, rounds: b.rounds }; }
   if (fireplace) return { slot: s.slot, mallows: v.dv.getUint16(L.FP_MALLOWS + 2 * s.slot, true) };
   const p = v.player(s.slot);
@@ -500,7 +496,7 @@ const per = sessions.map((s) => {
   };
 });
 const summary = {
-  bots: nBots, seconds, impair, genome: arena || bumper || party ? null : genome, arena, flight, bumper, party, fireplace,
+  bots: nBots, seconds, impair, genome: arena || party ? null : genome, arena, flight, party, fireplace,
   games: fireplace || party || arena ? world.games : undefined,
   results: fireplace ? world.results : undefined,
   // the arena's match as the run ended: its mode, and a team mode's scores, target, winner and sides' counts

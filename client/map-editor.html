@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Map Editor</title>
+<title>Studio · maps</title>
 <link rel="icon" href="data:,">
 <style>
   :root { --bg: #0b0d14; --panel: #131722; --line: #262c3b; --ink: #cfd3e0; --dim: #7d8499; --hot: #ffcf5a; --bad: #ff7a6b; --ok: #8fd18a; }
@@ -11,6 +11,10 @@
   header { grid-area: top; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
   header .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
   header b { color: var(--hot); margin-right: 6px; }
+  header nav.kit-tabs { display: flex; gap: 2px; margin-right: 4px; }
+  header nav.kit-tabs a { color: var(--dim); text-decoration: none; padding: 3px 8px; border: 1px solid transparent; border-radius: 4px; }
+  header nav.kit-tabs a:hover { color: var(--ink); border-color: var(--line); }
+  header nav.kit-tabs a[aria-current] { color: var(--hot); border-color: var(--hot); background: #3b3220; }
   #wrap { grid-area: map; position: relative; min-width: 0; min-height: 0; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   #wrap.m2d #view3d, #wrap.m3d #view { display: none; }
@@ -45,7 +49,8 @@
   }
 </style>
 <header>
-  <b>Map Editor</b>
+  <b>Studio</b>
+  <nav class="kit-tabs" aria-label="the studio"><a href="map-editor.html" aria-current="page">maps</a><a href="studio.html">minigames</a></nav>
   <select id="open" title="open a map">
     <option value="">open…</option>
     <option value="canyon">Box Canyon</option>

@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Studio</title>
+<title>Studio · minigames</title>
 <link rel="icon" href="data:,">
 <style>
   :root { --bg: #0b0d14; --panel: #131722; --line: #262c3b; --ink: #cfd3e0; --dim: #7d8499; --hot: #ffcf5a; --bad: #ff7a6b; --ok: #8fd18a; }
@@ -11,6 +11,10 @@
   header { grid-area: top; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
   header .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
   header b { color: var(--hot); margin-right: 6px; }
+  header nav.kit-tabs { display: flex; gap: 2px; margin-right: 4px; }
+  header nav.kit-tabs a { color: var(--dim); text-decoration: none; padding: 3px 8px; border: 1px solid transparent; border-radius: 4px; }
+  header nav.kit-tabs a:hover { color: var(--ink); border-color: var(--line); }
+  header nav.kit-tabs a[aria-current] { color: var(--hot); border-color: var(--hot); background: #3b3220; }
   #edit { grid-area: edit; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   #tabs { display: flex; gap: 3px; padding: 4px 8px 0; }
   #tabs button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
@@ -42,6 +46,7 @@
 <script src="../coi.js"></script>
 <header>
   <b>Studio</b>
+  <nav class="kit-tabs" aria-label="the studio"><a href="map-editor.html">maps</a><a href="studio.html" aria-current="page">minigames</a></nav>
   <select id="pick" title="the minigame to work on"></select>
   <span class="sep"></span>
   <button id="build" title="assemble party with this minigame (Ctrl+Enter)">build</button>
