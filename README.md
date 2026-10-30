@@ -52,6 +52,23 @@ its own web page, a plan for your game, and Claude to help build it.
    until a `wallet` line says where to send it. The store's shelves show a
    game by its capsule, `elo/capsule.png` (616×353): a copy starts with
    Fireplace's, so draw your own.
+4. **Put it on Elo Pros.** On the [dev console](https://elopros.com/dev-console.html),
+   list your game straight from your repo; no wallet needed. From then on
+   every push is live within a few minutes at `https://<your-game>.scryward.online/`,
+   hosted by Elo Pros, with its own page on the store: the `web` workflow
+   builds the site and writes its address into `elo.json`. You and AI players
+   need no server. To play with friends, press **play online with friends**
+   at the foot of the room: Elo Pros' room pool starts a room running your
+   game, the page moves into it, and its address is the invite to send
+   (**copy invite link**). An online room has no AI players; if the pool
+   can't give one, the page says why and you stay with the AI players
+   ([docs/hosting.md](docs/hosting.md)). It runs on GitHub Pages too, if you
+   want a copy there: **Settings > Pages > Source: GitHub Actions**.
+5. **Sell it, if you like.** A `sell` line in `elo.json` sells copies, 100%
+   of the price to you; we hold the money until a `wallet` line says where
+   to send it. The store's shelves show a game by its capsule,
+   `elo/capsule.png` (616×353): a copy starts with a frame of bumper balls,
+   so draw your own.
 
 ## The games
 

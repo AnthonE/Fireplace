@@ -6,8 +6,9 @@
 # again". Before the game is listed the answer says so, and the job still passes.
 #
 # GitHub's raw host caches a file for up to five minutes, so the job first
-# waits until it serves the bytes just pushed. Fireplace's own repo skips it:
-# its store row is the house's.
+# waits until it serves the bytes just pushed. Fireplace's own row is the
+# house's, marked to read this repo's commits (`repo_commits`), so it runs
+# here too.
 name: elo
 on:
   push:
@@ -15,7 +16,7 @@ on:
   workflow_dispatch:
 jobs:
   pull:
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.repository != 'AnthonE/Fireplace'
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

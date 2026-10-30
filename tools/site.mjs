@@ -20,7 +20,7 @@
 // licence). No sources the browser never reads: the relay, tests.
 //   node tools/site.mjs [out]   (default site/)
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './main.mjs';
 import { compileMap } from './map.mjs';
@@ -67,7 +67,9 @@ export function buildSite(out = join(ROOT, 'site')) {
   let n = 0, bytes = 0;
   for (const [dir, keep, deep] of PARTS) {
     for (const path of files(join(ROOT, dir), keep, deep)) {
-      const to = join(out, relative(ROOT, path));
+      // wabt's licence as LICENSE.txt: a file with no extension is one a
+      // static host may refuse (Elo Pros' web builds do)
+      const to = join(out, relative(ROOT, path) + (basename(path) === 'LICENSE' ? '.txt' : ''));
       mkdirSync(dirname(to), { recursive: true });
       cpSync(path, to);
       n++;
@@ -86,9 +88,10 @@ export function buildSite(out = join(ROOT, 'site')) {
     bytes += packed.length;
   }
   cpSync(join(ROOT, 'coi.js'), join(out, 'coi.js'));
+  // (no .nojekyll: Pages deployed from Actions runs no Jekyll, and a hidden
+  // file is one a static host may refuse, as Elo Pros' web builds do)
   writeFileSync(join(out, 'index.html'), INDEX);
-  writeFileSync(join(out, '.nojekyll'), ''); // Pages serves the files as they are
-  return { out, files: n + 3, bytes };
+  return { out, files: n + 2, bytes };
 }
 
 if (isMain(import.meta.url)) {

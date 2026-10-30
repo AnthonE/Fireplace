@@ -76,8 +76,10 @@ Know the menu before you plan. Everything here is in the repo today.
   <id> <their-github-login>`, then edit colours). A ball or a hat is one line
   in `client/looks.mjs`. These are the easy wins for a beginner's second
   milestone.
-- **Where it runs.** On their GitHub Pages site the page plays a local room
-  (them and AI players) as soon as Pages is on. Playing with friends online
+- **Where it runs.** Once it is listed on Elo Pros (the dev console lists it
+  from the repo, no wallet needed), Elo Pros hosts it at
+  `https://<game>.scryward.online/` and every push updates it; the page plays
+  a local room (them and AI players). GitHub Pages works too. Playing with friends online
   needs a relay running this repo's wasm (`docs/hosting.md`); its address
   goes in `client/kit.json`. Elo Pros may run one for them; say "ask on the
   Elo Pros dev console", never that it is free or guaranteed.
@@ -173,7 +175,7 @@ Rules for every task line (the checker holds you to them):
 - Milestone 1's first task is running it once, unchanged, with
   `elo.template.json`'s `first_run` as its check, exactly.
 - Milestone 1 has at most six tasks, and ends with their game on their page
-  (`npm run build && node tools/site.mjs` builds the site Pages serves).
+  (`npm run build && node tools/site.mjs` builds the site Elo Pros hosts).
 - After that, about three milestones: make it look like theirs (a theme, a
   ball or a hat), play with friends online (a relay, `client/kit.json`;
   `node net/run-party.mjs --mg <id>` is the online check), and put it on the
@@ -201,6 +203,6 @@ do, how to know it worked (the check, in a code block), and a last line:
 
 At most 25 lines: what this pull request adds (the three files), the first
 playable in one sentence, and what to do next: merge it, open issue 1, and
-either do it or comment `@claude` on it. Mention that the page is live at
-their GitHub Pages address once Pages is on (Settings > Pages > Source:
-GitHub Actions).
+either do it or comment `@claude` on it. Mention that the page goes live at
+`https://<game>.scryward.online/` once they list it on the Elo Pros dev
+console, and updates with every push.

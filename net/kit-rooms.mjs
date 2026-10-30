@@ -61,7 +61,7 @@ const DEFAULTS = {
   host: 'game.elopros.com', bind: '0.0.0.0', ports: [61300, 61315], native_offset: 0,
   max_rooms: 8, per_site_rooms: 2, max_players: 8, idle_s: 120, hold_s: 20,
   max_wasm_bytes: 2 * 1024 * 1024, max_map_bytes: MAP_STAGE_MAX, fetch_timeout_s: 10,
-  fetch_from: ['https://*.github.io'], allow_origins: ['https://*.github.io'],
+  fetch_from: ['https://*.github.io', 'https://*.scryward.online'], allow_origins: ['https://*.github.io', 'https://*.scryward.online'],
   refuse_after: 3, refuse_s: 3600, per_ip_per_min: 30,
   status_dir: 'traces/kit-rooms', wasm_dir: join(tmpdir(), 'kit-rooms-wasm'), relay_args: [],
 };
