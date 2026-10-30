@@ -268,29 +268,25 @@ counts each game a slot was in once, with its marshmallows and wins.
 `test/looks.test.mjs` and `test/achievements.test.mjs` hold the rest: the house
 look as the riders were, every pattern and style the lists use present in
 party's shader, earned looks naming real achievements, and each achievement's test.
-The determinism matrix replays 145,000 ticks
-of twelve guests, the playlist through once with the minigames and the modes
-as they stand at this commit: bumper balls, party from 191 s, the arena from
-469 s, party from 658 s, Dogfight from 857 s (its three minutes and the
-hold), golf from 1,046 s: 27 configurations (Node, Deno, Chrome x JIT tiers
-x 1, 2 and 4 threads), equal on every tick, at 0.053 to 0.056 ms a tick on
-TurboFan in Deno and Chrome, the region's hash included. CI records 155,000,
-into bumper balls again. Online, `net/run-fireplace.mjs --bots 15 --seconds
-270` on one 4-core machine shared with other work: 16 sessions (15 guests and
-Chrome), the room moved from bumper balls into party at 147 s, 4,174 interval
-hashes checked by the referee, all equal, 7 bytes a closed tick on average,
-3.8 KB/s down and 2.0 KB/s up a session. On SwiftShader the switch into party
-holds up the page's GPU for about 40 s while party's pipelines compile
-(bumper's take about 14 s as the page starts); its sim worker and its hashes
+The determinism matrix replays CI's log, 155,000 ticks of twelve guests,
+the playlist with the minigames and the modes as they stand at this commit:
+party, the arena from 263 s, party from 452 s, Dogfight from 630 s, golf from
+743 s, and round again (party from 902 s, the arena from 1,110 s): 27
+configurations (Node, Deno, Chrome x JIT tiers x 1, 2 and 4 threads), equal
+on every tick, at 0.049 to 0.055 ms a tick on TurboFan in Deno and Chrome on
+one thread, the region's hash included. Online, `net/run-fireplace.mjs
+--bots 15 --seconds 360` on one 4-core machine: 16 sessions (15 guests and
+Chrome), the room moved from party into the arena (Territories) at 218 s,
+5,630 interval hashes checked by the referee, all equal, 11 bytes a closed
+tick on average, 4.8 KB/s down and 2.0 KB/s up a session, each page's look
+round every page (`looksWentRound`). Started at Dogfight (`--start 3`,
+225 s): 16 sessions, 3,518 interval hashes checked, all equal, the room
+through Dogfight into golf at 189 s, Chrome with it and kept up. On
+SwiftShader, compiling party's pipelines holds up the page's GPU for about
+40 s (measured as the room switched into it); its sim worker and its hashes
 carry on, and it catches up. The switch tick costs 30 to 46 ms (measured
 with the machine busy) on the relay's referee and every client (most of it
 the 512 x 512 terrain each game builds); the sim workers catch up past it.
-With looks, `net/run-fireplace.mjs --chrome 2` (240 s, 15 guests): 17
-sessions, 3,959 interval hashes checked, all equal, the room into party, and
-each Chrome page's look in both pages' tables at its slot (the gate's
-`looksWentRound`). Started at Dogfight (`--start 4`, 225 s, 15 guests and
-Chrome): 16 sessions, 3,669 interval hashes checked, all equal, the room
-through Dogfight into golf at 189 s, Chrome with it and kept up.
 
 ```sh
 node --test test/fireplace.test.mjs
@@ -320,11 +316,12 @@ node tools/film.mjs shoot film/trailer.json --replay replays/<file>.qgr [--still
 ```
 
 The house cut was shot on a 960 s room of 64 guests, which went through the
-whole playlist once (bumper balls from 1 s, party from 175 s, the arena's
+playlist of the time once (bumper balls, since retired, from 1 s, party from 175 s, the arena's
 Juggernaut from 423 s, party from 612 s, golf from 846 s). On SwiftShader at
 1280 x 720 a second of film took about a minute to draw. A replay is tied to
 the build of `game.wasm` it was recorded on: after a sim change, record again,
-plan it and move the shots.
+plan it and move the shots. `film/trailer.json`'s times are still that
+replay's, so the next cut records again first.
 
 A signed-in player goes by the name their wallet has on Elo Pros, in every
 game's labels and the marshmallow board; the relay looks it up and sends it
