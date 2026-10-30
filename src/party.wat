@@ -55,6 +55,7 @@
 #include "mg/volley.wat"
 #include "mg/soccer.wat"
 #include "mg/sumo.wat"
+#include "mg/cheese.wat"
 
 ;; ---- the room and the round
 

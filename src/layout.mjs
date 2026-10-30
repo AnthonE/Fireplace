@@ -945,6 +945,7 @@ export const MINIGAMES = [
   { key: 'volley', prefix: 'vb', name: 'VOLLEYBALL' },
   { key: 'soccer', prefix: 'so', name: 'SOCCER' },
   { key: 'sumo', prefix: 'su', name: 'SUMO RING' },
+  { key: 'cheese', prefix: 'ch', name: 'SWISS ROLL' },
 ]; // index = MG_*
 export const MG_THINICE = 0;
 export const MG_COLOR = 1;
@@ -987,7 +988,8 @@ export const MG_DODGE = 37;
 export const MG_VOLLEY = 38;
 export const MG_SOCCER = 39;
 export const MG_SUMO = 40;
-export const NMG = 41;
+export const MG_CHEESE = 41;
+export const NMG = 42;
 
 export const PK_OUT = 0; // out is out: the last ball in wins
 export const PK_SCORE = 1; // a ball that falls comes back; placed by PG_SCORE at the end
@@ -1083,7 +1085,8 @@ import * as mg_dodge from './mg/dodge.mjs';
 import * as mg_volley from './mg/volley.mjs';
 import * as mg_soccer from './mg/soccer.mjs';
 import * as mg_sumo from './mg/sumo.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer, mg_sumo));
+import * as mg_cheese from './mg/cheese.mjs';
+export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer, mg_sumo, mg_cheese));
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come

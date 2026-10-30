@@ -60,7 +60,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 40 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War |
+| Party (the ball) | 42 | 60 | Mini Golf; with teams: Fall Ball, Egg Scramble, Tug o' War |
 | Arena (the fighter) | 16 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |

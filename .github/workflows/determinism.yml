@@ -128,6 +128,10 @@ jobs:
         run: |
           node tools/genparty.mjs --mg 40 --bots 16 --ticks 20000 --out logs/sumo.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/sumo.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: SWISS ROLL (bumper balls' wheel of cheese as a minigame), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 41 --bots 16 --ticks 20000 --out logs/cheese.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/cheese.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
       - name: Every map in maps/ compiles, builds into the debug sim and plays with AI fighters
         run: node tools/map-check.mjs --all
       - if: failure()
@@ -276,6 +280,8 @@ jobs:
         run: node net/run-party.mjs --chrome 0 --bots 256 --seconds 100
       - name: SUMO RING online (the minigame written in Rust forced, 64 AI balls, every hash checked)
         run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 40
+      - name: SWISS ROLL online (bumper balls' wheel forced, 64 AI balls, every hash checked)
+        run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 41
       - name: 256 players in one room (the bot host's golfers, impaired, the 257th refused)
         run: node net/run-n1.mjs --chrome 0 --seconds 60
       - name: Spectators through a tree of relays (two edges on the root, a third two deep, 100 verifying spectators each, a player turned away at an edge)
