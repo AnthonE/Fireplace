@@ -58,12 +58,16 @@ keeps the other's). The seed is a hash of the room's PRNG and the games played (
 `REGION + 0xe400`). The arena's forces a mode: `0xA8` in its top byte, the
 mode in the next, drawn by `$rand` from the twelve, never the one the arena
 played last (`FP_MODE`, `REGION + 0xe404`), and drawn as the game before ends
-so the TV can name it; whatever the mode, the match is cut to 3 min
-(Infection's already is; gun game, Juggernaut, Oddball and King of the Hill
-lose 2 or 3 min, Team Slayer 5, a Fiesta and Capture the Flag 7), and a team
+so the TV can name it; whatever the mode, the match is cut to 90 s
+(`FP_ARENA_TICKS`: Infection loses 90 s, Evade and Escape 2 or 2.5 min, the
+rest 3.5 to 8.5 min; Escape's exits, opening 60 s before the clock, open
+30 s in), and a team
 match cut short goes to the side ahead. Dogfight's forces one of flight's
 four modes the same way, drawn by `$rand` (any of them, the last one too)
-and cut to 3 min (a race cut short places by gates passed).
+and cut to 90 s (a race cut short places by gates passed). Golf's hole is
+cut to 90 s too, its penalty for anyone not in, and bumper balls' rounds are
+90 s already, so no match in the playlist runs longer; party's minigames keep
+their own lengths (75 s to 3 min).
 Party's keeps its top byte off `0xA7`, which would play one minigame only.
 What lasts from game to game (the marshmallows, the arena's last mode, the
 next seed) sits in 8 KiB of the region no game touches. A game's static world
@@ -245,16 +249,16 @@ with Elo Pros, and the referee's standings as their evidence, come next
 **Results.** `test/fireplace.test.mjs` (11 tests): the prefixer; one
 module with every export; the playlist on the debug build from bumper balls
 round to bumper balls again, the room coming and going (each game's matches:
-two rounds, three minigames, one match cut to 3 min, one hole; everyone in
-each new game straight after its switch; Dogfight's match cut to 3 min and
+two rounds, three minigames, one match cut to 90 s, one hole; everyone in
+each new game straight after its switch; Dogfight's match cut to 90 s and
 flying the mode its seed forces; no party seed forcing a minigame);
 the arena's seed drawn as the party before it ended, and the mode it played;
 marshmallows, 3, 2 and 1, by each game's places (party's by points, then wins;
 a mode's by its own), summed from game to game and lost with the slot; the
 mode's draw (any of the eight, then never the last, 100 draws each way), each
-mode's match cut to 3 min and placed by the mode; Dogfight's draw (every one
+mode's match cut to 90 s and placed by the mode; Dogfight's draw (every one
 of flight's modes seen in 40 draws), each switched into on Skyways with every
-ship in the air, cut to 3 min and placed by its mode; a party seed that came out
+ship in the air, cut to 90 s and placed by its mode; a party seed that came out
 with `0xA7` on top turned off it; the playlist equal on every tick on 1 and 4
 threads through bumper balls and the switch into party; and keyframes taken
 just into party, mid-party, mid-arena, mid-Dogfight and mid-golf, each
@@ -268,7 +272,8 @@ look as the riders were, every pattern and style the lists use present in both
 shaders, earned looks naming real achievements, and each achievement's test.
 The determinism matrix replays 145,000 ticks
 of twelve guests, the playlist through once with the minigames and the modes
-as they stand at this commit: bumper balls, party from 191 s, the arena from
+as they stood when the arena's and Dogfight's cut was 3 min and golf's
+2.5 min: bumper balls, party from 191 s, the arena from
 469 s, party from 658 s, Dogfight from 857 s (its three minutes and the
 hold), golf from 1,046 s: 27 configurations (Node, Deno, Chrome x JIT tiers
 x 1, 2 and 4 threads), equal on every tick, at 0.053 to 0.056 ms a tick on

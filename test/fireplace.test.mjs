@@ -102,10 +102,10 @@ test('the room plays the playlist by position: bumper balls, party, the arena, p
     assert.equal(overs.filter((o) => o.n === g.n).length, L.FP_MATCHES[g.game], `${L.GAMES[g.game]}'s matches`);
   }
   const arena = games.findIndex((g) => g.game === L.G_ARENA);
-  assert.ok(games[arena + 1].at - games[arena].at <= L.COUNT_TICKS + L.FP_ARENA_TICKS + L.FP_HOLD + 10, 'the arena cut to 3 min');
+  assert.ok(games[arena + 1].at - games[arena].at <= L.COUNT_TICKS + L.FP_ARENA_TICKS + L.FP_HOLD + 10, 'the arena cut to 90 s');
   assert.equal(starts[arena].clock, L.FP_ARENA_TICKS, `${L.MODES[starts[arena].mode].name}'s clock`);
   const flight = games.findIndex((g) => g.game === L.G_FLIGHT);
-  assert.ok(games[flight + 1].at - games[flight].at <= L.COUNT_TICKS + L.FP_FLIGHT_TICKS + L.FP_HOLD + 10, 'Dogfight cut to 3 min');
+  assert.ok(games[flight + 1].at - games[flight].at <= L.COUNT_TICKS + L.FP_FLIGHT_TICKS + L.FP_HOLD + 10, 'Dogfight cut to 90 s');
   assert.equal(starts[flight].clock, L.FP_FLIGHT_TICKS, "Dogfight's clock");
   assert.ok(L.FLIGHT_MODES.includes(starts[flight].mode), `Dogfight flies ${flightMode(starts[flight].mode).name}`);
   assert.equal(starts[flight].mode, (starts[flight].seed >>> 16) & 0xff, 'the mode its seed forces');
@@ -183,7 +183,7 @@ async function atTheEnd(k, poke = () => {}) {
   return { s, v, dv, rng, run };
 }
 
-test("the arena's mode: one of ARENA_MODES, never the last one played, forced by its seed and cut to 3 min, placed by the mode", async () => {
+test("the arena's mode: one of ARENA_MODES, never the last one played, forced by its seed and cut to 90 s, placed by the mode", async () => {
   const k = L.PLAYLIST.indexOf(L.G_ARENA);
   // 100 draws each way see all seven others (a mirror of $rand: rand % 7 first
   // gives the last residue at draw 47)
@@ -226,7 +226,7 @@ test("the arena's mode: one of ARENA_MODES, never the last one played, forced by
   }
 });
 
-test("Dogfight's mode: one of FLIGHT_MODES drawn from the room's PRNG, forced by its seed, cut to 3 min, placed by the mode, the ships flying", async () => {
+test("Dogfight's mode: one of FLIGHT_MODES drawn from the room's PRNG, forced by its seed, cut to 90 s, placed by the mode, the ships flying", async () => {
   const k = L.PLAYLIST.indexOf(L.G_FLIGHT);
   const seen = new Set();
   for (let r = 1; r <= 40; r++) {

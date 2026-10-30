@@ -1100,9 +1100,11 @@ export const G_BUMPER = 2;
 export const G_PARTY = 3;
 export const G_FLIGHT = 4;
 export const FP_HOLD = 750; // 6 s of the result, the standings, then the next game
-export const FP_ARENA_TICKS = 22500; // an arena match of 3 min, whatever its mode (Infection's is 3 already; the rest 5 or 10)
-export const FP_FLIGHT_TICKS = 22500; // a Dogfight of 3 min, whatever its mode
-export const FP_GOLF_TICKS = 18750; // a hole of at most 2.5 min, not 4
+// No game in the playlist runs past 90 s: bumper's rounds are 90 s already,
+// and these cut the rest (party's minigames keep their own, 75 s to 3 min).
+export const FP_ARENA_TICKS = 11250; // an arena match of 90 s, whatever its mode (the rest 3 to 10 min)
+export const FP_FLIGHT_TICKS = 11250; // a Dogfight of 90 s, whatever its mode
+export const FP_GOLF_TICKS = 11250; // a hole of at most 90 s, not 4 min
 // The games, by G_*: what the playlist (src/fireplace.wat, through the fp
 // macros), the assembler (tools/asm.mjs) and the page need to know of one, so
 // a game joins Fireplace as an entry here, its build's flags and one of the

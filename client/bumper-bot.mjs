@@ -43,11 +43,17 @@ function local(w, x, z, r) {
 }
 
 export class Roller {
-  // skill 0..1: how far ahead it looks, how steady it steers, how keen it is to fight
-  constructor(slot, seed = 1, skill = 0.6) {
+  // skill 0..1: how far ahead it looks, how steady it steers, how keen it is to fight.
+  // slips: a person's, for a room people play against (a local room's AI, the
+  // bot host's --slips): it looks 0.1 s less far ahead, and now and then (about
+  // every 4 s at skill 0.2, 9 s at 0.65) it stops paying attention for
+  // 0.3-0.7 s, keeping its last word whatever comes.
+  constructor(slot, seed = 1, skill = 0.6, { slips = false } = {}) {
     this.slot = slot;
     this.rng = (seed * 2654435761 + slot * 40503) >>> 0 || 1;
     this.skill = skill;
+    this.slips = slips;
+    this.doze = 0;
     this.use = 0;
     this.yaw = 0;
     this.move = 0;
@@ -68,6 +74,10 @@ export class Roller {
   // t: the tick the word is for; lag: ticks between the world it sees and t
   think(view, t = view.tick, lag = 0) {
     if ((t + this.slot) % THINK_EVERY && this.at >= 0) return this.word;
+    if (this.slips && this.at >= 0 && this.word) {
+      if (t < this.doze) return this.word;
+      if (this.rand() < 0.01 * (1 - this.skill)) { this.doze = t + 40 + Math.floor(this.rand() * 50); return this.word; }
+    }
     this.at = t;
     const me = view.bumper(this.slot);
     if (!me.live || me.out || view.hole().state !== L.H_PLAY) {
@@ -81,7 +91,7 @@ export class Roller {
     const vel = [me.vel[0], me.vel[2]];
     const speed = Math.hypot(...vel);
     const balls = ballsOf(view).filter((b) => b.slot !== this.slot);
-    const reach = 0.35 + 0.5 * this.skill; // seconds it looks ahead
+    const reach = 0.35 + 0.5 * this.skill - (this.slips ? 0.1 : 0); // seconds it looks ahead
 
     // the goal: an orb, a rival, or the middle
     let goal = null, want = 6;

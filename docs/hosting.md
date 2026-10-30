@@ -92,7 +92,8 @@ bots at its doors.
 ## Rooms for the kit's copies
 
 A copy of this repo made from the template ("Use this template") has a page
-on GitHub Pages and no relay, so it plays a local room with AI players.
+on GitHub Pages and no relay, so it plays a local room with AI players
+(skills 0.2 to 0.65, with a person's slips: `client/local.mjs`).
 `net/kit-rooms.mjs` gives it rooms: **play online with friends**, at the
 foot of the screen while the living room is in view, asks the pool
 (`relay.pool` in `client/kit.json`, `https://game.elopros.com/kit/` by

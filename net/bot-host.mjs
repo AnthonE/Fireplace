@@ -27,7 +27,7 @@
 // Given several relays, a session whose relay goes away tries the next, a few
 // times a second for up to 10 s, asking for its slot back (a resume): a
 // standby relay that has taken the room over holds it (net/relay.ts --standby).
-//   node net/bot-host.mjs [--relay 127.0.0.1:4434[,host:port...]] [--bots 250] [--seconds 0] [--rate 50] [--genome qg2:...] [--arena | --flight | --bumper | --party | --fireplace [--skill 0.6]]
+//   node net/bot-host.mjs [--relay 127.0.0.1:4434[,host:port...]] [--bots 250] [--seconds 0] [--rate 50] [--genome qg2:...] [--arena | --flight | --bumper | --party | --fireplace [--skill 0.6] [--slips]]
 //                         [--impair delay=60,jitter=10,loss=0.02] [--out traces/bot-host.json] [--watch] [--signin domain]
 // --seconds 0 plays until Ctrl-C; --rate: sessions opened a second. The summary
 // (--out, else stdout) holds every session's delivery and inputs, and the
@@ -73,6 +73,7 @@ const bumper = argv.includes('--bumper');
 const fireplace = argv.includes('--fireplace');
 const party = argv.includes('--party');
 const skill = Number(opt('skill', 0.6));
+const slips = argv.includes('--slips'); // a person's slips (each brain's own: late to react, a shaking aim, lapses), for rooms people play in
 const signinDomain = opt('signin', '');
 const genome = opt('genome', GOLFER);
 const HOLE_TICKS = 56; // client/sim.mjs: a repair can come until a hole is 64 ticks old
@@ -81,9 +82,9 @@ const TARGET_SLACK = (W.SEND_EVERY + 1) * W.TICK_MS; // net/bot.mjs: a lost inpu
 const bytes = readFileSync(join(ROOT, flight ? 'build/flight/game.wasm' : arena ? 'build/arena/game.wasm' : bumper ? 'build/bumper/game.wasm' : party ? 'build/party/game.wasm' : fireplace ? 'build/fireplace/game.wasm' : 'build/game.wasm'));
 // a golfer, or in the arena a fighter (in bumper balls and party a ball) of a skill about --skill
 const skilled = () => Math.max(0.1, Math.min(1, skill + (Math.random() - 0.5) * 0.4));
-const makeBot = (slot) => (flight ? new Pilot(slot, (Math.random() * 1e9) | 0, skilled()) : arena ? new Fighter(slot, (Math.random() * 1e9) | 0, skilled()) : bumper ? new Roller(slot, (Math.random() * 1e9) | 0, skilled())
-  : party ? new Partier(slot, (Math.random() * 1e9) | 0, skilled())
-  : fireplace ? new Guest(slot, (Math.random() * 1e9) | 0, skilled(), genome) : new BrainBot(slot, genome, { lag: 8 }));
+const makeBot = (slot) => (flight ? new Pilot(slot, (Math.random() * 1e9) | 0, skilled(), { slips }) : arena ? new Fighter(slot, (Math.random() * 1e9) | 0, skilled(), { slips }) : bumper ? new Roller(slot, (Math.random() * 1e9) | 0, skilled(), { slips })
+  : party ? new Partier(slot, (Math.random() * 1e9) | 0, skilled(), { slips })
+  : fireplace ? new Guest(slot, (Math.random() * 1e9) | 0, skilled(), genome, { slips }) : new BrainBot(slot, genome, { lag: 8 }));
 // --map: a map from outside the build (tools/map-compile.mjs packMap), as the relay's --map
 const mapBytes = opt('map', '') ? new Uint8Array(readFileSync(opt('map', ''))) : null;
 const prefix = await W.wasmPrefix(bytes, mapBytes);

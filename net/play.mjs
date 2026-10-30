@@ -19,6 +19,8 @@
 // --fireplace runs Fireplace (build/fireplace/game.wasm): every game in turn,
 // with --bots guests who play whatever is on (net/bot-host.mjs --fireplace);
 // --start k begins the playlist at its entry k (layout.mjs FP_START).
+// Its bots slip as people do (bot-host --slips), as a local room's AI does: a
+// room for people to play in (the gates' bot hosts run without it).
 // Another machine on the LAN can join with --host 0.0.0.0 if its Chrome treats
 // this page as secure: chrome://flags/#unsafely-treat-insecure-origin-as-secure
 // with http://<this machine>:8080 (shared memory and WebTransport need it).
@@ -82,7 +84,7 @@ if (fireplace) {
   if (nbots) {
     await new Promise((ok) => setTimeout(ok, 1500));
     mkdirSync('traces', { recursive: true });
-    bots = spawn(process.execPath, ['net/bot-host.mjs', '--fireplace', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
+    bots = spawn(process.execPath, ['net/bot-host.mjs', '--fireplace', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--slips', '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
   }
 } else if (party) {
   await serve({ port: web, host });
@@ -94,7 +96,7 @@ if (fireplace) {
   if (nbots) {
     await new Promise((ok) => setTimeout(ok, 1500));
     mkdirSync('traces', { recursive: true });
-    bots = spawn(process.execPath, ['net/bot-host.mjs', '--party', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
+    bots = spawn(process.execPath, ['net/bot-host.mjs', '--party', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--slips', '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
   }
 } else if (bumper) {
   await serve({ port: web, host });
@@ -105,7 +107,7 @@ if (fireplace) {
   if (nbots) {
     await new Promise((ok) => setTimeout(ok, 1500));
     mkdirSync('traces', { recursive: true });
-    bots = spawn(process.execPath, ['net/bot-host.mjs', '--bumper', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
+    bots = spawn(process.execPath, ['net/bot-host.mjs', '--bumper', '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--slips', '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
   }
 } else if (flight) {
   await serve({ port: web, host });
@@ -116,7 +118,7 @@ if (fireplace) {
   if (nbots) {
     await new Promise((ok) => setTimeout(ok, 1500));
     mkdirSync('traces', { recursive: true });
-    bots = spawn(process.execPath, ['net/bot-host.mjs', '--flight', ...mapArgs, '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
+    bots = spawn(process.execPath, ['net/bot-host.mjs', '--flight', ...mapArgs, '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--slips', '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
   }
 } else if (arena) {
   await serve({ port: web, host });
@@ -127,7 +129,7 @@ if (fireplace) {
   if (nbots) {
     await new Promise((ok) => setTimeout(ok, 1500));
     mkdirSync('traces', { recursive: true });
-    bots = spawn(process.execPath, ['net/bot-host.mjs', '--arena', ...mapArgs, '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
+    bots = spawn(process.execPath, ['net/bot-host.mjs', '--arena', ...mapArgs, '--relay', `${host === '0.0.0.0' ? '127.0.0.1' : host}:4434`, '--bots', String(nbots), '--slips', '--out', 'traces/bot-host.json'], { stdio: 'inherit' });
   }
 } else {
   await serve({ port: web, host });
