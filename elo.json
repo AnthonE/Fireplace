@@ -369,5 +369,11 @@
         "keep": "best"
       }
     ]
+  },
+  "web": {
+    "url": "https://github.com/AnthonE/Fireplace/releases/download/web-39c7618be1c7/site.zip",
+    "sha256": "7342173765613e59911a2dc9557e76a3ea40d13979842e8455a32d3b10d6a7c6",
+    "entry": "index.html",
+    "frame": false
   }
 }
