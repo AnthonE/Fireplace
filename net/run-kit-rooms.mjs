@@ -342,8 +342,8 @@ try {
   const golf = await ask({ site: site('p1'), game: 'golf' });
   check('a copy gets a room', golf.status === 200 && golf.json.game === 'golf', golf.text);
   await refuse('a copy with per_site_rooms open', { site: site('p1'), game: 'arena' }, 503, /has 1 room open, the most one copy may/);
-  const bumper = await ask({ site: site('p2'), game: 'bumper' });
-  check('another copy gets one', bumper.status === 200 && bumper.json.game === 'bumper', bumper.text);
+  const flight = await ask({ site: site('p2'), game: 'flight' });
+  check('another copy gets one', flight.status === 200 && flight.json.game === 'flight', flight.text);
   await refuse('a pool with max_rooms open', { site: site('p3'), game: 'party' }, 503, /the pool is full: 2 rooms open/);
   const share = await ask({ site: site('p3'), game: 'golf' });
   check('a copy with the same wasm as an open room joins it, over no cap', share.status === 200 && share.json.room === golf.json.room, share.text);

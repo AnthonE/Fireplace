@@ -116,10 +116,6 @@ jobs:
           node harness/matrix.mjs --ticks 20000 --log logs/flight-slayer.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
           node tools/genflight.mjs --bots 8 --ticks 20000 --mode 16 --out logs/flight-race.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/flight-race.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
-      - name: Bumper balls (build/bumper/), rounds of sixteen AI balls
-        run: |
-          node tools/genbumper.mjs --bots 16 --ticks 20000 --out logs/bumper.qgl
-          node harness/matrix.mjs --ticks 20000 --log logs/bumper.qgl --wasm build/bumper/game.wasm --runtimes node,deno,chromium
       - name: Party (build/party/), sixteen AI balls through the rotation of minigames
         run: |
           node tools/genparty.mjs --bots 16 --ticks 20000 --out logs/party.qgl
@@ -181,16 +177,16 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm run build
-      - name: Fireplace (build/fireplace/), the playlist round once (bumper balls, party, the arena in a drawn mode, party, Dogfight in a drawn mode, golf, bumper again), guests coming and going
+      - name: Fireplace (build/fireplace/), the playlist round once (party, the arena in a drawn mode, party, Dogfight in a drawn mode, golf, party again), guests coming and going
         run: |
           node tools/genfireplace.mjs --bots 12 --ticks 155000 --out logs/fireplace.qgl
           node harness/matrix.mjs --ticks 155000 --log logs/fireplace.qgl --wasm build/fireplace/game.wasm --runtimes node,deno,chromium
-      - name: Fireplace online (a relay on Fireplace's sim, 64 guests, the room moved from bumper balls into party, every hash checked)
-        run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 240
-      - name: Fireplace online from Dogfight (the playlist started at its entry 4, 64 guests, the room moved on into golf, every hash checked)
-        run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 220 --start 4
+      - name: Fireplace online (a relay on Fireplace's sim, 64 guests, the room moved from party into the arena, every hash checked)
+        run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 360
+      - name: Fireplace online from Dogfight (the playlist started at its entry 3, 64 guests, the room moved on into golf, every hash checked)
+        run: node net/run-fireplace.mjs --chrome 0 --bots 64 --seconds 220 --start 3
       - name: Elo Pros online (guests sign in through the relay, one refused; the first game's places and each guest's achievements reported once, signed with the server key)
-        run: node net/run-elo.mjs --bots 6 --seconds 240
+        run: node net/run-elo.mjs --bots 6 --seconds 360
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -274,8 +270,6 @@ jobs:
           node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 4
           node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 3
           node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 15
-      - name: Bumper balls online, full (a relay on bumper balls' sim, 256 AI balls through its native door, a round won, every hash checked)
-        run: node net/run-bumper.mjs --chrome 0 --bots 256 --seconds 100
       - name: Party online, full (a relay on Party's sim, 256 AI balls through its native door, the rotation, a round placed, every hash checked)
         run: node net/run-party.mjs --chrome 0 --bots 256 --seconds 100
       - name: SUMO RING online (the minigame written in Rust forced, 64 AI balls, every hash checked)

@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newParty, partyBytes, predicted } from './helpers.mjs';
-import { View, partyWord, PLAT_Y } from '../src/party-view.mjs';
+import { View, partyWord, PLAT_Y, B_RAD as RAD, MEGA_RAD } from '../src/party-view.mjs';
 import { replay, parseLog, decodeTrace } from '../harness/core.mjs';
 import { startWorkers } from '../harness/run-node.mjs';
 import { playParty } from '../tools/genparty.mjs';
@@ -322,4 +322,147 @@ test('the client module: the wheel and a shaft a hole right after it, the power-
     assert.ok(goal.every(Number.isFinite) && edge(w, goal[0], goal[1]) > -2, `goal ${goal}`);
   }
   assert.ok(cheese.hint.length <= 70);
+});
+
+// ---- the ball's own (bumper.wat's, the same in every minigame): bumps, KOs and the power-ups, on a Swiss Roll wheel
+
+const TURN = 16384;
+const noHoles = (g) => g.dv.setUint32(L.PG_H + MC.CH_NH, 0, true);
+const wide = (g) => g.dv.setFloat32(L.PG_H + MC.CH_RAD, MC.CH_RMAX, true);
+function hole(g, k, x, z, r) {
+  const a = L.PG_S + MC.CH_HOLES + 16 * k;
+  g.dv.setFloat32(a, x, true); g.dv.setFloat32(a + 4, z, true); g.dv.setFloat32(a + 8, r, true);
+  g.dv.setUint32(L.PG_H + MC.CH_NH, Math.max(k + 1, g.dv.getUint32(L.PG_H + MC.CH_NH, true)), true);
+}
+const give = (g, p, item) => g.dv.setUint8(rec(p) + L.B_ITEM, item);
+// Ball 0 uses what it holds, facing +x, with ball 1 placed where asked, on a wheel with no holes.
+async function use(item, at = [C + 4, C]) {
+  const g = await room(2);
+  noHoles(g);
+  put(g, 0, C, C);
+  put(g, 1, ...at);
+  give(g, 0, item);
+  g.step([[L.EV_INPUT, 0, partyWord({ yaw: 0, use: 1 })]]);
+  return g;
+}
+
+test('a bump: a ball rolling into a still one sends it off, and a MEGA ball is shoved less', async () => {
+  const run = async (mega) => {
+    const g = await room(2);
+    noHoles(g);
+    put(g, 0, C - 2.4, C, { vx: 10 });
+    put(g, 1, C, C);
+    if (mega) g.dv.setUint16(rec(1) + L.B_MEGA, 5000, true);
+    let k = 0;
+    while (g.v.partier(1).vel[0] < 0.1 && k++ < 200) g.step([[L.EV_INPUT, 0, partyWord({ yaw: 0, move: 0 })]]);
+    return { g, a: g.v.partier(0), b: g.v.partier(1) };
+  };
+  const { g, a, b } = await run(false);
+  assert.ok(b.vel[0] > 10, `the still ball goes off at ${b.vel[0]}`);
+  assert.ok(a.vel[0] < 1, `the hitter stops, ${a.vel[0]}`);
+  assert.equal(b.hitBy, 0);
+  assert.equal(a.hitBy, 1);
+  assert.equal(b.hitFor, L.CREDIT_TICKS - 1, 'a bump counts for 3 s, from the tick it came');
+  const [bump] = fxs(g.v, L.FX_BUMP);
+  assert.ok(bump && bump.size > 9, 'a hard one');
+  assert.equal(a.bumps, 1, 'the hitter gets the bump');
+  const heavy = await run(true);
+  assert.ok(heavy.b.vel[0] < b.vel[0] / 2, `MEGA moves off at ${heavy.b.vel[0]}`);
+  assert.ok(heavy.a.vel[0] < -2, 'and the hitter bounces back');
+});
+
+test("a KO: bumped into a hole within 3 s is the bumper's; later is nobody's", async () => {
+  for (const late of [false, true]) {
+    const g = await room(3);
+    noHoles(g);
+    hole(g, 0, C + 7, C, 3);
+    put(g, 0, C - 4, C, { vx: 10 });
+    put(g, 1, C + 1.5, C);
+    put(g, 2, C - 12, C);
+    for (let k = 0; k < 400 && !g.v.partier(1).out; k++) {
+      if (late && g.v.partier(1).hitBy === 0) g.dv.setUint16(rec(1) + L.B_HITT, 0, true);
+      g.step();
+    }
+    assert.ok(g.v.partier(1).out, 'into the hole');
+    assert.equal(g.v.partier(0).kos, late ? 0 : 1);
+    assert.equal(fxs(g.v, L.FX_SINK)[0].shot, late ? 255 : 0);
+  }
+});
+
+test('MEGA: twice the size and three times the weight for 8 s', async () => {
+  const g = await use(L.PU_MEGA);
+  assert.equal(g.v.partier(0).item, 0);
+  assert.equal(g.v.partier(0).radius, MEGA_RAD);
+  assert.equal(fxs(g.v, L.FX_USE)[0].size, L.PU_MEGA);
+  for (let k = 0; k < L.MEGA_TICKS; k++) g.step([[L.EV_INPUT, 0, partyWord({ yaw: 0, use: 1 })]]);
+  assert.equal(g.v.partier(0).radius, RAD);
+});
+
+test('DASH: 20 m/s where you face; POW: everyone near shoved away; a press with nothing held is dropped', async () => {
+  const d = await use(L.PU_DASH);
+  assert.ok(Math.abs(d.v.partier(0).vel[0] - 20) < 0.2);
+  const p = await use(L.PU_POW, [C + 4, C]);
+  const b = p.v.partier(1);
+  assert.ok(b.vel[0] > 8 && b.vel[1] > 2, `shoved off at ${b.vel}`);
+  assert.equal(b.hitBy, 0);
+  assert.equal(fxs(p.v, L.FX_BLAST)[0].size, 11);
+  // nothing held: the press goes nowhere, and a power-up picked up later waits for the next
+  const n = await use(0);
+  assert.equal(n.v.partier(0).shots, 0);
+  give(n, 0, L.PU_DASH);
+  n.step([[L.EV_INPUT, 0, partyWord({ yaw: 0, use: 1 })]]);
+  assert.equal(n.v.partier(0).item, L.PU_DASH);
+  n.step([[L.EV_INPUT, 0, partyWord({ yaw: 0, use: 2 })]]);
+  assert.equal(n.v.partier(0).item, 0);
+});
+
+test("ROCKET: golf's club, flying level, its blast shoving the ball it meets", async () => {
+  const g = await use(L.PU_ROCKET, [C + 15, C]);
+  assert.equal(g.v.projectiles().length, 1);
+  let k = 0;
+  while (g.v.projectiles().length && k++ < 200) g.step();
+  assert.ok(k > 30 && k < 70, `${k} ticks to go 13 m`);
+  const b = g.v.partier(1);
+  assert.ok(b.vel[0] > 10, `${b.vel[0]}`);
+  assert.equal(b.hitBy, 0);
+  assert.equal(fxs(g.v, L.FX_BLAST).length, 1);
+});
+
+test('SPRING: a high jump that can save a ball tipping into a hole, and a stomp where it lands', async () => {
+  const g = await room(2);
+  noHoles(g);
+  hole(g, 0, C + 3.4, C, 3);
+  put(g, 0, C, C, { vx: 1.5 });
+  put(g, 1, C - 4, C);
+  give(g, 0, L.PU_SPRING);
+  // over the hole and starting to drop, then the spring
+  while (g.v.partier(0).ground) g.step();
+  g.step([[L.EV_INPUT, 0, partyWord({ yaw: TURN / 2, move: 1, use: 1 })]]);
+  assert.ok(g.v.partier(0).vel[1] > 12);
+  assert.ok(g.v.partier(0).stomp);
+  let top = 0;
+  for (let k = 0; k < 400 && !g.v.partier(0).ground; k++) { g.step([[L.EV_INPUT, 0, partyWord({ yaw: TURN / 2, move: 1, use: 1 })]]); top = Math.max(top, g.v.partier(0).pos[1]); }
+  assert.ok(top > PLAT_Y + 3.5, `up ${top - PLAT_Y} m`);
+  const a = g.v.partier(0);
+  assert.ok(a.ground && !a.falling && !a.out, 'saved: landed back on cheese');
+  assert.ok(!a.stomp);
+  assert.equal(fxs(g.v, L.FX_BLAST).length, 1, 'the stomp');
+  assert.ok(Math.hypot(...g.v.partier(1).vel) > 1, 'it shoved the ball beside it');
+});
+
+test('the prediction matches the confirmed ball bit for bit through the power-ups: rolling, hops, MEGA, DASH, SPRING', async () => {
+  const g = await room(1);
+  noHoles(g);
+  wide(g);
+  put(g, 0, C - 10, C);
+  give(g, 0, L.PU_MEGA);
+  const wobbly = Array.from({ length: 300 }, (_, k) => partyWord({ yaw: Math.round(3000 * Math.sin(k / 20)) & (TURN - 1), move: k % 50 < 40 ? 1 : 2, hop: k === 80 || k === 81 ? 1 : 0, use: k >= 20 ? 1 : 0 }));
+  assert.ok(predicted(g, wobbly) >= 300);
+  assert.equal(g.v.partier(0).radius, MEGA_RAD);
+  give(g, 0, L.PU_DASH);
+  assert.ok(predicted(g, Array.from({ length: 150 }, (_, k) => partyWord({ yaw: TURN / 2, move: 4, use: k >= 10 ? 2 : 1 }))) >= 150);
+  put(g, 0, C + 20, C);
+  give(g, 0, L.PU_SPRING);
+  assert.ok(predicted(g, Array.from({ length: 150 }, (_, k) => partyWord({ yaw: 0, move: 1, use: k >= 5 ? 3 : 2 }))) >= 150);
+  assert.equal(g.v.partier(0).shots, 3, 'all three used');
 });

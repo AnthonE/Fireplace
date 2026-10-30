@@ -11,7 +11,7 @@
 import * as L from '../src/layout.mjs';
 
 // The ratings ladder for each game, by G_*: a game's skill is its own.
-export const LADDERS = ['golf', 'arena', 'bumper', 'party', 'dogfight'];
+export const LADDERS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // bumper balls' retired (layout.mjs FP_SETS): its number kept
 
 // What a sign-in got, the relay's answer (W.T_SIGNED).
 export const SIGNIN = { SIGNED: 1, REFUSED: 2, UNCHECKED: 3, OFF: 4, ELSEWHERE: 5 };

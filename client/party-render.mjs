@@ -1,4 +1,4 @@
-// Party's WebGPU renderer: bumper balls' look for any stage. Drawn at the
+// Party's WebGPU renderer: the balls on any stage. Drawn at the
 // window's own resolution with 4x multisampling, lit by a sun (a moon at
 // night) and a sky, tone-mapped, over the sea far below with clouds in the
 // sky. The stage is a Scene: boxes, cylinders, hex prisms and spheres packed
@@ -10,10 +10,10 @@
 // the balls cast into it (a ball and its rider as spheres) and everything
 // samples it soft, the sea included. Decals are flat glowing rings and discs.
 // The paint layer is a grid of colour indices over the floor, uploaded when
-// its version changes. The balls are bumper's impostors (beach-ball stripes
+// its version changes. The balls are impostors (beach-ball stripes
 // turning as they roll, an ink outline, a rider), with its orbs, rockets and
 // flashes, and coins and bombs besides; beams, the HUD's 3x5 font, rects and
-// the net graph as bumper's. The minimap is the stage drawn from above each
+// the net graph. The minimap is the stage drawn from above each
 // frame into a small texture with every caster as a dot. Nothing loops over
 // solids per pixel. Nothing here is hashed.
 import * as L from '../src/layout.mjs';
@@ -930,7 +930,7 @@ struct FOutS { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(
   return vec4f(vec3f(0.95, 0.97, 1.0) * a, a);
 }
 
-// ---- sprites (bumper's)
+// ---- sprites
 struct SOut {
   @builtin(position) pos: vec4f,
   @location(0) uv: vec2f,

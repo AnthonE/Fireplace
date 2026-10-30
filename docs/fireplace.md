@@ -7,9 +7,8 @@ going, snow at the window, a walnut console TV with rabbit ears. Click and you
 sit down: the camera closes in on the TV until its glass fills the screen, and
 you're in whatever the room is playing. When a game ends it pulls back to the
 room, and the TV shows the marshmallows and what's on next; then it closes in
-again. The room plays the playlist through: party (three minigames; bumper
-balls' wheel comes round among them as SWISS ROLL), the arena (one three-minute match of any of its fifteen
-modes, drawn for it), party again, a three-minute Dogfight (a free-for-all,
+again. The room plays the playlist through: party (three minigames), the
+arena (one three-minute match of any of its fifteen modes, drawn for it), party again, a three-minute Dogfight (a free-for-all,
 red against blue, the juggernaut or Ring Race, drawn for it), a hole of golf, and round
 again; the top three of each game get 3, 2 and 1 marshmallows. Join any time,
 into whatever is on (or the next round of it); leave any time.
@@ -17,20 +16,20 @@ into whatever is on (or the next round of it); leave any time.
 ```sh
 node net/play.mjs --fireplace            # the relay on Fireplace's sim, 15 guests, the page; open the URL it prints
 node net/play.mjs --fireplace --bots 0   # just people
-node net/play.mjs --fireplace --start 4  # from the playlist's entry 4, Dogfight, on
+node net/play.mjs --fireplace --start 3  # from the playlist's entry 3, Dogfight, on
 ```
 
 Click (or Enter) to sit down; then each game's own controls. `?bot=1` sits a
 guest at the controls; `?watch=1` spectates; F goes fullscreen. While the room
 is in view, T changes its theme (`?theme=<id>` picks one), B, H and P your
 ball, hat and body, and L lists your achievements (`?look=<word>` wears a look
-for one visit). In bumper balls and party, 1 to 4 wave, cheer, dance and spin.
+for one visit). In party, 1 to 4 wave, cheer, dance and spin.
 
 **How it fits on the engine.** `build/fireplace/game.wasm` is golf, the arena,
-bumper balls, party and flight's Dogfight in one module: `tools/asm.mjs`
-expands each exactly as its own build is (the arena on Box Canyon, flight on
-Skyways, each its own passive segment), puts its every identifier under a
-prefix (`$g.`, `$a.`, `$b.`, `$p.`, `$f.`) and makes its exports internal, and appends `src/fireplace.wat`.
+party and flight's Dogfight in one module: `tools/asm.mjs` expands each
+exactly as its own build is (the arena on Box Canyon, flight on Skyways, each
+its own passive segment), puts its every identifier under a prefix (`$g.`,
+`$a.`, `$p.`, `$f.`) and makes its exports internal, and appends `src/fireplace.wat`.
 That sends every export to the game on now (the header's `FP_GAME`) and runs
 the playlist at the end of each tick. The games are a list, `FP_SETS` in
 `src/layout.mjs`: each entry names its prefix and build flags, its world's
@@ -39,6 +38,10 @@ whose input word it reads, its matches and longest match, how it scores and
 what its next seed forces, and the `fp` macros (`src/macros.mjs`) write the
 playlist's game-by-game code from it. A new game is an entry there and its
 row in `client/fireplace.mjs`'s `PAGES` (its frontend, its size, its light).
+A game's number is its place on the list and never changes (replays, the
+playlist, browsers' achievement tallies and Elo Pros' stats name games by
+it), so a game taken out stays as `{ name, retired: true }` and a `null` row:
+bumper balls, number 2, whose wheel of cheese is party's SWISS ROLL now.
 Moving the five games onto the list left every tick's region hash equal over
 a 152,091-tick log through all six playlist entries and back to the first. The ball phases and the barrier are the
 same code in every game, so the worker threads never change games. The
@@ -46,17 +49,16 @@ playlist goes by position, not by game (`PLAYLIST` in `src/layout.mjs`): the
 count of games played (`FP_COUNT`'s high half) mod its length picks the next
 entry, so party comes round twice. When a game's last match ends, its result
 is scored (golf: strokes; the arena and Dogfight: a Fiesta by kills, then
-deaths, any other mode by the places it gives; bumper: rounds won, then KOs, then bumps; party:
-party points, then minigames won), the marshmallows handed out, the next
+deaths, any other mode by the places it gives; party: party points, then
+minigames won), the marshmallows handed out, the next
 entry's seed drawn and the result held 6 s. Then the region is wiped but for
 the tick, the PRNG and the playlist's own state, the next game's world is
 built on that seed, and everyone in the room is joined into it on that tick
-(bumper and party lay one round out with everyone in it), keeping their input
-words when the two games read the same word (golf's, which bumper and party
-share; the arena's and Dogfight's are alike but mean other things, so neither
+(party lays one round out with everyone in it), keeping their input words
+when the two games read the same word (golf's, which party shares; the arena's and Dogfight's are alike but mean other things, so neither
 keeps the other's). The seed is a hash of the room's PRNG and the games played (`FP_NEXT`,
 `REGION + 0xe400`). The arena's forces a mode: `0xA8` in its top byte, the
-mode in the next, drawn by `$rand` from the twelve, never the one the arena
+mode in the next, drawn by `$rand` from the fifteen (`ARENA_MODES`), never the one the arena
 played last (`FP_MODE`, `REGION + 0xe404`), and drawn as the game before ends
 so the TV can name it; whatever the mode, the match is cut to 3 min
 (Infection's already is; gun game, Juggernaut, Oddball and King of the Hill
@@ -80,12 +82,12 @@ changed: the relay, referee, keyframes, spectators and replays just see a sim.
 
 `client/fireplace.html` is the page. One host (`client/host.mjs`: the memory,
 the net and sim workers, the prediction's instance, the sound, one GPU device)
-and each game's frontend (`client/bumper-game.mjs`, `party-game.mjs`,
-`arena-game.mjs`, `golf-game.mjs`) mounted on its own canvas as the room moves
-into it, every one at the window's size; `bumper.html`, `party.html` and `arena.html` are the same
-frontends mounted alone. The net worker packs each tick's word in the format
-of the game on now. The room (`client/room-render.mjs`) is drawn like the
-cheese, solved per pixel: a few dozen boxes, two pumpkins and the antenna's
+and each game's frontend (`client/party-game.mjs`, `arena-game.mjs`,
+`flight-game.mjs`, `golf-game.mjs`) mounted on its own canvas as the room
+moves into it, every one at the window's size; `party.html`, `arena.html` and
+`flight.html` are the same frontends mounted alone. The net worker packs each tick's word in the format
+of the game on now. The room (`client/room-render.mjs`) is solved per
+pixel: a few dozen boxes, two pumpkins and the antenna's
 rods, lit by the fire (it flickers, and its shadow is cast through the
 firebox's mouth), by the TV in the colour of the game on it, and by the snow
 light, every colour the theme's. The flames are a short march through the firebox. While the room is in
@@ -136,8 +138,8 @@ sends the table to every session that asked for looks in its hello (flag 4),
 then what changed, at most every 250 ms (`docs/wire.md`). A slot that empties
 goes back to 0, the house look. No tick, record, replay or hash carries a
 look, so the sims build to the same sha256 with or without them, and
-`tiny-client` and an edge relay, which never ask, never see one. Bumper balls
-and party draw the ball's pattern (beach panels, bands, ribs, a solid, metal,
+`tiny-client` and an edge relay, which never ask, never see one. Party
+draws the ball's pattern (beach panels, bands, ribs, a solid, metal,
 an eight ball's spot) and the hat on the rider's head, a few lines each in
 their shaders' ball and head cases; golf and the arena tint the golfer and the
 fighter the ball's colour (a team mode's sides still win). Look 0 draws exactly
@@ -187,12 +189,12 @@ every game puts touch controls over its screen (`client/touch.mjs`): a stick
 wherever the left thumb lands, which holds W, A, S and D in the game's own
 keys; a drag anywhere else to look, through the game's own mouse look as if
 the pointer were locked; and round buttons on the right, the first and
-biggest in the corner (jump in bumper balls and party, fire in the arena,
+biggest in the corner (jump in party, fire in the arena,
 golf and Dogfight). The couch gets a bar for B, H, P, T, L and F.
 
 ![Party on a phone: the stick, the drag, the buttons](p5-phone.png)
 
-**The font.** Bumper balls', party's and the TV's text is a bold sans with a
+**The font.** Party's and the TV's text is a bold sans with a
 dark outline (`client/hudfont.mjs`): the 3x5 font's 64 characters drawn again
 at startup from the system's own sans, a rounded one where there is one, into
 an atlas that rides in the renderers' font buffer after the pixel glyphs, so
@@ -201,7 +203,7 @@ x 6 HUD pixels, so every layout is what it was. `?font=pixel` keeps the 3x5
 font. Golf's, the arena's and Dogfight's HUDs draw at one screen pixel a font
 pixel, where a cell is too small for a smooth face, and keep it.
 
-**Emotes and juice.** 1 to 4 in bumper balls and party wave, cheer, dance and
+**Emotes and juice.** 1 to 4 in party wave, cheer, dance and
 spin: the look word's top byte, an emote in its low four bits and a count in
 its high four, so the same emote twice is a new word the relay passes on. A
 page acts one out for 2.5 s from when it sees the word change, and not one it
@@ -218,9 +220,9 @@ frontends already read.
 browser: a first game, the top three, a win, two, three and five wins in a
 row, 10 wins, first, second and third, 25, 100 and 250 marshmallows, 25 and
 100 games, golf, the arena and party each played and each won, all four
-with Dogfight played and won, three wins (Big Cheese, once bumper balls
-won: bumper balls left the playlist for party's SWISS ROLL, and an
-achievement's id never changes, only its test), each game won on its own, and a game
+with Dogfight played and won, three wins (Big Cheese: it was bumper balls
+won, and an achievement's id never changes, only its test), each game won
+on its own, and a game
 with 32, and one with 100, or more in it. Each is a test over
 a tally of results, and a result is what the confirmed world holds while a
 game's end is on screen (`FP_STAGE` 1): the game, this slot's place
@@ -241,7 +243,8 @@ the TV, six a page. They are this browser's record, not the room's: signing in
 with Elo Pros, and the referee's standings as their evidence, come next
 (`docs/roadmap.md`).
 
-**Results.** `test/fireplace.test.mjs` (11 tests): the prefixer; one
+**Results.** `test/fireplace.test.mjs` (12 tests): the prefixer; the games'
+list (`FP_SETS`, a retired entry only its name, a page row for each); one
 module with every export; the playlist on the debug build from party
 round to party again, the room coming and going (each game's matches:
 three minigames, one match cut to 3 min, one hole; everyone in
@@ -250,7 +253,7 @@ flying the mode its seed forces; no party seed forcing a minigame);
 the arena's seed drawn as the party before it ended, and the mode it played;
 marshmallows, 3, 2 and 1, by each game's places (party's by points, then wins;
 a mode's by its own), summed from game to game and lost with the slot; the
-mode's draw (any of the eight, then never the last, 100 draws each way), each
+mode's draw (any of the fifteen, then never the last, 100 draws each way), each
 mode's match cut to 3 min and placed by the mode; Dogfight's draw (every one
 of flight's modes seen in 40 draws), each switched into on Skyways with every
 ship in the air, cut to 3 min and placed by its mode; a party seed that came out
@@ -263,8 +266,8 @@ equal to a run that never left; and the achievements' tally fed every held
 end of that playlist for three slots, twice each as a page sees a hold, which
 counts each game a slot was in once, with its marshmallows and wins.
 `test/looks.test.mjs` and `test/achievements.test.mjs` hold the rest: the house
-look as the riders were, every pattern and style the lists use present in both
-shaders, earned looks naming real achievements, and each achievement's test.
+look as the riders were, every pattern and style the lists use present in
+party's shader, earned looks naming real achievements, and each achievement's test.
 The determinism matrix replays 145,000 ticks
 of twelve guests, the playlist through once with the minigames and the modes
 as they stand at this commit: bumper balls, party from 191 s, the arena from
@@ -291,9 +294,9 @@ through Dogfight into golf at 189 s, Chrome with it and kept up.
 
 ```sh
 node --test test/fireplace.test.mjs
-node tools/genfireplace.mjs --bots 12 --ticks 155000 --out logs/fireplace.qgl   # or --games 7: 1500 ticks into bumper balls again
+node tools/genfireplace.mjs --bots 12 --ticks 155000 --out logs/fireplace.qgl   # or --games 6: 1500 ticks into party again
 node harness/matrix.mjs --ticks 155000 --log logs/fireplace.qgl --wasm build/fireplace/game.wasm
-node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 240] [--res 960x600] [--port 4433] [--start k]
+node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 360] [--res 960x600] [--port 4433] [--start k]
 ```
 
 ## The trailer

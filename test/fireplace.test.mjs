@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newFireplace, fireplaceBytes, wasmBytes, arenaBytes, bumperBytes, partyBytes } from './helpers.mjs';
+import { newFireplace, fireplaceBytes, wasmBytes, arenaBytes, partyBytes } from './helpers.mjs';
 import { View } from '../src/view.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { modeName as flightMode } from '../src/flight-view.mjs';
@@ -28,31 +28,35 @@ test('the prefixer: every identifier under its prefix, exports made internal, st
   assert.doesNotMatch(out, /export|module|import/);
 });
 
-test('the games are a list (FP_SETS): each entry one of the ways the playlist knows, and the page has a row for each', async () => {
-  assert.equal(new Set(L.FP_SETS.map((g) => g.prefix)).size, L.FP_SETS.length, 'a prefix a game');
+test('the games are a list (FP_SETS): each entry one of the ways the playlist knows, a retired one only its name, and the page has a row for each', async () => {
+  const plays = L.FP_PLAYS.map((k) => L.FP_SETS[k]);
+  assert.equal(new Set(plays.map((g) => g.prefix)).size, plays.length, 'a prefix a game');
   for (const [k, g] of L.FP_SETS.entries()) {
+    assert.equal(L.GAMES[k], g.name);
+    if (g.retired) { assert.deepEqual(Object.keys(g).sort(), ['name', 'retired'], g.name); assert.ok(!L.FP_PLAYS.includes(k) && !L.PLAYLIST.includes(k)); continue; }
     assert.match(g.prefix, /^[a-z]$/, g.name);
     assert.ok(['ev', 'round'].includes(g.join), `${g.name}: join`);
     assert.ok(['golf', 'arena'].includes(g.word), `${g.name}: word`);
-    assert.ok(['golf', 'arena', 'bumper', 'party'].includes(g.score), `${g.name}: score`);
+    assert.ok(['golf', 'arena', 'party'].includes(g.score), `${g.name}: score`);
     assert.ok([undefined, 'arena', 'flight', 'party'].includes(g.seed), `${g.name}: seed`);
     assert.ok([undefined, 'arena', 'flight'].includes(g.map), `${g.name}: map`);
     assert.ok(g.world.length >= 1 && Number.isInteger(g.matches) && g.matches >= 1 && Number.isInteger(g.ticks), g.name);
-    assert.equal(L.GAMES[k], g.name);
     assert.equal(L.FP_MATCHES[k], g.matches);
   }
-  assert.deepEqual([L.G_GOLF, L.G_ARENA, L.G_BUMPER, L.G_PARTY, L.G_FLIGHT].map((k) => L.FP_SETS[k].prefix), ['g', 'a', 'b', 'p', 'f']);
-  assert.ok(L.PLAYLIST.every((g) => L.FP_SETS[g]), 'the playlist names games on the list');
+  assert.deepEqual([L.G_GOLF, L.G_ARENA, L.G_PARTY, L.G_FLIGHT].map((k) => L.FP_SETS[k].prefix), ['g', 'a', 'p', 'f']);
+  assert.ok(L.FP_SETS[L.G_BUMPER].retired, 'bumper balls keeps its number, retired');
+  assert.ok(L.PLAYLIST.every((g) => L.FP_PLAYS.includes(g)), 'the playlist names games on the list');
   // client/fireplace.mjs's PAGES, a row a game (it refuses to start otherwise)
   const page = (await import('node:fs')).readFileSync(new URL('../client/fireplace.mjs', import.meta.url), 'utf8');
-  const rows = page.slice(page.indexOf('const PAGES = ['), page.indexOf('];', page.indexOf('const PAGES = ['))).match(/frontend:/g) || [];
+  const rows = page.slice(page.indexOf('const PAGES = ['), page.indexOf('];', page.indexOf('const PAGES = ['))).match(/frontend:|null,/g) || [];
   assert.equal(rows.length, L.FP_SETS.length, "client/fireplace.mjs's PAGES has a row for every game");
+  rows.forEach((r, k) => assert.equal(r === 'null,', !!L.FP_SETS[k].retired, `row ${k}`));
 });
 
 test('Fireplace is one module with every game in it, and the games on their own build as before', async () => {
   const s = await newFireplace();
   for (const name of ['init', 'step', 'step_mt', 'worker_run', 'predict', 'snapshot', 'restore', 'regrid', 'hash_region', 'tick_begin', 'tick_end', 'contacts', 'integrate']) assert.equal(typeof s.x[name], 'function', name);
-  assert.ok(fireplaceBytes().length > wasmBytes().length + (arenaBytes().length + bumperBytes().length + partyBytes().length) / 2);
+  assert.ok(fireplaceBytes().length > wasmBytes().length + (arenaBytes().length + partyBytes().length) / 2);
   s.init(7);
   const v = new View(s.memory.buffer);
   assert.equal(game(v), L.PLAYLIST[0]);

@@ -8,7 +8,7 @@
 // mods; no wallet, no price, no jobs). Running it again with the same
 // answers changes nothing. It leaves the playlist alone: src/layout.mjs's
 // PLAYLIST is one line, but test/fireplace.test.mjs is written to the whole
-// one (7 of its 10 tests fail on bumper and party alone), so trimming it is a
+// one (most of its tests want party, the arena, Dogfight and golf), so trimming it is a
 // change to make with those tests, not a switch here.
 //
 // It refuses to run in Fireplace's own repo (its git remote, or the Actions
@@ -30,7 +30,7 @@ export const HOME = /^(anthone)\/(fireplace|quake-golf)$/i; // Fireplace's own r
 export const HOME_SLUG = 'fireplace';
 export const ENGINE = { name: 'Fireplace', license: 'CC0-1.0' };
 // the store shows a community game on its shelves once it has a capsule (616x353): a copy starts with
-// the kit's, a frame of bumper balls, and the README says to draw its own
+// the kit's, a frame of balls on a wheel of cheese, and the README says to draw its own
 export const CAPSULE = 'elo/capsule.png';
 // the tests a copy's first run passes in seconds; npm test runs them all (about 10 min)
 export const FAST = ['asm', 'themes', 'looks', 'new-mg', 'wire', 'achievements', 'kit', 'plan'];

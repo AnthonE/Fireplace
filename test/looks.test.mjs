@@ -69,8 +69,8 @@ test('locked looks are skipped and taken off', () => {
   assert.equal(nextOpen(BALLS, gold - 1, new Set(['golden'])), gold);
 });
 
-test('every pattern and style the lists use is one the bumper and party shaders draw', () => {
-  for (const f of ['client/bumper-render.mjs', 'client/party-render.mjs']) {
+test('every pattern and style the lists use is one the party shader draws', () => {
+  for (const f of ['client/party-render.mjs']) {
     const src = readFileSync(f, 'utf8');
     const ball = src.slice(src.indexOf('fn lookBall('), src.indexOf('fn lookHat('));
     const hat = src.slice(src.indexOf('fn lookHat('), src.indexOf('\n}\n', src.indexOf('fn lookHat(')));
@@ -118,9 +118,9 @@ test('a browser that never picked is blocky; an AI player in a local room wears 
   }
 });
 
-test('both renderers draw a box (client/rider.mjs) as sprite kind 12', () => {
+test('the party renderer draws a box (client/rider.mjs) as sprite kind 12', () => {
   assert.equal(BLOCK, 12);
-  for (const f of ['client/bumper-render.mjs', 'client/party-render.mjs']) {
+  for (const f of ['client/party-render.mjs']) {
     const src = readFileSync(f, 'utf8');
     assert.match(src, /\$\{BLOCK_WGSL\}/, f);
     assert.match(src, /case 12u: \{[^]*?blockAt\(/, f);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newParty, partyBytes, wasmBytes, arenaBytes, bumperBytes, fireplaceBytes, scriptedParty, predicted } from './helpers.mjs';
+import { newParty, partyBytes, wasmBytes, arenaBytes, fireplaceBytes, scriptedParty, predicted } from './helpers.mjs';
 import { View, partyWord, hexAt, hexCentre, seed, hash32, PLAT_Y, B_RAD } from '../src/party-view.mjs';
 import { replay, parseLog, decodeTrace } from '../harness/core.mjs';
 import { startWorkers } from '../harness/run-node.mjs';
@@ -38,7 +38,7 @@ const fxs = (v, kind) => { const out = []; for (let k = 0; k < v.fxCount(); k++)
 
 test('party is its own sim: another wasm on the same engine, every other build its own bytes', async () => {
   const s = await newParty();
-  for (const other of [wasmBytes(), arenaBytes(), bumperBytes(), fireplaceBytes()]) assert.notDeepEqual(partyBytes(), other);
+  for (const other of [wasmBytes(), arenaBytes(), fireplaceBytes()]) assert.notDeepEqual(partyBytes(), other);
   for (const name of ['init', 'step', 'step_mt', 'worker_run', 'predict', 'snapshot', 'restore', 'regrid', 'hash_region']) assert.equal(typeof s.x[name], 'function', name);
   s.init(7);
   const v = new View(s.memory.buffer);

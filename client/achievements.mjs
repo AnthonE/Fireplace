@@ -87,7 +87,7 @@ export const gotSet = (t) => new Set(Object.keys(t.got));
 // per game, the extremes kept), so the tally comes back from them whole.
 // Every test above only ever turns true as a tally grows, so a tally that
 // came back short (Elo Pros not reached) opens fewer, never a wrong one.
-export const GAME_KEYS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // by G_*; net/elo.mjs LADDERS
+export const GAME_KEYS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // by G_*; net/elo.mjs LADDERS (bumper balls' retired, its stats kept)
 export const STORE_ID = (id) => id.toUpperCase();
 const PROGRESS = { cheese: ['wins', 3], bag: ['mallows', 25], campfire: ['mallows', 100], regular: ['games', 25], champ: ['wins', 10], bonfire: ['mallows', 250], fixture: ['games', 100] };
 const sentence = (s) => (s[0] + s.slice(1).toLowerCase()).replace(/\bdogfight\b/g, 'Dogfight');

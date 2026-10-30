@@ -6,22 +6,24 @@ not measured yet, it says so.
 
 ## Where it is
 
-58 games, each gated online: golf, bumper balls, the arena's fifteen modes
+58 games, each gated online: golf, the arena's fifteen modes
 (Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 41 minigames. Fireplace plays them in turn.
+Territories, VIP, Assault) and Party's 42 minigames (bumper balls, once a
+game of its own, among them as Swiss Roll). Fireplace plays them in turn.
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
 on Fireplace's playlist between party and golf.
 
-What a page downloads, gzipped, everything it imports included:
+What a page downloads: every file it fetched in its first 15 s in headless
+Chrome (its modules, workers, themes and wasm), each gzipped:
 
 | Page | Files | Gzipped |
 | --- | --- | --- |
-| `client/party.html` | 54 | 275 KB (wasm 29 KB) |
-| `client/fireplace.html` | 72 | 436 KB (wasm 85 KB, 68 KB of it Box Canyon's height map) |
-| `client/bumper.html` | 38 | 114 KB |
-| `client/arena.html` | 44 | 190 KB (the team modes: 6 files and 31 KB of it) |
+| `client/party.html` | 135 | 730 KB (wasm 80 KB; the 42 minigames' client modules are most of the files) |
+| `client/fireplace.html` | 152 | 978 KB (wasm 246 KB: the four games, Box Canyon and Skyways) |
+| `client/arena.html` | 111 | 387 KB (wasm 59 KB) |
+| `client/flight.html` | 108 | 410 KB (wasm 106 KB, most of it Skyways) |
 
 No textures, models, sound files or fonts: sounds are synthesized, the font is
 3x5 bitmaps, every shape is drawn on the GPU. A Party minigame adds about
@@ -66,7 +68,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
 | Flight (the ship, `#if FLIGHT` on the arena) | 1 (4 modes) | 6 | capture the flag in the air, escort, a base raid, survival against waves |
-| Golf, bumper balls | 2 | 2 | |
+| Golf | 1 | 1 | |
 
 The grid kit is this engine's model at its plainest: your own board is
 predicted exactly, the garbage and bombs others send arrive a round trip
@@ -115,9 +117,9 @@ only of your own body), physics sandboxes, open worlds.
    compiled (every hash still equal). Then a frame rate on a real laptop GPU.
 6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
    less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
-   than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); bumper's and the
-   arena's pages load Party's constants through `layout.mjs`'s `MG_CONSTS`
-   (26 KB gzipped).
+   than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); the
+   arena's and flight's pages load Party's constants through `layout.mjs`'s
+   `MG_CONSTS` (26 KB gzipped).
 7. People playing it. Everything so far is played by bots.
 
 ## Bringing maps and games in

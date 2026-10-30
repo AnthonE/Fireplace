@@ -794,50 +794,31 @@ export const FLIGHT_OK = FLIGHT_MODES.reduce((b, m) => b | (1 << m), 0);
 // a flight match's clock by mode: the arena's, and Ring Race's past them
 export const FLIGHT_TICKS = [...MODES.map((m) => m.ticks), flight_consts.RACE_TICKS];
 
-// ---- Bumper balls: src/ built with BUMPER (build/bumper/game.wasm). The
-// same world, netcode and lockstep; every player is a ball now, and the golf
-// cup is what you keep out of. A wheel of Swiss cheese floats at PLAT_Y over
-// the sea, its holes laid out from the room's PRNG each round; a ball whose
-// centre rolls over a hole, or off the rim, drops through and is out. Balls
-// bump: an elastic hit with a kick on top, heavier balls shoved less. The
-// rim crumbles in and the holes widen as the round goes on. Power-ups drop
-// from the sky; roll over one to hold it, fire to use it. The last ball
-// rolling wins the round. Golf's balls, cup and guns are left out; the hole
-// states run the round (H_COUNT before it, H_PLAY during it, H_OVER after).
+// ---- The ball: src/ built with BUMPER (which party, below, always sets with
+// PARTY). The same world, netcode and lockstep; every player is a ball. Balls
+// bump: an elastic hit with a kick on top, heavier balls shoved less.
+// Power-ups: roll over one to hold it, fire to use it. Golf's balls, cup and
+// guns are left out; the hole states run the round (H_COUNT before it,
+// H_PLAY during it, H_OVER after). (Bumper balls, the game this began as, a
+// wheel of Swiss cheese, is party's SWISS ROLL: src/mg/cheese.wat.)
 //
 // The input word is golf's (yaw b0-13, move b24-27, jump b28 for a hop, the
 // shot counter b29-30 to use the power-up held); pitch and b31 are unused,
 // so a client keeps them still and they cost nothing on the wire.
-export const B_CX = 512; // the wheel's centre, world x and z
-export const B_COUNT = 625; // 5 s countdown: late joiners still make the round
-export const ROUND_TICKS = 11250; // 90 s, then whoever is still rolling shares the win
-export const SHRINK_TICKS = 7500; // 60 s for the rim to crumble in to B_RMIN and the holes to widen by half
-export const B_OVER = 625; // 5 s of the round's result
-export const NHOLE = 64;
-export const NORB = 32;
-export const DROP_FIRST = 250; // 2 s into the round, the first power-ups fall
-export const DROP_TICKS = 500; // then a drop every 4 s, one orb plus one for every 24 balls still in
-export const ORB_LIFE = 1250; // 10 s on the cheese, then gone
-export const ORB_Y = 36; // m above the cheese they start falling from
+export const B_CX = 512; // the stage's centre, world x and z (a round's PG_CX by default)
+export const ROUND_TICKS = 11250; // 90 s, a round's length unless its minigame says
+export const ORB_Y = 36; // m above the floor a power-up starts falling from
 export const MEGA_TICKS = 1000; // 8 s
 export const DASH_TICKS = 60;
 export const USE_REFIRE = 40;
 export const CREDIT_TICKS = 375; // a ball out within 3 s of a bump is the bumper's KO
-export const OUT_DEPTH = 14; // m under the cheese a falling ball is out
+export const OUT_DEPTH = 14; // m under the floor a falling ball is out
 
 // The header, in golf's tee and cup fields (all inside the prediction's copy).
-export const BH_R0 = HDR_TEE; // f32 the wheel's radius at the round's start
-export const BH_NHOLE = HDR_TEE + 4; // u32
 export const BH_N0 = HDR_TEE + 8; // u32 balls in at the start
-export const BH_DROP = HDR_CUP; // u32 tick of the next drop
 export const BH_LEFT = HDR_CUP + 4; // u32 balls still in, counted every tick
 export const BH_WINNER = HDR_CUP + 8; // u32 the last round's winner, 255 for none or a shared win
 
-// Bumper state past the projectiles, where the arena keeps its pads (hashed, in every keyframe).
-export const B_HOLES = REGION + 0xc100; // 64 x 16 B: f32 x, z, radius at the start | u32 0
-export const B_ORBS = REGION + 0xc500; // 32 x 16 B: f32 x, y, z | u8 kind (0 none) | u8 1 falling, 2 landed | u16 ticks left
-export const HOLE_SIZE = 16;
-export const ORB_SIZE = 16;
 // serial scratch for laying a round out (spawn candidates) and the bump pass (the balls in): never hashed
 export const B_SCR = DVX;
 
@@ -871,9 +852,7 @@ export const FX_DROP = 13; // an orb starts to fall: the kind as size
 
 // Physics, as the f32 literals the module inlines.
 export const BPHYS = {
-  PLAT_Y: '40', // the cheese's top
-  PLAT_T: '6', // how thick it is
-  B_RMIN: '9', // the rim's radius once it has crumbled in
+  PLAT_Y: '40', // a stage's floor, over the sea
   B_RAD: '1', // a ball's radius
   MEGA_RAD: '1.6',
   MEGA_M: '3', // MEGA's weight
@@ -896,9 +875,9 @@ export const BPHYS = {
 };
 
 // ---- Party: src/ built with BUMPER and PARTY (build/party/game.wasm).
-// Bumper balls' ball, and every round a different minigame on its own stage,
-// up to 256 in a room. bumper.wat's ball, power-ups, bumps and blasts stay;
-// its cheese and its round give way to src/party.wat, the framework (rounds,
+// The ball, and every round a different minigame on its own stage, up to
+// 256 in a room. bumper.wat's ball, power-ups, bumps and blasts; around them
+// src/party.wat, the framework (rounds,
 // rotation, joins, the ball's move over any stage, outs, places, points),
 // which calls each minigame's hooks (src/mg/<key>.wat, named $<prefix>_<hook>)
 // through (!mg). A minigame's own constants live in src/mg/<key>.mjs, every
@@ -1091,8 +1070,8 @@ export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, m
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come
 // and go as they please. Each game is its own build, unchanged, under a prefix
-// ($g. golf, $a. the arena, $b. bumper balls, $p. party, $f. flight's
-// Dogfight); src/fireplace.wat
+// ($g. golf, $a. the arena, $p. party, $f. flight's Dogfight; bumper balls,
+// $b., is retired); src/fireplace.wat
 // dispatches every export to the game on now and, at the end of a tick, runs
 // the playlist: when a game's last match ends it hands out marshmallows (3, 2
 // and 1 for the top three), holds the result, then wipes the world, builds the
@@ -1110,32 +1089,36 @@ export const FP_GOLF_TICKS = 18750; // a hole of at most 2.5 min, not 4
 // macros), the assembler (tools/asm.mjs) and the page need to know of one, so
 // a game joins Fireplace as an entry here, its build's flags and one of the
 // ways below of being joined, scored and seeded. Append-only: a game's number
-// is its place, and replays and the playlist name games by number.
+// is its place, and replays, the playlist, browsers' achievement tallies and
+// Elo Pros' stats name games by number. A game taken out stays as
+// { name, retired: true }: nothing builds, plays or pages it, its number kept.
 //   prefix   its functions' prefix in the module ($g.step)
 //   flags    its build's (#if ARENA ...); map: the arena's map, or flight's own
 //   world    its generators, called (gen seed) in order to build its static world
 //   join     'ev': each player in joins by an EV_JOIN record (its ev_join);
 //            'round': everyone in is laid out at once (its b_join of the last slot)
-//   word     whose input word it reads: 'golf' (golf's, which bumper and party
-//            share) or 'arena' (which Dogfight shares); a switch keeps the
-//            players' words only between games that read the same one
-//   matches  how many it plays before the next game (bumper's rounds, party's minigames)
+//   word     whose input word it reads: 'golf' (golf's, which party shares) or
+//            'arena' (which Dogfight shares); a switch keeps the players'
+//            words only between games that read the same one
+//   matches  how many it plays before the next game (party's minigames)
 //   ticks    the longest a match may run in Fireplace, 0 for its own length
 //   score    how a player's place is read: 'golf' fewest strokes; 'arena' a
-//            Fiesta's kills, then deaths, any other mode's place; 'bumper'
-//            rounds won, then KOs, then bumps; 'party' party points, then wins
+//            Fiesta's kills, then deaths, any other mode's place; 'party'
+//            party points, then wins
 //   seed     what its next seed forces: 'arena' a mode of ARENA_MODES (never
 //            the last), 'flight' one of FLIGHT_MODES, 'party' never one
 //            minigame; none for a seed as drawn
 export const FP_SETS = [
   { name: 'GOLF', prefix: 'g', flags: {}, world: ['terrain_gen', 'course_gen'], join: 'ev', word: 'golf', matches: 1, ticks: FP_GOLF_TICKS, score: 'golf' },
   { name: 'ARENA', prefix: 'a', flags: { ARENA: true }, map: 'arena', world: ['terrain_gen', 'arena_gen'], join: 'ev', word: 'arena', matches: 1, ticks: FP_ARENA_TICKS, score: 'arena', seed: 'arena' },
-  { name: 'BUMPER BALLS', prefix: 'b', flags: { BUMPER: true }, world: ['terrain_gen', 'bumper_gen'], join: 'round', word: 'golf', matches: 2, ticks: 0, score: 'bumper' },
+  // bumper balls' own build, retired: its wheel of cheese is party's SWISS ROLL
+  { name: 'BUMPER BALLS', retired: true },
   { name: 'PARTY', prefix: 'p', flags: { BUMPER: true, PARTY: true }, world: ['terrain_gen', 'bumper_gen'], join: 'round', word: 'golf', matches: 3, ticks: 0, score: 'party', seed: 'party' },
   { name: 'DOGFIGHT', prefix: 'f', flags: { ARENA: true, FLIGHT: true }, map: 'flight', world: ['terrain_gen', 'arena_gen'], join: 'ev', word: 'arena', matches: 1, ticks: FP_FLIGHT_TICKS, score: 'arena', seed: 'flight' },
 ];
 export const GAMES = FP_SETS.map((g) => g.name);
-export const FP_MATCHES = FP_SETS.map((g) => g.matches); // by game: matches it plays before the next game
+export const FP_MATCHES = FP_SETS.map((g) => g.matches ?? 0); // by game: matches it plays before the next game
+export const FP_PLAYS = [...FP_SETS.keys()].filter((k) => !FP_SETS[k].retired); // the games built into Fireplace, by number
 // By position, so a game may come round more than once: the room plays entry
 // (games played) % length next. Bumper balls stays on the list (its id is in
 // browsers' achievements and Elo Pros' stats) but not in the playlist: its

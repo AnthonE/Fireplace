@@ -19,9 +19,7 @@
 #endif
 #if BUMPER
   #include "bumper.wat"
-#if PARTY
   #include "party.wat"
-#endif
 #endif
   #include "predict.wat"
   #include "tick.wat"

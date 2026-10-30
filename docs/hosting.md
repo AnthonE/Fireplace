@@ -42,7 +42,7 @@ half). Its flags, through `relay_args`:
 When a game ends, the referee reads the places it gave (`FP_LAST`) and the
 relay reports the players signed in at that tick, each at their place, to
 `POST /api/ratings/fireplace/report`, one ladder per game (golf, arena,
-bumper, party, dogfight). A game with fewer than two signed in isn't reported. The
+party, dogfight; bumper balls' is retired with it). A game with fewer than two signed in isn't reported. The
 match's id names the room and the game, so a report sent twice, or sent again
 by a standby that took the room over, is rated once.
 
@@ -143,7 +143,7 @@ certificate is stopped. The relays listen on `ports` (61300-61315 in the
 example, UDP, open in the firewall); the API listens on `listen`, behind nginx.
 
 The wasm is someone else's. It is fetched with no redirects, at most
-`max_wasm_bytes` (2 MiB; Fireplace's is 291 KiB), a map at most
+`max_wasm_bytes` (2 MiB; Fireplace's is 750 KiB), a map at most
 `max_map_bytes` (1 MiB, what `map_load` takes), within `fetch_timeout_s`,
 only from `fetch_from` (`https://*.github.io`), and written only to
 `wasm_dir/<sha256>.wasm` (a map `<sha256>.qgmap`) for the relay to read; it runs only in the referee,

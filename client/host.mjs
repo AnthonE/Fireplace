@@ -3,7 +3,7 @@
 // confirmed world), the main thread's own instance for the prediction, the
 // sound, and one GPU device for every renderer the page has. A game's
 // frontend (client/<game>-game.mjs) mounts on a host and draws from it; a
-// page with one game (bumper.html, arena.html) mounts one and keeps it, and
+// page with one game (party.html, arena.html) mounts one and keeps it, and
 // Fireplace mounts each game as the room moves into it.
 //   q: the page's query (?url=, ?hash=, ?impair=, ?threads=, ?music=0, ?replay=<url>: a
 //      replay file (net/replay.mjs) in the net worker's place, as a spectator)
@@ -156,7 +156,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
 
 // A local room's AI players (their brain by the page's game) and its seed.
 function localRoom(q, wasm, { arena, fireplace, kind: named = '' }) {
-  const kind = named || (fireplace ? 'fireplace' : /\/flight\//.test(wasm) ? 'flight' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : /\/bumper\//.test(wasm) ? 'bumper' : '');
+  const kind = named || (fireplace ? 'fireplace' : /\/flight\//.test(wasm) ? 'flight' : arena ? 'arena' : /\/party\//.test(wasm) ? 'party' : '');
   const rand = crypto.getRandomValues(new Uint32Array(1))[0];
   const seed = q.has('seed') ? Number(q.get('seed')) >>> 0
     : q.has('mg') && kind === 'party' ? ((0xa7 << 24) | ((Number(q.get('mg')) & 0xff) << 16) | (rand & 0xffff)) >>> 0

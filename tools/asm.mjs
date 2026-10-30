@@ -8,11 +8,10 @@
 // Every sim builds from src/, with its layout.mjs and macros.mjs. Golf is
 // build/game.wasm; the arena (build/arena/) is src/ with ARENA set: a
 // deathmatch on the same engine; flight (build/flight/) is the arena with
-// FLIGHT set too: every fighter a ship; bumper balls (build/bumper/) is src/ with
-// BUMPER set: every player a ball; party (build/party/) is src/ with BUMPER
-// and PARTY set: bumper's ball, a different minigame every round.
-// Fireplace (build/fireplace/) is golf, the arena, bumper balls, party and
-// flight in one module (the arena on Box Canyon, flight on its own map), each as its own build would be under a prefix, with src/fireplace.wat
+// FLIGHT set too: every fighter a ship; party (build/party/) is src/ with
+// BUMPER (every player a ball) and PARTY set: a different minigame every round.
+// Fireplace (build/fireplace/) is golf, the arena, party and flight in one
+// module (the arena on Box Canyon, flight on its own map), each as its own build would be under a prefix, with src/fireplace.wat
 // dispatching to the one on now.
 //   (!macro args...)        JS macros from src/macros.mjs; args are raw s-expressions
 //
@@ -82,13 +81,13 @@ async function binaryenSize(bin) {
 }
 
 // Fireplace's games (layout.mjs FP_SETS): each a build under its prefix, with its flags and map
-export const GAMESETS = layout.FP_SETS.map((g) => [g.prefix, g.flags, g.map ?? null]);
+export const GAMESETS = layout.FP_PLAYS.map((k) => layout.FP_SETS[k]).map((g) => [g.prefix, g.flags, g.map ?? null]);
 
 export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = makeMacros, map = compileMap(), flightMap = null, src = join(ROOT, 'src') } = {}) {
   // flight flies its own map, whatever the arena's
   flightMap ??= compileMap(mapDir(lay.FLIGHT_CONSTS.FLIGHT_MAP));
   const maps = { arena: map, flight: flightMap };
-  const games = lay.FP_SETS.map((g) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...g.flags, layout: lay, macros, map: g.map ? maps[g.map] : null }), g.prefix));
+  const games = lay.FP_PLAYS.map((k) => lay.FP_SETS[k]).map((g) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...g.flags, layout: lay, macros, map: g.map ? maps[g.map] : null }), g.prefix));
   const fp = expand(join(src, 'fireplace.wat'), { DEBUG, layout: lay, macros });
   const wat = `(module\n  (import "env" "mem" (memory ${lay.PAGES} ${lay.PAGES} shared))\n${games.join('\n')}\n${fp}\n)\n`;
   forbid(wat);
@@ -99,7 +98,6 @@ export const SIMS = [
   { name: 'game', src: join(ROOT, 'src'), out: join(ROOT, 'build') },
   { name: 'arena', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'arena'), flags: { ARENA: true } },
   { name: 'flight', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'flight'), flags: { ARENA: true, FLIGHT: true }, map: layout.FLIGHT_CONSTS.FLIGHT_MAP },
-  { name: 'bumper', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'bumper'), flags: { BUMPER: true } },
   { name: 'party', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'party'), flags: { BUMPER: true, PARTY: true } },
   { name: 'fireplace', src: join(ROOT, 'src'), out: join(ROOT, 'build', 'fireplace'), fireplace: true },
 ];
