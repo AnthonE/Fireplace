@@ -262,7 +262,7 @@ test('hacking: a survivor still (under ES_STILL) within ES_TERM_R across and ES_
   assert.equal(n, AC.ES_HACK);
 });
 
-test('the exits: ES_NEED hacked opens them that tick (two ground spawn points, the first drawn, the second the farthest from it), news; ES_LATE before the clock they open hacked or not (in Fireplace\'s 3 min too); a survivor up within ES_EXIT_R escapes, in order, out of play; not the downed, not the hunter', async () => {
+test('the exits: ES_NEED hacked opens them that tick (two ground spawn points, the first drawn, the second the farthest from it), news; ES_LATE before the clock they open hacked or not (in Fireplace\'s 90 s too, 30 s in); a survivor up within ES_EXIT_R escapes, in order, out of play; not the downed, not the hunter', async () => {
   const g = await room(5);
   const h = hunters(g)[0];
   const s = [0, 1, 2, 3, 4].filter((p) => p !== h);
@@ -309,7 +309,7 @@ test('the exits: ES_NEED hacked opens them that tick (two ground spawn points, t
   assert.deepEqual([escapeOf(g.v).free, escapeOf(g.v).escapes], [2, 2]);
   steps(g, 400);
   assert.ok(!g.v.fighter(s[1]).respawn === false && out(g, s[1]), 'never back while the match lasts');
-  // at the clock less ES_LATE they open, hacked or not, with Fireplace's 3 min clock as with Escape's 4
+  // at the clock less ES_LATE they open, hacked or not, with Fireplace's 90 s clock as with Escape's 4 min
   for (const len of [L.MODE_TICKS[L.M_ESCAPE], L.FP_ARENA_TICKS]) {
     const r = await room(3);
     const h0 = r.v.hole();
@@ -322,7 +322,7 @@ test('the exits: ES_NEED hacked opens them that tick (two ground spawn points, t
     assert.equal(escapeOf(r.v).open, 0);
     r.step();
     assert.deepEqual([escapeOf(r.v).open, escapeOf(r.v).hacked, u32(r, L.HDR_UNTIL) - u32(r, L.HDR_TICK) <= AC.ES_LATE], [2, 0, true]);
-    assert.ok(AC.ES_LATE * 2 < L.FP_ARENA_TICKS, 'the endgame in Fireplace\'s cut');
+    assert.ok(AC.ES_LATE < L.FP_ARENA_TICKS, 'the exits open inside Fireplace\'s cut, not at its start');
   }
 });
 

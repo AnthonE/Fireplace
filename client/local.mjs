@@ -35,16 +35,20 @@ self.onmessage = (e) => {
   });
 };
 
-// an AI player for the page's game, think(view, t, lag) giving its word for tick t
+// an AI player for the page's game, think(view, t, lag) giving its word for tick t:
+// a skill of 0.2 to 0.65 by slot, with a person's slips (late to react, an
+// aim that shakes, lapses of attention; each brain says which), so the one
+// person in the room has a chance
 async function brain(kind, slot, seed) {
-  const skill = 0.35 + 0.5 * ((slot * 7) % 10) / 10;
+  const skill = 0.2 + 0.5 * ((slot * 7) % 10) / 10;
+  const opts = { slips: true };
   if (kind === 'fireplace') {
     const [{ Guest }, { GOLFER }] = await Promise.all([import('./fireplace-bot.mjs'), import('./brain.mjs')]);
-    return new Guest(slot, seed, skill, GOLFER);
+    return new Guest(slot, seed, skill, GOLFER, opts);
   }
-  if (kind === 'arena') return new (await import('./arena-bot.mjs')).Fighter(slot, seed, skill);
-  if (kind === 'flight') return new (await import('./flight-bot.mjs')).Pilot(slot, seed, skill);
-  if (kind === 'party') return new (await import('./party-bot.mjs')).Partier(slot, seed, skill);
+  if (kind === 'arena') return new (await import('./arena-bot.mjs')).Fighter(slot, seed, skill, opts);
+  if (kind === 'flight') return new (await import('./flight-bot.mjs')).Pilot(slot, seed, skill, opts);
+  if (kind === 'party') return new (await import('./party-bot.mjs')).Partier(slot, seed, skill, opts);
   return null;
 }
 

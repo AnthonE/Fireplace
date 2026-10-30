@@ -157,15 +157,28 @@ export class Brain {
 
 // The golf bot's own legs and aim, with the brain's feel in place of its
 // private sim: the one thing that differs between the two is how the shot
-// is chosen.
+// is chosen. opts.slips (with opts.skill 0..1 and opts.seed): a person's
+// hand, for a room people play against: each shot's blast distance off by up
+// to 15% (skill 0) and its line by up to 3 degrees either way, less the more
+// skill. Without it the brain's shot goes as it decided.
 export class BrainBot extends GolfBot {
-  constructor(slot, genome, opts) {
+  constructor(slot, genome, opts = {}) {
     super(slot, null, opts);
     this.brain = genome instanceof Brain ? genome : new Brain(genome);
+    this.slips = !!opts.slips;
+    this.skill = opts.skill ?? 0.6;
+    this.rng = ((opts.seed ?? 1) * 2654435761 + slot * 40503) >>> 0 || 1;
   }
 
+  rand() { let x = this.rng; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.rng = x >>> 0; return this.rng / 4294967296; }
+
   choose(view, ball, cup) {
-    const { dh, turn } = this.brain.decide(features(view, ball, cup));
+    let { dh, turn } = this.brain.decide(features(view, ball, cup));
+    if (this.slips) {
+      const off = 1 - this.skill;
+      dh = Math.max(DH_MIN, Math.min(DH_MIN + DH_SPAN, dh * (1 + (this.rand() - 0.5) * 0.3 * off)));
+      turn += (this.rand() - 0.5) * 2 * off * 3 * Math.PI / 180;
+    }
     return { from: ball.slice(), shot: shotGeometry(view, ball, cup, dh, turn), score: 0 };
   }
 }

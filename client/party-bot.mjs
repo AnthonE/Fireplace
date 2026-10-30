@@ -122,11 +122,17 @@ function roll(x, v, wish, a, d, n) {
 }
 
 export class Partier {
-  // skill 0..1: how far ahead it looks, how steady it steers
-  constructor(slot, seed = 1, skill = 0.6) {
+  // skill 0..1: how far ahead it looks, how steady it steers.
+  // slips: a person's, for a room people play against (a local room's AI, the
+  // bot host's --slips): its horizon 0.1 s nearer, and now and then (about every 4 s at skill 0.2,
+  // 9 s at 0.65) 0.3-0.7 s of not paying attention, its last word kept
+  // whatever comes.
+  constructor(slot, seed = 1, skill = 0.6, { slips = false } = {}) {
     this.slot = slot;
     this.rng = (seed * 2654435761 + slot * 40503) >>> 0 || 1;
     this.skill = skill;
+    this.slips = slips;
+    this.doze = 0;
     this.use = 0;
     this.yaw = 0; // 1/16384 turn, as the word has it
     this.move = 0;
@@ -155,6 +161,10 @@ export class Partier {
   think(view, t = view.tick, lag = 0) {
     // (a page asks once a frame, two ticks or so apart: it thinks then too once its turn has gone by)
     if ((t + this.slot) % THINK_EVERY && this.at >= 0 && t - this.at < THINK_EVERY) return this.word;
+    if (this.slips && this.at >= 0 && this.word) {
+      if (t < this.doze) return this.word;
+      if (this.rand() < 0.01 * (1 - this.skill)) { this.doze = t + 40 + Math.floor(this.rand() * 50); return this.word; }
+    }
     this.at = t;
     this.lag = lag;
     const w = worldOf(view);
@@ -198,7 +208,7 @@ export class Partier {
       const gx = goal ? goal[0] : g.cx, gz = goal ? goal[1] : g.cx;
       const gd0 = Math.hypot(gx - px, gz - pz);
       // the samples: an eighth of a second out, then 0.25 s to its horizon
-      const H = 0.45 + 0.4 * this.skill;
+      const H = 0.45 + 0.4 * this.skill - (this.slips ? 0.1 : 0);
       const ticks = [0.12, 0.25, 0.25 + (H - 0.25) / 3, 0.25 + 2 * (H - 0.25) / 3, H].map((s) => Math.round(s / DT));
       const reach = Math.hypot(vx, vz) * H + 12 * H * H + ROOM;
       const rivals = near(w, px, pz, reach + ROOM, this.slot, NEAR_MAX, w.through ? own : -1);

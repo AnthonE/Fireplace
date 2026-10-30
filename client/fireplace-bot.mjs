@@ -2,7 +2,8 @@
 // for each (golf's neural golfer, the arena's fighter, party's ball,
 // Dogfight's pilot) and asks the one for the game in the world it sees (FP_GAME), in that
 // game's input word. Deterministic from its seed and what it sees, like each
-// of them.
+// of them. slips: each of them slips as a person does (see each one's own),
+// for a room people play against.
 import * as L from '../src/layout.mjs';
 import '../src/arena-view.mjs';
 import '../src/party-view.mjs';
@@ -13,12 +14,12 @@ import { Partier } from './party-bot.mjs';
 import { Pilot } from './flight-bot.mjs';
 
 export class Guest {
-  constructor(slot, seed = 1, skill = 0.6, genome) {
+  constructor(slot, seed = 1, skill = 0.6, genome, { slips = false } = {}) {
     this.slot = slot;
-    this.golfer = new BrainBot(slot, genome, { lag: 8 });
-    this.fighter = new Fighter(slot, seed, skill);
-    this.partier = new Partier(slot, seed, skill);
-    this.pilot = new Pilot(slot, seed, skill);
+    this.golfer = new BrainBot(slot, genome, { lag: 8, slips, skill, seed });
+    this.fighter = new Fighter(slot, seed, skill, { slips });
+    this.partier = new Partier(slot, seed, skill, { slips });
+    this.pilot = new Pilot(slot, seed, skill, { slips });
   }
 
   // the game on in this view

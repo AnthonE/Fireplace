@@ -26,11 +26,16 @@ const MAX_PITCH = F.PITCH_MAX / 16384 * TAU;
 const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 
 export class Pilot {
-  // skill 0..1: how fast it settles its aim and how steady it holds it
-  constructor(slot, seed = 1, skill = 0.6) {
+  // skill 0..1: how fast it settles its aim and how steady it holds it.
+  // slips: a person's, for a room people play against (as the arena's
+  // Fighter): 0.3-0.7 s on a new target before it fires, a nose that weaves
+  // 3-6 degrees and never settles, the charge shot half as often.
+  constructor(slot, seed = 1, skill = 0.6, { slips = false } = {}) {
     this.slot = slot;
     this.rng = (seed * 2654435761 + slot * 40503) >>> 0 || 1;
     this.skill = skill;
+    this.slips = slips;
+    this.react = 0;
     this.shot = 0; this.roll = 0; this.bomb = 0;
     this.frame = 0;
     this.sent = {}; // the last frame's lag and tick
@@ -72,11 +77,12 @@ export class Pilot {
         // a new target: the aim starts off and settles
         const off = 1 - this.skill;
         this.err = [(this.rand() - 0.5) * 0.5 * off, (this.rand() - 0.5) * 0.25 * off];
+        if (this.slips && best >= 0) this.react = t + Math.round((0.3 + 0.4 * off) * 125);
       }
     }
     const k = 0.9 + 0.08 * this.skill;
     this.err = [this.err[0] * k, this.err[1] * k];
-    const wobble = (1 - this.skill) * 0.04;
+    const wobble = (1 - this.skill) * 0.04 + (this.slips ? 0.035 + 0.05 * (1 - this.skill) : 0);
 
     let want, dist = Infinity, to = null, gate = null;
     const racing = view.dv.getUint32(L.AH_MODE, true) === F.M_RACE && h.state === L.H_PLAY;
@@ -150,9 +156,10 @@ export class Pilot {
     if (to) {
       const d = norm([to[0] - me.pos[0], to[1] - me.pos[1], to[2] - me.pos[2]]);
       const on = d[0] * me.nose[0] + d[1] * me.nose[1] + d[2] * me.nose[2];
-      fire = on > 0.985 && dist < F.LASER_RANGE - 20;
+      const ready = !this.slips || t >= this.react;
+      fire = ready && on > 0.985 && dist < F.LASER_RANGE - 20;
       // the charge: held a while with the target ahead, let go once full
-      if (!this.charging && t > this.nextCharge && on > 0.8 && dist < 220 && this.rand() < 0.02) this.charging = F.CHARGE_TICKS + 8;
+      if (ready && !this.charging && t > this.nextCharge && on > 0.8 && dist < 220 && this.rand() < (this.slips ? 0.01 : 0.02)) this.charging = F.CHARGE_TICKS + 8;
       // a bomb into a crowd ahead: three enemies within its reach of a point 40 m out
       if (me.bombs && on > 0.9 && dist < 70 && ((t + this.slot) & 31) === 0) {
         const c = [me.pos[0] + me.nose[0] * 40, me.pos[1] + me.nose[1] * 40, me.pos[2] + me.nose[2] * 40];

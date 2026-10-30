@@ -305,11 +305,18 @@ function suits(w, d) {
 const POWER = new Set([L.W_SNIPER, L.W_ROCKET, L.W_SHOTGUN, L.W_SWORD, L.W_BR, L.W_NEEDLER]);
 
 export class Fighter {
-  // skill 0..1: how fast it settles its aim and how steady it holds it
-  constructor(slot, seed = 1, skill = 0.6) {
+  // skill 0..1: how fast it settles its aim and how steady it holds it.
+  // slips: a person's, for a room people play against (a local room's AI, the
+  // bot host's --slips): it notices only what is in front of it (60 degrees
+  // either side, or within 10 m), waits 0.25-0.6 s on a new target before it
+  // fires, never holds its aim dead still, and lets go of the trigger now and
+  // then. Without it the bot plays as it always has.
+  constructor(slot, seed = 1, skill = 0.6, { slips = false } = {}) {
     this.slot = slot;
     this.rng = (seed * 2654435761 + slot * 40503) >>> 0 || 1;
     this.skill = skill;
+    this.slips = slips;
+    this.react = 0; this.burstUntil = 0; this.restUntil = 0;
     this.shot = 0; this.melee = 0; this.gren = 0;
     this.slotOut = 0;
     this.yaw = 0; this.pitch = 512;
@@ -395,12 +402,22 @@ export class Fighter {
         for (const [, q] of pals.slice(0, 4)) if (sees(view, eye, chest(q))) { this.buddy = q; break; }
       }
       best = -1;
-      for (const [, q] of near.slice(0, 6)) if (sees(view, eye, chest(q))) { best = q; break; }
+      // (slips: only those in front, or close; the one it has is kept wherever it went)
+      const front = (q) => {
+        if (!this.slips || q === this.target) return true;
+        const c = chest(q);
+        if (Math.hypot(c[0] - me.pos[0], c[2] - me.pos[2]) < 10) return true;
+        const a = Math.atan2(c[2] - me.pos[2], c[0] - me.pos[0]) * TURN / (2 * Math.PI);
+        return Math.abs(((a - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2) < TURN / 6;
+      };
+      for (const [, q] of near.slice(0, 6)) if (front(q) && sees(view, eye, chest(q))) { best = q; break; }
     } else if (((t + this.slot) & 3) === 0 && !sees(view, eye, chest(best))) best = -1;
     if (best !== this.target) {
       this.target = best;
       // a new target: the aim starts off by up to 20 degrees and settles
       this.err = [(this.rand() - 0.5) * 900, (this.rand() - 0.5) * 120];
+      // (slips: and it holds fire while it takes them in)
+      if (this.slips && best >= 0) this.react = t + Math.round((0.25 + 0.35 * (1 - this.skill)) * 125);
     }
 
     // a team mode's objective, asked of its kit module every 8 ticks (each bot on its own tick of the 8)
@@ -440,7 +457,9 @@ export class Fighter {
       const lead = (lag + 4) * 0.008;
       const aim = aimAt(eye, [f.pos[0] + f.vel[0] * lead, f.pos[1] + 1.15 + f.vel[1] * lead, f.pos[2] + f.vel[2] * lead]);
       const settle = 0.9 - 0.12 * this.skill;
-      this.err = this.err.map((e) => e * settle + (this.rand() - 0.5) * (1 - this.skill) * 40);
+      // (slips: a shake that never settles: 2.8 degrees rms at skill 0.2, 1.4 at 0.65, where without it 0.4 and 0.14)
+      const shake = (1 - this.skill) * 40 + (this.slips ? 70 + 150 * (1 - this.skill) : 0);
+      this.err = this.err.map((e) => e * settle + (this.rand() - 0.5) * shake);
       this.turnTo(aim.yaw + this.err[0], aim.pitch + this.err[1] / 8, 0.35 + 0.4 * this.skill);
       // the gun for the range
       const want = suits(me.gun[1], d) > suits(me.gun[0], d) + 1 ? 1 : suits(me.gun[0], d) > suits(me.gun[1], d) + 1 ? 0 : this.slotOut;
@@ -448,15 +467,24 @@ export class Fighter {
       const off = Math.abs(((aim.yaw - this.yaw + TURN / 2) % TURN + TURN) % TURN - TURN / 2);
       const arm = L.ARMS[me.weapon] || L.ARMS[L.W_AR];
       const inRange = arm.type === 1 || d < arm.range * 0.9;
-      if (inRange && off < 120 + 2000 / Math.max(d, 1)) {
-        if (arm.auto) this.shot = (this.shot + 1) & 3;
+      // (slips: nothing until it has reacted; an automatic held 0.5-0.8 s, then let go 0.2-0.4 s)
+      const ready = !this.slips || t >= this.react;
+      let held = true;
+      if (this.slips && arm.auto) {
+        if (t >= this.burstUntil && t >= this.restUntil) { this.restUntil = t + 25 + Math.floor(this.rand() * 25); this.burstUntil = this.restUntil + 60 + Math.floor(this.rand() * 40); }
+        held = t >= this.restUntil;
+      }
+      if (ready && inRange && off < 120 + 2000 / Math.max(d, 1)) {
+        if (arm.auto) { if (held) this.shot = (this.shot + 1) & 3; }
         else if (t - this.lastFire > arm.refire + 2) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
       }
-      if (d < 2.2 && me.cool === 0) this.melee ^= 1;
-      else if (me.weapon === L.W_SWORD && d < 4.5 && t - this.lastFire > arm.refire) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
-      if (d > 10 && d < 30 && me.grens > 0 && me.cool === 0 && this.rand() < 0.004) this.gren ^= 1;
-      // Crossroads' superball goes where it's aimed, fast: thrown at whoever is near and in front, once it's in hand
-      else if (mode === L.M_CROSSROADS && d > 3 && d < 18 && off < 200 && me.grens > 0 && me.cool === 0 && this.rand() < 0.2) this.gren ^= 1;
+      if (ready) {
+        if (d < 2.2 && me.cool === 0) this.melee ^= 1;
+        else if (me.weapon === L.W_SWORD && d < 4.5 && t - this.lastFire > arm.refire) { this.shot = (this.shot + 1) & 3; this.lastFire = t; }
+        if (d > 10 && d < 30 && me.grens > 0 && me.cool === 0 && this.rand() < 0.004) this.gren ^= 1;
+        // Crossroads' superball goes where it's aimed, fast: thrown at whoever is near and in front, once it's in hand
+        else if (mode === L.M_CROSSROADS && d > 3 && d < 18 && off < 200 && me.grens > 0 && me.cool === 0 && this.rand() < 0.2) this.gren ^= 1;
+      }
       // strafe, close in or back off
       if (t >= this.strafeUntil) { this.strafe = this.rand() < 0.5 ? 4 : 8; this.strafeUntil = t + 60 + Math.floor(this.rand() * 120); }
       const close = me.weapon === L.W_SWORD || me.weapon === L.W_SHOTGUN;

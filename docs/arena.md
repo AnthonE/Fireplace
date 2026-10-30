@@ -33,7 +33,11 @@ E picks up the gun on the pad you stand on, Tab shows the scores, F goes
 fullscreen, N the net graph. `?bot=1` hands your slot to an AI fighter;
 `?watch=1` spectates. More fighters for a running room (up to 255, one
 process, one shared copy of the world):
-`node net/bot-host.mjs --arena --relay 127.0.0.1:4434 --bots 50 [--skill 0.6]`.
+`node net/bot-host.mjs --arena --relay 127.0.0.1:4434 --bots 50 [--skill 0.6] [--slips]`.
+`--slips` gives them a person's slips, as a local room's AI and `net/play.mjs`'s
+bots have: blind past 60 degrees either side (but within 10 m), 0.25 to
+0.6 s before firing on someone new, an aim that shakes 1.4 to 2.8 degrees
+rms at skill 0.65 to 0.2 (0.14 to 0.4 without), bursts let go now and then.
 
 You spawn with two different guns of the nine, drawn at random, full, and
 two frags, under 100 points of shields and 100 of health. Shields take damage first and
