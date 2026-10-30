@@ -37,6 +37,28 @@ const SERVICES = {
   ContentProvider: 'preloading assets',
   StarterGui: 'the HUD', GuiService: 'the HUD',
 };
+// How the place's characters walk, jump and fall, in studs and seconds, as
+// Roblox reads it: StarterPlayer's CharacterWalkSpeed and its jump (the
+// JumpPower when CharacterUseJumpPower, or in a file from before that
+// property, else the JumpHeight) and the Workspace's Gravity. A place from
+// before StarterPlayer (2014) has the Humanoid's own: 16, a JumpPower of 50,
+// 196.2. height is how high a standing jump goes, in studs.
+export function humanoidOf(doc) {
+  const sp = doc.instances.find((x) => x.class === 'StarterPlayer')?.props;
+  const ws = doc.instances.find((x) => x.class === 'Workspace')?.props || {};
+  const gravity = ws.Gravity ?? 196.2, walk = sp?.CharacterWalkSpeed ?? 16;
+  const usePower = sp ? (sp.CharacterUseJumpPower ?? sp.CharacterJumpHeight === undefined) : true;
+  const power = usePower ? (sp?.CharacterJumpPower ?? 50) : null;
+  const height = usePower ? (gravity > 0 ? power * power / (2 * gravity) : 0) : (sp.CharacterJumpHeight ?? 7.2);
+  return { walk, power, height, gravity, health: sp?.CharacterMaxHealth ?? 100, legacy: !sp };
+}
+
+// The classic gear (Roblox's own Linked tools, which Crossroads and the
+// places of its day hand everyone) in a StarterPack: the arena's Crossroads
+// mode plays it (src/am/crossroads.wat).
+export const classicGear = (doc) => doc.instances.some((t) => t.class === 'Tool' && /^Linked(Sword|RocketLauncher|Superball)$/.test(t.name)
+  && /^StarterPack\./.test(path(t)));
+
 // a tool's name to the arena's gun it is nearest (the arena's WEAPONS), when one is
 export function weaponOf(name) {
   const n = name.toLowerCase();
@@ -104,8 +126,11 @@ export function robloxBrief(doc, { map = null, name = 'the place' } = {}) {
 
   // what the players are: speed, jump, health, respawn, and what they carry
   lines.push('## The players', '');
-  const walk = sp.CharacterWalkSpeed, jump = sp.CharacterJumpPower ?? sp.CharacterJumpHeight;
-  lines.push(`- walk ${walk ?? 16} studs/s (${((walk ?? 16) * 0.28).toFixed(1)} m/s), jump ${sp.CharacterJumpPower !== undefined ? `power ${sp.CharacterJumpPower}` : `height ${jump ?? 7.2} studs`}, max health ${sp.CharacterMaxHealth ?? 100}; respawn ${players.RespawnTime ?? 5} s. The arena's fighter: 1.8 m tall, jumps 1.2 m, 100 shield and 100 health, 3 s to respawn.`);
+  const hum = humanoidOf(doc), mv = map?.spec?.movement, s = map?.scale ?? 0.28;
+  lines.push(`- walk ${hum.walk} studs/s, jump ${hum.power !== null ? `power ${hum.power} (${hum.height.toFixed(1)} studs)` : `height ${hum.height} studs`}, gravity ${hum.gravity} studs/s^2${hum.legacy ? ' (a place from before StarterPlayer: the Humanoid\'s own)' : ''}, max health ${hum.health}; respawn ${players.RespawnTime ?? 5} s.`);
+  lines.push(mv ? `- the map moves its fighters so (its "movement", at ${s} m a stud): walking ${mv.walk.toFixed(2)} m/s, jumping ${mv.jump.toFixed(2)} m, falling at ${mv.gravity.toFixed(1)} m/s^2, steering in the air as on the ground. The arena's fighter is 1.8 m tall (${(1.8 / s).toFixed(1)} studs), with 100 shield and 100 health and 3 s to respawn, unless a mode says otherwise.`
+    : '- the map keeps the arena\'s own movement (10 m/s, a 1.2 m jump): the place\'s numbers are out of the range a map takes.');
+  if (map?.spec?.mode) lines.push(`- the map plays the arena's ${map.spec.mode[0].toUpperCase() + map.spec.mode.slice(1)} mode every match (its "mode"): the classic gear's rules, written for the arena (docs/arena.md).`);
   const pack = of('Tool').filter((t) => /^StarterPack\./.test(path(t)));
   const loose = of('Tool').filter((t) => /^Workspace\./.test(path(t)));
   const kept = of('Tool').filter((t) => !/^(StarterPack|Workspace)\./.test(path(t)));

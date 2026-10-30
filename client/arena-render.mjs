@@ -12,6 +12,7 @@
 // everything else from the main thread each frame. Nothing here is hashed.
 import { moverBoxes, drawnTick } from './movers.mjs';
 import * as L from '../src/layout.mjs';
+import * as AC from '../src/am/consts.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { BODIES } from './looks.mjs';
@@ -353,6 +354,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
       case ${L.K_ROCKET}u: { half = vec2f(0.25); color = vec4f(1.0, 0.7, 0.3, 1.0); minpx = 1.5; }
       case ${L.K_GRENADE}u: { half = vec2f(0.12); color = vec4f(0.3, 0.36, 0.2, 1.0); kind = 0u; minpx = 1.0; }
       case ${L.K_BOLT}u: { half = vec2f(0.2); color = vec4f(0.35, 0.75, 1.0, 1.0); minpx = 1.5; }
+      case ${AC.CX_K_BALL}u: { half = vec2f(${AC.CX_BALL_R}); color = vec4f(0.95, 0.3, 0.25, 1.0); kind = 0u; minpx = 1.5; }
       default: { half = vec2f(0.1); color = vec4f(1.0, 0.35, 0.85, 1.0); minpx = 1.0; }
     }
   } else {

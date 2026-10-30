@@ -23,9 +23,11 @@ import { isMain } from './main.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Fighters join 25 ticks apart; one leaves at `leaveAt` and comes back 500 ticks later.
-export async function playArena({ bytes, seed = 7, bots = 8, ticks = 20000, delay = 6, leaveAt = 0, onTick } = {}) {
+export async function playArena({ bytes, seed = 7, bots = 8, ticks = 20000, delay = 6, leaveAt = 0, onTick, map = null } = {}) {
   const memory = newMemory();
   const sim = new Sim(await instantiate(await WebAssembly.compile(bytes), memory), memory);
+  // a packed map laid before init (map_load), as a room on one has it
+  if (map) sim.loadMap(map);
   sim.init(seed);
   const view = new View(memory.buffer);
   const fighters = Array.from({ length: bots }, (_, k) => ({ f: new Fighter(k, seed, 0.3 + 0.6 * ((k * 5) % bots) / bots), join: 25 * k, queue: [], last: -1, live: false }));

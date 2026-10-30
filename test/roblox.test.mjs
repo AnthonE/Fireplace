@@ -312,3 +312,35 @@ end)`;
   const mv = f.spec.structures.find((s) => s.name === 'Lift').move;
   assert.ok(mv.seconds > 0.1 && Math.hypot(...mv.by) * 1.5 / mv.seconds <= L.MV_STEP_MAX * L.TICK_HZ + 1e-9, JSON.stringify(mv));
 });
+
+// A place with the given Workspace properties, StarterPlayer (null: none, a place from before it) and StarterPack tools.
+function placeWith({ ws = '', sp = null, pack = [] } = {}) {
+  const tool = (name) => `<Item class="Tool" referent="T${name}"><Properties><string name="Name">${name}</string></Properties></Item>`;
+  return new TextEncoder().encode(`<roblox version="4"><Item class="Workspace" referent="W"><Properties><string name="Name">Workspace</string>${ws}</Properties>${item(baseplate)}</Item>`
+    + (sp === null ? '' : `<Item class="StarterPlayer" referent="SP"><Properties><string name="Name">StarterPlayer</string>${sp}</Properties></Item>`)
+    + `<Item class="StarterPack" referent="PK"><Properties><string name="Name">StarterPack</string></Properties>${pack.map(tool).join('')}</Item></roblox>`);
+}
+
+test('a place\'s characters\' walk, jump and gravity are the map\'s movement, in metres; the classic gear plays Crossroads', () => {
+  // a place from before StarterPlayer: the Humanoid's own, a JumpPower of 50
+  const old = robloxToMap(readRoblox(placeWith({ pack: ['LinkedSword', 'LinkedRocketLauncher'] })));
+  assert.deepEqual(old.spec.movement, { walk: 4.48, jump: Math.round(50 * 50 / (2 * 196.2) * S * 1e4) / 1e4, gravity: 54.936 });
+  assert.equal(old.spec.mode, 'crossroads');
+  compileSpec(old.spec, old.images);
+  // a modern one: its JumpHeight, its walk speed, the Workspace's gravity
+  const sp = '<float name="CharacterWalkSpeed">24</float><bool name="CharacterUseJumpPower">false</bool><float name="CharacterJumpHeight">10</float><float name="CharacterJumpPower">50</float>';
+  const now = robloxToMap(readRoblox(placeWith({ ws: '<float name="Gravity">100</float>', sp, pack: ['ClassicSword'] })));
+  assert.deepEqual(now.spec.movement, { walk: 6.72, jump: 2.8, gravity: 28 }, '24, 10 and 100 at 0.28 m a stud');
+  assert.equal(now.spec.mode, undefined, 'no classic gear, no mode');
+  // its JumpPower, when it says to use it
+  const power = robloxToMap(readRoblox(placeWith({ sp: '<bool name="CharacterUseJumpPower">true</bool><float name="CharacterJumpPower">70</float>' })));
+  assert.equal(power.spec.movement.jump, Math.round(70 * 70 / (2 * 196.2) * S * 1e4) / 1e4);
+  // out of range (no gravity): the arena's own, and the report says so
+  const none = robloxToMap(readRoblox(placeWith({ ws: '<float name="Gravity">0</float>' })));
+  assert.equal(none.spec.movement, undefined);
+  assert.ok(none.report.some((r) => /keeps the arena's movement/.test(r)));
+  // the brief says what the map does
+  const brief = robloxBrief(readRoblox(placeWith({ pack: ['LinkedSword'] })), { map: old, name: 'Old' }).files['port.md'];
+  assert.match(brief, /walking 4\.48 m\/s, jumping 1\.78 m, falling at 54\.9 m\/s\^2/);
+  assert.match(brief, /plays the arena's Crossroads mode every match/);
+});

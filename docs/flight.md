@@ -55,7 +55,7 @@ legs, and fire only at what is already on their nose: 8 of them finished
 three laps in 112 s, the leader about 37 s a lap.
 
 **How it fits on the engine.** Ring Race is flight's own: its number,
-`M_RACE` (15), sits past the arena's modes, so the arena's build, whose
+`M_RACE` (16), sits past the arena's modes, so the arena's build, whose
 `MODES` it never joins, stays bit-identical. Its clock comes from
 `FLIGHT_TICKS` (the arena's `MODE_TICKS` and the race's past them) under
 `#if FLIGHT` in the match and the prediction; `$a_mode_play` hands it to
