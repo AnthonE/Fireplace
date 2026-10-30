@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newFireplace, fireplaceBytes, wasmBytes, arenaBytes, bumperBytes, partyBytes } from './helpers.mjs';
+import { newFireplace, fireplaceBytes, wasmBytes, arenaBytes, partyBytes } from './helpers.mjs';
 import { View } from '../src/view.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { modeName as flightMode } from '../src/flight-view.mjs';
@@ -28,40 +28,44 @@ test('the prefixer: every identifier under its prefix, exports made internal, st
   assert.doesNotMatch(out, /export|module|import/);
 });
 
-test('the games are a list (FP_SETS): each entry one of the ways the playlist knows, and the page has a row for each', async () => {
-  assert.equal(new Set(L.FP_SETS.map((g) => g.prefix)).size, L.FP_SETS.length, 'a prefix a game');
+test('the games are a list (FP_SETS): each entry one of the ways the playlist knows, a retired one only its name, and the page has a row for each', async () => {
+  const plays = L.FP_PLAYS.map((k) => L.FP_SETS[k]);
+  assert.equal(new Set(plays.map((g) => g.prefix)).size, plays.length, 'a prefix a game');
   for (const [k, g] of L.FP_SETS.entries()) {
+    assert.equal(L.GAMES[k], g.name);
+    if (g.retired) { assert.deepEqual(Object.keys(g).sort(), ['name', 'retired'], g.name); assert.ok(!L.FP_PLAYS.includes(k) && !L.PLAYLIST.includes(k)); continue; }
     assert.match(g.prefix, /^[a-z]$/, g.name);
     assert.ok(['ev', 'round'].includes(g.join), `${g.name}: join`);
     assert.ok(['golf', 'arena'].includes(g.word), `${g.name}: word`);
-    assert.ok(['golf', 'arena', 'bumper', 'party'].includes(g.score), `${g.name}: score`);
+    assert.ok(['golf', 'arena', 'party'].includes(g.score), `${g.name}: score`);
     assert.ok([undefined, 'arena', 'flight', 'party'].includes(g.seed), `${g.name}: seed`);
     assert.ok([undefined, 'arena', 'flight'].includes(g.map), `${g.name}: map`);
     assert.ok(g.world.length >= 1 && Number.isInteger(g.matches) && g.matches >= 1 && Number.isInteger(g.ticks), g.name);
-    assert.equal(L.GAMES[k], g.name);
     assert.equal(L.FP_MATCHES[k], g.matches);
   }
-  assert.deepEqual([L.G_GOLF, L.G_ARENA, L.G_BUMPER, L.G_PARTY, L.G_FLIGHT].map((k) => L.FP_SETS[k].prefix), ['g', 'a', 'b', 'p', 'f']);
-  assert.ok(L.PLAYLIST.every((g) => L.FP_SETS[g]), 'the playlist names games on the list');
+  assert.deepEqual([L.G_GOLF, L.G_ARENA, L.G_PARTY, L.G_FLIGHT].map((k) => L.FP_SETS[k].prefix), ['g', 'a', 'p', 'f']);
+  assert.ok(L.FP_SETS[L.G_BUMPER].retired, 'bumper balls keeps its number, retired');
+  assert.ok(L.PLAYLIST.every((g) => L.FP_PLAYS.includes(g)), 'the playlist names games on the list');
   // client/fireplace.mjs's PAGES, a row a game (it refuses to start otherwise)
   const page = (await import('node:fs')).readFileSync(new URL('../client/fireplace.mjs', import.meta.url), 'utf8');
-  const rows = page.slice(page.indexOf('const PAGES = ['), page.indexOf('];', page.indexOf('const PAGES = ['))).match(/frontend:/g) || [];
+  const rows = page.slice(page.indexOf('const PAGES = ['), page.indexOf('];', page.indexOf('const PAGES = ['))).match(/frontend:|null,/g) || [];
   assert.equal(rows.length, L.FP_SETS.length, "client/fireplace.mjs's PAGES has a row for every game");
+  rows.forEach((r, k) => assert.equal(r === 'null,', !!L.FP_SETS[k].retired, `row ${k}`));
 });
 
 test('Fireplace is one module with every game in it, and the games on their own build as before', async () => {
   const s = await newFireplace();
   for (const name of ['init', 'step', 'step_mt', 'worker_run', 'predict', 'snapshot', 'restore', 'regrid', 'hash_region', 'tick_begin', 'tick_end', 'contacts', 'integrate']) assert.equal(typeof s.x[name], 'function', name);
-  assert.ok(fireplaceBytes().length > wasmBytes().length + (arenaBytes().length + bumperBytes().length + partyBytes().length) / 2);
+  assert.ok(fireplaceBytes().length > wasmBytes().length + (arenaBytes().length + partyBytes().length) / 2);
   s.init(7);
   const v = new View(s.memory.buffer);
   assert.equal(game(v), L.PLAYLIST[0]);
   assert.equal(v.hole().state, L.H_IDLE);
-  assert.equal(v.dv.getFloat32(L.BH_R0, true), 16, "bumper's world, not golf's");
+  assert.equal(v.dv.getUint32(L.PG_PREV, true), 0xffff, "party's world, not golf's");
 });
 
 // The playlist on the debug build (a NaN traps), the room coming and going,
-// from bumper balls round to bumper balls again: every round's end, and each
+// from party round to party again: every round's end, and each
 // game's result as it was held.
 let played = null;
 async function playlist() {
@@ -92,11 +96,11 @@ async function playlist() {
   return played;
 }
 
-test('the room plays the playlist by position: bumper balls, party, the arena, party, Dogfight, golf, bumper again, everyone moved each time', async () => {
+test('the room plays the playlist by position: party, the arena, party, Dogfight, golf, party again, everyone moved each time', async () => {
   const { games, states, overs, starts } = await playlist();
   assert.deepEqual(games.map((g) => g.game), ROUND, games.map((g) => `${L.GAMES[g.game]} at ${g.at}`).join(', '));
   assert.deepEqual(games.map((g) => g.n), ROUND.map((_, k) => k + 1), 'FP_COUNT counts the games played');
-  // each game played its matches (bumper's 2 rounds, party's 3 minigames, one match, one hole), then the next
+  // each game played its matches (party's 3 minigames, one match, one hole), then the next
   for (let k = 0; k < L.PLAYLIST.length; k++) {
     const g = games[k];
     assert.equal(overs.filter((o) => o.n === g.n).length, L.FP_MATCHES[g.game], `${L.GAMES[g.game]}'s matches`);
@@ -150,13 +154,13 @@ test('marshmallows: 3, 2 and 1 for the top three of each game, party by its poin
   // handed out as the result is held, FP_HOLD ticks before the switch, and kept
   const at = (t) => states.findLast((x) => x.t <= t);
   const before = at(games[1].at - L.FP_HOLD - 300).mallows, after = at(games[1].at + 10).mallows;
-  assert.deepEqual(after.map((m, k) => m - before[k]), holds[0].players.slice(0, 10).map((x) => x.got), "bumper's");
+  assert.deepEqual(after.map((m, k) => m - before[k]), holds[0].players.slice(0, 10).map((x) => x.got), "the first party's");
   assert.deepEqual(mallows, mallows.map((_, p) => holds.reduce((n, h) => n + h.players[p].got, 0)), 'every game summed');
   // slot 1 left at tick 3000 and came back: what it had then is gone
   assert.equal(at(3100).mallows[1], 0);
 });
 
-// A sim at the end of bumper balls' last round with the playlist's entry k
+// A sim at the end of the first game's (party's) last round with the playlist's entry k
 // next: the result about to be held, the next seed about to be drawn. One
 // sim, three in its room, its region put back each time.
 let room = null;
@@ -171,7 +175,7 @@ async function atTheEnd(k, poke = () => {}) {
   const { s, v, region } = room;
   s.setRegion(region);
   const dv = v.dv;
-  dv.setUint8(L.FP_COUNT, L.FP_MATCHES[L.G_BUMPER] - 1);
+  dv.setUint8(L.FP_COUNT, L.FP_MATCHES[L.PLAYLIST[0]] - 1);
   dv.setUint16(L.FP_COUNT + 2, k, true);
   dv.setUint32(L.HDR_STATE, L.H_OVER, true);
   dv.setUint32(L.HDR_UNTIL, v.tick + 5000, true);
@@ -238,7 +242,7 @@ test("Dogfight's mode: one of FLIGHT_MODES drawn from the room's PRNG, forced by
   }
   assert.deepEqual([...seen].sort(), [...L.FLIGHT_MODES].sort());
   for (const m of L.FLIGHT_MODES) {
-    // bumper's words are golf's: none of them reaches a ship
+    // party's words are golf's: none of them reaches a ship
     const { v, dv, run } = await atTheEnd(k, (dv) => { for (let p = 0; p < 3; p++) dv.setUint32(rec(p, L.P_IN), 0x1234567 + p, true); });
     dv.setUint32(L.FP_NEXT, forcedSeed(m, 99), true);
     run(L.FP_HOLD + 1);
@@ -283,7 +287,7 @@ async function released() {
   return rel;
 }
 
-// Through bumper balls and the switch into party's first round (every tick's
+// Through the first party and the switch into the arena (every tick's
 // whole region hashed: a 4-thread tick here is 0.45 ms); the matrix replays
 // the playlist round on 1, 2 and 4 threads.
 test('the playlist replays to the same hash on every tick, on 1 and 4 threads', async () => {
@@ -303,8 +307,9 @@ test("a keyframe from any game joins a world sitting in another's: the terrain a
   const a = await newFireplace(true);
   a.init(7);
   const on = (g) => games.find((x) => x.game === g).at;
-  // keyframes at interval boundaries just into party, mid-party, mid-arena, mid-Dogfight and mid-golf
-  const picks = [on(L.G_PARTY) + 1, on(L.G_PARTY) + 4000, on(L.G_ARENA) + 3000, on(L.G_FLIGHT) + 3000, on(L.G_GOLF) + 1500].map((t) => Math.ceil(t / L.NSLICE) * L.NSLICE);
+  // keyframes at interval boundaries mid-arena, just into the second party (out of the arena), mid-party, mid-Dogfight and mid-golf
+  const party2 = games.filter((x) => x.game === L.G_PARTY)[1].at;
+  const picks = [party2 + 1, party2 + 4000, on(L.G_ARENA) + 3000, on(L.G_FLIGHT) + 3000, on(L.G_GOLF) + 1500].map((t) => Math.ceil(t / L.NSLICE) * L.NSLICE);
   assert.ok(picks.at(-1) + 1500 <= ticks);
   const keys = new Map();
   const after = new Map(); // tick -> the region's hash on a run that never left
@@ -314,9 +319,9 @@ test("a keyframe from any game joins a world sitting in another's: the terrain a
     a.x.step();
     if (picks.some((k) => t >= k && t < k + 1500)) after.set(t, a.x.hash_region());
   }
-  assert.deepEqual([...keys.values()].map((k) => k.game), [L.G_PARTY, L.G_PARTY, L.G_ARENA, L.G_FLIGHT, L.G_GOLF]);
+  assert.deepEqual([...keys.values()].map((k) => k.game), [L.G_ARENA, L.G_PARTY, L.G_PARTY, L.G_FLIGHT, L.G_GOLF]);
   for (const [t, k] of keys) {
-    // into a sim sitting in bumper balls' world
+    // into a sim sitting in the first party's world
     const b = await newFireplace(true);
     b.init(7);
     b.setRegion(k.region);

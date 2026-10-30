@@ -4,9 +4,9 @@
 // drawing and steering only, never fed back into the sim; the hex grid is
 // worked in f32 as the sim works it, so a point picks the cell the sim picks.
 import * as L from './layout.mjs';
-import { View, inputWord, bumperWord, PLAT_Y, PLAT_T, B_RAD, MEGA_RAD } from './bumper-view.mjs';
+import { View, inputWord, bumperWord, PLAT_Y, B_RAD, MEGA_RAD } from './bumper-view.mjs';
 
-export { View, inputWord, PLAT_Y, PLAT_T, B_RAD, MEGA_RAD };
+export { View, inputWord, PLAT_Y, B_RAD, MEGA_RAD };
 export const P_STEP = Number(L.P_STEP);
 
 // The round on this bank: the minigame, its knobs, who's in, the clock.

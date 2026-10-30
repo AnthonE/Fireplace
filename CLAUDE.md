@@ -2,15 +2,17 @@
 
 One engine, hand-written WebAssembly (no compiler), deterministic lockstep at
 125 Hz: only inputs cross the network, and every machine steps the same bits.
-Five games build from `src/`: golf (`build/game.wasm`), the arena with
-`ARENA` set (`build/arena/`), bumper balls with `BUMPER` set
-(`build/bumper/`), and party, a minigame a round, with `BUMPER` and `PARTY`
-(`build/party/`); and flight, the arena with every fighter a ship, with
-`ARENA` and `FLIGHT` (`build/flight/`, "Dogfight", its own page and map). **Fireplace** (`build/fireplace/`) is the party game made
-of them: all five in one module, a playlist the room plays through, a living
-room for a menu (`client/fireplace.html`). README.md is the front page; the
-long-form docs are `docs/<game>.md` (golf, arena, bumper, party, fireplace)
-and `docs/netcode.md` (flight's is `docs/flight.md`): read the one for whatever you touch. `docs/wire.md` is
+Four games build from `src/`: golf (`build/game.wasm`), the arena with
+`ARENA` set (`build/arena/`), party, every player a ball (`BUMPER`) and a
+minigame a round (`PARTY`), with both set (`build/party/`); and flight, the
+arena with every fighter a ship, with `ARENA` and `FLIGHT` (`build/flight/`,
+"Dogfight", its own page and map). **Fireplace** (`build/fireplace/`) is the
+party game made of them: all four in one module, a playlist the room plays
+through, a living room for a menu (`client/fireplace.html`). (Bumper balls,
+once a fifth, is party's SWISS ROLL now; `BUMPER` is never set without
+`PARTY`.) README.md is the front page; the long-form docs are
+`docs/<game>.md` (golf, arena, flight, party, fireplace) and
+`docs/netcode.md`: read the one for whatever you touch. `docs/wire.md` is
 the protocol for writing a client, `docs/hosting.md` the room pool
 (`net/rooms.mjs`), and `docs/roadmap.md` the plan for what comes next.
 
@@ -19,11 +21,11 @@ the protocol for writing a client, `docs/hosting.md` the room pool
 ```sh
 npm ci && sh tools/install-deno.sh   # once: wabt, binaryen, Deno 2.9.7 in .tools/
 npm run build                        # every sim; prints each wasm's sha256
-npm test                             # node --test test/*.test.mjs, about 10 min; prints its own count
-node --test test/bumper.test.mjs     # one file
+npm test                             # node --test test/*.test.mjs, about 25 min; prints its own count
+node --test test/party.test.mjs      # one file
 node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.wasm   # Node, Deno, Chrome x JIT tiers x 1/2/4 threads
-node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --bumper | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
-node net/run-arena.mjs / run-flight.mjs / run-bumper.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
+node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
+node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
@@ -37,7 +39,7 @@ node tools/serve.mjs                        # then /client/studio.html: a Party 
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
-`genarena.mjs`, `genflight.mjs`, `genbumper.mjs`, `genparty.mjs`, `genfireplace.mjs`. Gates write `traces/`
+`genarena.mjs`, `genflight.mjs`, `genparty.mjs`, `genfireplace.mjs`. Gates write `traces/`
 (screenshots included). Headless Chrome is Playwright's preinstalled Chromium
 on SwiftShader: pictures are right, frame rates mean nothing, and drawing to an
 on-screen canvas destroys the GPU device, so gate pages run with `?present=0`
@@ -72,13 +74,13 @@ shell whose own command line contains the name: it kills that shell.
 
 - `src/layout.mjs` is the one memory map for the WAT (`@NAME`, `@(expr)`),
   the harness, the net code and the clients. Physics literals sit in `PHYS`
-  (and `BPHYS` for bumper) as strings, inlined as `f32.const`.
+  (and `BPHYS` for the ball) as strings, inlined as `f32.const`.
 - Mode code goes in its own file (`arena.wat`, `bumper.wat`); shared files keep
   their differences behind `#if ARENA` / `#if BUMPER` (nesting works, `#if !X`
   too). Changing a mode must leave the other builds bit-identical: compare the
   sha256s `npm run build` prints before and after.
-- Party (`src/party.wat`) is bumper's ball with bumper.wat's cheese and round
-  behind `#if !PARTY`. Each minigame is `src/mg/<key>.wat` (nine hooks under
+- Party (`src/party.wat`) is the ball (`src/bumper.wat`: its power-ups,
+  bumps, blasts and rockets) and the round around it. Each minigame is `src/mg/<key>.wat` (nine hooks under
   its prefix, called through `(!mg)`), its constants in `src/mg/<key>.mjs`
   (literal numbers, no imports; the WAT sees them through layout.mjs's
   `MG_CONSTS`, JS imports the file itself), its client module
@@ -131,14 +133,9 @@ shell whose own command line contains the name: it kills that shell.
   NET alone; a hello's hash covers the map (`wasmPrefix(wasm, map)`).
   Anything that reads the map reads it from memory, never from a
   `MAPSEG_*`/`MAPIMG_*`/`MAP_CEIL` constant outside `$arena_gen`'s
-  built-in half.
   built-in half. A map's rules (`MAP_RULES`: map.json `movement`, a Roblox
   place's Humanoid that `$move` runs through `$a_gait`, and `mode`, played
   every match) are 0 for a map without them, so `$move` takes its old path.
-  fighter's goal), its tests `test/arena-<key>.test.mjs`. A kit mode with
-  `team: 0` in `MODES` has no sides; an AM entry may name optional hooks
-  (`strike`, `spawn`, `hurt`). The map's
-  objectives (flags, skull, hills) are `MAP_OBJ`, from `map.json`.
 - Flight (`src/flight.wat`) is the arena build with `#if FLIGHT` where a
   ship differs: `$move` hands its tick to `$f_move`, charge shots and bombs
   fly in `$f_proj`, `$a_spawn` ends in `$f_spawn`, no pads, the match picks
@@ -148,14 +145,7 @@ shell whose own command line contains the name: it kills that shell.
   (`$a_arm`, pickups) must stay off a ship. A ship's position is its
   centre. It builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
   drawn by `tools/skyways.mjs`; `--flight-map` gives it another);
-  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 15:
-  `MODES.length`, its news past every kit mode's MX codes, which
-  `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
-  drawn by `tools/skyways.mjs`; `--flight-map` gives it another); `MAP_CEILING` holds its ceiling. Its own
-  mode, Ring Race (`M_RACE`, 12), sits past the arena's `MODES` so the
-  centre. It always builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
-  drawn by `tools/skyways.mjs`); `MAP_CEILING` holds its ceiling. Its own
-  mode, Ring Race (`M_RACE`, 16: `MODES.length`, its news past every kit
+  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 16: `MODES.length`, its news past every kit
   mode's MX codes, which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
   arena's build never sees it: its clock is `FLIGHT_TICKS`, its course the
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
@@ -164,7 +154,10 @@ shell whose own command line contains the name: it kills that shell.
   (`tools/asm.mjs` `prefixed()`), listed in `FP_SETS` (`src/layout.mjs`: its
   flags, world, join, input word, matches, score, seed), from which the `fp`
   macros write the playlist's game-by-game code; a new game is an entry there
-  and a row in `client/fireplace.mjs`'s `PAGES`. A change to a game changes
+  and a row in `client/fireplace.mjs`'s `PAGES`. Numbers are append-only: a
+  game taken out stays as `{ name, retired: true }` (bumper balls, 2), a
+  `null` row in `PAGES`, built and played nowhere (`FP_PLAYS` lists the rest),
+  its number still in browsers' achievement tallies and Elo Pros' stats. A change to a game changes
   Fireplace too. The playlist's state is the header's last 16 bytes
   (`FP_GAME`...) and `REGION + 0xe000` (8 KiB no game uses: marshmallows,
   `FP_NEXT`, `FP_MODE`): keep games out of both. `PLAYLIST` goes by position
@@ -176,7 +169,7 @@ shell whose own command line contains the name: it kills that shell.
   from another game arrives (`FP_WORLD`, `FP_STASH` at `0x360000`); the map
   area is cleared first, so two maps never mix.
 - Inputs are one u32 word per player per tick (golf's layout in
-  `src/view.mjs`; the arena's in `arena-view.mjs`; bumper and party reuse golf's).
+  `src/view.mjs`; the arena's in `arena-view.mjs`; party reuses golf's).
   Keep fields that rarely change still: wire v4 codes deltas.
 
 ## Clients
@@ -185,7 +178,7 @@ shell whose own command line contains the name: it kills that shell.
   prediction's instance, sound, one GPU device); each game's frontend
   (`client/<game>-game.mjs`) exports `mount(host, opts)` returning
   `{ frame(now, target), unmount(), capture(), state() }`, with every listener
-  on an AbortController. `bumper.html`, `arena.html` and `flight.html` mount one alone
+  on an AbortController. `party.html`, `arena.html` and `flight.html` mount one alone
   (flight's renderer, `client/flight-render.mjs`, has a full camera basis and ray-traces its ships);
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
@@ -216,8 +209,8 @@ shell whose own command line contains the name: it kills that shell.
   only: the relay carries each slot's word beside the ticks (hello flag 4,
   `T_LOOK`), never in a tick, record or hash. The lists are append-only (a look's number
   goes on the wire); look 0 draws exactly as the riders always have, and a new
-  pattern or hat style goes in both bumper's and party's shaders
-  (`test/looks.test.mjs` checks). Achievements (`client/achievements.mjs`)
+  pattern or hat style goes in party's shader (`test/looks.test.mjs`
+  checks). Achievements (`client/achievements.mjs`)
   test results read from the confirmed world while a game's end is held, and
   are kept in the browser, like the look.
 - `elo.json` is Fireplace's manifest for its Elo Pros store row (jobs, mods);
@@ -232,6 +225,6 @@ shell whose own command line contains the name: it kills that shell.
   only), Node, Deno and Chrome. The gates load `playwright` or
   `playwright-core`, whichever resolves; CI adds the latter with `--no-save`.
 - Tests use `node:test` with helpers in `test/helpers.mjs` (`newSim`,
-  `newArena`, `newBumper`, `newParty`, `newFireplace`); a new mode gets its own test file, a recorded
+  `newArena`, `newFlight`, `newParty`, `newFireplace`); a new mode gets its own test file, a recorded
   log for the matrix, a CI step in `.github/workflows/determinism.yml`, and an
   online gate.

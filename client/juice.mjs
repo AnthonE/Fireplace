@@ -1,4 +1,4 @@
-// What makes a hit and a win feel like one in bumper's and party's frontends:
+// What makes a hit and a win feel like one in party's frontend:
 // riders that jolt when their balls meet, the camera shaking when yours does,
 // and a winner who cheers in a shower of confetti. Drawing only, from what the
 // frontends already see (the confirmed world's FX and the round's end); the

@@ -16,10 +16,10 @@ test('with no canvas to draw it, the font buffer is the pixel font and a header 
   assert.ok(GW * 3 === GH * 2, 'a glyph is its cell, 4 by 6');
 });
 
-test('bumper, party and golf draw HUD text in it, and fall back to the pixel font on a 0 header', () => {
+test('party and golf draw HUD text in it, and fall back to the pixel font on a 0 header', () => {
   assert.match(HUD_FONT_WGSL, /fn roundText\(/);
   assert.match(HUD_FONT_WGSL, /font\[64u\] == 0u/);
-  for (const f of ['client/bumper-render.mjs', 'client/party-render.mjs']) {
+  for (const f of ['client/party-render.mjs']) {
     const src = readFileSync(f, 'utf8');
     assert.match(src, /\$\{HUD_FONT_WGSL\}/, f);
     assert.match(src, /roundText\(hp, \$\{COLS\}u, u32\(u\.hud\.x\)\)/, f);

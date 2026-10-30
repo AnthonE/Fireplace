@@ -15,7 +15,7 @@
 import * as L from '../src/layout.mjs';
 import { colorsOf } from './avatar.mjs';
 
-// The ball's patterns, as the bumper and party renderers draw them (case 0)
+// The ball's patterns, as party's renderer draws them (case 0)
 export const PATTERN = { BEACH: 0, STRIPES: 1, RIBS: 2, SOLID: 3, METAL: 4, EIGHT: 5 };
 // The hat's styles, as the head is drawn (case 8)
 export const STYLE = { CAP: 0, NONE: 1, BEANIE: 2, BAND: 3, HELMET: 4, CROWN: 5, PUMPKIN: 6 };
@@ -87,7 +87,7 @@ export const packLook = (ball, hat, body = 0) => ((ball & 255) | ((hat & 255) <<
 const byte = (list, w, k) => (list[(w >>> k) & 255] ? (w >>> k) & 255 : 0);
 export const unpackLook = (w) => ({ ball: byte(BALLS, w, 0), hat: byte(HATS, w, 8), body: byte(BODIES, w, 16) });
 
-// The seat's colour, as the bumper and party frontends have always drawn it
+// The seat's colour, as the balls have always been drawn
 export const slotColor = (s) => { const h = (s * 0.618034) % 1; return [0, 0.33, 0.67].map((o) => 0.55 + 0.4 * Math.cos(6.2832 * (h + o))); };
 // three 0..1 channels as one integer under 2^24, exact in an f32
 export const rgb24 = (c) => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);

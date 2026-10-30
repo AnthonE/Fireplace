@@ -17,7 +17,7 @@ export function hudFrame(W, H) {
 }
 // The focal length (px) a W x H screen sees through, k of its width up to a
 // 16:10 screen and of 1.6 times its height past that, so a wide screen
-// shows more at the sides, not less up and down (party's and bumper's rule).
+// shows more at the sides, not less up and down (party's rule).
 export const focalFor = (W, H, k = 0.62) => Math.min(W, H * 1.6) * k;
 
 export const LOWPOLY_WGSL = /* wgsl */ `

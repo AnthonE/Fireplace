@@ -19,7 +19,7 @@
 //
 // A cut list (film/*.json):
 //   { "replay": "replays/<file>.qgr", "out": "film/out/<name>.mp4", "size": [1920, 1080], "fps": 30,
-//     "res": "1920x1080",                    the room's (and bumper's and party's) canvas
+//     "res": "1920x1080",                    the room's (and party's) canvas
 //     "theme": "grandma",                    the room's look at the start
 //     "fade": 0.5,                           a fade from and to black at the ends, seconds
 //     "shots": [

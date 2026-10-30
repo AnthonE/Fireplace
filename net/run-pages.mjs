@@ -11,7 +11,7 @@
 // check played the debug build and found the split hashes equal, and its
 // build played in party's page. Screenshots go
 // to traces/pages-*.png.
-//   node net/run-pages.mjs [--seconds 200] [--bots 5] [--mg 0]
+//   node net/run-pages.mjs [--seconds 330] [--bots 5] [--mg 0]   (party's three minigames, the first game, take about 220 s)
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
@@ -23,7 +23,7 @@ import * as L from '../src/layout.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
-const seconds = Number(opt('seconds', 200));
+const seconds = Number(opt('seconds', 330));
 const nbots = Number(opt('bots', 5));
 const mg = Number(opt('mg', 0));
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -130,7 +130,7 @@ const gate = {
   openedFireplace: !!report.fireplace?.url?.startsWith('/client/fireplace.html'),
   playing: !!f && f.slot === 0 && f.clState === 2 && f.scene !== 'couch',
   stepped: !!f && f.hashes >= Math.floor(((seconds - 15) * 125) / 128) * 0.8,
-  switchedGames: seconds < 200 || (f?.games.length ?? 0) >= 2,
+  switchedGames: seconds < 330 || (f?.games.length ?? 0) >= 2,
   partyLocal: !!report.party?.isolated && report.party.hashes > 0,
   partyOnItsMinigame: ps.game === mg,
   editorOpensAMap: !!report.editor?.checked,

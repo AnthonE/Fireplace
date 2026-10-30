@@ -4,7 +4,7 @@
 // back to the room, and the TV shows the marshmallows and what's on next;
 // then it closes in again. One host (client/host.mjs) on Fireplace's sim,
 // every game's frontend mounted in turn on its own canvas (golf, the arena,
-// bumper balls, party, Dogfight); while the room is in view, the game draws into a
+// party, Dogfight); while the room is in view, the game draws into a
 // texture the TV shows. B and H, while the room is in view, change your ball
 // and hat (client/looks.mjs), which everyone in the room sees; L lists your
 // achievements (client/achievements.mjs). Both are kept in this browser.
@@ -39,17 +39,18 @@ const note = document.getElementById('note');
 const roomCanvas = document.getElementById('room');
 // The page's half of each game in layout.mjs's FP_SETS, by G_*: its frontend
 // (mount(host, opts), client/host.mjs) and what its picture lights the room
-// with; every game draws at the room's size. A game added to FP_SETS adds its row here.
+// with; every game draws at the room's size. A game added to FP_SETS adds its row here,
+// a retired one keeps its place as null.
 const PAGES = [
   { frontend: './golf-game.mjs', light: [0.45, 0.7, 0.45] }, // golf's grass
   { frontend: './arena-game.mjs', light: [0.6, 0.65, 0.6] }, // the arena's grey
-  { frontend: './bumper-game.mjs', light: [1, 0.85, 0.5] }, // the cheese
+  null, // bumper balls, retired (party's SWISS ROLL)
   { frontend: './party-game.mjs', light: [0.55, 0.75, 1] }, // party's sky
   { frontend: './flight-game.mjs', light: [0.5, 0.65, 0.95] }, // Dogfight's bluer sky
 ];
 if (PAGES.length !== L.FP_SETS.length) throw new Error(`client/fireplace.mjs knows ${PAGES.length} games and FP_SETS has ${L.FP_SETS.length}`);
 // a canvas a game, fireplace.html's or made here
-const canvases = L.GAMES.map((_, k) => document.getElementById(`g${k}`) ?? stage.appendChild(Object.assign(document.createElement('canvas'), { id: `g${k}` })));
+const canvases = L.FP_SETS.map((s, k) => s.retired ? null : document.getElementById(`g${k}`) ?? stage.appendChild(Object.assign(document.createElement('canvas'), { id: `g${k}` })));
 const BOT = q.get('bot') === '1';
 const FILM = q.has('film') && q.has('replay') ? Number(q.get('film')) : 0;
 const WATCH = q.get('watch') === '1' || q.has('replay');
@@ -58,8 +59,8 @@ const ZOOM_MS = 1700;
 const LOOK_MS = 5000; // how long B or H keeps your look on the TV
 const LIST_MS = 12000; // and L your achievements
 const PER_PAGE = 6; // achievements a page, in type the TV can show from the couch
-const TV_LIGHT = PAGES.map((p) => p.light);
-const FRONTENDS = PAGES.map((p) => p.frontend);
+const TV_LIGHT = PAGES.map((p) => p?.light);
+const FRONTENDS = PAGES.map((p) => p?.frontend);
 const WASM = '../build/fireplace/game.wasm';
 // the title card's name and line, client/kit.json's (node tools/kit.mjs init writes them)
 const TITLE = String(kit.name || 'Fireplace').toUpperCase();
@@ -74,7 +75,7 @@ async function main() {
   // ?gres=WxH: golf, the arena and Dogfight (the games that ray-trace a world per pixel) at their own
   // size, the room and the rest at W x H: tools/film.mjs on a box with no GPU films them in hours, not days
   const GRES = q.has('gres') ? q.get('gres').split('x').map(Number) : null;
-  canvases.forEach((c, k) => { [c.width, c.height] = GRES && [L.G_GOLF, L.G_ARENA, L.G_FLIGHT].includes(k) ? GRES : [W, H]; });
+  canvases.forEach((c, k) => { if (c) [c.width, c.height] = GRES && [L.G_GOLF, L.G_ARENA, L.G_FLIGHT].includes(k) ? GRES : [W, H]; });
   const clock = FILM ? filmClock() : null;
   const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;
@@ -83,7 +84,7 @@ async function main() {
   // the room's theme: ?theme=, else this viewer's last pick, else Grandma's (client/themes.mjs)
   const theme = await loadTheme(q.get('theme') || savedTheme() || DEFAULT).catch((e) => { console.warn(e.message); return FALLBACK; });
   const room = await createRoom(roomCanvas, host.device, { present: q.get('present') !== '0', theme });
-  const tvTex = canvases.map((c) => room.tvTexture(c.width, c.height));
+  const tvTex = canvases.map((c) => c && room.tvTexture(c.width, c.height));
   const guest = BOT ? new Guest(0, (Math.random() * 1e9) | 0, Number(q.get('skill') || 0.8), GOLFER) : null;
 
   // ---- your look and your achievements, kept in this browser; a guest at the controls or a spectator keeps neither
@@ -121,7 +122,7 @@ async function main() {
   let gamesSeen = 0;
   let last = null;
   const zoomBy = (to, now) => { zoomFrom = zoom; zoomTo = to; zoomAt = now; };
-  const show = (canvas) => { for (const c of [roomCanvas, ...canvases]) c.classList.toggle('on', c === canvas); };
+  const show = (canvas) => { for (const c of [roomCanvas, ...canvases]) c?.classList.toggle('on', c === canvas); };
 
   const sitDown = () => {
     if (scene !== 'couch') return;
@@ -194,7 +195,7 @@ async function main() {
   function drive() {
     const slot = get(L.CL_SLOT);
     if (!guest || slot < 0 || get(L.CL_STATE) !== 2) return;
-    guest.slot = guest.golfer.slot = guest.fighter.slot = guest.roller.slot = guest.partier.slot = guest.pilot.slot = slot;
+    guest.slot = guest.golfer.slot = guest.fighter.slot = guest.partier.slot = guest.pilot.slot = slot;
     const nowE = epoch();
     const lag = Math.round(readClock(i32, f64, L.CL_PRED, nowE) - readClock(i32, f64, L.CL_PLAY, nowE));
     const w = guest.think(view, view.tick, lag);

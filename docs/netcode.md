@@ -144,8 +144,10 @@ CI runs the gate without Chrome (256 golfers) on every push.
 
 Not done:
 
-- **Rooms per machine.** One relay runs one room; several across isolates
-  come next. (Failover, the other half, is [below](#failover-and-replays).)
+- **Rooms in one process.** One relay runs one room; a machine runs many as
+  a pool of relays (`net/rooms.mjs`, [hosting.md](hosting.md)), and several
+  rooms in one process across isolates come next. (Failover is
+  [below](#failover-and-replays).)
 
 ## Spectators
 

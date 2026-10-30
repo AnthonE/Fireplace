@@ -261,13 +261,13 @@
       {
         "id": "PLAYLIST",
         "name": "The whole playlist",
-        "desc": "Play golf, the arena, bumper balls and party",
+        "desc": "Play golf, the arena and party",
         "icon": "tv"
       },
       {
         "id": "ALLROUND",
         "name": "All-rounder",
-        "desc": "Win golf, the arena, bumper balls and party",
+        "desc": "Win golf, the arena and party",
         "icon": "medal"
       },
       {
@@ -285,13 +285,13 @@
       {
         "id": "SURFER",
         "name": "Channel surfer",
-        "desc": "Play all five games on the tv",
+        "desc": "Play all four games on the tv",
         "icon": "gamepad"
       },
       {
         "id": "HOUSE",
         "name": "House champion",
-        "desc": "Win all five games on the tv",
+        "desc": "Win all four games on the tv",
         "icon": "fireplace"
       },
       {
@@ -309,8 +309,12 @@
       {
         "id": "CHEESE",
         "name": "Big cheese",
-        "desc": "Win bumper balls",
-        "icon": "cheese"
+        "desc": "Win 3 games",
+        "icon": "cheese",
+        "progress": {
+          "stat": "wins",
+          "max": 3
+        }
       },
       {
         "id": "LIFE",

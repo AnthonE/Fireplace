@@ -6,7 +6,7 @@
 // crosses the network and nobody else can join.
 //   in:  { local: { kind, bots, seed }, memory, prefix, simPort, watch, arena, fireplace } once, then { leave }
 //   kind: the AI players' brain, by the page's game (fireplace, arena, flight,
-//   bumper, party; golf has none); a spectator (watch) has only them in the room.
+//   party; golf has none); a spectator (watch) has only them in the room.
 // Tick T closes when the room's clock passes T + 1, with the word sampled for
 // it LEAD ticks early; the sim steps it DELAY ticks after that, so a timer that
 // runs late still finds it there. The prediction covers the gap, as online.
@@ -44,7 +44,6 @@ async function brain(kind, slot, seed) {
   }
   if (kind === 'arena') return new (await import('./arena-bot.mjs')).Fighter(slot, seed, skill);
   if (kind === 'flight') return new (await import('./flight-bot.mjs')).Pilot(slot, seed, skill);
-  if (kind === 'bumper') return new (await import('./bumper-bot.mjs')).Roller(slot, seed, skill);
   if (kind === 'party') return new (await import('./party-bot.mjs')).Partier(slot, seed, skill);
   return null;
 }

@@ -78,7 +78,7 @@ Kill the first relay and the game goes on: the standby takes the room over
 and everyone comes back to their own slot.
 
 To write your own client, in any language, [wire.md](wire.md) is
-the protocol, and `net/tiny-client.mjs` is a whole client in 128 lines.
+the protocol, and `net/tiny-client.mjs` is a whole client in 129 lines.
 
 ## The golf bot and the bred golfer
 

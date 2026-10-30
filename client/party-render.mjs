@@ -1,4 +1,4 @@
-// Party's WebGPU renderer: bumper balls' look for any stage. Drawn at the
+// Party's WebGPU renderer: the balls on any stage. Drawn at the
 // window's own resolution with 4x multisampling, lit by a sun (a moon at
 // night) and a sky, tone-mapped, over the sea far below with clouds in the
 // sky. The stage is a Scene: boxes, cylinders, hex prisms and spheres packed
@@ -10,10 +10,10 @@
 // the balls cast into it (a ball and its rider as spheres) and everything
 // samples it soft, the sea included. Decals are flat glowing rings and discs.
 // The paint layer is a grid of colour indices over the floor, uploaded when
-// its version changes. The balls are bumper's impostors (beach-ball stripes
+// its version changes. The balls are impostors (beach-ball stripes
 // turning as they roll, an ink outline, a rider), with its orbs, rockets and
 // flashes, and coins and bombs besides; beams, the HUD's 3x5 font, rects and
-// the net graph as bumper's. The minimap is the stage drawn from above each
+// the net graph. The minimap is the stage drawn from above each
 // frame into a small texture with every caster as a dot. Nothing loops over
 // solids per pixel. Nothing here is hashed.
 import * as L from '../src/layout.mjs';
@@ -54,7 +54,12 @@ export const SHAPE = { BOX: 0, CYL: 1, HEX: 2, SPHERE: 3 };
 //   CHECKER  squares a a side (1 m) in the world, its colour and the opposite; b softens the opposite toward it
 //   WOOD     planks a wide (0.32 m) along its longer side, grain, seams
 //   RUBBER   rough, a faint sheen, a fine pebbly grain
-export const LOOK = { MATTE: 0, PLASTIC: 1, ICE: 2, METAL: 3, HAZARD: 4, GLOW: 5, PAINT: 6, CHECKER: 7, WOOD: 8, RUBBER: 9 };
+//   CHEESE   a wheel with holes cut through it: a the holes, the cylinders right after it in the Scene (each a
+//            hole's centre and radius, its half height the wheel's), every pixel of the wheel inside one gone.
+//            A hole's own cylinder has a -(k + 1), k its place after the wheel, and a negative x half extent
+//            (mirrored, so its inside is what is drawn): the shaft's wall, open at both ends, gone outside the
+//            wheel's rim and inside the other holes, darker the deeper
+export const LOOK = { MATTE: 0, PLASTIC: 1, ICE: 2, METAL: 3, HAZARD: 4, GLOW: 5, PAINT: 6, CHECKER: 7, WOOD: 8, RUBBER: 9, CHEESE: 10 };
 // decal kinds: 0 a ring (its outer edge at radius, width inward), 1 a disc, 2 a zone (a faint disc, a bright rim, ripples going in), 3 a target (a ring, a dot, four ticks)
 export const DECAL = { RING: 0, DISC: 1, ZONE: 2, TARGET: 3 };
 
@@ -207,7 +212,7 @@ struct U {
   map2: vec4f,   // y span, my slot, a dot's least radius (m), my heading (rad)
 };
 @group(0) @binding(0) var<uniform> u: U;
-@group(0) @binding(1) var<storage, read> solids: array<vec4f>;  // four a solid (Scene)
+@group(0) @binding(1) var<storage, read> solids: array<vec4f>;  // four a solid (Scene), in its order (a CHEESE wheel finds its holes after it)
 @group(0) @binding(2) var<storage, read> order: array<u32>;     // solids by draw
 @group(0) @binding(3) var<storage, read> casters: array<vec4f>; // x, y (the bottom), z, radius (negative: a round thing centred at y, no rider)
 @group(0) @binding(4) var<storage, read> sprites: array<vec4f>; // four a sprite: pos, size | colour | kind, aspect, min px, seed | velocity, roll
@@ -486,6 +491,7 @@ struct MOut {
   @location(5) @interpolate(flat) ext: vec4f,    // half extents, yaw
   @location(6) @interpolate(flat) shape: u32,
   @location(7) @interpolate(flat) roll: f32,
+  @location(8) @interpolate(flat) idx: u32,      // its place in the Scene
 };
 fn solidAt(ii: u32, p: vec3f, n: vec3f) -> MOut {
   var o: MOut;
@@ -501,7 +507,33 @@ fn solidAt(ii: u32, p: vec3f, n: vec3f) -> MOut {
   o.prm = solids[4u * i + 3u];
   o.ext = b;
   o.shape = u32(a.w) & 3u;
+  o.idx = i;
   return o;
+}
+
+// A CHEESE solid's pixel that isn't there: the wheel's inside one of its
+// holes; a shaft's on its ends, outside the wheel's rim, or inside another hole.
+fn cheeseCut(m: MOut) -> bool {
+  if (u32(m.col.w + 0.5) != 10u) { return false; }
+  var w = m.idx;
+  var own = 0xffffffffu;
+  if (m.prm.x < 0.0) {
+    if (abs(m.ln.y) > 0.7) { return true; }
+    own = m.idx;
+    w = u32(i32(m.idx) + i32(m.prm.x));
+    let d = m.wp.xz - solids[4u * w].xz;
+    let wr = solids[4u * w + 1u].x;
+    if (dot(d, d) > wr * wr) { return true; }
+  }
+  let nh = u32(max(solids[4u * w + 3u].x, 0.0) + 0.5);
+  for (var k = 1u; k <= nh; k++) {
+    let j = w + k;
+    if (j == own) { continue; }
+    let d = m.wp.xz - solids[4u * j].xz;
+    let hr = abs(solids[4u * j + 1u].x);
+    if (dot(d, d) < hr * hr) { return true; }
+  }
+  return false;
 }
 @vertex fn vs_solid(@location(0) p: vec3f, @location(1) n: vec3f, @builtin(instance_index) ii: u32) -> MOut {
   var o = solidAt(ii, p, n);
@@ -588,12 +620,13 @@ fn litSolid(m: MOut, fragPos: vec2f) -> vec4f {
   let pb = m.prm.y;
   let seed = m.prm.w;
   let yaw = m.ext.w;
-  let h = m.ext.xyz;
+  let h = abs(m.ext.xyz);                                // (a CHEESE shaft's x is negative: mirrored)
   let toEye = u.cam.xyz - m.wp;
   let dist = length(toEye);
   let v = toEye / dist;
   let vl = toSolid(v, yaw, m.roll);                      // the view, in the solid's frame
   var nl = normalize(select(m.ln, m.lp / (h * h), shape == 3u));   // a sphere's normal is exact from where we are on it (an ellipsoid's too)
+  if (look == 10u && pa < 0.0) { nl = normalize(vec3f(-m.lp.x, 0.0, -m.lp.z) + vec3f(1e-6, 0.0, 0.0)); } // a shaft's wall faces in
   // everything that takes a derivative, while every pixel still runs the same code
   let px = max(length(fwidth(m.wp)) * 0.7071, 1e-5);   // metres a pixel, here
   let ndv0 = dot(nl, vl);
@@ -608,7 +641,16 @@ fn litSolid(m: MOut, fragPos: vec2f) -> vec4f {
   let fwC = fwidth(cq);
 
   // the edge: a rounded bevel that catches the light, and a soft ink line right on it
-  let eg = edgeOf(shape, m.lp, nl, h);
+  var eg = edgeOf(shape, m.lp, nl, h);
+  // a CHEESE wheel's top rounds down into each of its holes
+  if (look == 10u && pa > 0.0 && top && nl.y > 0.0) {
+    for (var k = 1u; k <= u32(pa + 0.5); k++) {
+      let j = m.idx + k;
+      let d = m.wp.xz - solids[4u * j].xz;
+      let e = length(d) - abs(solids[4u * j + 1u].x);
+      if (e < eg.e) { eg.e = e; eg.tilt = vec3f(-d.x, 0.0, -d.y) / max(length(d), 1e-4); }
+    }
+  }
   let bw = max(min(0.07, eg.size * 0.25), px * 1.5);
   let bk = 1.0 - clamp(eg.e / bw, 0.0, 1.0);
   nl = normalize(nl + eg.tilt * bk * bk * 1.3);
@@ -736,6 +778,11 @@ fn litSolid(m: MOut, fragPos: vec2f) -> vec4f {
       let nb = normalize(n + vec3f(gx, 0.0, gz) * 1.6 * (1.0 - smoothstep(0.005, 0.02, px)));
       c = shade(base * 0.88, nb, sh, ao) + sunSpec(nb, v, 10.0, 0.1) * sh;
     }
+    case 10u: { // CHEESE: waxy, a little mottled; a shaft's wall darker the deeper it goes
+      var alb = base * (0.9 + 0.16 * grain) * (0.94 + 0.1 * fbm(m.wp.xz * 0.35 + m.wp.y * 0.5));
+      if (pa < 0.0) { alb *= 0.3 + 0.62 * smoothstep(-h.y, h.y, m.lp.y); }
+      c = shade(alb, n, sh, ao) + sunSpec(n, v, 24.0, 0.1) * sh;
+    }
     default: { // MATTE
       c = shade(base * (0.9 + 0.16 * grain), n, sh, ao);
     }
@@ -743,8 +790,16 @@ fn litSolid(m: MOut, fragPos: vec2f) -> vec4f {
   c *= ink;
   return vec4f(finish(haze(c, -v, dist), fragPos), alpha);
 }
-@fragment fn fs_solid(m: MOut) -> @location(0) vec4f { return vec4f(litSolid(m, m.pos.xy).rgb, 1.0); }
-@fragment fn fs_solid_t(m: MOut) -> @location(0) vec4f { return litSolid(m, m.pos.xy); }
+@fragment fn fs_solid(m: MOut) -> @location(0) vec4f {
+  let c = litSolid(m, m.pos.xy);
+  if (cheeseCut(m)) { discard; }
+  return vec4f(c.rgb, 1.0);
+}
+@fragment fn fs_solid_t(m: MOut) -> @location(0) vec4f {
+  let c = litSolid(m, m.pos.xy);
+  if (cheeseCut(m)) { discard; }
+  return c;
+}
 
 // the minimap's picture: each solid's colour from above, its look in a word, an outline, higher brighter
 @fragment fn fs_map(m: MOut) -> @location(0) vec4f {
@@ -758,10 +813,11 @@ fn litSolid(m: MOut, fragPos: vec2f) -> vec4f {
   if (look == 6u) { let p = paintAt(m.wp.xz, 2.0 * u.map.z / ${MAP_N}.0); c = mix(c, p.rgb, min(p.a, 1.0)); }
   if (look == 9u) { c *= 0.8; }
   let px = 2.0 * u.map.z / ${MAP_N}.0;
-  let eg = edgeOf(m.shape, m.lp, nl, m.ext.xyz);
+  let eg = edgeOf(m.shape, m.lp, nl, abs(m.ext.xyz));
   if (eg.e < px * 1.1 && eg.size > px * 2.5) { c *= 0.5; }
   let hk = clamp((m.wp.y - (u.map.w - u.map2.x)) / u.map2.x, 0.0, 1.0);
   c *= 0.55 + 0.55 * hk;
+  if (cheeseCut(m)) { discard; }
   return vec4f(c, 0.94 * max(m.prm.z, 0.3));
 }
 
@@ -874,7 +930,7 @@ struct FOutS { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(
   return vec4f(vec3f(0.95, 0.97, 1.0) * a, a);
 }
 
-// ---- sprites (bumper's)
+// ---- sprites
 struct SOut {
   @builtin(position) pos: vec4f,
   @location(0) uv: vec2f,
@@ -1370,7 +1426,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
   const g0Layout = device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: VERT | FRAG, buffer: { type: 'uniform' } },
-      ...[[1, VERT], [2, VERT], [3, VERT], [4, VERT], [5, VERT], [6, FRAG], [7, FRAG], [8, FRAG], [9, FRAG], [10, VERT], [11, FRAG]]
+      ...[[1, VERT | FRAG], [2, VERT], [3, VERT], [4, VERT], [5, VERT], [6, FRAG], [7, FRAG], [8, FRAG], [9, FRAG], [10, VERT], [11, FRAG]]
         .map(([binding, visibility]) => ({ binding, visibility, buffer: { type: 'read-only-storage' } })),
     ],
   });

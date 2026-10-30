@@ -9,8 +9,11 @@
 // The list is append-only and an id never changes: a browser keeps ids.
 import * as L from '../src/layout.mjs';
 
-const ALL4 = (1 << L.G_GOLF) | (1 << L.G_ARENA) | (1 << L.G_BUMPER) | (1 << L.G_PARTY);
-const ALL5 = ALL4 | (1 << L.G_FLIGHT);
+// The playlist's games (bumper balls left it for Party's SWISS ROLL: a tally
+// with it still counts, it just isn't needed): golf, the arena and party, and
+// with Dogfight all four on the TV.
+const ALL3 = (1 << L.G_GOLF) | (1 << L.G_ARENA) | (1 << L.G_PARTY);
+const ALL4 = ALL3 | (1 << L.G_FLIGHT);
 const bits = (m) => { let n = 0; for (; m; m &= m - 1) n++; return n; };
 const won = (g) => (t) => ((t.won >> g) & 1) === 1;
 
@@ -27,15 +30,15 @@ export const ACHIEVEMENTS = [
   { id: 'bag', name: 'A BAG OF THEM', about: '25 MARSHMALLOWS IN ALL', test: (t) => t.mallows >= 25, have: (t) => [t.mallows, 25], icon: 'bag' },
   { id: 'campfire', name: 'CAMPFIRE', about: '100 MARSHMALLOWS IN ALL', test: (t) => t.mallows >= 100, have: (t) => [t.mallows, 100], icon: 'campfire' },
   { id: 'regular', name: 'A REGULAR', about: 'PLAY 25 GAMES', test: (t) => t.games >= 25, have: (t) => [t.games, 25], icon: 'sofa' },
-  { id: 'playlist', name: 'THE WHOLE PLAYLIST', about: 'PLAY GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.played & ALL4) === ALL4, have: (t) => [bits(t.played & ALL4), 4], icon: 'tv' },
-  { id: 'allround', name: 'ALL-ROUNDER', about: 'WIN GOLF, THE ARENA, BUMPER BALLS AND PARTY', test: (t) => (t.won & ALL4) === ALL4, have: (t) => [bits(t.won & ALL4), 4], icon: 'medal' },
+  { id: 'playlist', name: 'THE WHOLE PLAYLIST', about: 'PLAY GOLF, THE ARENA AND PARTY', test: (t) => (t.played & ALL3) === ALL3, have: (t) => [bits(t.played & ALL3), 3], icon: 'tv' },
+  { id: 'allround', name: 'ALL-ROUNDER', about: 'WIN GOLF, THE ARENA AND PARTY', test: (t) => (t.won & ALL3) === ALL3, have: (t) => [bits(t.won & ALL3), 3], icon: 'medal' },
   { id: 'crowd', name: 'A FULL HOUSE', about: 'PLAY A GAME WITH 32 OR MORE IN IT', test: (t) => t.crowd >= 32, icon: 'crowd' },
   { id: 'ace', name: 'ACE', about: 'WIN A DOGFIGHT', test: won(L.G_FLIGHT), icon: 'jet' },
-  { id: 'surfer', name: 'CHANNEL SURFER', about: 'PLAY ALL FIVE GAMES ON THE TV', test: (t) => (t.played & ALL5) === ALL5, have: (t) => [bits(t.played & ALL5), 5], icon: 'gamepad' },
-  { id: 'house', name: 'HOUSE CHAMPION', about: 'WIN ALL FIVE GAMES ON THE TV', test: (t) => (t.won & ALL5) === ALL5, have: (t) => [bits(t.won & ALL5), 5], icon: 'fireplace' },
+  { id: 'surfer', name: 'CHANNEL SURFER', about: 'PLAY ALL FOUR GAMES ON THE TV', test: (t) => (t.played & ALL4) === ALL4, have: (t) => [bits(t.played & ALL4), 4], icon: 'gamepad' },
+  { id: 'house', name: 'HOUSE CHAMPION', about: 'WIN ALL FOUR GAMES ON THE TV', test: (t) => (t.won & ALL4) === ALL4, have: (t) => [bits(t.won & ALL4), 4], icon: 'fireplace' },
   { id: 'fore', name: 'FORE!', about: 'WIN A HOLE OF GOLF', test: won(L.G_GOLF), icon: 'golf' },
   { id: 'sharp', name: 'SHARPSHOOTER', about: 'WIN AN ARENA MATCH', test: won(L.G_ARENA), icon: 'target' },
-  { id: 'cheese', name: 'BIG CHEESE', about: 'WIN BUMPER BALLS', test: won(L.G_BUMPER), icon: 'cheese' },
+  { id: 'cheese', name: 'BIG CHEESE', about: 'WIN 3 GAMES', test: (t) => t.wins >= 3, have: (t) => [t.wins, 3], icon: 'cheese' },
   { id: 'life', name: 'LIFE OF THE PARTY', about: 'WIN A GAME OF PARTY', test: won(L.G_PARTY), icon: 'popper' },
   { id: 'onfire', name: 'ON FIRE', about: 'WIN FIVE GAMES IN A ROW', test: (t) => t.best >= 5, have: (t) => [t.best, 5], icon: 'meteor' },
   { id: 'champ', name: 'CHAMPION', about: 'WIN 10 GAMES', test: (t) => t.wins >= 10, have: (t) => [t.wins, 10], icon: 'cup' },
@@ -84,9 +87,9 @@ export const gotSet = (t) => new Set(Object.keys(t.got));
 // per game, the extremes kept), so the tally comes back from them whole.
 // Every test above only ever turns true as a tally grows, so a tally that
 // came back short (Elo Pros not reached) opens fewer, never a wrong one.
-export const GAME_KEYS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // by G_*; net/elo.mjs LADDERS
+export const GAME_KEYS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // by G_*; net/elo.mjs LADDERS (bumper balls' retired, its stats kept)
 export const STORE_ID = (id) => id.toUpperCase();
-const PROGRESS = { bag: ['mallows', 25], campfire: ['mallows', 100], regular: ['games', 25], champ: ['wins', 10], bonfire: ['mallows', 250], fixture: ['games', 100] };
+const PROGRESS = { cheese: ['wins', 3], bag: ['mallows', 25], campfire: ['mallows', 100], regular: ['games', 25], champ: ['wins', 10], bonfire: ['mallows', 250], fixture: ['games', 100] };
 const sentence = (s) => (s[0] + s.slice(1).toLowerCase()).replace(/\bdogfight\b/g, 'Dogfight');
 
 // elo.json's stats block (tools/elo.mjs writes it from this list).

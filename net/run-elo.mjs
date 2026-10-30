@@ -14,7 +14,7 @@
 // was sent the names the stand-in's faces give the signed-in wallets
 // (/api/face), cleaned to what the font draws, and none for a wallet with none,
 // and heard the avatar each face gives (client/avatar.mjs), on its slot.
-//   node net/run-elo.mjs [--bots 6] [--seconds 240] [--port 4441: the relay's, its native door the next, the stand-in the one after]
+//   node net/run-elo.mjs [--bots 6] [--seconds 360] [--port 4441: the relay's, its native door the next, the stand-in the one after]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -26,8 +26,8 @@ import { serverText } from './elo.mjs';
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
 const nbots = Number(opt('bots', 6));
-// the first game (bumper balls) ended 97 and 106 s in, and not in 170 s twice, on a 4-core box
-const seconds = Number(opt('seconds', 240));
+// the first game (party's three minigames) ended 215 s in on a 4-core box; 360 s leaves room
+const seconds = Number(opt('seconds', 360));
 const port = Number(opt('port', 4441));
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 const DOMAIN = 'fireplace.test';

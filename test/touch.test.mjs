@@ -11,8 +11,8 @@ test('?touch=1 turns them on, ?touch=0 off, and with neither a page with no coar
   assert.equal(touchWanted(new URLSearchParams('')), false);
 });
 
-test('golf, the arena, Dogfight, bumper balls and party each put them up for a player, and take them down', () => {
-  for (const g of ['golf', 'arena', 'flight', 'bumper', 'party']) {
+test('golf, the arena, Dogfight and party each put them up for a player, and take them down', () => {
+  for (const g of ['golf', 'arena', 'flight', 'party']) {
     const src = readFileSync(`client/${g}-game.mjs`, 'utf8');
     assert.match(src, /touch = touchControls\(\{ held, writeKeys/, g);
     assert.match(src, /if \(TOUCH\) locked = true;/, g);

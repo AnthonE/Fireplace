@@ -15,7 +15,7 @@
 // HTTP, under public_base's path (/kit/), CORS for allow_origins:
 //   POST rooms {site, game?, sha256?, map?, map_sha256?, room?}  (or GET rooms?site=...)
 //     site: the copy's page, https://owner.github.io/repo/; game: fireplace
-//     (default), party, arena, flight, bumper or golf; sha256: the page's own wasm's,
+//     (default), party, arena, flight or golf; sha256: the page's own wasm's,
 //     so a page with a stale or newer build is told rather than refused by the
 //     relay; map: for the arena or flight, a map's name as the site publishes
 //     it, map_sha256 the page's copy of it, as sha256; room: an invite's room,
@@ -49,7 +49,7 @@ import { MAP_STAGE_MAX } from '../src/layout.mjs';
 // where each game's wasm is on a site (tools/site.mjs copies build/ as it is)
 export const GAMES = {
   fireplace: 'build/fireplace/game.wasm', party: 'build/party/game.wasm', arena: 'build/arena/game.wasm',
-  flight: 'build/flight/game.wasm', bumper: 'build/bumper/game.wasm', golf: 'build/game.wasm',
+  flight: 'build/flight/game.wasm', golf: 'build/game.wasm',
 };
 // the games that take a map from outside the build, and where a site's map is (tools/site.mjs packs maps/)
 export const MAP_GAMES = ['arena', 'flight'];
