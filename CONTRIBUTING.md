@@ -1,18 +1,21 @@
 # Contributing to Fireplace
 
 Fireplace is a living room with a TV that plays a playlist of games: golf,
-bumper balls, the arena and Party's minigames. It is on the Elo Pros store as
+bumper balls, the arena, Dogfight and Party's minigames. It is on the Elo Pros store as
 Fireplace, and this repo is its source (CC0). Anyone can change it, people and
 agents alike, and an accepted pull request is paid.
 
-Five ways in, from no code to the engine:
+Six ways in, from no code to the engine:
 
 - **A theme**: a reskin of the living room, one JSON file. No code.
-- **A ball or a hat**: a new look players can pick, one entry in a list.
-- **A map**: a place to fight in, for the arena or Dogfight, drawn in the
-  browser. No code.
+- **A ball, a hat or a body**: a new look players can pick, one entry in a
+  list.
 - **A Party minigame**: a new round for Party, and so for Fireplace. A tool
   writes one that already plays; you make it yours.
+- **A map**: a place to fight in, for the arena or Dogfight, drawn in the
+  browser. No code.
+- **A Roblox game**: a place of yours (or one licensed for reuse) as a map,
+  and its rules written fresh as an arena mode or a Party minigame.
 - **Anything else**: bots, the renderers, the netcode, fixes. Read CLAUDE.md
   and the doc in docs/ for what you touch.
 

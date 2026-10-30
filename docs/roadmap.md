@@ -18,13 +18,14 @@ What a page downloads, gzipped, everything it imports included:
 
 | Page | Files | Gzipped |
 | --- | --- | --- |
-| `client/party.html` | 54 | 275 KB (wasm 29 KB) |
-| `client/fireplace.html` | 72 | 436 KB (wasm 85 KB, 68 KB of it Box Canyon's height map) |
-| `client/bumper.html` | 38 | 114 KB |
-| `client/arena.html` | 44 | 190 KB (the team modes: 6 files and 31 KB of it) |
+| `client/party.html` | 132 | 741 KB (wasm 80 KB) |
+| `client/fireplace.html` | 167 | 1,132 KB (wasm 251 KB, 35 KB of it Box Canyon's height map and 80 KB Skyways') |
+| `client/bumper.html` | 89 | 256 KB (wasm 10 KB) |
+| `client/arena.html` | 105 | 389 KB (wasm 59 KB; the kit modes: 25 files and 70 KB) |
 
-No textures, models, sound files or fonts: sounds are synthesized, the font is
-3x5 bitmaps, every shape is drawn on the GPU. A Party minigame adds about
+No textures, models, sound files or fonts: sounds are synthesized, the HUD's
+text is the system's sans drawn into an atlas at startup, every shape is
+drawn on the GPU. A Party minigame adds about
 10 KB of client code and 2 to 3 KB of wasm.
 
 Cost a tick at 256 players: 0.2 to 0.4 ms of the sim's 8 ms. Cost a frame on

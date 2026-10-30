@@ -143,7 +143,7 @@ certificate is stopped. The relays listen on `ports` (61300-61315 in the
 example, UDP, open in the firewall); the API listens on `listen`, behind nginx.
 
 The wasm is someone else's. It is fetched with no redirects, at most
-`max_wasm_bytes` (2 MiB; Fireplace's is 291 KiB), a map at most
+`max_wasm_bytes` (2 MiB; Fireplace's is 770 KiB), a map at most
 `max_map_bytes` (1 MiB, what `map_load` takes), within `fetch_timeout_s`,
 only from `fetch_from` (`https://*.github.io`), and written only to
 `wasm_dir/<sha256>.wasm` (a map `<sha256>.qgmap`) for the relay to read; it runs only in the referee,
