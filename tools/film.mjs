@@ -38,7 +38,9 @@
 //   "room": true; "pre" is its unseen run-in, 1 s by default. "score": a tune
 //   key (client/sound.mjs) laid under the whole cut, the rooms' own music off:
 //   a cut faster than a round. "guests": true dresses every seat as a local
-//   room's AI players are (a replay keeps no looks). Its beat is 1.024 s (117 bpm), and every shot
+//   room's AI players are (a replay keeps no looks). "gres": "WxH" draws golf,
+//   the arena and Dogfight at that size (a box with no GPU ray-traces them
+//   slowly at the film's), scaled up smoothly. Its beat is 1.024 s (117 bpm), and every shot
 //   ends on its frame, so shots in whole beats stay on it.
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, renameSync } from 'node:fs';
@@ -91,7 +93,7 @@ async function record() {
   console.error(`\n${made.length ? made.map((f) => `replays/${f}`).join('\n') : 'no replay was written'}`);
 }
 
-async function open({ replay, res = '960x540', film = 1, theme = '', music = true, guests = false }) {
+async function open({ replay, res = '960x540', gres = '', film = 1, theme = '', music = true, guests = false }) {
   if (!existsSync('build/fireplace/game.wasm')) execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
   const require = createRequire(import.meta.url);
   const { chromium } = require('playwright');
@@ -103,7 +105,7 @@ async function open({ replay, res = '960x540', film = 1, theme = '', music = tru
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   page.on('pageerror', (e) => console.error('page error:', e.message));
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.error('page:', m.text()); });
-  const q = new URLSearchParams({ replay: `/${relative(ROOT, resolve(replay))}`, film: String(film), present: '0', res, ...(theme ? { theme } : {}), ...(music ? {} : { music: '0' }), ...(guests ? { guests: '1' } : {}) });
+  const q = new URLSearchParams({ replay: `/${relative(ROOT, resolve(replay))}`, film: String(film), present: '0', res, ...(theme ? { theme } : {}), ...(music ? {} : { music: '0' }), ...(guests ? { guests: '1' } : {}), ...(gres ? { gres } : {}) });
   await page.goto(`http://127.0.0.1:${port}/client/fireplace.html?${q}`);
   await page.waitForFunction(() => window.__film || window.__qa?.error, null, { timeout: 120000 });
   const err = await page.evaluate(() => window.__qa?.error);
@@ -144,7 +146,7 @@ async function shoot(cut) {
   const rooms = new Map();
   const roomOf = async (replay) => {
     if (!rooms.has(replay)) {
-      const r = await open({ replay, res: cut.res || `${W}x${H}`, film: Math.ceil(total + 2), theme: cut.theme, music: cut.score === undefined, guests: !!cut.guests });
+      const r = await open({ replay, res: cut.res || `${W}x${H}`, film: Math.ceil(total + 2), theme: cut.theme, music: cut.score === undefined, guests: !!cut.guests, gres: cut.gres });
       rooms.set(replay, { ...r, tick: 0, span: null });
     }
     return rooms.get(replay);

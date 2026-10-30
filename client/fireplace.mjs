@@ -71,7 +71,10 @@ async function main() {
   const [W, H] = fitSize(q, [1600, 1000]);
   roomCanvas.width = W;
   roomCanvas.height = H;
-  canvases.forEach((c) => { [c.width, c.height] = [W, H]; });
+  // ?gres=WxH: golf, the arena and Dogfight (the games that ray-trace a world per pixel) at their own
+  // size, the room and the rest at W x H: tools/film.mjs on a box with no GPU films them in hours, not days
+  const GRES = q.has('gres') ? q.get('gres').split('x').map(Number) : null;
+  canvases.forEach((c, k) => { [c.width, c.height] = GRES && [L.G_GOLF, L.G_ARENA, L.G_FLIGHT].includes(k) ? GRES : [W, H]; });
   const clock = FILM ? filmClock() : null;
   const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;
