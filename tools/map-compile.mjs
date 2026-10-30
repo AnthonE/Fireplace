@@ -189,6 +189,15 @@ export function compileSpec(spec, images, name = 'map.json') {
     return g;
   });
   if (race.length === 1 || race.length > L.FLIGHT_CONSTS.NGATE) fail(`${race.length} race gates: none, or 2 to ${L.FLIGHT_CONSTS.NGATE}`);
+  // how a fighter walks, jumps and falls here (map.json "movement", metres
+  // and seconds: a Roblox place's Humanoid, as tools/rbx-map.mjs writes it),
+  // and a mode every match on it plays ("mode", a MAP_MODES key)
+  const gait = spec.movement ? movement(spec.movement, fail) : null;
+  let mode = 0;
+  if (spec.mode !== undefined) {
+    if (!(spec.mode in MAP_MODES)) fail(`mode "${spec.mode}": one of ${Object.keys(MAP_MODES).join(', ')}`);
+    mode = MAP_MODES[spec.mode] + 1;
+  }
   const sides = [0, 0];
   for (const s of spawns) { const k = half(s.x, s.z, flags); if (k < 2) sides[k]++; }
   ['red', 'blue'].forEach((team, k) => { if (!sides[k]) fail(`no spawn on ${team}'s half (the spawns nearer its flag at ${flags[k][0]}, ${flags[k][1]} than the other)`); });
@@ -248,6 +257,14 @@ export function compileSpec(spec, images, name = 'map.json') {
     [m.travel, m.wait, m.phase, L.MV_ON | (m.ease ? L.MV_EASE : 0)].forEach((v, i) => mb.setUint32(a + 12 + 4 * i, v, true));
   });
   if (nmove) parts.push(new Uint8Array(mb.buffer));
+  // the rules as MAP_RULES lays them out, only for a map that has them (the same)
+  const rb = new DataView(new ArrayBuffer(gait || mode ? L.MAP_RULES_SIZE : 0));
+  if (rb.byteLength) {
+    rb.setUint32(L.RU_FLAGS, gait ? L.RU_GAIT : 0, true);
+    rb.setUint32(L.RU_MODE, mode, true);
+    if (gait) for (const k of ['WALK', 'ZWALK', 'ACCEL', 'JUMP', 'ZJUMP', 'GRAV']) rb.setFloat32(L[`RU_${k}`], gait[k], true);
+    parts.push(new Uint8Array(rb.buffer));
+  }
   const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   const offs = [];
   parts.reduce((at, p) => { offs.push(at); bytes.set(p, at); return at + p.length; }, 0);
@@ -259,9 +276,10 @@ export function compileSpec(spec, images, name = 'map.json') {
       MAPSEG_GROUPS: offs[1], MAPSEG_NGROUPB: gbytes.byteLength, MAPSEG_BOXES: offs[2], MAPSEG_NBOXB: bbytes.byteLength,
       MAPSEG_H: offs[3], MAPSEG_S: offs[4], MAPSEG_OBJ: offs[5], MAPIMG_X0: gx, MAPIMG_Z0: gz, MAPIMG_W: W, MAPIMG_H: H, MAP_CEIL: ceiling,
       MAPSEG_RACE: race.length ? offs[6] : bytes.length, MAPSEG_NRACEB: race.length ? 16 + 16 * race.length : 0,
-      MAPSEG_MOVE: nmove ? offs[parts.length - 1] : bytes.length, MAPSEG_NMOVEB: mb.byteLength,
+      MAPSEG_MOVE: nmove ? offs[parts.length - (rb.byteLength ? 2 : 1)] : bytes.length, MAPSEG_NMOVEB: mb.byteLength,
+      MAPSEG_RULES: rb.byteLength ? offs[parts.length - 1] : bytes.length, MAPSEG_NRULESB: rb.byteLength,
     },
-    ceiling, void: voidY,
+    ceiling, void: voidY, movement: gait, mode,
     bounds, groups, boxes, teleporters, spawns, pads, flags, ball, hills, race, sides, heights, surf, origin: [ox, oz], size: [W, H],
   };
 }
@@ -313,7 +331,8 @@ export function packMap(m) {
   const c = m.consts, out = new Uint8Array(L.MAPPACK_HEAD + m.bytes.length), dv = new DataView(out.buffer);
   const u32 = { MP_MAGIC: L.MAPPACK_MAGIC, MP_BYTES: m.bytes.length, MP_GROUPS: c.MAPSEG_GROUPS, MP_NGROUPB: c.MAPSEG_NGROUPB, MP_BOXES: c.MAPSEG_BOXES,
     MP_NBOXB: c.MAPSEG_NBOXB, MP_H: c.MAPSEG_H, MP_S: c.MAPSEG_S, MP_OBJ: c.MAPSEG_OBJ, MP_RACE: c.MAPSEG_RACE, MP_NRACEB: c.MAPSEG_NRACEB,
-    MP_X0: c.MAPIMG_X0, MP_Z0: c.MAPIMG_Z0, MP_W: c.MAPIMG_W, MP_HT: c.MAPIMG_H, MP_MOVE: c.MAPSEG_MOVE, MP_NMOVEB: c.MAPSEG_NMOVEB };
+    MP_X0: c.MAPIMG_X0, MP_Z0: c.MAPIMG_Z0, MP_W: c.MAPIMG_W, MP_HT: c.MAPIMG_H, MP_MOVE: c.MAPSEG_MOVE, MP_NMOVEB: c.MAPSEG_NMOVEB,
+    MP_RULES: c.MAPSEG_RULES, MP_NRULESB: c.MAPSEG_NRULESB };
   for (const [k, v] of Object.entries(u32)) dv.setUint32(L[k], v, true);
   dv.setFloat32(L.MP_CEIL, m.ceiling, true);
   out.set(m.bytes, L.MAPPACK_HEAD);
@@ -322,4 +341,26 @@ export function packMap(m) {
 // What map_load's codes mean
 export const MAP_LOAD_ERRORS = ['', 'not a packed map (its head)', 'a count past the build\'s limits', 'a part outside its bytes',
   'its images outside the world', 'a group or a box (out of range, inside out, or not a number)', 'its ceiling or void', 'a place that is not a number in reach',
-  'a mover (past its groups, its ticks out of range, or its flags)'];
+  'a mover (past its groups, its ticks out of range, or its flags)', 'its rules (a mode it hasn\'t, its flags, or a speed out of range)'];
+
+// The modes a map may name ("mode"), by M_*: the arena's own and the kit's keys.
+export const MAP_MODES = { fiesta: L.M_FIESTA, infection: L.M_INFECTION, gungame: L.M_GUNGAME, juggernaut: L.M_JUGGERNAUT,
+  ...Object.fromEntries(L.AM.map((m) => [m.key, m.mode])) };
+
+// map.json's "movement" as MAP_RULES holds it: { walk (m/s), jump (m: how
+// high a standing jump goes), gravity (m/s^2), accel (m/s^2: how fast the
+// speed across turns toward where the keys point; 10 times walk, so walk is
+// reached in a tenth of a second: a Humanoid has next to no momentum) }, each f32 as the sim
+// reads it. The fast legs walk a quarter faster and jump half as high again,
+// as ZRUN and ZJUMP are to RUN and JUMP.
+export function movement(m, fail = (s) => { throw new Error(s); }) {
+  const f = Math.fround, num = (v, what, max) => {
+    if (typeof v !== 'number' || !(v > 0 && v <= max)) fail(`movement.${what} ${v}: over 0, at most ${max}`);
+    return v;
+  };
+  const walk = num(m.walk, 'walk', 60), jump = num(m.jump, 'jump', 50), gravity = num(m.gravity, 'gravity', L.RU_MAX);
+  const accel = num(m.accel ?? walk * 10, 'accel', 1000);
+  const v = Math.sqrt(2 * gravity * jump);
+  if (v * Math.sqrt(1.5) > L.RU_MAX) fail(`movement: a jump of ${jump} m under ${gravity} m/s^2 leaves the ground at ${v.toFixed(1)} m/s, over ${L.RU_MAX / Math.sqrt(1.5)}`);
+  return { WALK: f(walk), ZWALK: f(walk * 1.25), ACCEL: f(accel / L.TICK_HZ), JUMP: f(v), ZJUMP: f(v * Math.sqrt(1.5)), GRAV: f(gravity / L.TICK_HZ) };
+}

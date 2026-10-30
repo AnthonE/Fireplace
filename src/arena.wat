@@ -41,6 +41,9 @@
       ;; the movers' rows, up to the last group that moves (none: all stand still)
       (memory.fill (i32.const @MAP_MOVE) (i32.const 0) (i32.const @(MAP_MOVE_END - MAP_MOVE)))
       (memory.init $map (i32.const @MAP_MOVE) (i32.const @MAPSEG_MOVE) (i32.const @MAPSEG_NMOVEB))
+      ;; the map's rules (none: the arena's own movement and rotation)
+      (memory.fill (i32.const @MAP_RULES) (i32.const 0) (i32.const @MAP_RULES_SIZE))
+      (memory.init $map (i32.const @MAP_RULES) (i32.const @MAPSEG_RULES) (i32.const @MAPSEG_NRULESB))
       (!for $z (i32.const 0) (i32.const @MAPIMG_H)
         (local.set $k (i32.add (i32.mul (i32.add (local.get $z) (i32.const @MAPIMG_Z0)) (i32.const @GRID)) (i32.const @MAPIMG_X0)))
         (memory.init $map (i32.add (i32.const @TERRAIN_H) (i32.shl (local.get $k) (i32.const 1)))
@@ -105,7 +108,8 @@
 ;; number the sim reads as a place is finite and in reach, before anything is
 ;; written: 0 when it is in place, else what was wrong (1 its head, 2 a count,
 ;; 3 a part outside the bytes, 4 the images outside the world, 5 a group or a
-;; box, 6 the ceiling or the void, 7 a place, 8 a mover), and nothing changed. The
+;; box, 6 the ceiling or the void, 7 a place, 8 a mover, 9 its rules), and
+;; nothing changed. The
 ;; mountains past the images grow from $terrain_gen's seed 0, so the static
 ;; world is the map's alone, whatever seed a room plays.
 (func (export "map_load") (param $src i32) (param $len i32) (result i32)
@@ -181,6 +185,25 @@
                                     (i32.or (i32.gt_u (i32.load offset=20 (local.get $g)) (i32.const @MV_TICKS_MAX))
                                             (i32.eqz (call $a_inreach (local.get $g) (i32.const 3) (i32.const 1)))))))
           (then (return (i32.const 8)))))))
+  ;; the rules: none, or a whole block; its flags RU_GAIT or none, its mode
+  ;; one this build has, and with RU_GAIT every speed over 0 and in reach
+  (local.set $a (i32.load offset=@MP_NRULESB (local.get $src)))
+  (if (i32.or (i32.gt_u (i32.load offset=@MP_RULES (local.get $src)) (local.get $n))
+              (i32.gt_u (i32.add (i32.load offset=@MP_RULES (local.get $src)) (local.get $a)) (local.get $n)))
+    (then (return (i32.const 3))))
+  (if (local.get $a)
+    (then
+      (local.set $g (i32.add (local.get $d) (i32.load offset=@MP_RULES (local.get $src))))
+      (local.set $z (i32.load offset=@RU_FLAGS (local.get $g)))
+      (if (i32.or (i32.or (i32.ne (local.get $a) (i32.const @MAP_RULES_SIZE)) (i32.and (local.get $z) (i32.const @(~RU_GAIT))))
+                  (i32.gt_u (i32.load offset=@RU_MODE (local.get $g)) (i32.const @(MODES.length))))
+        (then (return (i32.const 9))))
+      (if (local.get $z)
+        (then
+          (!for $i (i32.const 0) (i32.const 6)
+            (local.set $c (f32.load offset=@RU_WALK (i32.add (local.get $g) (i32.shl (local.get $i) (i32.const 2)))))
+            (if (i32.eqz (i32.and (f32.gt (local.get $c) (f32.const 0)) (f32.le (local.get $c) (f32.const @RU_MAX))))
+              (then (return (i32.const 9)))))))))
   ;; the race: none, or a count and that many gates
   (local.set $a (i32.load offset=@MP_NRACEB (local.get $src)))
   (if (local.get $a)
@@ -242,6 +265,8 @@
   (memory.copy (i32.const @MAP_OBJ) (i32.add (local.get $d) (i32.load offset=@MP_OBJ (local.get $src))) (i32.const @MAP_OBJ_SIZE))
   (memory.fill (i32.const @MAP_MOVE) (i32.const 0) (i32.const @(MAP_MOVE_END - MAP_MOVE)))
   (memory.copy (i32.const @MAP_MOVE) (i32.add (local.get $d) (i32.load offset=@MP_MOVE (local.get $src))) (i32.load offset=@MP_NMOVEB (local.get $src)))
+  (memory.fill (i32.const @MAP_RULES) (i32.const 0) (i32.const @MAP_RULES_SIZE))
+  (memory.copy (i32.const @MAP_RULES) (i32.add (local.get $d) (i32.load offset=@MP_RULES (local.get $src))) (i32.load offset=@MP_NRULESB (local.get $src)))
 #if FLIGHT
   ;; the race's gates, as flight's own map's are (the arena has no race)
   (memory.fill (i32.const @MAP_RACE) (i32.const 0) (i32.const @(MAP_RACE_END - MAP_RACE)))
@@ -597,6 +622,26 @@
                           (i32.const 1))))))))))
   (local.get $x) (local.get $z) (i32.const 0))
 
+;; A fighter's speed across on a map with its own movement (MAP_RULES,
+;; RU_GAIT: a Roblox place's Humanoid), on the ground and in the air alike:
+;; toward where the keys point (wx, wz, a unit vector or 0) at `wish`, by at
+;; most RU_ACCEL this tick. No friction and no air strafing past `wish`: a
+;; Humanoid stops when the keys are let go and turns in mid-air, and what a
+;; blast gave it it loses at RU_ACCEL a tick.
+(func $a_gait (param $vx f32) (param $vz f32) (param $wx f32) (param $wz f32) (param $wish f32) (result f32 f32)
+  (local $dx f32) (local $dz f32) (local $len f32) (local $acc f32)
+  (local.set $dx (f32.sub (f32.mul (local.get $wx) (local.get $wish)) (local.get $vx)))
+  (local.set $dz (f32.sub (f32.mul (local.get $wz) (local.get $wish)) (local.get $vz)))
+  (local.set $len (f32.sqrt (f32.add (f32.mul (local.get $dx) (local.get $dx)) (f32.mul (local.get $dz) (local.get $dz)))))
+  (local.set $acc (f32.load (i32.const @(MAP_RULES + RU_ACCEL))))
+  (if (f32.gt (local.get $len) (local.get $acc))
+    (then
+      (local.set $acc (f32.div (local.get $acc) (local.get $len)))
+      (local.set $dx (f32.mul (local.get $dx) (local.get $acc)))
+      (local.set $dz (f32.mul (local.get $dz) (local.get $acc)))))
+  (f32.add (local.get $vx) (local.get $dx))
+  (f32.add (local.get $vz) (local.get $dz)))
+
 ;; A fighter of bank d whose feet reach a teleporter's pad comes out at its
 ;; other end, moving as it was: the position, and 1 if it went through.
 (func $a_tele (param $p i32) (param $d i32) (param $x f32) (param $y f32) (param $z f32) (result f32 f32 f32 i32)
@@ -888,7 +933,10 @@
         (then
           (!put u8 @(PLAYERS + A_GRENS) (local.get $pb) (i32.sub (!at u8 @(PLAYERS + A_GRENS) (local.get $pb)) (i32.const 1)))
           (!put u16 @(PLAYERS + P_SHOTS) (local.get $pb) (i32.add (!at u16 @(PLAYERS + P_SHOTS) (local.get $pb)) (i32.const 1)))
-          (call $a_launch (local.get $p) (local.get $d) (i32.const @K_GRENADE) (local.get $s) (local.get $c) (local.get $u) (f32.const @GREN_V) (f32.const @GREN_UP) (i32.const 0))
+          ;; (Crossroads throws its superball: src/am/crossroads.wat)
+          (if (i32.eq (i32.load offset=@AH_MODE (local.get $d)) (i32.const @M_CROSSROADS))
+            (then (call $a_launch (local.get $p) (local.get $d) (i32.const @CX_K_BALL) (local.get $s) (local.get $c) (local.get $u) (f32.const @CX_BALL_V) (f32.const 0) (i32.const 0)))
+            (else (call $a_launch (local.get $p) (local.get $d) (i32.const @K_GRENADE) (local.get $s) (local.get $c) (local.get $u) (f32.const @GREN_V) (f32.const @GREN_UP) (i32.const 0))))
           (local.set $cool (i32.const @COOL_TICKS))))))
   (!put u8 @(PLAYERS + A_ACT) (local.get $pb) (local.get $act))
   (!put u16 @(PLAYERS + A_COOL) (local.get $pb) (local.get $cool))
@@ -1520,7 +1568,9 @@
               (then (!put u16 @(PLAYERS + A_RESPAWN) (local.get $pb) (i32.sub (local.get $n) (i32.const 1))))
               (else (call $a_spawn (local.get $p)))))
           (else
+            ;; shields, then health, back after a quiet spell (not in a mode that keeps its own: Crossroads')
             (local.set $n (!at u16 @(PLAYERS + A_SHT) (local.get $pb)))
+            (if (i32.and (i32.shl (i32.const 1) (i32.load (i32.const @AH_MODE))) (i32.const @OWN_HEALTH)) (then (local.set $n (i32.const 1))))
             (if (local.get $n)
               (then (!put u16 @(PLAYERS + A_SHT) (local.get $pb) (i32.sub (local.get $n) (i32.const 1))))
               (else
@@ -1638,8 +1688,8 @@
 ;; the prediction changes.
 
 ;; The mode of the match about to count down (match HDR_HOLE of the room): the
-;; rotation's, or the seed's if its top byte is FORCE_MODE (one past the
-;; modes is a Fiesta). Every mode's state starts from zero: the header's mode
+;; rotation's, or the map's if it names one (MAP_RULES), or the seed's if its
+;; top byte is FORCE_MODE (one past the modes is a Fiesta). Every mode's state starts from zero: the header's mode
 ;; fields, the records, a team mode's objective; and in Fiesta's build the
 ;; map's pads are laid for a mode that has them, none for one that hasn't
 ;; (so a Fiesta's are all 0, as they always were).
@@ -1650,6 +1700,7 @@
   ;; flight's own rotation; a forced mode it doesn't fly is a free-for-all
   (local.set $k (i32.rem_u (i32.load (i32.const @HDR_HOLE)) (i32.const @(FLIGHT_MODES.length))))
   (local.set $m (!tab FLIGHT_MODES (local.get $k)))
+  (if (i32.load (i32.const @(MAP_RULES + RU_MODE))) (then (local.set $m (i32.sub (i32.load (i32.const @(MAP_RULES + RU_MODE))) (i32.const 1)))))
   (if (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FORCE_MODE))
     (then (local.set $m (i32.and (i32.shr_u (local.get $seed) (i32.const 16)) (i32.const 0xff)))))
   (if (i32.or (i32.ge_u (local.get $m) (i32.const 32)) (i32.eqz (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @FLIGHT_OK))))
@@ -1657,6 +1708,8 @@
 #else
   (local.set $k (i32.rem_u (i32.load (i32.const @HDR_HOLE)) (i32.const @(ARENA_MODES.length))))
   (local.set $m (!tab ARENA_MODES (local.get $k)))
+  ;; a map that names its mode plays it every match (map.json "mode")
+  (if (i32.load (i32.const @(MAP_RULES + RU_MODE))) (then (local.set $m (i32.sub (i32.load (i32.const @(MAP_RULES + RU_MODE))) (i32.const 1)))))
   (if (i32.eq (i32.shr_u (local.get $seed) (i32.const 24)) (i32.const @FORCE_MODE))
     (then (local.set $m (i32.and (i32.shr_u (local.get $seed) (i32.const 16)) (i32.const 0xff)))))
   (if (i32.ge_u (local.get $m) (i32.const @(MODES.length))) (then (local.set $m (i32.const @M_FIESTA))))
@@ -2092,3 +2145,4 @@
 #include "am/lucky.wat"
 #include "am/evade.wat"
 #include "am/escape.wat"
+#include "am/crossroads.wat"

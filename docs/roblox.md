@@ -2,7 +2,8 @@
 
 A place built in Roblox Studio comes into Fireplace as an arena map: its
 parts, their colours, the smooth terrain, the spawn locations and their
-teams, and where there is nothing under you, the fall. One command, or one
+teams, where there is nothing under you, the fall, and how its characters
+walk, jump and fall. One command, or one
 file dropped on the map editor; no prompt, no hand work, and a report of
 everything it left out or changed.
 
@@ -45,6 +46,8 @@ line). `tools/rbx-map.mjs` makes the map:
 | a tool lying in the Workspace (a gear giver) | a weapon pad with the arena's nearest gun, by its name: a sword, a rocket launcher, a sniper rifle |
 | sky under the place | a pit, and `"void"`: a fighter below 3 m under the lowest ground dies by falling |
 | unanchored parts | kept: a classic place's bricks are held by joints, not anchors (`--anchored` leaves them out) |
+| StarterPlayer's CharacterWalkSpeed and jump (its JumpPower when CharacterUseJumpPower says so, else its JumpHeight), the Workspace's Gravity; in a place from before StarterPlayer, the Humanoid's own 16, JumpPower 50 and 196.2 | the map's `movement`: a Humanoid's walk, jump and fall in metres, steering in the air as on the ground ([arena.md](arena.md), "A map's own movement") |
+| Roblox's classic gear in the StarterPack (LinkedSword, LinkedRocketLauncher, LinkedSuperball) | the map's `mode`: every match is the arena's [Crossroads](arena.md#crossroads) |
 | a part a script tweens (the script in it, or in its model), or one a physical mover drives (BodyPosition, AlignPosition, PrismaticConstraint...) | a structure of its own, never fused; a tween that repeats for ever and reverses (a lift's, a moving platform's: its Position plus a Vector3, or its CFrame times a CFrame) is its `move` as in the place ([arena.md](arena.md), "Moving boxes"), no faster than 25 m/s; the rest stand still, listed in the brief |
 
 Left out, and counted: parts no one collides with (CanCollide off), invisible
@@ -53,9 +56,11 @@ Workspace (a game that keeps its maps in storage names them in the report,
 and `--from ServerStorage.Maps.Castle` takes one), and every script: the
 arena's own modes are the game.
 
-A stud is 0.28 m (Roblox's own figure; `--scale`). The arena's fighter
-stands 1.8 m and jumps 1.2 m, where a Roblox character stands about 1.4 m
-and jumps 2 m, so a ledge built for a Roblox jump may need a step.
+A stud is 0.28 m (Roblox's own figure; `--scale`), and the movement is the
+place's at that scale: Roblox's defaults walk 4.48 m/s and jump 2.0 m (a
+JumpHeight of 7.2) under 54.9 m/s^2, so a ledge built for a Roblox jump is
+one here. A place whose numbers a map can't take (no gravity, a walk over 60
+m/s) keeps the arena's movement, and the report says so.
 
 ## Fitting the arena
 
@@ -153,7 +158,13 @@ What porting a game takes beyond the brief:
 
 1. **Its rules, written fresh** on a kit here (the arena's modes, Party's
    minigames), by an agent from the brief. The part that can't be
-   mechanical.
+   mechanical. Crossroads' are the first: the arena's
+   [Crossroads](arena.md#crossroads) mode, the classic sword, rocket
+   launcher and superball and a Humanoid's health and respawn, from the
+   superball's scripts in the place and the sword's script it links to.
+   The trowel, the timebomb and the slingshot are still to come (the trowel
+   needs boxes a fighter adds, and the arena's two hands and a throw hold
+   three of the six tools), and so is its teleporter to other places.
 2. ~~Maps chosen at run time, and a room for one~~: done. A converted map
    plays the minute it is made: the editor's **play it here**, or
    `net/play.mjs --arena --map <it>` online, the map laid in every
@@ -182,10 +193,14 @@ What porting a game takes beyond the brief:
   arch in the terrain is filled; build one as parts.
 - Fireplace's ground has four surfaces (grass, rock, sand, metal), so the
   terrain's colours are those four.
+- The fighter's body is the arena's, 1.8 m tall and 1 m across: 6.4 by 3.6
+  studs, where a classic character is 5 by 2. A gap narrower than 3.6 studs
+  or a ceiling lower than 6.4 that a Roblox character passes, it can't.
+  Steps are the arena's half metre.
 - Unions saved before Roblox kept their parts in the file (no `ChildData`)
   are their bounds.
-- Nothing of the game comes over: its scripts, sounds, guis, tools and
-  data. Of what moves, only a tween that goes back and forth for ever is
+- Nothing of the game comes over but its movement and, for the classic
+  gear, its mode: its scripts, sounds, guis, tools and data stay. Of what moves, only a tween that goes back and forth for ever is
   read, and only when its numbers are written plainly in the script. Bringing a game's rules is a port, written fresh
   ([docs/roadmap.md](roadmap.md), "Bringing maps and games in").
 
@@ -197,14 +212,14 @@ Only bring a place that is yours, or that its owner has licensed for reuse
 | File | |
 | --- | --- |
 | `tools/rbx-file.mjs` | a Roblox file into instances: binary (LZ4, zstd given a decoder) and XML, no Node |
-| `tools/rbx-map.mjs` | instances into solids, the terrain's columns, spawns and pads, no Node |
+| `tools/rbx-map.mjs` | instances into solids, the terrain's columns, spawns and pads, the movement and the mode, no Node |
 | `tools/scene-map.mjs` | the back half, shared with the voxel converter ([docs/vox.md](vox.md)): solids into `map.json` and the two images, the fit, the void, the report, no Node |
-| `tools/rbx-brief.mjs` | the port brief: the scripts as files, port.md, assets.json, no Node |
+| `tools/rbx-brief.mjs` | the port brief: the scripts as files, port.md, assets.json; a place's Humanoid (`humanoidOf`) and its classic gear, no Node |
 | `tools/zip.mjs` | the brief as one stored zip, for the editor, no Node |
 | `tools/roblox.mjs` | the command line: a file in, `maps/<name>/` out, compiled by `tools/map.mjs`; `--brief` writes `port/<name>/` |
 | `client/map-view.mjs` | the editor's 3D view: the arena's renderer on the map being edited |
 | `client/map-editor.mjs` | the editor's **a Roblox place…**, drop, and the brief's download |
-| `test/roblox.test.mjs` | the reader on Studio's own baseplate (binary and XML agree) and unions, LZ4, terrain, each rule above on a place written in the test, the fit, and the void in the sim |
+| `test/roblox.test.mjs` | the reader on Studio's own baseplate (binary and XML agree) and unions, LZ4, terrain, each rule above on a place written in the test, the fit, the void in the sim, and the movement and mode a place gets |
 
 Box colours are drawing only: the low byte of a box's material word is its
 look, bit 7 says the three bytes above are its colour (`materialWord`,

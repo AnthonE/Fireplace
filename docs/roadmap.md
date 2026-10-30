@@ -61,7 +61,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
 | Party (the ball) | 40 | 60 | Mini Golf, Sumo Ring; with teams: Fall Ball, Egg Scramble, Tug o' War |
-| Arena (the fighter) | 15 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Arena (the fighter) | 16 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
@@ -123,8 +123,12 @@ only of your own body), physics sandboxes, open worlds.
 ## Bringing maps and games in
 
 Built: a Roblox place as an arena map, one command or one file dropped on
-the map editor ([docs/roblox.md](roblox.md)). Of Roblox's 31 open-source
-levels, 29 convert, 22 of them with every box kept. And a MagicaVoxel model
+the map editor ([docs/roblox.md](roblox.md)), moving its fighters as the
+place's Humanoid moves (its walk, jump and gravity). Of Roblox's 31
+open-source levels, 29 convert, 22 of them with every box kept. The first
+port of a game's rules is Crossroads' (the arena's Crossroads mode: the
+classic sword, rocket launcher and superball), which any place handing
+everyone the classic gear plays. And a MagicaVoxel model
 the same way ([docs/vox.md](vox.md)): its voxels as boxes in their own
 colours, its floor the ground, objects named for spawns and weapons. Each
 converter is a reader for its format (`tools/rbx-file.mjs`,
