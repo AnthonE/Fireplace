@@ -7,8 +7,8 @@ going, snow at the window, a walnut console TV with rabbit ears. Click and you
 sit down: the camera closes in on the TV until its glass fills the screen, and
 you're in whatever the room is playing. When a game ends it pulls back to the
 room, and the TV shows the marshmallows and what's on next; then it closes in
-again. The room plays the playlist through: bumper balls (two rounds), party
-(three minigames), the arena (one three-minute match of any of its fifteen
+again. The room plays the playlist through: party (three minigames; bumper
+balls' wheel comes round among them as SWISS ROLL), the arena (one three-minute match of any of its fifteen
 modes, drawn for it), party again, a three-minute Dogfight (a free-for-all,
 red against blue, the juggernaut or Ring Race, drawn for it), a hole of golf, and round
 again; the top three of each game get 3, 2 and 1 marshmallows. Join any time,
@@ -217,8 +217,10 @@ frontends already read.
 **Achievements.** Twenty-four, in `client/achievements.mjs`, kept in this
 browser: a first game, the top three, a win, two, three and five wins in a
 row, 10 wins, first, second and third, 25, 100 and 250 marshmallows, 25 and
-100 games, golf, the arena, bumper balls and party each played and each won,
-all five with Dogfight played and won, each game won on its own, and a game
+100 games, golf, the arena and party each played and each won, all four
+with Dogfight played and won, three wins (Big Cheese, once bumper balls
+won: bumper balls left the playlist for party's SWISS ROLL, and an
+achievement's id never changes, only its test), each game won on its own, and a game
 with 32, and one with 100, or more in it. Each is a test over
 a tally of results, and a result is what the confirmed world holds while a
 game's end is on screen (`FP_STAGE` 1): the game, this slot's place
@@ -230,9 +232,9 @@ Elo Pros too, where they follow the wallet: the room's relay runs the same
 tests for each signed-in slot and reports them ([hosting.md](hosting.md)).
 Ten open a look: the pumpkin head (a
 first game), the eight ball (the top three), the gold ball (a win), the crown
-(two in a row), the marshmallow ball (100 marshmallows), Swiss cheese (bumper
-balls won), the flight helmet (a Dogfight won), ember (five in a row), s'more
-(250 marshmallows) and platinum (all five games won). Each names its picture
+(two in a row), the marshmallow ball (100 marshmallows), Swiss cheese (three
+wins), the flight helmet (a Dogfight won), ember (five in a row), s'more
+(250 marshmallows) and platinum (all four games won). Each names its picture
 on Elo Pros (`icon`, drawn in scry-forge's
 `watchtower/art/achievements/fireplace/`). What one opened shows under the standings, and L lists them on
 the TV, six a page. They are this browser's record, not the room's: signing in
@@ -240,9 +242,9 @@ with Elo Pros, and the referee's standings as their evidence, come next
 (`docs/roadmap.md`).
 
 **Results.** `test/fireplace.test.mjs` (11 tests): the prefixer; one
-module with every export; the playlist on the debug build from bumper balls
-round to bumper balls again, the room coming and going (each game's matches:
-two rounds, three minigames, one match cut to 3 min, one hole; everyone in
+module with every export; the playlist on the debug build from party
+round to party again, the room coming and going (each game's matches:
+three minigames, one match cut to 3 min, one hole; everyone in
 each new game straight after its switch; Dogfight's match cut to 3 min and
 flying the mode its seed forces; no party seed forcing a minigame);
 the arena's seed drawn as the party before it ended, and the mode it played;
@@ -253,9 +255,9 @@ mode's match cut to 3 min and placed by the mode; Dogfight's draw (every one
 of flight's modes seen in 40 draws), each switched into on Skyways with every
 ship in the air, cut to 3 min and placed by its mode; a party seed that came out
 with `0xA7` on top turned off it; the playlist equal on every tick on 1 and 4
-threads through bumper balls and the switch into party; and keyframes taken
-just into party, mid-party, mid-arena, mid-Dogfight and mid-golf, each
-restored into a sim sitting in bumper balls' world, its terrain and map
+threads through the first party and the switch into the arena; and keyframes taken
+mid-arena, just into the second party, mid-party, mid-Dogfight and mid-golf, each
+restored into a sim sitting in the first party's world, its terrain and map
 (Box Canyon or Skyways) rebuilt, every tick after
 equal to a run that never left; and the achievements' tally fed every held
 end of that playlist for three slots, twice each as a page sees a hold, which

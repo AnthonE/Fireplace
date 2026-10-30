@@ -1137,8 +1137,10 @@ export const FP_SETS = [
 export const GAMES = FP_SETS.map((g) => g.name);
 export const FP_MATCHES = FP_SETS.map((g) => g.matches); // by game: matches it plays before the next game
 // By position, so a game may come round more than once: the room plays entry
-// (games played) % length next.
-export const PLAYLIST = [G_BUMPER, G_PARTY, G_ARENA, G_PARTY, G_FLIGHT, G_GOLF];
+// (games played) % length next. Bumper balls stays on the list (its id is in
+// browsers' achievements and Elo Pros' stats) but not in the playlist: its
+// wheel comes round as Party's SWISS ROLL.
+export const PLAYLIST = [G_PARTY, G_ARENA, G_PARTY, G_FLIGHT, G_GOLF];
 export const FP_START = 0xf1; // a Fireplace seed with this top byte starts the playlist at entry (seed >>> 16) & 0xff, for gates and dev
 export const FP_PARTY_FORCE = 0xa7; // a party seed with this top byte plays one minigame only (party.wat's $bumper_gen): Fireplace's never has it
 // In the header's last 16 bytes, which no game uses (inside the prediction's copy):

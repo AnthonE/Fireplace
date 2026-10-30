@@ -55,8 +55,8 @@ its own web page, a plan for your game, and Claude to help build it.
 
 ## The games
 
-The room plays a playlist, round and round: bumper balls (two rounds), Party
-(three minigames), the arena (one three-minute match), Party again, a
+The room plays a playlist, round and round: Party (three minigames, bumper
+balls' wheel of cheese, Swiss Roll, among them), the arena (one three-minute match), Party again, a
 three-minute Dogfight, a hole of golf. The top three of each game get 3, 2 and
 1 marshmallows.
 

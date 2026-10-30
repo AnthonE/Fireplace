@@ -116,15 +116,15 @@ test("the referee says when a game ends, with the places the room shows, once; w
     ref.step(join);
     for (let t = 0; t < 50; t++) ref.step({ ev: [], w: [] });
     assert.equal(ref.result, null, 'nothing ended yet');
-    // bumper balls' last round over, as test/fireplace.test.mjs's atTheEnd puts it: wins 2, 0, 1
+    // the first party's last round over, as test/fireplace.test.mjs's atTheEnd puts it: points 25, 9, 17
     const dv = ref.dv;
-    dv.setUint8(L.FP_COUNT, L.FP_MATCHES[L.G_BUMPER] - 1);
+    dv.setUint8(L.FP_COUNT, L.FP_MATCHES[L.G_PARTY] - 1);
     dv.setUint16(L.FP_COUNT + 2, 0, true);
     dv.setUint32(L.HDR_STATE, L.H_OVER, true);
     dv.setUint32(L.HDR_UNTIL, ref.tick + 5000, true);
-    [2, 0, 1].forEach((wins, p) => {
-      dv.setUint16(L.PLAYERS + p * L.PSIZE + L.B_ROUNDS, 2, true);
-      dv.setUint16(L.PLAYERS + p * L.PSIZE + L.B_WINS, wins, true);
+    [25, 9, 17].forEach((pts, p) => {
+      dv.setUint16(L.PLAYERS + p * L.PSIZE + L.B_ROUNDS, 3, true);
+      dv.setUint16(L.PLAYERS + p * L.PSIZE + L.PG_PTS, pts, true);
     });
     const got = [];
     for (let t = 0; t < 20; t++) { ref.step({ ev: [], w: [] }); if (ref.result) { got.push(ref.result); ref.result = null; } }
@@ -134,12 +134,12 @@ test("the referee says when a game ends, with the places the room shows, once; w
   assert.equal(got.length, 1, 'one result for one game, though it is held for many ticks');
   assert.equal(ref.dv.getUint32(L.FP_STAGE, true), 1);
   const r = got[0];
-  assert.equal(r.game, L.G_BUMPER);
+  assert.equal(r.game, L.G_PARTY);
   assert.equal(r.count, 0, "the room's first game: none played before it");
   assert.deepEqual(r.places, [[0, 1], [1, 3], [2, 2]]);
   assert.deepEqual(r.places, [0, 1, 2].map((p) => [p, ref.u8[L.FP_LAST + p]]), 'the places FP_LAST holds');
   assert.deepEqual(r.got, [0, 1, 2].map((p) => ref.u8[L.FP_GOT + p]), 'the marshmallows FP_GOT holds');
   assert.equal(r.got[0], 3, 'the winner got three');
-  assert.equal(Elo.matchOf({ seed: 7, roomStart: 0, result: r, wallet: (p) => `0x${String(p).repeat(40)}` }).ladder, 'bumper');
+  assert.equal(Elo.matchOf({ seed: 7, roomStart: 0, result: r, wallet: (p) => `0x${String(p).repeat(40)}` }).ladder, 'party');
   assert.deepEqual((await run(false)).got, []);
 });
