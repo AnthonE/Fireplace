@@ -8,7 +8,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { init, plan, slugOf, repoOf, pagesUrl, CAPSULE } from '../tools/kit.mjs';
+import { init, plan, slugOf, repoOf, pagesUrl, hostedUrl, CAPSULE } from '../tools/kit.mjs';
 import { withGenerated, readMaps } from '../tools/elo.mjs';
 import { readThemes } from '../tools/themes.mjs';
 
@@ -41,6 +41,7 @@ test('slugs, repos and Pages addresses', () => {
   assert.equal(repoOf('https://example.com/x/y'), null);
   assert.equal(pagesUrl('KidDev/snow-fort'), 'https://kiddev.github.io/snow-fort/');
   assert.equal(pagesUrl('KidDev/kiddev.github.io'), 'https://kiddev.github.io/');
+  assert.equal(hostedUrl('snow-fort-party'), 'https://snow-fort-party.scryward.online/');
 });
 
 test("it refuses Fireplace's own repo and slug unless forced, and a name it cannot use", () => {
@@ -66,7 +67,7 @@ test("init gives a copy its own game's name and manifest, and a second run chang
     assert.equal(elo.game, 'snow-fort-party');
     assert.equal(elo.elo, 1);
     assert.equal(elo.listing.name, 'Snow Fort Party');
-    assert.equal(elo.listing.play_url, 'https://kiddev.github.io/snow-fort/');
+    assert.equal(elo.listing.play_url, 'https://snow-fort-party.scryward.online/', 'the copy plays where Elo Pros hosts it');
     assert.deepEqual(elo.listing.engine, { name: 'Fireplace', license: 'CC0-1.0' });
     for (const k of ['wallet', 'jobs', 'sell', 'terms', 'servers']) assert.equal(elo[k], undefined, `no ${k} by default`);
     assert.deepEqual(elo.art, { capsule: CAPSULE }, 'the kit\'s capsule, so the store can show the copy');
@@ -76,7 +77,7 @@ test("init gives a copy its own game's name and manifest, and a second run chang
     assert.equal(JSON.parse(read('package.json')).name, 'snow-fort-party');
     assert.equal(JSON.parse(read('client/kit.json')).name, 'Snow Fort Party');
     assert.equal(JSON.parse(read('client/kit.json')).repo, 'KidDev/snow-fort', "the copy's maps go to its own repo, not Fireplace's");
-    assert.deepEqual(elo.tools.map((t) => [t.id, t.url]), [['map-editor', 'https://kiddev.github.io/snow-fort/client/map-editor.html'], ['studio', 'https://kiddev.github.io/snow-fort/client/studio.html']], "the store links the copy's own map editor and studio");
+    assert.deepEqual(elo.tools.map((t) => [t.id, t.url]), [['map-editor', 'https://snow-fort-party.scryward.online/client/map-editor.html'], ['studio', 'https://snow-fort-party.scryward.online/client/studio.html']], "the store links the copy's own map editor and studio");
     assert.match(read('client/fireplace.html'), /<title>Snow Fort Party<\/title>/);
     assert.match(read('client/room.html'), /<title>Snow Fort Party Room<\/title>/);
     assert.match(read('README.md'), /^# Snow Fort Party\n\nSnow Fort Party is made from \[Fireplace\]/);
@@ -90,6 +91,8 @@ test("init gives a copy its own game's name and manifest, and a second run chang
     assert.equal(renamed.game, 'snow-fort-pals');
     assert.equal(renamed.listing.name, 'Snow Fort Pals');
     assert.equal(renamed.wallet, withWallet.wallet);
+    assert.equal(renamed.listing.play_url, 'https://snow-fort-pals.scryward.online/', 'a rename moves the page');
+    assert.deepEqual(renamed.tools.map((t) => t.url), ['https://snow-fort-pals.scryward.online/client/map-editor.html', 'https://snow-fort-pals.scryward.online/client/studio.html'], '…and its tools with it');
     assert.equal((read('README.md').match(/is made from \[Fireplace\]/g) || []).length, 1, 'one line saying where it came from');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
