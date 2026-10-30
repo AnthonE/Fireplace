@@ -25,8 +25,9 @@ Chrome (its modules, workers, themes and wasm), each gzipped:
 | `client/arena.html` | 111 | 387 KB (wasm 59 KB) |
 | `client/flight.html` | 108 | 410 KB (wasm 106 KB, most of it Skyways) |
 
-No textures, models, sound files or fonts: sounds are synthesized, the font is
-3x5 bitmaps, every shape is drawn on the GPU. A Party minigame adds about
+No textures, models, sound files or fonts: sounds are synthesized, the HUD's
+text is the system's sans drawn into an atlas at startup, every shape is
+drawn on the GPU. A Party minigame adds about
 10 KB of client code and 2 to 3 KB of wasm.
 
 Cost a tick at 256 players: 0.2 to 0.4 ms of the sim's 8 ms. Cost a frame on
