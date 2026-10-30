@@ -192,7 +192,7 @@ async function main() {
   function drive() {
     const slot = get(L.CL_SLOT);
     if (!guest || slot < 0 || get(L.CL_STATE) !== 2) return;
-    guest.slot = guest.golfer.slot = guest.fighter.slot = guest.roller.slot = guest.partier.slot = guest.pilot.slot = slot;
+    guest.slot = guest.golfer.slot = guest.fighter.slot = guest.partier.slot = guest.pilot.slot = slot;
     const nowE = epoch();
     const lag = Math.round(readClock(i32, f64, L.CL_PRED, nowE) - readClock(i32, f64, L.CL_PLAY, nowE));
     const w = guest.think(view, view.tick, lag);

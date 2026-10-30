@@ -26,7 +26,7 @@ import { serverText } from './elo.mjs';
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
 const nbots = Number(opt('bots', 6));
-// the first game (bumper balls) ended 97 and 106 s in, and not in 170 s twice, on a 4-core box
+// the first game (party's three minigames) ended 215 s in on a 4-core box; 360 s leaves room
 const seconds = Number(opt('seconds', 360));
 const port = Number(opt('port', 4441));
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
