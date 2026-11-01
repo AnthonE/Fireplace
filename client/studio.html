@@ -7,7 +7,7 @@
   :root { --bg: #0b0d14; --panel: #131722; --line: #262c3b; --ink: #cfd3e0; --dim: #7d8499; --hot: #ffcf5a; --bad: #ff7a6b; --ok: #8fd18a; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-monospace, monospace; overflow: hidden; }
-  body { display: grid; grid-template: "top top" auto "edit side" 1fr "foot side" auto / 1fr 420px; }
+  body { display: grid; grid-template: "note note" auto "top top" auto "edit side" 1fr "foot side" auto / 1fr 420px; }
   header { grid-area: top; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
   header .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
   header b { color: var(--hot); margin-right: 6px; }
@@ -39,9 +39,13 @@
   code { color: var(--hot); user-select: all; word-break: break-all; }
   a { color: var(--hot); }
   @media (max-width: 860px) {
-    body { grid-template: "top" auto "edit" 45vh "foot" auto "side" 1fr / 1fr; overflow: auto; }
+    body { grid-template: "note" auto "top" auto "edit" 45vh "foot" auto "side" 1fr / 1fr; overflow: auto; }
     aside { border-left: 0; border-top: 1px solid var(--line); }
   }
+  #safari-note { grid-area: note; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 18px; background: #3b3220; border-bottom: 2px solid var(--hot); color: #fff3cf; font: 600 16px/1.4 system-ui, sans-serif; }
+  #safari-note p { margin: 0; flex: 1 1 320px; }
+  #safari-note b { color: #fff; }
+  #safari-note button { font: 600 14px system-ui, sans-serif; padding: 6px 12px; }
 </style>
 <script src="../coi.js"></script>
 <header>
@@ -66,4 +70,5 @@
   <div id="play"><p>Build, then play: your minigame with AI balls, here.</p></div>
 </aside>
 <footer id="foot">loading…</footer>
+<script type="module" src="./browser-note.mjs"></script>
 <script type="module" src="./studio.mjs"></script>
