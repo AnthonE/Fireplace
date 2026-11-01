@@ -184,11 +184,23 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   let right = vec2f(-fwd.y, fwd.x);
   let dir = fwd + right * ((p.x - u.screen.x * 0.5) / u.cam.w);
   let rise = (u.view.z - p.y) / u.cam.w;
+  // the scope's black ring: nothing past it is seen, so nothing past it is
+  // traced (the HUD paints it black over whatever is here); the margin keeps
+  // the ring's own grey edge drawn over a traced picture
+  if (u.fx.y > 0.5 && length(p.xy - u.screen.xy * 0.5) > u.screen.y * 0.46 + 2.0 * u.hudv.x) {
+    o.color = vec4f(0.0, 0.0, 0.0, 1.0);
+    o.depth = 1.0;
+    return o;
+  }
   var z = 0.3;
   var prev = 0.0;
   var hit = false;
-  // zoomed, the steps stretch with the focal length so far things stay sharp
-  let k = 0.012 * 240.0 / u.cam.w;
+  // zoomed, the steps stretch with the focal length so far things stay sharp,
+  // up to twice the unzoomed lens (u.hudv.w). Past that a step is already a
+  // tenth of a ground sample at a hundred metres and the bisection below
+  // finds the surface to 1/64 of it, so the sniper's 5x took 2.3 times the
+  // steps to reach 150 m for nothing on screen.
+  let k = 0.012 * 240.0 / min(u.cam.w, 2.0 * u.hudv.w);
   // the boxes first: the ground is marched only as far as the nearest
   let ray = vec3f(dir.x, rise, dir.y);
   let bh = traceBoxes(u.cam.xyz, ray, u.screen.z);
