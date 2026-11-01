@@ -35,6 +35,7 @@ import {
   worldBox, setWorldBox, moveOf, movedAt, shifted, readPart, setKind, setPartField, nextStage, beltOf, beltVelocity, beltWorld, beltLocal,
   PART_NAMES, PART_MARK, PART_WHAT, ROBLOX_MOVEMENT, ROBLOX_BODY, ARENA_BODY, needsSides, courseOf, partCounts, starterObby,
 } from './map-build.mjs';
+import { codeEditor } from './code-editor.mjs';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view'), ctx = canvas.getContext('2d');
@@ -1923,13 +1924,48 @@ function renderCheck() {
     ...(st.report ? [el('p', { className: 'hint', textContent: st.reportFrom }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
     ...(st.brief ? [
       el('p', { className: 'hint', textContent: `Its game is ${st.brief.summary.scripts} scripts (${st.brief.summary.lines.toLocaleString('en')} lines). The port brief is them as files and port.md, what they do and lean on: hand it to an agent to write the rules here.` }),
-      el('div', { className: 'row' }, btn('download the port brief', () => {
+      el('div', { className: 'row' }, ...(st.brief.summary.scripts ? [btn('read the scripts', readScripts, 'every script in the place, in a code editor')] : []), btn('download the port brief', () => {
         const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([zip(Object.fromEntries(Object.entries(st.brief.files).map(([f, t]) => [`${st.brief.name}-port/${f}`, t])))])), download: `${st.brief.name}-port.zip` });
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 5000);
       })),
     ] : []),
   );
+}
+
+// ---- the place's scripts, read in a code editor (client/code-editor.mjs:
+// Monaco, as VS Code). Read only: they are Luau on Roblox's API, the spec for
+// rules written here, not code that runs here.
+let scriptsView = null;
+const langOf = (f) => /\.luau?$/.test(f) ? 'lua' : f.endsWith('.md') ? 'markdown' : f.endsWith('.json') ? 'json' : 'plaintext';
+function readScripts() {
+  const b = st.brief;
+  if (!b) return;
+  if (!scriptsView) {
+    const title = el('b');
+    const list = el('nav', { className: 'files' });
+    const area = el('textarea', { spellcheck: false, readOnly: true });
+    const box = el('dialog', { id: 'scripts' },
+      el('div', { className: 'bar' }, title, el('span', { className: 'hint', textContent: 'read only: the port brief\'s files, the scripts as they sat in the place' }), btn('close', () => box.close(), 'Esc')),
+      el('div', { className: 'body' }, list, el('div', { className: 'code' }, area)));
+    document.body.append(box);
+    scriptsView = { box, title, list, ed: codeEditor(area) };
+  }
+  const v = scriptsView;
+  // port.md first, then the files in path order
+  const names = Object.keys(b.files).sort((x, y) => (y === 'port.md') - (x === 'port.md') || x.localeCompare(y));
+  const show = (f) => {
+    v.ed.show(`${b.name}/${f}`, b.files[f], { language: langOf(f), readOnly: true });
+    for (const a of v.list.children) a.classList.toggle('on', a.dataset.f === f);
+  };
+  v.title.textContent = `${b.name}: ${b.summary.scripts} scripts, ${b.summary.lines.toLocaleString('en')} lines`;
+  v.list.replaceChildren(...names.map((f) => {
+    const a = btn(f.replace(/^scripts\//, ''), () => show(f), f);
+    a.dataset.f = f;
+    return a;
+  }));
+  show(names.find((f) => f.startsWith('scripts/')) || names[0]);
+  v.box.showModal();
 }
 
 // ---- the header
@@ -1968,6 +2004,8 @@ function buildHeader() {
 
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox' || e.target instanceof HTMLSelectElement) return;
+  // typing in a code editor (the scripts' dialog) is not editing the map
+  if (e.target instanceof HTMLTextAreaElement || e.target.closest?.('dialog[open]')) return;
   const k = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? restore(redo, undo) : restore(undo, redo); return; }
   if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); restore(redo, undo); return; }

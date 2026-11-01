@@ -16,7 +16,7 @@
   header nav.kit-tabs a:hover { color: var(--ink); border-color: var(--line); }
   header nav.kit-tabs a[aria-current] { color: var(--hot); border-color: var(--hot); background: #3b3220; }
   #wrap { grid-area: map; position: relative; min-width: 0; min-height: 0; }
-  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #wrap > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   #wrap.m2d #view3d, #wrap.m2d #over3d, #wrap.m3d #view { display: none; }
   #wrap.split #view { width: 50%; }
   #wrap.split #view3d, #wrap.split #over3d { left: 50%; width: 50%; border-left: 1px solid var(--line); }
@@ -74,6 +74,18 @@
     header .grow, header .sep { display: none; }
     aside { border-left: 0; border-top: 1px solid var(--line); }
   }
+  #scripts { width: min(1400px, 94vw); height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
+  #scripts[open] { display: flex; flex-direction: column; }
+  #scripts::backdrop { background: rgba(0, 0, 0, .6); }
+  #scripts .bar { display: flex; gap: 12px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  #scripts .bar .hint { flex: 1; margin: 0; }
+  #scripts .body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(180px, 280px) 1fr; }
+  #scripts .files { overflow: auto; border-right: 1px solid var(--line); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+  #scripts .files button { text-align: left; border-color: transparent; background: none; overflow-wrap: anywhere; }
+  #scripts .files button.on { background: #3b3220; border-color: var(--hot); color: var(--hot); }
+  #scripts .code { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #scripts .code > textarea { flex: 1; resize: none; border: 0; padding: 8px 10px; background: #0e1119; color: var(--ink); font: 12.5px/1.45 ui-monospace, monospace; white-space: pre; }
+  #scripts .code-host { flex: 1; min-height: 0; }
   #safari-note { grid-area: note; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 18px; background: #3b3220; border-bottom: 2px solid var(--hot); color: #fff3cf; font: 600 16px/1.4 system-ui, sans-serif; }
   #safari-note p { margin: 0; flex: 1 1 320px; }
   #safari-note b { color: #fff; }
