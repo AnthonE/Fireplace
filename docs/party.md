@@ -314,11 +314,16 @@ on heaves it has seen, 0.14 to 0.38 s late by skill, and AI rounds whack 75 to
 the closing wall reaches it and it sinks, so the prediction rides a crate down
 as the confirmed world does; its pops are read off bumper's bookkeeping as
 Kart Grab's hits are (a fresh `B_HITT`; touching and closing, a bump judged by
-the speeds as the last tick ended; a hitter not touching, or blowing up beside
-it, a blast). Its AI rounds found one rule: with steals, the best two or three
+the speeds as the last tick ended). Bumper keeps one hitter, so the tick finds
+every blast itself from what it kept as the last tick ended (a POW or a
+landing from each ball's record; a rocket from a copy of `PROJ`, a slot free
+then and free now being one fired and gone off at once), each at the point it
+went off: a ball hit within a blast's radius of that point was blasted,
+whoever bumped it after, and a pair one of which blasted the other is not a
+bump. Its AI rounds found one rule: with steals, the best two or three
 refilled each other and saw out the clock every round; with none in the last
-ring and a lower ram speed there, 5 of 9 rounds of 16 end outright, between
-73 and 89 s. Egg Raid is Dodgeball's carrying on Soccer's walled pitch: the
+ring and a lower ram speed there, 18 of 27 rounds of 16 end outright, between
+71 and 89.5 s. Egg Raid is Dodgeball's carrying on Soccer's walled pitch: the
 carrier's 15% is a push reading its own `PG_M`, so the prediction has it once
 the pickup arrives a round trip later; each nest's floor rolls every ball out,
 so neither side parks in its own; and a knock needs the foe faster into the
