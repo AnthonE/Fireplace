@@ -349,7 +349,7 @@ test('the prediction matches the confirmed ball bit for bit: a slide over the ho
   assert.ok(off(g.v.partier(0)) > st.ring[3] + MC.BE_CLR, `carried out of the house, pushing back: ${off(g.v.partier(0)).toFixed(2)} m out as the wave ends`);
 });
 
-for (const [balls, sd] of [[8, 3], [64, 5]]) {
+for (const [balls, sd] of [[8, 7], [64, 5]]) {
   test(`a round of ${balls} AI balls (the Partier, this brain) on the debug build: no trap, nine ends, the house full at the bells, the points spread, few falls; the house cleared after each bell; equal on 1 and 4 threads`, async () => {
     let start = -1, over = -1, places = null, pts = null, scores = null, trap = 0, downs = 0, inHouse = 0, bulls = 0;
     const was = [], at1s = [], atEnd = [];

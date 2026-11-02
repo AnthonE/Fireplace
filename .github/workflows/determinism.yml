@@ -128,6 +128,22 @@ jobs:
         run: |
           node tools/genparty.mjs --mg 41 --bots 16 --ticks 20000 --out logs/cheese.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/cheese.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: WHACK A MOLE (moles popping up on the seed's schedule, whacked from a hop), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 42 --bots 16 --ticks 20000 --out logs/mole.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/mole.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: BALLOON BASH (three balloons a ball, stomped and rammed off), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 43 --bots 16 --ticks 20000 --out logs/balloon.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/balloon.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: EGG RAID (red against blue, eggs carried between two nests), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 44 --bots 16 --ticks 20000 --out logs/eggs.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/eggs.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: BOWLING (lanes of pins, every ball the bowling ball), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 45 --bots 16 --ticks 20000 --out logs/bowl.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/bowl.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
       - name: Every map in maps/ compiles, builds into the debug sim and plays with AI fighters
         run: node tools/map-check.mjs --all
       - if: failure()
@@ -276,6 +292,12 @@ jobs:
         run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 40
       - name: SWISS ROLL online (bumper balls' wheel forced, 64 AI balls, every hash checked)
         run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 41
+      - name: The fifth wave online (WHACK A MOLE, BALLOON BASH, EGG RAID and BOWLING each forced, 64 AI balls, every hash checked)
+        run: |
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 42
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 43
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 44
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 45
       - name: 256 players in one room (the bot host's golfers, impaired, the 257th refused)
         run: node net/run-n1.mjs --chrome 0 --seconds 60
       - name: Spectators through a tree of relays (two edges on the root, a third two deep, 100 verifying spectators each, a player turned away at an edge)

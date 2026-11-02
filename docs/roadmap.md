@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-58 games, each gated online: golf, the arena's fifteen modes
+62 games, each gated online: golf, the arena's fifteen modes
 (Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 42 minigames (bumper balls, once a
+Territories, VIP, Assault) and Party's 46 minigames (bumper balls, once a
 game of its own, among them as Swiss Roll). Fireplace plays them in turn.
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
@@ -20,10 +20,10 @@ Chrome (its modules, workers, themes and wasm), each gzipped:
 
 | Page | Files | Gzipped |
 | --- | --- | --- |
-| `client/party.html` | 135 | 730 KB (wasm 80 KB; the 42 minigames' client modules are most of the files) |
-| `client/fireplace.html` | 152 | 978 KB (wasm 246 KB: the four games, Box Canyon and Skyways) |
-| `client/arena.html` | 111 | 387 KB (wasm 59 KB) |
-| `client/flight.html` | 108 | 410 KB (wasm 106 KB, most of it Skyways) |
+| `client/party.html` | 137 | 778 KB (wasm 88 KB; the 46 minigames' client modules are most of the files) |
+| `client/fireplace.html` | 158 | 1,037 KB (wasm 254 KB: the four games, Box Canyon and Skyways) |
+| `client/arena.html` | 106 | 387 KB (wasm 59 KB) |
+| `client/flight.html` | 104 | 412 KB (wasm 107 KB, most of it Skyways) |
 
 No textures, models, sound files or fonts: sounds are synthesized, the HUD's
 text is the system's sans drawn into an atlas at startup, every shape is
@@ -35,9 +35,11 @@ the main thread: 0.5 ms for 256 balls, 0.25 ms for 1,172 ice tiles, about
 2 ms for 20,000 solids. Not measured: frame rate on a real GPU (headless
 Chrome here is SwiftShader).
 
-A Party minigame on the framework is about 1,200 to 1,500 lines (sim, client
-module, tests) and about an hour of one agent; this 4-core machine runs two
-to four at once. Twelve took four hours.
+A Party minigame on the framework is about 1,200 to 1,800 lines (sim, client
+module, tests) and an hour to an hour and a half of one agent; this 4-core
+machine runs two to four at once. Twelve took four hours; the fifth wave's
+four (Whack a Mole, Balloon Bash, Egg Raid, Bowling: 1,770 to 1,850 lines
+each) took 72 to 93 minutes apiece, all four at once.
 
 ## The engine's limits
 
@@ -63,7 +65,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 42 | 60 | Mini Golf; with teams: Fall Ball, Egg Scramble, Tug o' War |
+| Party (the ball) | 46 | 60 | Mini Golf; with teams: Fall Ball, Tug o' War |
 | Arena (the fighter) | 16 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
@@ -345,8 +347,8 @@ do yet, and each names what it would need first; the first is built.
 1. Teams; the champion kit and FFA ARAM; Team Slayer, CTF, Oddball and King of
    the Hill in the arena. The arena's half is done (its teams, the kit and the
    four modes: one session of about five and a half hours, up to four agents at once);
-   Party's teams are in, with Dodgeball, Volleyball and Soccer; their other games
-   (Fall Ball, Egg Scramble, Tug o' War), the champion kit and FFA ARAM are left.
+   Party's teams are in, with Dodgeball, Volleyball, Soccer and Egg Raid; their
+   other games (Fall Ball, Tug o' War), the champion kit and FFA ARAM are left.
 2. The grid kit: Tetris 99, Bomberman 128, Snake, Puyo 99.
 3. The vehicle kit and karts. A kart's handling exists already, as one
    Party minigame's push on the ball (Kart Grab, `src/mg/kart.wat`): a

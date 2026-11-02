@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Plays Party with AI balls (client/party-bot.mjs) on a local sim (no network)
 // and records it as a .qgl event log: joins, leaves and every input word that
-// changed. Each ball's words land `delay` ticks after it decides them and it
-// sees the world that old, as over a network. The log replays in the harness
+// changed. Each ball's words land `delay` ticks after it decides them, from
+// the world as it is then, as over a network. The log replays in the harness
 // like any other, so the determinism matrix covers the rotation, every
 // minigame it reaches, the bumps and the outs. --mg k plays only minigame k,
 // through the seed as the framework reads it (top byte 0xA7, k in the next).

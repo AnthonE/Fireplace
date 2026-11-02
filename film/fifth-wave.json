@@ -1,0 +1,22 @@
+{
+ "replay": "replays/f1000001-2026-11-02T16-29-48-408Z.qgr",
+ "out": "film/out/fireplace-fifth-wave.mp4",
+ "size": [1920, 1080],
+ "fps": 30,
+ "theme": "grandma",
+ "guests": true,
+ "score": 20,
+ "fade": 0.6,
+ "shots": [
+  { "replay": "replays/f1000001-2026-11-02T16-29-48-408Z.qgr", "couch": 4.096, "caption": "FOUR NEW PARTY GAMES" },
+  { "replay": "replays/f1000001-2026-11-02T16-29-48-408Z.qgr", "sit": 4.096 },
+  { "replay": "replays/f1000001-2026-11-02T16-29-48-408Z.qgr", "at": 14.5, "len": 3.072, "caption": "WHACK A MOLE\nHOP ON THEM AS THEY POP UP" },
+  { "replay": "replays/f1000001-2026-11-02T16-29-48-408Z.qgr", "at": 49, "len": 2.048 },
+  { "replay": "replays/f100005b-2026-11-02T16-29-48-964Z.qgr", "at": 14.3, "len": 3.072, "caption": "BALLOON BASH\nSTOMP THEM TO POP THEIRS" },
+  { "replay": "replays/f100005b-2026-11-02T16-29-48-964Z.qgr", "at": 59, "len": 2.048 },
+  { "replay": "replays/f1000023-2026-11-02T16-32-45-986Z.qgr", "at": 13, "len": 3.072, "caption": "EGG RAID\nRED AGAINST BLUE" },
+  { "replay": "replays/f1000023-2026-11-02T16-32-45-986Z.qgr", "at": 59, "len": 2.048 },
+  { "replay": "replays/f100002c-2026-11-02T16-32-47-726Z.qgr", "at": 13.2, "len": 4.096, "caption": "BOWLING\nYOU ARE THE BALL" },
+  { "replay": "replays/f1000001-2026-11-02T16-29-48-408Z.qgr", "back": 5.12, "caption": "46 MINIGAMES\nFIREPLACE IN YOUR BROWSER" }
+ ]
+}

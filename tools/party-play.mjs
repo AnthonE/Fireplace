@@ -10,10 +10,12 @@ import * as L from '../src/layout.mjs';
 // A room seed that forces minigame mg (null: the rotation's) and keeps the low bits of seed.
 export const partySeed = (seed, mg = null) => (mg === null || mg === undefined ? seed >>> 0 : ((0xa7 << 24) | ((mg & 0xff) << 16) | (seed & 0xffff)) >>> 0);
 
-// Balls join a tick apart; one leaves at `leaveAt` and comes back 500 ticks
-// later. onTick(t, sim, view) after every step. Returns the log, every ball's
-// tally, the rounds over, the minigames played (in order), the bots' think
-// time (thinkMs in all, playMs a tick while a round plays).
+// Each ball's word lands `delay` ticks after it decides it, from the world as
+// it is then (its lag: delay). Balls join a tick apart; one leaves at
+// `leaveAt` and comes back 500 ticks later. onTick(t, sim, view) after every
+// step. Returns the log, every ball's tally, the rounds over, the minigames
+// played (in order), the bots' think time (thinkMs in all, playMs a tick
+// while a round plays).
 export async function playParty({ bytes, seed = 7, mg = null, bots = 16, ticks = 20000, delay = 6, leaveAt = 0, onTick } = {}) {
   const memory = newMemory();
   const sim = new Sim(await instantiate(await WebAssembly.compile(bytes), memory), memory);
@@ -32,7 +34,8 @@ export async function playParty({ bytes, seed = 7, mg = null, bots = 16, ticks =
       if (t === p.join || (leaveAt && k === 1 && t === leaveAt + 500)) { now.push([L.EV_JOIN, k]); p.live = true; p.queue = []; p.last = -1; }
       if (leaveAt && k === 1 && t === leaveAt) { now.push([L.EV_LEAVE, k]); p.live = false; }
       if (!p.live) continue;
-      p.queue.push(p.r.think(view, t + delay, 2 * delay));
+      // it sees the world as it is on t; its word is for t + delay, so that is its lag
+      p.queue.push(p.r.think(view, t + delay, delay));
       if (p.queue.length > delay) {
         const w = p.queue.shift();
         if (w !== p.last) { now.push([L.EV_INPUT, k, w]); p.last = w; }
