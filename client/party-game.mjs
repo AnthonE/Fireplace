@@ -31,6 +31,7 @@
 //   sink(f, name, view) -> the feed's line for an FX_SINK (f; name(p) as fx's), optional: null for the usual FELL / KNOCKED OUT
 //   music(view, ptick) -> false to hush the round's music for now (optional; ptick the prediction's clock, as draw's)
 //   outForGood: true for a PK_SCORE round whose balls out stay out (home, or taken): yours watches the others, as in PK_OUT
+//   quietDown: true for a PK_SCORE round where a fall is the way back round (Bowling's pit): no DOWN banner or countdown
 //   drawsBalls: true, optional: draw() draws the balls themselves (ctx.own is where your own is drawn, [x, y, z] its
 //     bottom, or null), the frontend only their riders, what they hold, their shadows and their dots
 //   hud(view, ctx): ctx { put(x, y, str, c), centre(y, str, c), right(y, str, c), rect(x0, y0, x1, y1, r, g, b, a)
@@ -218,7 +219,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
         glows.push({ pos: [f.pos[0], f.pos[1] + 0.5, f.pos[2]], size: 3, color: [0.6, 0.85, 1, 0.9], kind: SPRITE.RING, born: now, life: 600, grow: true });
         sound.sink(f.owner === slot ? 0 : d);
         if (f.owner === slot) {
-          if (score) setBanner(`DOWN  BACK IN ${Math.ceil(g.respawn / 125)}`, C.RED, 1800);
+          if (score) { if (!MG[g.game]?.quietDown) setBanner(`DOWN  BACK IN ${Math.ceil(g.respawn / 125)}`, C.RED, 1800); }
           else { setBanner(`OUT  ${ordinal(f.size)} OF ${g.n0}`, C.RED, 4000, 2); watched = -1; }
         }
         if (f.shot === slot) { setBanner(`YOU KNOCKED ${score ? 'OFF' : 'OUT'} P${f.owner + 1}`, C.GREEN, 2000); sound.kill(); }
@@ -549,7 +550,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       if (me.out && g.state === L.H_PLAY && !score) centre(rows - 4, f ? `OUT  WATCHING P${f.slot + 1}  CLICK FOR ANOTHER` : 'OUT', C.GREY);
       if (me.out && me.place === 0 && g.state === L.H_PLAY && !score) centre(rows - 5, 'YOU PLAY THE NEXT ROUND', C.CYAN);
       if (me.out && g.state === L.H_PLAY && score && mod.outForGood && f) centre(rows - 4, `WATCHING P${f.slot + 1}  CLICK FOR ANOTHER`, C.GREY);
-      if (me.out && g.state === L.H_PLAY && score && !mod.ownScore) centre(rows - 4, `DOWN  BACK IN ${Math.max(0, Math.ceil((g.respawn - ((g.tick - me.outAt) | 0)) / 125))}`, C.GREY);
+      if (me.out && g.state === L.H_PLAY && score && !mod.ownScore && !mod.quietDown) centre(rows - 4, `DOWN  BACK IN ${Math.max(0, Math.ceil((g.respawn - ((g.tick - me.outAt) | 0)) / 125))}`, C.GREY);
       if (item && !me.out) put(tx, COLS, 47, rows - 3, `${L.PU_NAMES[item]}  CLICK`, C.WHITE);
     } else if (WATCH && f) put(tx, COLS, 1, 1, `WATCHING P${f.slot + 1}  < >`, C.CYAN);
     // the minigame's own lines

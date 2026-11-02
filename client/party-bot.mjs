@@ -14,7 +14,8 @@
 // of them cost a little over a quarter of that in thinks a tick. In a team
 // round (PGF_TEAMS) it knows its side (this.side): teammates that pass
 // through it (no PGF_MATES) aren't in its way, and it uses a power-up on the
-// other side only; team(view, slot) hands a brain its teammates and its foes.
+// other side only; team(view, slot) (client/party-world.mjs, where a
+// minigame's module imports it from) hands a brain its teammates and its foes.
 //
 // What it asks of a minigame's brain (client/mg/<key>.mjs, brain: {...}),
 // handed a view whose party() and hole() are read once a world tick, `me`
@@ -31,6 +32,9 @@
 import * as L from '../src/layout.mjs';
 import { partyWord } from '../src/party-view.mjs';
 import { MG } from './mg/index.mjs';
+import { world, team, CELL } from './party-world.mjs';
+
+export { team };
 
 const TURN = 16384;
 const DIRS = 16;
@@ -39,52 +43,17 @@ const DT = 0.008;
 const N = (k) => Math.fround(Number(L.BPHYS[k]));
 const ACC = N('B_ACC_DT'), AIR = N('B_AIR_DT'), AIR_DRAG = N('B_AIR_DRAG');
 const ROOM = 2.6; // m between centres it likes to keep from a rival
-const CELL = 8; // m, the rivals' grid
 const NEAR_MAX = 12; // rivals it minds at once
 // the planner's per-think arrays, shared: bots think one at a time
 const SCRATCH = { coastX: new Float64Array(8), coastZ: new Float64Array(8), pushK: new Float64Array(8), idleX: new Float64Array(8), idleZ: new Float64Array(8),
   rx: new Float64Array(8 * NEAR_MAX), rz: new Float64Array(8 * NEAR_MAX) };
 
-// What every bot looking at one world tick shares: the round, every ball in
-// (not out, not falling) in a grid of CELL m squares (each with its side),
-// both sides' balls in a team round, and the view the brains are handed: the
-// same memory, with party() and hole() read once for the tick.
+// The world a tick's bots share (client/party-world.mjs), with the round's
+// minigame module added for the brain.
 function worldOf(view) {
-  const t = view.tick;
-  if (view._pbot?.tick === t) return view._pbot;
-  const g = view.party();
-  const bv = Object.create(view);
-  bv.party = () => g;
-  bv.hole = () => g;
-  const balls = [];
-  const grid = new Map();
-  const sides = [[], []];
-  for (let p = 0; p < L.NPLAYER; p++) {
-    const a = L.PLAYERS + view.bank + p * L.PSIZE;
-    const fl = view.u8[a + L.P_FL];
-    if ((fl & (L.PF_LIVE | L.PF_DEAD | L.PF_FALL)) !== L.PF_LIVE) continue;
-    const b = { slot: p, x: view.dv.getFloat32(a + L.P_PX, true), z: view.dv.getFloat32(a + L.P_PZ, true), vx: view.dv.getFloat32(a + L.P_VX, true), vz: view.dv.getFloat32(a + L.P_VZ, true), side: fl & L.PF_BLUE ? 1 : 0 };
-    balls.push(b);
-    if (g.teams) sides[b.side].push(b);
-    const k = Math.floor(b.x / CELL) * 4096 + Math.floor(b.z / CELL);
-    const list = grid.get(k);
-    if (list) list.push(b); else grid.set(k, [b]);
-  }
-  // teammates pass through each other in a team round without PGF_MATES: not in each other's way
-  const through = g.teams && !(g.flags & L.PGF_MATES);
-  view._pbot = { tick: t, g, mg: MG[g.game] || MG[0], balls, grid, sides, through, view: bv };
-  return view._pbot;
-}
-
-// A team round as slot sees it on the view's tick: its side (0 red, 1 blue;
-// -1 outside a team round or out of it), and the balls in ({ slot, x, z, vx,
-// vz, side }) on its side but itself and on the other.
-export function team(view, slot) {
-  const w = worldOf(view);
-  const a = L.PLAYERS + view.bank + slot * L.PSIZE;
-  if (!w.g.teams || !(view.u8[a + L.P_FL] & L.PF_LIVE)) return { side: -1, mates: [], foes: w.balls.filter((b) => b.slot !== slot) };
-  const side = view.u8[a + L.P_FL] & L.PF_BLUE ? 1 : 0;
-  return { side, mates: w.sides[side].filter((b) => b.slot !== slot), foes: w.sides[1 - side] };
+  const w = world(view);
+  if (!w.mg) w.mg = MG[w.g.game] || MG[0];
+  return w;
 }
 
 // The balls within r of (x, z) but slot (and but side's, when side is 0 or

@@ -264,6 +264,7 @@ export default {
   hint: 'ROLL FROM BEHIND THE FOUL LINE  A POINT A PIN  ALL TEN A STRIKE',
   rules: 'KEEP ROLLING DOWN THE LANE TO KNOCK PINS  MOST POINTS WINS',
   env: 'night',
+  quietDown: true, // every roll ends in the pit: the feed says how it went, no DOWN banner
 
   draw(view, ctx, out) {
     const s = stage(view);
