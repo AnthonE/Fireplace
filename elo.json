@@ -375,8 +375,8 @@
     ]
   },
   "web": {
-    "url": "https://github.com/AnthonE/Fireplace/releases/download/web-ea49b4984447/site.zip",
-    "sha256": "d7f86d5ae67e46e8f85e85f3e674009e1123f84f465716adb404b3adb6fbb5c6",
+    "url": "https://github.com/AnthonE/Fireplace/releases/download/web-39bf73f387c8/site.zip",
+    "sha256": "0e52fa8d514d2baa72e4b9aa9bee43e7f9e57c9fd74475b9b8beb1a1690052df",
     "entry": "index.html",
     "frame": false
   }
