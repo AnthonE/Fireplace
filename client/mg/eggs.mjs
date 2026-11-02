@@ -5,14 +5,17 @@
 // a ring of bundles with a flag behind it, the eggs laid there heaped in
 // it. The eggs are white (golden ones gold): loose ones slid on to now as
 // $eg_slide slides them, one just knocked loose popping off its carrier, a
-// carried one riding over its carrier's head. A golden egg's landing is a
-// pulsing ring in the middle from its call, the egg falling into it for its
-// last 0.8 s. The nests' values are the HUD's side scores.
+// carried one riding over its carrier's head (over the power-up it holds, if
+// any). A golden egg's landing is a pulsing ring in the middle from its call,
+// the egg falling into it for its last 0.8 s. Bumper's power-ups fall onto the
+// yard as Swiss Roll's do: a target where one will land and a streak as it
+// falls, then lying, bobbing. The nests' values are the HUD's side scores.
 import * as L from '../../src/layout.mjs';
 import * as MC from '../../src/mg/eggs.mjs'; // EG_*: the minigame's own constants
-import { PLAT_Y, B_RAD, SIDES } from '../../src/party-view.mjs';
+import { PLAT_Y, B_RAD, MEGA_RAD, SIDES } from '../../src/party-view.mjs';
 import { LOOK, SPRITE, SHAPE, DECAL } from '../party-render.mjs';
 import { C } from '../font.mjs';
+import { world, team } from '../party-world.mjs';
 
 const TICK = 0.008;
 const HH = 0.5; // the floor's half height, m
@@ -23,6 +26,8 @@ const FENCE = [0.62, 0.45, 0.3];
 const SHELL = [0.97, 0.95, 0.88];
 const GOLD = [1, 0.76, 0.18];
 const BARN = [0.66, 0.16, 0.12];
+// the power-ups' colours, by PU_* (bumper's)
+const PU_RGB = [[1, 1, 1], [1, 0.3, 0.25], [0.3, 0.8, 1], [1, 0.85, 0.2], [1, 0.55, 0.15], [0.5, 1, 0.45]];
 const EW = 0.33, EH2 = MC.EG_EH / 2; // an egg's half width and half height as drawn
 const MARGIN = 9; // m of grass round the fence
 const f = Math.fround;
@@ -62,6 +67,17 @@ export function slotOf(view, p) {
 }
 // The egg slot p carries (its PG_M less 1, on the view's bank), -1 none.
 export const carried = (view, p) => view.dv.getUint32(L.PLAYERS + (view.bank || 0) + p * L.PSIZE + L.PG_M, true) - 1;
+// The power-up slot p holds (PU_*, 0 none), on the view's bank.
+const holds = (view, p) => view.u8[L.PLAYERS + (view.bank || 0) + p * L.PSIZE + L.B_ITEM];
+// The power-ups from the sky (PG_S, the confirmed world's): { k, x, y (its centre), z, kind, falling, life }.
+export function orbs(view) {
+  const dv = view.dv, out = [];
+  for (let k = 0; k < MC.EG_NORB; k++) {
+    const a = L.PG_S + MC.EG_ORBS + 16 * k, kind = view.u8[a + 12];
+    if (kind) out.push({ k, x: dv.getFloat32(a, true), y: dv.getFloat32(a + 4, true), z: dv.getFloat32(a + 8, true), kind, falling: view.u8[a + 13] === 1, life: dv.getUint16(a + 14, true) });
+  }
+  return out;
+}
 
 // $eg_tilt: (vx, vz) after the nest at (nx, cx) if (x, z) is on its floor.
 function tilt(x, z, vx, vz, nx, cx, nr) {
@@ -163,12 +179,16 @@ const pops = [];
 // ---- the AI ball
 
 // What every AI ball looking at one world tick shares: the yard, the clock,
-// the eggs loose, carried and in each nest, each side's balls in, and the
-// jobs: in a side of three or more, a quarter guard its nest and a quarter
-// raid the other (from its place in the side, turned each round), the rest
-// fetch; each loose egg (the golden ones first) to the nearest fetcher free
-// (any ball of the side carrying nothing, but the guards while a foe
-// threatens and the raiders while the other nest has eggs).
+// the eggs loose, carried and in each nest, the power-ups lying (or a second
+// from landing), each side's balls in (client/party-world.mjs's, in slot
+// order), and the jobs: in a side of three or more, a quarter guard its nest
+// and a quarter raid the other (from its place in the side, turned each
+// round), the rest fetch; each loose egg (the golden ones first) to the
+// nearest fetcher free (any ball of the side carrying nothing, but the guards
+// while a foe threatens and the raiders while the other nest has eggs); then
+// each power-up to the nearest of the side within 12 m with its hands free,
+// carrying nothing (no guard while a foe threatens), and no egg it is sent
+// for under twice as far.
 function worldOf(view) {
   const o = view.bank || 0;
   const w0 = view._eg;
@@ -182,31 +202,25 @@ function worldOf(view) {
   const loose = list.filter((e) => e.st === MC.EG_FREE);
   const nest = [0, 0];
   for (const e of list) if (e.st === MC.EG_NEST) nest[e.side & 1] += e.v;
-  const side = [[], []];
-  if (state === L.H_PLAY) {
-    for (let p = 0; p < L.NPLAYER; p++) {
-      const a = L.PLAYERS + o + p * L.PSIZE;
-      const fl = view.u8[a + L.P_FL];
-      if ((fl & (L.PF_LIVE | L.PF_DEAD | L.PF_FALL)) !== L.PF_LIVE) continue;
-      side[fl & L.PF_BLUE ? 1 : 0].push({ slot: p, x: dv.getFloat32(a + L.P_PX, true), z: dv.getFloat32(a + L.P_PZ, true),
-        vx: dv.getFloat32(a + L.P_VX, true), vz: dv.getFloat32(a + L.P_VZ, true), egg: dv.getUint32(a + L.PG_M, true) - 1 });
-    }
-  }
-  const job = new Map(); // slot -> { role: 'guard' | 'raid' | 'fetch', egg (the loose egg it's sent for, or null), i, n }
+  const ups = state === L.H_PLAY ? orbs(view).filter((u) => !u.falling || u.y < PLAT_Y + 10) : [];
+  const side = state === L.H_PLAY ? world(view).sides : [[], []];
+  const job = new Map(); // slot -> { role: 'guard' | 'raid' | 'fetch', egg (the loose egg it's sent for, or null), orb (the power-up, or null), i, n }
   for (const s of [0, 1]) {
     const mine = side[s], m = mine.length;
     const ng = m >= 3 ? Math.floor(m / 4) : 0, nraid = m >= 3 ? Math.max(1, Math.floor(m / 4)) : 0;
     const [nx, nz] = nestAt(c, s);
     // a foe near our nest, or carrying one of ours away
-    const threat = side[1 - s].some((b) => b.egg >= 0 || Math.hypot(b.x - nx, b.z - nz) < c.nr + 12);
-    const free = [];
+    const threat = side[1 - s].some((b) => carried(view, b.slot) >= 0 || Math.hypot(b.x - nx, b.z - nz) < c.nr + 12);
+    const free = [], hands = [];
     let gi = 0;
     mine.forEach((b, i) => {
       const rot = (i + round * 7) % m;
       const role = rot < ng ? 'guard' : rot < ng + nraid ? 'raid' : 'fetch';
-      const j = { role, egg: null, i: role === 'guard' ? gi++ : 0, n: ng };
+      const j = { role, egg: null, orb: null, i: role === 'guard' ? gi++ : 0, n: ng };
       job.set(b.slot, j);
-      if (b.egg < 0 && (role === 'fetch' || (role === 'guard' && !threat) || (role === 'raid' && nest[1 - s] === 0))) free.push(b);
+      if (carried(view, b.slot) >= 0) return;
+      if (role === 'fetch' || (role === 'guard' && !threat) || (role === 'raid' && nest[1 - s] === 0)) free.push(b);
+      if (!holds(view, b.slot) && !(role === 'guard' && threat)) hands.push(b);
     });
     // the golden eggs first, then the rest in order: each to the nearest fetcher free
     const order = loose.slice().sort((a, b) => b.v - a.v || a.k - b.k);
@@ -217,37 +231,115 @@ function worldOf(view) {
       job.get(free[best].slot).egg = e;
       free.splice(best, 1);
     }
+    for (const u of ups) {
+      let best = null, bd = 12;
+      for (const b of hands) {
+        const j = job.get(b.slot), d = Math.hypot(b.x - u.x, b.z - u.z);
+        if (!j.orb && d < bd && (!j.egg || Math.hypot(b.x - j.egg.x, b.z - j.egg.z) > 2 * d)) { bd = d; best = j; }
+      }
+      if (best) best.orb = u;
+    }
   }
-  view._eg = { tick: view.tick, bank: o, c, state, t, round, list, loose, nest, side, job, near: new Map() };
+  view._eg = { tick: view.tick, bank: o, c, state, t, round, list, loose, nest, ups, side, job, near: new Map() };
   return view._eg;
 }
+
+// Where ball b will be s seconds on.
+const lead = (b, s) => [b.x + b.vx * s, b.z + b.vz * s];
 
 // A charge at foe b: at where it will be when this ball gets there (it
 // closes at about 11 m/s), straight in, flat out, so it is the faster into
 // the bump.
 function charge(px, pz, b, lagS, skill) {
-  const bx = b.x + b.vx * lagS, bz = b.z + b.vz * lagS;
+  const [bx, bz] = lead(b, lagS);
   const tt = Math.min(1.2, Math.hypot(bx - px, bz - pz) / 11) * (0.5 + 0.5 * skill);
   return { yaw: Math.atan2(bz + b.vz * tt - pz, bx + b.vx * tt - px), move: 1 };
 }
 
-// The word for a ball carrying nothing with a foe carrier in reach: a
-// charge (any ball, at one within 7 m; a guard at one anywhere on its own
-// half or within 25 m); a guard with none, at a foe come within 10 m of its
-// nest, raiding. Else null: the planner takes it to its goal.
-function play(view, w, me, bot, tick) {
-  if (carried(view, me.slot) >= 0) return null;
-  const c = w.c, s = me.side;
+// Is the way from (px, pz) to (tx, tz) clear of every ball of list (none
+// within 1.8 m of it, between the two)? A rocket goes off on the first ball it meets.
+function clear(list, px, pz, tx, tz) {
+  const dx = tx - px, dz = tz - pz, l2 = dx * dx + dz * dz || 1;
+  for (const b of list) {
+    const u = ((b.x - px) * dx + (b.z - pz) * dz) / l2;
+    if (u > 0 && u < 1 && Math.hypot(px + dx * u - b.x, pz + dz * u - b.z) < 1.8) return false;
+  }
+  return true;
+}
+
+// The power-up held, spent where it pays, or null: a POW at a foe carrier
+// within 7 m (its blast knocks the egg loose), or a carrier's at a foe within
+// 4; a ROCKET at a foe carrier within 22 m, led, no teammate in its way; a
+// DASH home for a carrier with a foe within 9 m or 18 m still to go, or at a
+// foe carrier 2.5 to 9 m off, led (the faster into the bump); a SPRING over a
+// foe closing on a carrier within 5 m; MEGA by a foe carrier within 10 m, or
+// a carrier's with a foe within 8. Foes as they will be when the word lands;
+// a word with a yaw aims it, one without leaves the steering as it was.
+function spend(view, w, me, item, px, pz, vx, vz, lagS, mine) {
+  const { mates, foes } = team(view, me.slot);
+  let fc = null, fd = Infinity, near = Infinity, closing = 0;
+  for (const b of foes) {
+    const [bx, bz] = lead(b, lagS), d = Math.hypot(bx - px, bz - pz);
+    if (carried(view, b.slot) >= 0) { if (d < fd) { fd = d; fc = b; } } else if (d < near) { near = d; closing = ((b.vx - vx) * (px - bx) + (b.vz - vz) * (pz - bz)) / (d || 1); }
+  }
+  const aim = (b, s) => { const [x, z] = lead(b, lagS + s); return Math.atan2(z - pz, x - px); };
+  switch (item) {
+    case L.PU_POW:
+      if (fd < 7 || (mine && near < 4)) return { use: true };
+      break;
+    case L.PU_ROCKET:
+      if (fd < 22 && clear(mates, px, pz, ...lead(fc, lagS + fd / 30))) return { yaw: aim(fc, fd / 30), move: 1, use: true };
+      break;
+    case L.PU_DASH:
+      if (mine) {
+        const [nx, nz] = nestAt(w.c, me.side), nd = Math.hypot(nx - px, nz - pz);
+        if (nd > 8 && (near < 9 || nd > 18)) return { yaw: Math.atan2(nz - pz, nx - px), move: 1, use: true };
+      } else if (fd > 2.5 && fd < 9) return { yaw: aim(fc, fd / 16), move: 1, use: true };
+      break;
+    case L.PU_SPRING:
+      if (mine && near < 5 && closing > 2) return { use: true };
+      break;
+    case L.PU_MEGA:
+      if (fd < 10 || (mine && near < 8)) return { use: true };
+      break;
+    default:
+  }
+  return null;
+}
+
+// The word: the power-up held when it pays (now and then by skill, as
+// balloon's AI fires); else for a ball carrying nothing with a foe carrier in
+// reach, a charge (any ball, at one within 7 m; a guard at one anywhere on its
+// own half or within 25 m); a guard with none, at a foe come within 10 m of
+// its nest, raiding. Else null: the planner takes it to its goal.
+function play(view, w, me, bot, tick, item) {
   const lagS = Math.max(0, Math.min(60, (tick - view.tick) | 0)) * TICK;
   const px = bot?.pos?.[0] ?? me.pos[0], pz = bot?.pos?.[1] ?? me.pos[2];
   const skill = bot?.skill ?? 0.6;
+  const mine = carried(view, me.slot) >= 0;
+  let use = false;
+  if (item && me.refire === 0) {
+    const u = spend(view, w, me, item, px, pz, bot?.vel?.[0] ?? me.vel[0], bot?.vel?.[1] ?? me.vel[2], lagS, mine);
+    if (u && (!bot?.rand || bot.rand() < 0.3 + 0.6 * skill)) {
+      if (u.yaw !== undefined) return u;
+      use = true;
+    }
+  }
+  const word = mine ? null : hunt(view, w, me, px, pz, lagS, skill);
+  return use ? { ...word, use } : word;
+}
+
+// A charge for a ball carrying nothing at a foe carrier in reach, or a
+// guard's at a raider near its nest; else null.
+function hunt(view, w, me, px, pz, lagS, skill) {
+  const c = w.c, s = me.side;
   const j = w.job.get(me.slot);
   const guard = j?.role === 'guard';
   const [nx, nz] = nestAt(c, s);
-  const foes = w.side[1 - s];
+  const { foes } = team(view, me.slot);
   let best = null, bd = Infinity;
   for (const b of foes) {
-    if (b.egg < 0) continue;
+    if (carried(view, b.slot) < 0) continue;
     const d = Math.hypot(b.x - px, b.z - pz);
     const ours = (b.x - c.cx) * dir(s) > 0;
     if ((d < 7 || (guard && (ours || d < 25))) && d < bd) { bd = d; best = b; }
@@ -263,14 +355,15 @@ function play(view, w, me, bot, tick) {
   return null;
 }
 
-// Where a ball wants to be: carrying, its own nest; sent for an egg, there;
-// a guard, its spot on an arc round its nest toward the middle; a raider (or
-// any with nothing to fetch) the other nest while it has eggs; else spread
-// over its half of the middle.
+// Where a ball wants to be: carrying, its own nest; sent for a power-up or
+// an egg, there; a guard, its spot on an arc round its nest toward the
+// middle; a raider (or any with nothing to fetch) the other nest while it has
+// eggs; else spread over its half of the middle.
 function goalOf(view, w, me, bot) {
   const c = w.c, s = me.side, slot = me.slot;
   if (carried(view, slot) >= 0) return nestAt(c, s);
   const j = w.job.get(slot);
+  if (j?.orb) return [j.orb.x, j.orb.z];
   if (j?.egg) return [j.egg.x, j.egg.z];
   if (j?.role === 'guard') {
     const [nx, nz] = nestAt(c, s);
@@ -286,7 +379,7 @@ function goalOf(view, w, me, bot) {
 export default {
   id: L.MG_EGGS, key: 'eggs', name: 'EGG RAID',
   hint: 'ROLL OVER AN EGG  ROLL IT INTO YOUR NEST  RAID THEIRS',
-  rules: 'A HARD BUMP KNOCKS AN EGG LOOSE  THE BIGGER NEST WINS',
+  rules: 'A HARD BUMP OR A BLAST KNOCKS AN EGG LOOSE  THE BIGGER NEST WINS',
   env: 'day',
 
   draw(view, ctx, out) {
@@ -294,7 +387,7 @@ export default {
     if (!(c.hx > 0)) return;
     const g = view.party();
     const sc = out.scene, cx = c.cx;
-    const now = (ctx?.now ?? 0) / 1000;
+    const ms0 = ctx?.now ?? 0, now = ms0 / 1000;
     // the island's grass, one solid so no seam crosses the yard; the dirt in the middle
     sc.box(cx, PLAT_Y - HH, cx, c.hx + MARGIN, HH, c.hz + MARGIN, 0, ...GRASS, LOOK.MATTE, 0, 0, 1, 7);
     out.decals.push({ pos: [cx, PLAT_Y + 0.02, cx], radius: c.pr + 2.2, color: [...DIRT, 0.85], kind: DECAL.DISC });
@@ -347,6 +440,23 @@ export default {
       const a = L.PLAYERS + p * L.PSIZE;
       return [0, 1, 2].map((i) => dvb.getFloat32(a + L.P_PX + 4 * i, true) + dvb.getFloat32(a + L.P_VX + 4 * i, true) * dt);
     };
+    // over a carrier's head: its radius (MEGA's bigger) and the power-up party's frontend draws there (yours as predicted)
+    const over = (p) => {
+      const b = mine && p === slot ? mine : { item: view.u8[L.PLAYERS + p * L.PSIZE + L.B_ITEM], mega: dvb.getUint16(L.PLAYERS + p * L.PSIZE + L.B_MEGA, true) };
+      return 2 * (b.mega ? MEGA_RAD : B_RAD) + 1.5 + (b.item ? 0.8 : 0);
+    };
+    // the power-ups: a target where one will land and a streak as it falls, then on the floor, bobbing
+    for (const o of orbs(view)) {
+      const rgb = PU_RGB[o.kind] || PU_RGB[0];
+      const y = o.falling ? Math.max(PLAT_Y + 0.6, o.y - 10 * dt) : PLAT_Y + 0.6 + 0.15 * Math.sin(ms0 / 333 + o.k);
+      out.casters.push([o.x, y, o.z, -0.6]);
+      out.solid.push({ pos: [o.x, y, o.z], size: 0.6, color: [...rgb, 1], kind: SPRITE.ORB, minpx: 2 });
+      out.glow.push({ pos: [o.x, y, o.z], size: 1.5, color: [...rgb, 0.5], kind: SPRITE.FLASH, minpx: 2 });
+      if (o.falling && y > PLAT_Y + 0.6) {
+        out.beams?.push({ a: [o.x, y + 5, o.z], b: [o.x, y, o.z], width: 0.12, color: [...rgb, 0.35] });
+        out.decals.push({ pos: [o.x, PLAT_Y + 0.03, o.z], radius: 1.4, width: 0.25, color: [...rgb, 0.85], kind: DECAL.TARGET });
+      }
+    }
     for (const e of list) {
       const col = e.v > 1 ? GOLD : SHELL, look = e.v > 1 ? LOOK.METAL : LOOK.PLASTIC;
       let x, y, z;
@@ -357,7 +467,7 @@ export default {
         if (tp >= 0 && e.at > tp) { const u = 1 - (e.at - tp) / MC.EG_LOCK; y += (2 * B_RAD + 0.8) * (1 - u * u); }
       } else if (e.st === MC.EG_HELD) {
         const h = ballAt(e.by);
-        x = h[0]; z = h[2]; y = h[1] + 2 * B_RAD + 1.5 + 0.08 * Math.sin(now * 6 + e.k);
+        x = h[0]; z = h[2]; y = h[1] + over(e.by) + 0.08 * Math.sin(now * 6 + e.k);
       } else if (e.st === MC.EG_NONE && e.v > 1 && tp >= 0) {
         // a golden egg called: its ring in the middle, and the egg falling into it
         const k = e.k - c.ne, T = goldAt(k);
@@ -466,7 +576,7 @@ export default {
       const n = (tick - view.tick) * TICK * 0.7;
       let d = 0;
       let near = w.near.get(me.slot);
-      if (!near) w.near.set(me.slot, near = w.side[1 - me.side].filter((b) => b.egg < 0 && Math.hypot(b.x - me.pos[0], b.z - me.pos[2]) < 14));
+      if (!near) w.near.set(me.slot, near = team(view, me.slot).foes.filter((b) => carried(view, b.slot) < 0 && Math.hypot(b.x - me.pos[0], b.z - me.pos[2]) < 14));
       for (const b of near) {
         const dx = x - (b.x + b.vx * n), dz = z - (b.z + b.vz * n), d2 = dx * dx + dz * dz;
         if (d2 < 9) d = Math.max(d, 0.6 * (1 - Math.sqrt(d2) / 3));
@@ -479,10 +589,15 @@ export default {
       return goalOf(view, w, me, bot);
     },
     hop() { return false; },
+    // the power-up is the brain's to spend (the planner's own rule would fire it
+    // at any ball ahead, carrying or not): the record it reads holds none (a
+    // fresh one each think), as Tag's does
     think(view, me, bot, tick = view.tick) {
       const w = worldOf(view);
       if (w.state !== L.H_PLAY || !me || !me.live || me.out) return null;
-      return play(view, w, me, bot, tick);
+      const item = me.item;
+      me.item = 0;
+      return play(view, w, me, bot, tick, item);
     },
   },
 };

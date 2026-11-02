@@ -4,9 +4,11 @@
 // laying and stealing; an egg knocked loose by a hard bump from a foe and by
 // a blast, never by a soft one or by a carrier's own charge; a loose egg's
 // slide off the fence and out of a nest, and the client's slide the same
-// bits; the golden eggs; the end by the nests' value and a draw; a newcomer
-// in play and a ball alone; the prediction bit for bit through the fence,
-// the nests and the slowdown; the client and its AI; rounds of AI balls.
+// bits; the golden eggs; bumper's power-ups from the sky, and a ROCKET taken
+// from one knocking an egg loose; the end by the nests' value and a draw; a
+// newcomer in play and a ball alone; the prediction bit for bit through the
+// fence, the nests, the slowdown, a DASH and a SPRING; the client and its AI,
+// power-ups drawn and spent; rounds of AI balls.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newParty, partyBytes, predicted } from './helpers.mjs';
@@ -66,6 +68,18 @@ function carry(g, p, k, v = 1) {
   g.dv.setUint32(rec(p) + L.PG_M, k + 1, true);
 }
 const egg = (g, k) => eggList(g.v)[k];
+const OA = (k) => L.PG_S + MC.EG_ORBS + 16 * k;
+// Power-up k of kind, lying on the floor at (x, z) from the centre (ticks left), or falling at y over it.
+function setO(g, k, kind, x, z, { y = 0, life = MC.EG_ORBLIFE } = {}) {
+  const a = OA(k), dv = g.dv;
+  [C + x, PLAT_Y + (y || 0.6), C + z].forEach((v, i) => dv.setFloat32(a + 4 * i, v, true));
+  dv.setUint8(a + 12, kind);
+  dv.setUint8(a + 13, y ? 1 : 2);
+  dv.setUint16(a + 14, y ? 0 : life, true);
+}
+const orb = (g, k) => ({ kind: g.v.u8[OA(k) + 12], st: g.v.u8[OA(k) + 13], y: g.dv.getFloat32(OA(k) + 4, true) - PLAT_Y, life: g.dv.getUint16(OA(k) + 14, true) });
+// No drop till tick into play t.
+const hold = (g, t = 1e6) => g.dv.setUint32(L.PG_H + MC.EG_DROP, t, true);
 // Every egg out of play (the golden ones too, till theirs lands), so a test has only its own.
 const clear = (g) => { for (let k = 0; k < MC.EG_NMAX + MC.EG_NGOLD; k++) g.dv.setUint8(EA(k) + MC.EG_EST, MC.EG_NONE); };
 const fxs = (v, from, kind) => { const out = []; for (let k = from; k < v.fxCount(); k++) { const x = v.fx(k); if (x.kind === kind) out.push(x); } return out; };
@@ -324,7 +338,7 @@ test('knocked loose: a foe rolling into a carrier at over 5 m/s pops its egg out
   assert.equal(carried(g.v, p2), 0, 'a teammate\'s');
 });
 
-test('knocked loose by a blast: a foe\'s POW shoves a carrier 4 m off and its egg pops out; a teammate\'s spares it', async () => {
+test('knocked loose by a blast: a foe\'s POW shoves a carrier 4 m off and its egg pops out; a teammate\'s spares it; one blowing up beside a MEGA carrier, too light a jolt for a bump, is still a blast', async () => {
   const { g, c, red, blue } = await stage(4);
   const [p, p2] = red, [q] = blue;
   carry(g, p, 0);
@@ -344,6 +358,21 @@ test('knocked loose by a blast: a foe\'s POW shoves a carrier 4 m off and its eg
   const [x] = fxs(g.v, f0, MC.EG_FX_POP);
   assert.ok(x.owner === p && x.shot === (q | 256), JSON.stringify(x));
   assert.ok(egg(g, 0).vx < -2, `away from the blast: ${egg(g, 0).vx}`);
+  // touching a MEGA carrier (three times the weight): a POW jolts it 4.5 m/s, under a bump's EG_HARD
+  for (let k = 0; k < MC.EG_REGRAB; k++) g.step();
+  clear(g);
+  carry(g, p, 1);
+  put(g, p, 0, -6);
+  g.dv.setUint16(rec(p) + L.B_MEGA, L.MEGA_TICKS, true);
+  put(g, q, 2.7, -6);
+  put(g, p2, -9, 9);
+  g.dv.setUint8(rec(q) + L.B_ITEM, L.PU_POW);
+  g.step();
+  const f1 = g.v.fxCount();
+  g.step([[L.EV_INPUT, q, partyWord({ use: 2 })]]);
+  assert.equal(carried(g.v, p), -1, 'a POW beside it is a blast');
+  const [y] = fxs(g.v, f1, MC.EG_FX_POP);
+  assert.ok(y.owner === p && y.shot === (q | 256) && y.size > MC.EG_SHOVE && y.size < MC.EG_HARD, JSON.stringify(y));
   void c;
 });
 
@@ -412,6 +441,93 @@ test('the golden eggs: called 2 s ahead, landing in the middle at 20, 40, 60 and
   assert.equal(egg(g, ne + 1).st, MC.EG_FREE);
 });
 
+test('the power-ups: bumper\'s from the sky, 6 s into play and every 8 s, one more a drop for every 16 balls in, onto the yard and never into a nest; the first ball into one, by slot, takes it; one left lying goes at 10 s; a ROCKET taken from the sky and fired knocks a foe carrier\'s egg loose', async () => {
+  // on the clock: one at a time for 8, two for 16, 17 for 256
+  const { g, c, red, blue } = await stage(8);
+  const g16 = (await stage(16)).g;
+  const f0 = g.v.fxCount(), h0 = g16.v.fxCount();
+  const at = (v) => (x) => x.tick - v.party().start;
+  while (!fxs(g.v, f0, L.FX_DROP).length) g.step();
+  const [d0] = fxs(g.v, f0, L.FX_DROP);
+  assert.equal(at(g.v)(d0), MC.EG_DROP0);
+  const k0 = d0.shot;
+  assert.ok(d0.size >= L.PU_MEGA && d0.size <= L.NPU && orb(g, k0).kind === d0.size && orb(g, k0).st === 1);
+  // it falls at 10 m/s from ORB_Y and lies there 10 s, nobody near it (everyone along the far fence)
+  const far = Math.sign(d0.pos[2] - C) || 1;
+  [...red, ...blue].forEach((p, i) => put(g, p, -10 + 2.5 * i, -far * (c.hz - 1.5)));
+  let landed = -1;
+  for (let k = 0; k < 2000 && orb(g, k0).kind; k++) {
+    g.step();
+    if (landed < 0 && orb(g, k0).st === 2) { landed = g.v.party().t; assert.ok(Math.abs(orb(g, k0).y - 0.6) < 1e-4); }
+  }
+  assert.ok(Math.abs(landed - at(g.v)(d0) - (L.ORB_Y - 0.6) / 0.08) < 2, `landed ${landed - at(g.v)(d0)} ticks after the drop`);
+  assert.equal(g.v.party().t - landed, MC.EG_ORBLIFE, 'gone 10 s after it landed');
+  while (g16.v.party().t <= MC.EG_DROP0 + MC.EG_DROPGAP) g16.step();
+  assert.deepEqual(fxs(g.v, f0, L.FX_DROP).map(at(g.v)).slice(0, 2), [MC.EG_DROP0, MC.EG_DROP0 + MC.EG_DROPGAP], 'one at a time for 8');
+  assert.deepEqual(fxs(g16.v, h0, L.FX_DROP).map(at(g16.v)), [0, 0, 1, 1].map((i) => MC.EG_DROP0 + i * MC.EG_DROPGAP), 'two for 16');
+  // onto the yard, never into a nest: 256 balls, drops forced every tick (the old ones cleared), 17 a time
+  const big = await room(256, { seed: 3 });
+  const cb = yard(big.v);
+  const b0 = big.v.fxCount();
+  for (let k = 0; k < 24; k++) {
+    for (let j = 0; j < MC.EG_NORB; j++) big.dv.setUint8(OA(j) + 12, 0);
+    hold(big, 0);
+    big.step();
+  }
+  const spots = fxs(big.v, b0, L.FX_DROP);
+  assert.equal(spots.length, 24 * 17);
+  const ix = cb.hx - cb.cr, iz = cb.hz - cb.cr;
+  const sides = new Set();
+  for (const x of spots) {
+    const ax = Math.abs(x.pos[0] - C), az = Math.abs(x.pos[2] - C);
+    assert.ok(Math.hypot(Math.max(0, ax - ix), Math.max(0, az - iz)) <= cb.cr - MC.EG_DROPIN + 1e-4, `inside the fence: ${ax}, ${az}`);
+    for (const s of [0, 1]) assert.ok(Math.hypot(x.pos[0] - nestAt(cb, s)[0], x.pos[2] - C) >= cb.nr + MC.EG_DROPNEST - 1e-4, 'off the nests');
+    sides.add(`${Math.sign(x.pos[0] - C)}${Math.sign(x.pos[2] - C)}`);
+  }
+  assert.equal(sides.size, 4, 'all over the yard');
+  const kinds = spots.reduce((n, x) => { n[x.size]++; return n; }, [0, 0, 0, 0, 0, 0]);
+  assert.ok(kinds[L.PU_POW] > kinds[L.PU_SPRING] && kinds[L.PU_DASH] > kinds[L.PU_SPRING] && kinds[L.PU_MEGA] < kinds[L.PU_SPRING], `the mix: ${kinds}`);
+  // taken by the first ball into it, by slot, holding none: of two at once the lower; one holding one rolls through
+  const t = await stage(4);
+  hold(t.g);
+  const [p, p2] = t.red, [q, q2] = t.blue;
+  const lo = Math.min(p, q), hi = Math.max(p, q);
+  setO(t.g, 0, L.PU_DASH, 0, 0);
+  setO(t.g, 1, L.PU_POW, 6, 0);
+  put(t.g, lo, -1.2, 0);
+  put(t.g, hi, 1.2, 0);
+  t.g.dv.setUint8(rec(q2) + L.B_ITEM, L.PU_SPRING);
+  put(t.g, q2, 6, 1);
+  const f1 = t.g.v.fxCount();
+  t.g.step();
+  assert.deepEqual([t.g.v.partier(lo).item, t.g.v.partier(hi).item, orb(t.g, 0).kind], [L.PU_DASH, 0, 0], 'the lower slot');
+  const [pk] = fxs(t.g.v, f1, L.FX_PICKUP);
+  assert.deepEqual([pk.owner, pk.shot, pk.size], [lo, 0, L.PU_DASH]);
+  assert.deepEqual([orb(t.g, 1).kind, t.g.v.partier(q2).item], [L.PU_POW, L.PU_SPRING], 'hands full: left lying');
+  // a ROCKET from the sky: blue rolls into it and fires it at red's carrier 12 m off
+  for (const r of [p, p2, q, q2]) t.g.dv.setUint8(rec(r) + L.B_ITEM, 0);
+  setO(t.g, 1, 0, 0, 0);
+  setO(t.g, 2, L.PU_ROCKET, 3, 0, { y: 4 });
+  carry(t.g, p, 0);
+  put(t.g, p, -8, 0);
+  put(t.g, p2, -6, 8);
+  put(t.g, q, 4.5, 0);
+  put(t.g, q2, 6, -8);
+  const f2 = t.g.v.fxCount();
+  const left = partyWord({ yaw: 8192, move: 1 });
+  for (let k = 0; k < 120 && !t.g.v.partier(q).item; k++) t.g.step([[L.EV_INPUT, q, left]]);
+  assert.equal(t.g.v.partier(q).item, L.PU_ROCKET, 'taken');
+  t.g.step([[L.EV_INPUT, q, partyWord({ yaw: 8192, move: 1, use: 1 })]]);
+  assert.equal(t.g.v.partier(q).item, 0, 'fired');
+  for (let k = 0; k < 60 && carried(t.g.v, p) >= 0; k++) t.g.step([[L.EV_INPUT, q, partyWord({ yaw: 8192, move: 0, use: 1 })]]);
+  assert.equal(carried(t.g.v, p), -1, 'knocked loose');
+  const [x] = fxs(t.g.v, f2, MC.EG_FX_POP);
+  assert.ok(x.owner === p && x.shot === (q | 256) && x.size > MC.EG_SHOVE, JSON.stringify(x));
+  assert.equal(fxs(t.g.v, f2, L.FX_BLAST).length, 1);
+  assert.ok(egg(t.g, 0).vx < -1, `away from the blast: ${egg(t.g, 0).vx}`);
+  assert.deepEqual([t.g.v.partier(q).score, slotOf(t.g.v, q).knocks], [MC.EG_PT_KNOCK, 1]);
+});
+
 test('the end: at the clock the bigger nest wins, every ball of its side 1st and the rest by their own score; level nests are a draw, placed by score', async () => {
   const { g, red, blue } = await stage(6);
   setE(g, 0, { st: MC.EG_NEST, side: 1 });
@@ -462,44 +578,54 @@ test('a newcomer in play goes to the smaller side and falls in in front of its o
   assert.deepEqual([one.v.party().twin, one.v.partier(0).place, one.v.partier(0).wins], [1, 1, 1]);
 });
 
-test('the prediction matches the confirmed ball bit for bit: a carrier, slowed, off the fence and its corners and rolled out of the other nest; a ball carrying nothing through its own nest', async () => {
+test('the prediction matches the confirmed ball bit for bit: a carrier, slowed, off the fence and its corners and rolled out of the other nest, through a DASH; a ball carrying nothing through its own nest and a SPRING', async () => {
   const { g, c, red, blue } = await stage(4);
+  hold(g); // no power-up from the sky: a pickup, like a take, comes a round trip late
   const s = g.v.partier(0).side;
   const others = [...red, ...blue].filter((p) => p);
   // everyone else in a corner of slot 0's own half, out of its way
   others.forEach((p, i) => put(g, p, dir(s) * (c.hx - 6 - 2.5 * i), -c.hz + 1.5));
   carry(g, 0, 0);
   put(g, 0, -dir(s) * 3, 2);
+  g.dv.setUint8(rec(0) + L.B_ITEM, L.PU_DASH);
   const [fx] = nestAt(c, 1 - s);
   // at the other nest's middle, then out to the side's fence, then round and round
   const turn = (a) => Math.round(a / (2 * Math.PI) * 16384) & 16383;
   const toNest = turn(Math.atan2(-2, fx - C + dir(s) * 3));
-  const words = Array.from({ length: 480 }, (_, k) => partyWord({ yaw: k < 150 ? toNest : k < 340 ? 4096 : (k * 131) & 16383, move: k < 340 || k % 60 < 52 ? 1 : 0, hop: k > 340 && k % 71 === 9 ? 1 : 0 }));
+  const words = Array.from({ length: 480 }, (_, k) => partyWord({ yaw: k < 150 ? toNest : k < 340 ? 4096 : (k * 131) & 16383, move: k < 340 || k % 60 < 52 ? 1 : 0, hop: k > 340 && k % 71 === 9 ? 1 : 0, use: k >= 40 ? 1 : 0 }));
   let inNest = 0, onFence = 0;
   const watch = (k) => { const m = local(g, 0); if (Math.hypot(m.x - (fx - C), m.z) < c.nr) inNest++; if (Math.abs(m.x) > c.hx - 1.05 || Math.abs(m.z) > c.hz - 1.05) onFence++; };
   const n0 = predicted({ ...g, step: (recs) => { g.step(recs); watch(); } }, words);
   assert.ok(n0 >= words.length);
   assert.ok(inNest > 0 && onFence > 0, `through the other nest (${inNest} ticks) and against the fence (${onFence})`);
   assert.equal(carried(g.v, 0), 0, 'carrying all the while');
+  assert.deepEqual([g.v.partier(0).item, g.v.partier(0).shots], [0, 1], 'the DASH used');
   // carrying nothing, through its own nest: no eggs anywhere to take or steal
   clear(g);
   g.dv.setUint32(rec(0) + L.PG_M, 0, true);
   const [ox] = nestAt(c, s);
   put(g, 0, ox - C - dir(s) * (c.nr + 4), 1);
+  g.dv.setUint8(rec(0) + L.B_ITEM, L.PU_SPRING);
   inNest = 0;
-  const run = Array.from({ length: 360 }, (_, k) => partyWord({ yaw: k < 120 ? (s ? 0 : 8192) : (k * 97) & 16383, move: 1, hop: k % 53 === 20 ? 1 : 0 }));
-  const own = (k) => { const m = local(g, 0); if (Math.hypot(m.x - (ox - C), m.z) < c.nr) inNest++; };
+  let high = 0;
+  const run = Array.from({ length: 360 }, (_, k) => partyWord({ yaw: k < 120 ? (s ? 0 : 8192) : (k * 97) & 16383, move: 1, hop: k % 53 === 20 ? 1 : 0, use: k >= 150 ? 2 : 1 }));
+  const own = (k) => { const m = local(g, 0); if (Math.hypot(m.x - (ox - C), m.z) < c.nr) inNest++; high = Math.max(high, g.v.partier(0).pos[1] - PLAT_Y); };
   assert.ok(predicted({ ...g, step: (recs) => { g.step(recs); own(); } }, run) >= run.length);
   assert.ok(inNest > 0, `through its own nest (${inNest} ticks)`);
+  assert.ok(high > 4, `up on the SPRING: ${high.toFixed(1)} m (a hop makes 2)`);
 });
 
-test('the client: the yard, the fence, the nests and their eggs heaped, eggs loose, carried and falling; its HUD and feed; the AI carries home round foes, fetches the nearest egg, raids, and a guard charges a foe carrier', async () => {
+test('the client: the yard, the fence, the nests and their eggs heaped, eggs loose, carried and falling, power-ups falling and lying; its HUD and feed; the AI carries home round foes, fetches the nearest egg, raids, a guard charges a foe carrier, and a power-up is fetched and spent where it pays', async () => {
   const { Scene } = await import('../client/party-render.mjs');
   const { g, c, red, blue } = await stage(16);
+  hold(g);
   for (let k = 0; k < 9; k++) setE(g, k, { st: MC.EG_NEST, side: k & 1, v: k === 4 ? 3 : 1 });
   setE(g, 9, { x: 2, z: 3, vx: 3 });
   carry(g, red[0], 10);
+  g.dv.setUint8(rec(red[0]) + L.B_ITEM, L.PU_DASH);
   setE(g, 11, { x: -1, z: 1, at: g.v.party().t + 20 });
+  setO(g, 0, L.PU_POW, 6, -4);
+  setO(g, 1, L.PU_ROCKET, -6, 5, { y: 15 });
   g.step();
   const out = () => ({ scene: new Scene(24000), solid: [], glow: [], beams: [], decals: [], casters: [], paint: null });
   const o = out();
@@ -507,10 +633,20 @@ test('the client: the yard, the fence, the nests and their eggs heaped, eggs loo
   eggs.draw(g.v, { tick: g0.tick, t: g0.t * TICK, dt: 0.01, ptick: g0.tick + 6, now: 1000, slot: red[1], pme: g.v.partier(red[1]), own: g.v.partier(red[1]).pos }, o);
   for (let k = 0; k < o.scene.count * 16; k++) assert.ok(Number.isFinite(o.scene.data[k]), 'finite');
   assert.ok(o.scene.count > 120, `the yard, the fence, the nests, the eggs: ${o.scene.count}`);
-  assert.equal(o.casters.length, 3, 'a loose egg, a carried one and one popping');
+  assert.equal(o.casters.length, 5, 'a loose egg, a carried one and one popping; two power-ups');
   const eggSolids = [];
   for (let k = 0; k < o.scene.count; k++) if ((o.scene.data[k * 16 + 3] & 3) === 3 && Math.abs(o.scene.data[k * 16 + 5] - MC.EG_EH / 2) < 1e-3) eggSolids.push(k);
   assert.equal(eggSolids.length, 12, 'nine in the nests, three out');
+  // the carried one over its carrier's DASH (party's frontend draws that 1.55 m over its head)
+  const held = eggSolids.find((k) => o.scene.data[k * 16 + 15] === 10);
+  assert.ok(o.scene.data[held * 16 + 1] - g.v.partier(red[0]).pos[1] > 2 * B_RAD + 2.2, 'over the power-up it holds');
+  // the power-ups: the lying one bobbing on the floor, the falling one with its streak and a target where it lands
+  const ups = o.solid.filter((x) => x.kind === 2);
+  assert.equal(ups.length, 2);
+  assert.ok(ups.some((x) => Math.abs(x.pos[0] - C - 6) < 1e-3 && Math.abs(x.pos[1] - PLAT_Y - 0.6) < 0.2), 'lying');
+  assert.ok(ups.some((x) => Math.abs(x.pos[0] - C + 6) < 1e-3 && x.pos[1] - PLAT_Y > 10), 'falling');
+  assert.equal(o.beams.length, 1);
+  assert.ok(o.decals.some((d) => d.kind === 3 && Math.abs(d.pos[0] - C + 6) < 1e-3 && Math.abs(d.pos[2] - C - 5) < 1e-3), 'its target');
   // a golden egg called: its ring, then falling
   const o2 = out();
   eggs.draw(g.v, { tick: g0.tick, dt: 0, pt: (goldAt(0) - 50) * TICK, now: 0, slot: -1 }, o2);
@@ -546,6 +682,35 @@ test('the client: the yard, the fence, the nests and their eggs heaped, eggs loo
   g.step();
   const w = think(red[2]).word;
   assert.ok(w && Math.abs(Math.atan2(Math.sin(w.yaw), Math.cos(w.yaw))) < 0.6, `charging it: ${w && w.yaw}`);
+  // power-ups spent where they pay: a POW at a foe carrier 4 m off, held with none in reach; a ROCKET at one 12 m
+  // off, its way clear of teammates; a DASH home for a carrier 25 m out; the record the planner reads holds none
+  clear(g);
+  for (const p of [...red, ...blue]) { g.dv.setUint8(rec(p) + L.B_ITEM, 0); g.dv.setUint32(rec(p) + L.PG_M, 0, true); }
+  for (let k = 0; k < MC.EG_NORB; k++) setO(g, k, 0, 0, 0);
+  const arm = (p, x, z, item) => { put(g, p, x, z); g.dv.setUint8(rec(p) + L.B_ITEM, item); };
+  carry(g, red[0], 1);
+  put(g, red[0], 0, 6);
+  arm(blue[2], 4, 6, L.PU_POW);
+  arm(blue[3], 16, 10, L.PU_POW);
+  put(g, blue[0], 14, -12);
+  arm(blue[4], 10, 12, L.PU_ROCKET);
+  carry(g, red[5], 2);
+  arm(red[5], 8, -6, L.PU_DASH);
+  g.step();
+  const pow = think(blue[2]);
+  assert.ok(pow.word?.use && pow.me.item === 0, `a POW: ${JSON.stringify(pow.word)}`);
+  assert.ok(!think(blue[3]).word?.use, 'none in reach: held');
+  const rk = think(blue[4]).word, aim = Math.atan2(g.v.partier(red[0]).pos[2] - g.v.partier(blue[4]).pos[2], g.v.partier(red[0]).pos[0] - g.v.partier(blue[4]).pos[0]);
+  assert.ok(rk?.use && Math.abs(rk.yaw - aim) < 0.05, `a ROCKET at it: ${JSON.stringify(rk)}, ${aim}`);
+  const [hx, hz] = nestAt(c, 0), dash = think(red[5]).word, d5 = g.v.partier(red[5]).pos;
+  assert.ok(dash?.use && Math.abs(dash.yaw - Math.atan2(hz - d5[2], hx - d5[0])) < 1e-9, `a DASH home: ${JSON.stringify(dash)}`);
+  // a power-up lying near: the nearest of each side with its hands free sent for it
+  const r6 = g.v.partier(red[6]).pos;
+  setO(g, 3, L.PU_SPRING, r6[0] - C + 2, r6[2] - C + 1);
+  g.step();
+  const at3 = [f(r6[0] + 2), f(r6[2] + 1)];
+  const sentFor = red.filter((p) => { const q = think(p).goal; return q && q[0] === at3[0] && q[1] === at3[1]; });
+  assert.deepEqual(sentFor, [red[6]], 'the nearest red ball for it');
   // staged: an AI ball alone against a full other nest raids it and brings an egg home
   const one = await stage(2, { seed: 5 });
   const [r0] = one.red;
@@ -558,7 +723,7 @@ test('the client: the yard, the fence, the nests and their eggs heaped, eggs loo
 
 // A round of AI balls (client/party-bot.mjs) steered by this minigame's brain on the debug build, stats from it.
 async function aiRound(balls, ticks, seed) {
-  const stats = { start: -1, over: -1, takes: [0, 0], steals: [0, 0], lays: [0, 0], knocks: 0, gold: 0, places: null, twin: 0 };
+  const stats = { start: -1, over: -1, takes: [0, 0], steals: [0, 0], lays: [0, 0], knocks: 0, blasts: 0, gold: 0, drops: 0, picks: 0, uses: 0, places: null, twin: 0 };
   let seen = 0;
   const r = await playParty({ bytes: partyBytes(true), mg: L.MG_EGGS, bots: balls, ticks, seed, onTick: (t, sim, v) => {
     const g = v.party();
@@ -567,7 +732,10 @@ async function aiRound(balls, ticks, seed) {
       if (stats.over >= 0 || stats.start < 0) continue;
       if (x.kind === MC.EG_FX_GET) stats[x.shot & 256 ? 'steals' : 'takes'][v.partier(x.owner).side]++;
       if (x.kind === MC.EG_FX_LAY) { stats.lays[(x.shot >> 8) & 1]++; if (x.shot & 512) stats.gold++; }
-      if (x.kind === MC.EG_FX_POP) stats.knocks++;
+      if (x.kind === MC.EG_FX_POP) stats[x.shot & 256 ? 'blasts' : 'knocks']++;
+      if (x.kind === L.FX_DROP) stats.drops++;
+      if (x.kind === L.FX_PICKUP) stats.picks++;
+      if (x.kind === L.FX_USE) stats.uses++;
     }
     if (stats.start < 0 && g.state === L.H_PLAY) stats.start = t;
     if (stats.over < 0 && stats.start >= 0 && g.state === L.H_OVER) {
@@ -582,7 +750,7 @@ async function aiRound(balls, ticks, seed) {
 }
 
 for (const [balls, ticks, seed] of [[8, 12200, 5], [64, 12200, 4]]) {
-  test(`a round of ${balls} AI balls on the debug build: no trap, eggs taken, laid and stolen by both sides, knocked loose, the bigger nest winning at the clock; equal on 1 and 4 threads`, async () => {
+  test(`a round of ${balls} AI balls on the debug build: no trap, eggs taken, laid and stolen by both sides, knocked loose by bumps and by blasts, power-ups taken and spent, the bigger nest winning at the clock; equal on 1 and 4 threads`, async () => {
     const { log, sim, stats, games } = await aiRound(balls, ticks, seed);
     assert.equal(sim.error().code, 0);
     assert.ok(games.every((x) => x === L.MG_EGGS));
@@ -590,6 +758,10 @@ for (const [balls, ticks, seed] of [[8, 12200, 5], [64, 12200, 4]]) {
     assert.equal(stats.over - stats.start, MC.EG_LEN, 'at the clock');
     for (const s of [0, 1]) assert.ok(stats.takes[s] >= balls / 4 && stats.lays[s] >= balls / 4 && stats.steals[s] >= 3, `takes ${stats.takes}, lays ${stats.lays}, steals ${stats.steals}`);
     assert.ok(stats.knocks >= balls && stats.gold >= 2, `${stats.knocks} knocked loose, ${stats.gold} golden laid`);
+    // the power-ups a spice: most taken and spent, their blasts a few of the knocks
+    assert.equal(stats.drops, (1 + Math.floor(balls / MC.EG_DROPN)) * Math.ceil((MC.EG_LEN - MC.EG_DROP0) / MC.EG_DROPGAP));
+    assert.ok(stats.picks >= stats.drops * 0.7 && stats.uses >= stats.picks * 0.8, `${stats.drops} dropped, ${stats.picks} taken, ${stats.uses} used`);
+    assert.ok(stats.blasts >= 2 && stats.blasts < stats.knocks / 2, `${stats.blasts} knocked loose by blasts, ${stats.knocks} by bumps`);
     assert.equal(stats.twin, stats.tscore[0] > stats.tscore[1] ? 1 : stats.tscore[0] < stats.tscore[1] ? 2 : 3);
     if (stats.twin !== 3) stats.sides.forEach((s, p) => assert.equal(stats.places[p] === 1, s === stats.twin - 1, `P${p + 1}: the winners share 1st`));
     const parsed = parseLog(log);

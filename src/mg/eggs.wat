@@ -15,18 +15,23 @@
 ;; closing) or shoved by a blast (more than EG_SHOVE) drops its egg: it pops
 ;; out loose, sliding EG_POPK of the jolt, keeping EG_FRIC of its speed a
 ;; tick and coming off the fence, nobody's for EG_LOCK and not its carrier's
-;; for EG_REGRAB. A side's score (PG_TSCORE) is the value of the eggs in its
-;; nest, live; the bigger nest at the clock wins, or a draw. A ball's own
-;; points (PG_SCORE, how the losers place): an egg laid its value, a steal
-;; EG_PT_STEAL, a foe's egg knocked loose EG_PT_KNOCK.
+;; for EG_REGRAB. Bumper's power-ups fall onto the yard, never into a nest,
+;; EG_DROPGAP apart, one more a drop for every EG_DROPN balls in: a POW or a
+;; ROCKET is the blast, a DASH an egg run home or a carrier caught. A side's
+;; score (PG_TSCORE) is the value of the eggs in its nest, live; the bigger
+;; nest at the clock wins, or a draw. A ball's own points (PG_SCORE, how the
+;; losers place): an egg laid its value, a steal EG_PT_STEAL, a foe's egg
+;; knocked loose EG_PT_KNOCK.
 ;;
 ;; The fence and the nests are fixed at setup in the header, and a carrier's
 ;; slowdown reads its own PG_M (the egg it carries), so the prediction rolls
 ;; a ball through them bit for bit. The eggs are the confirmed world's, in
 ;; PG_S: taking, laying, stealing and knocking loose are judged in tick on
 ;; the records as they stand, a ball against a shared object, and come a
-;; round trip late, PG_M with them. A loose egg's slide is a function of its
-;; record alone ($eg_slide), so the page slides it on to its own clock.
+;; round trip late, PG_M with them; so are the power-ups' drops and pickups,
+;; while a power-up's use is bumper's, on either bank. A loose egg's slide is
+;; a function of its record alone ($eg_slide), so the page slides it on to
+;; its own clock.
 
 ;; An egg's record, and a slot's.
 (func $eg_e (param $k i32) (result i32)
@@ -65,6 +70,7 @@
   (f32.store (i32.const @(PG_H + EG_NX)) (f32.sub (f32.sub (local.get $hx) (f32.const @EG_NIN)) (local.get $nr)))
   (f32.store (i32.const @(PG_H + EG_PR)) (local.get $pr))
   (i32.store (i32.const @(PG_H + EG_NE)) (local.get $ne))
+  (i32.store (i32.const @(PG_H + EG_DROP)) (i32.const @EG_DROP0))
   (!for $k (i32.const 0) (local.get $ne)
     (call $p_disc (local.get $k) (local.get $ne) (local.get $pr))
     (local.set $z) (local.set $x)
@@ -110,16 +116,31 @@
   (!madd (f32.sub (f32.convert_i32_u (i32.rem_u (local.get $k) (local.get $cols))) (f32.mul (f32.convert_i32_s (i32.sub (local.get $cnt) (i32.const 1))) (f32.const 0.5)))
          (f32.const @EG_GAP) (local.get $cx)))
 
-;; Slot p's velocity and hard bumps kept for the next tick's knock.
+;; Slot p's velocity, hard bumps, uses, power-up and flags kept for the next tick's knock.
 (func $eg_keep (param $p i32)
   (local $pb i32) (local $sb i32)
   (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
   (local.set $sb (call $eg_s (local.get $p)))
   (f32.store offset=@EG_SVX (local.get $sb) (!at f32 @(PLAYERS + P_VX) (local.get $pb)))
   (f32.store offset=@EG_SVZ (local.get $sb) (!at f32 @(PLAYERS + P_VZ) (local.get $pb)))
-  (i32.store16 offset=@EG_SBUMPS (local.get $sb) (!at u16 @(PLAYERS + B_BUMPS) (local.get $pb))))
+  (i32.store16 offset=@EG_SBUMPS (local.get $sb) (!at u16 @(PLAYERS + B_BUMPS) (local.get $pb)))
+  (i32.store16 offset=@EG_SSHOTS (local.get $sb) (!at u16 @(PLAYERS + P_SHOTS) (local.get $pb)))
+  (i32.store8 offset=@EG_SITEM (local.get $sb) (!at u8 @(PLAYERS + B_ITEM) (local.get $pb)))
+  (i32.store8 offset=@EG_SFL (local.get $sb) (!at u8 @(PLAYERS + P_FL) (local.get $pb))))
 
-;; Play starts: every ball's velocity and hard bumps, for the first knock.
+;; Did slot q blow up this tick: a POW used (its uses counted on and a POW
+;; held as the last tick ended), or its SPRING's landing (PF_STOMP gone)?
+(func $eg_blew (param $q i32) (result i32)
+  (local $qb i32) (local $sb i32)
+  (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
+  (local.set $sb (call $eg_s (local.get $q)))
+  (i32.or
+    (i32.and (i32.ne (!at u16 @(PLAYERS + P_SHOTS) (local.get $qb)) (i32.load16_u offset=@EG_SSHOTS (local.get $sb)))
+             (i32.eq (i32.load8_u offset=@EG_SITEM (local.get $sb)) (i32.const @PU_POW)))
+    (i32.and (i32.ne (i32.and (i32.load8_u offset=@EG_SFL (local.get $sb)) (i32.const @PF_STOMP)) (i32.const 0))
+             (i32.eqz (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (i32.const @PF_STOMP))))))
+
+;; Play starts: every ball's kept, for the first knock.
 (func $eg_start
   (local $p i32)
   (!for $p (i32.const 0) (i32.const @NPLAYER) (call $eg_keep (local.get $p))))
@@ -281,7 +302,8 @@
 
 ;; Carrier p (in play, carrying egg k) hit this tick, t into play: by a foe
 ;; touching it that was the faster into the bump, its velocity jolted more
-;; than EG_HARD; by a blast (nobody touching it), more than EG_SHOVE level.
+;; than EG_HARD; by a blast (its hitter not touching it, or blowing up beside
+;; it), more than EG_SHOVE level.
 ;; Knocked, the egg pops out sliding EG_POPK of the jolt (EG_POPMAX at most),
 ;; a point and a tally to the foe that knocked it.
 (func $eg_knock (param $p i32) (param $k i32) (param $t i32)
@@ -301,7 +323,8 @@
           (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (!at f32 @(PLAYERS + P_PX) (local.get $pb))))
           (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $qb)) (!at f32 @(PLAYERS + P_PZ) (local.get $pb))))
           (local.set $rs (f32.add (f32.add (call $b_rad (local.get $pb)) (call $b_rad (local.get $qb))) (f32.const @EG_TOUCH)))
-          (local.set $bump (f32.lt (!madd (local.get $dx) (local.get $dx) (f32.mul (local.get $dz) (local.get $dz))) (f32.mul (local.get $rs) (local.get $rs))))))))
+          (local.set $bump (i32.and (f32.lt (!madd (local.get $dx) (local.get $dx) (f32.mul (local.get $dz) (local.get $dz))) (f32.mul (local.get $rs) (local.get $rs)))
+                                    (i32.eqz (call $eg_blew (local.get $q)))))))))
   (if (local.get $bump)
     (then (local.set $hit (i32.and (f32.gt (local.get $dv) (f32.const @EG_HARD))
                                    (i32.eq (!at u16 @(PLAYERS + B_BUMPS) (local.get $pb)) (i32.load16_u offset=@EG_SBUMPS (local.get $sb))))))
@@ -431,12 +454,115 @@
                       (local.get $x) (f32.const @(+PLAT_Y + EG_R)) (local.get $z)
                       (f32.convert_i32_u (i32.load8_u offset=@EG_EV (local.get $e))))))))))
 
+;; ---- the power-ups, bumper's, from the sky
+
+;; Is (x, z) a spot for a power-up: EG_DROPIN or more inside the fence (its
+;; corners' arcs too), EG_DROPNEST or more past either nest's rim?
+(func $eg_spot (param $x f32) (param $z f32) (result i32)
+  (local $cx f32) (local $ax f32) (local $az f32) (local $ix f32) (local $iz f32) (local $lim f32) (local $dx f32) (local $dz f32) (local $nr f32)
+  (local.set $cx (f32.load (i32.const @PG_CX)))
+  (local.set $ax (f32.abs (f32.sub (local.get $x) (local.get $cx))))
+  (local.set $az (f32.abs (f32.sub (local.get $z) (local.get $cx))))
+  (local.set $ix (f32.sub (f32.load (i32.const @(PG_H + EG_HX))) (f32.load (i32.const @(PG_H + EG_CR)))))
+  (local.set $iz (f32.sub (f32.load (i32.const @(PG_H + EG_HZ))) (f32.load (i32.const @(PG_H + EG_CR)))))
+  (local.set $lim (f32.sub (f32.load (i32.const @(PG_H + EG_CR))) (f32.const @EG_DROPIN)))
+  (local.set $dx (f32.max (f32.sub (local.get $ax) (local.get $ix)) (f32.const 0)))
+  (local.set $dz (f32.max (f32.sub (local.get $az) (local.get $iz)) (f32.const 0)))
+  (if (f32.gt (!madd (local.get $dx) (local.get $dx) (f32.mul (local.get $dz) (local.get $dz))) (f32.mul (local.get $lim) (local.get $lim)))
+    (then (return (i32.const 0))))
+  ;; off both nests: |x - cx| against the nests' centres' distance from the middle
+  (local.set $dx (f32.sub (local.get $ax) (f32.load (i32.const @(PG_H + EG_NX)))))
+  (local.set $nr (f32.add (f32.load (i32.const @(PG_H + EG_NR))) (f32.const @EG_DROPNEST)))
+  (f32.ge (!madd (local.get $dx) (local.get $dx) (f32.mul (local.get $az) (local.get $az))) (f32.mul (local.get $nr) (local.get $nr))))
+
+;; What a power-up from the sky is, from the PRNG (EG_P* of each hundred).
+(func $eg_kind (result i32)
+  (local $h i32)
+  (local.set $h (i32.rem_u (call $rand) (i32.const 100)))
+  (if (i32.lt_u (local.get $h) (i32.const @EG_PPOW)) (then (return (i32.const @PU_POW))))
+  (if (i32.lt_u (local.get $h) (i32.const @(EG_PPOW + EG_PROCKET))) (then (return (i32.const @PU_ROCKET))))
+  (if (i32.lt_u (local.get $h) (i32.const @(EG_PPOW + EG_PROCKET + EG_PDASH))) (then (return (i32.const @PU_DASH))))
+  (if (i32.lt_u (local.get $h) (i32.const @(EG_PPOW + EG_PROCKET + EG_PDASH + EG_PSPRING))) (then (return (i32.const @PU_SPRING))))
+  (i32.const @PU_MEGA))
+
+;; A power-up in a free slot, high over a random spot of the yard (EG_DROPTRY tries).
+(func $eg_sky
+  (local $k i32) (local $o i32) (local $tries i32) (local $x f32) (local $z f32) (local $cx f32)
+  (block $found
+    (!for $k (i32.const 0) (i32.const @EG_NORB)
+      (local.set $o (i32.add (i32.const @(PG_S + EG_ORBS)) (i32.shl (local.get $k) (i32.const 4))))
+      (br_if $found (i32.eqz (i32.load8_u offset=12 (local.get $o)))))
+    (return))
+  (local.set $cx (f32.load (i32.const @PG_CX)))
+  (!for $tries (i32.const 0) (i32.const @EG_DROPTRY)
+    (local.set $x (!madd (f32.sub (f32.mul (call $p_unit) (f32.const 2)) (f32.const 1))
+                         (f32.sub (f32.load (i32.const @(PG_H + EG_HX))) (f32.const @EG_DROPIN)) (local.get $cx)))
+    (local.set $z (!madd (f32.sub (f32.mul (call $p_unit) (f32.const 2)) (f32.const 1))
+                         (f32.sub (f32.load (i32.const @(PG_H + EG_HZ))) (f32.const @EG_DROPIN)) (local.get $cx)))
+    (if (call $eg_spot (local.get $x) (local.get $z))
+      (then
+        (f32.store (local.get $o) (local.get $x))
+        (f32.store offset=4 (local.get $o) (f32.const @(+PLAT_Y + ORB_Y)))
+        (f32.store offset=8 (local.get $o) (local.get $z))
+        (i32.store8 offset=12 (local.get $o) (call $eg_kind))
+        (i32.store8 offset=13 (local.get $o) (i32.const 1))
+        (i32.store16 offset=14 (local.get $o) (i32.const 0))
+        (call $fx (i32.const 0) (i32.const @FX_DROP) (i32.const 0) (local.get $k) (local.get $x) (f32.const @PLAT_Y) (local.get $z)
+                  (f32.convert_i32_u (i32.load8_u offset=12 (local.get $o))))
+        (return)))))
+
+;; The power-ups on tick t into play: drops on the clock; each falling at
+;; ORB_FALL onto the floor, lying there EG_ORBLIFE, then gone; taken by the
+;; first ball in, by slot, holding none, that rolls into it.
+(func $eg_orbs (param $t i32)
+  (local $m i32) (local $k i32) (local $o i32) (local $p i32) (local $pb i32) (local $life i32)
+  (local $y f32) (local $rad f32) (local $dx f32) (local $dy f32) (local $dz f32) (local $lim f32)
+  (if (i32.ge_u (local.get $t) (i32.load (i32.const @(PG_H + EG_DROP))))
+    (then
+      (i32.store (i32.const @(PG_H + EG_DROP)) (i32.add (local.get $t) (i32.const @EG_DROPGAP)))
+      (!for $m (i32.const 0) (i32.add (i32.const 1) (i32.div_u (i32.load (i32.const @BH_LEFT)) (i32.const @EG_DROPN)))
+        (call $eg_sky))))
+  (!for $k (i32.const 0) (i32.const @EG_NORB)
+    (local.set $o (i32.add (i32.const @(PG_S + EG_ORBS)) (i32.shl (local.get $k) (i32.const 4))))
+    (if (i32.load8_u offset=12 (local.get $o))
+      (then (block $gone
+        (if (i32.eq (i32.load8_u offset=13 (local.get $o)) (i32.const 1))
+          (then
+            (local.set $y (f32.sub (f32.load offset=4 (local.get $o)) (f32.const @ORB_FALL)))
+            (if (f32.le (local.get $y) (f32.const @(+PLAT_Y + 0.6)))
+              (then
+                (local.set $y (f32.const @(+PLAT_Y + 0.6)))
+                (i32.store8 offset=13 (local.get $o) (i32.const 2))
+                (i32.store16 offset=14 (local.get $o) (i32.const @EG_ORBLIFE))))
+            (f32.store offset=4 (local.get $o) (local.get $y)))
+          (else
+            (local.set $life (i32.sub (i32.load16_u offset=14 (local.get $o)) (i32.const 1)))
+            (i32.store16 offset=14 (local.get $o) (local.get $life))
+            (if (i32.eqz (local.get $life)) (then (memory.fill (local.get $o) (i32.const 0) (i32.const 16)) (br $gone)))))
+        (!for $p (i32.const 0) (i32.const @NPLAYER)
+          (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+          (if (i32.and (call $p_in (local.get $pb)) (i32.eqz (!at u8 @(PLAYERS + B_ITEM) (local.get $pb))))
+            (then
+              (local.set $rad (call $b_rad (local.get $pb)))
+              (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $pb)) (f32.load (local.get $o))))
+              (local.set $dy (f32.sub (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (local.get $rad)) (f32.load offset=4 (local.get $o))))
+              (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $pb)) (f32.load offset=8 (local.get $o))))
+              (local.set $lim (f32.add (local.get $rad) (f32.const @ORB_R)))
+              (if (f32.lt (!dot3 (local.get $dx) (local.get $dy) (local.get $dz) (local.get $dx) (local.get $dy) (local.get $dz)) (f32.mul (local.get $lim) (local.get $lim)))
+                (then
+                  (!put u8 @(PLAYERS + B_ITEM) (local.get $pb) (i32.load8_u offset=12 (local.get $o)))
+                  (call $fx (i32.const 0) (i32.const @FX_PICKUP) (local.get $p) (local.get $k)
+                            (f32.load (local.get $o)) (f32.load offset=4 (local.get $o)) (f32.load offset=8 (local.get $o)) (f32.convert_i32_u (i32.load8_u offset=12 (local.get $o))))
+                  (memory.fill (local.get $o) (i32.const 0) (i32.const 16))
+                  (br $gone)))))))))))
+
 ;; The round's world, a tick of it: eggs whose carrier is gone (or carries
 ;; another) dropped where it was, its PG_M let go; the carriers hit this tick, in slot order,
 ;; knocked; a golden egg called, or landing in the middle; each ball in play,
 ;; in slot order, laying in its own nest what it carries or stealing from
-;; the other the best egg there; the loose eggs slid; the takes; each side's
-;; nest's value, PG_TSCORE; every ball's velocity kept for the next knock.
+;; the other the best egg there; the loose eggs slid; the takes; the
+;; power-ups; each side's nest's value, PG_TSCORE; every ball's velocity,
+;; uses, power-up and flags kept for the next knock.
 (func $eg_tick
   (local $t i32) (local $ne i32) (local $k i32) (local $e i32) (local $p i32) (local $pb i32) (local $q i32) (local $s i32) (local $m i32)
   (local $best i32) (local $bv i32) (local $v i32) (local $sb i32) (local $at i32) (local $cx f32)
@@ -531,6 +657,7 @@
     (local.set $e (call $eg_e (local.get $k)))
     (if (i32.eq (i32.load8_u offset=@EG_EST (local.get $e)) (i32.const @EG_FREE)) (then (call $eg_slide (local.get $e)))))
   (call $eg_takes (local.get $t))
+  (call $eg_orbs (local.get $t))
   (i32.store (i32.const @PG_TSCORE) (call $eg_nest (i32.const 0)))
   (i32.store (i32.const @(PG_TSCORE + 4)) (call $eg_nest (i32.const 1)))
   (!for $p (i32.const 0) (i32.const @NPLAYER) (call $eg_keep (local.get $p))))
