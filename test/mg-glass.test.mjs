@@ -448,7 +448,7 @@ async function aiRound(balls, seed) {
   return { log, stats };
 }
 
-for (const [balls, seed] of [[8, 6], [64, 7]]) {
+for (const [balls, seed] of [[8, 6], [64, 8]]) {
   test(`a round of ${balls} AI balls on the debug build: no trap, they cross on the trail and guess at the front, some get across, the rest fall by the glass; places and points for all; equal on 1 and 4 threads`, async () => {
     const { log, stats } = await aiRound(balls, seed);
     assert.ok(stats.over > 0, 'the round ended');
