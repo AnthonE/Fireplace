@@ -68,7 +68,7 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 41 | SWISS ROLL | last one in | bumper balls' round: a wheel of Swiss cheese over the sea, 16 m plus 3.5 m times the root of the balls in (80 m at most), with four holes and one more for every 70 m² of it (64 at most), 2.6 to 6 m across, never within 7 m of the middle; a ball whose centre rolls over a hole or off the rim drops down its shaft and is out; over 60 s the rim crumbles in to 9 m and every hole widens by half; power-ups fall from the sky onto it, one every 4 s and one more for every 24 balls in; bumps on; 90 s, then everyone still rolling shares the win |
 | 42 | WHACK A MOLE | points | a square lawn over the sea, fenced, a mole hole every 8 m, one for every 1.5 balls in (9 at least, 169 for 256); a hole's dirt heaves 0.6 s, a ring round it lit, then its mole rises in 0.15 s, stays up 1.2 s shrinking to 0.7 s by the end and ducks; more up at once as the round goes, a sixth of the holes to a third; up, a mole is a post, and coming down on its head from a hop (0.55 m up; a hop's bottom tops out at 0.9) whacks it for a point, the first ball by slot, once a pop; gold ones (1 in 8) pay 3; from 30 s spiked ones (1 in 6 of the rest) fling whoever touches them away at 12 m/s and up, and coming down on one costs 2; the last 15 s a frenzy, more moles and double points; bumps on; 80 s |
 | 43 | BALLOON BASH | last one in | every ball carries three balloons into a walled arena, 14 m plus 2.5 m times the root of the balls in, nobody falling; a tower in the middle (a base a hop high, a top tier a hop more) and crates round it, low ones a hop high and tall ones with a step; come down on a ball's top (your bottom over its centre, falling) and it loses one and you bounce up at 8 m/s; ram it faster than 7 m/s, and faster than it comes at you (3.5 m/s for a MEGA ball), and it loses one; a ROCKET's or POW's blast or a SPRING's landing pops one of every ball it shoves; a pop steals the balloon if you have fewer than three, and the loser is guarded 1.5 s (everyone the first 2 s); out of balloons, out, the KO to whoever popped the last; power-ups fall every 3 s, one more for every 16 balls in; from 35 s the wall closes in to an 8 m ring round the tower by 70 s, each crate sinking as it reaches it; in that last ring a ram takes 4.5 m/s, nothing is stolen and power-ups fall every 1.5 s; 90 s, then everyone still in shares the win |
-| 44 | EGG RAID | the side with the bigger nest | red against blue in a fenced farmyard 1.6 times as long as wide, its corners rounded (47 by 30 m for 16, 114 by 71 for 256); a straw nest near each end, 3.1 to 4.9 m across, whose floor rolls any ball off it at 25 m/s², and an egg for every ball (10 to 128) piled in the middle; roll over a loose egg to carry it, one at a time, 15% slower (8.5 m/s flat out); into your own nest it's laid, into theirs carrying nothing you take their best; a golden egg worth 3 lands in the middle at 20, 40, 60 and 80 s, called 2 s ahead; a foe faster into the bump than you at over 5 m/s of closing, or a blast, knocks your egg loose, sliding half the jolt, yours again only after 1 s; a side's score is its nest's value, live; points of your own: an egg laid its value, a steal or a knock 1; 90 s, draws allowed |
+| 44 | EGG RAID | the side with the bigger nest | red against blue in a fenced farmyard 1.6 times as long as wide, its corners rounded (47 by 30 m for 16, 114 by 71 for 256); a straw nest near each end, 3.1 to 4.9 m in radius, whose floor rolls any ball off it at 25 m/s², and an egg for every ball (10 to 128) piled in the middle; roll over a loose egg to carry it, one at a time, 15% slower (8.5 m/s flat out); into your own nest it's laid, into theirs carrying nothing you take their best; a golden egg worth 3 lands in the middle at 20, 40, 60 and 80 s, called 2 s ahead; power-ups fall onto the yard, never into a nest, from 6 s and every 8 s after, one more for every 16 balls in, each lying 10 s (a quarter POW, a quarter ROCKET, 30% DASH, 15% SPRING, 5% MEGA); a foe faster into the bump than you at over 5 m/s of closing, or a blast (a POW or a SPRING's landing beside you counts), knocks your egg loose, sliding half the jolt, yours again only after 1 s; a side's score is its nest's value, live; points of your own: an egg laid its value, a steal or a knock 1; 90 s, draws allowed |
 | 45 | BOWLING | points | lanes side by side over the sea, one for every 6 balls (2 to 43), each 6 m of maple with a gutter either side (2.2 m across, 0.45 m down, on past the pins) and a divider to the next; from a 9 m approach, 40 m to ten pins in a triangle 1.6 m apart, then the pit; a slick lane (14.7 m/s flat out), no hop, bumps without the kick; roll from behind the foul line and keep rolling (2 m/s at least) and you knock every pin your edge reaches, never slowed: it flies off at 1.5 times the speed you close at, slides, topples over 0.32 s and knocks the standing pins it meets, all credited to you; a point a pin, a strike (all ten of a rack yours) 5 more, a golden pin in one rack in 3 worth 3; a lane is called once its ten are down or 3 s after its first went, nothing scores there, 2 s on its deck drops into the pit and 1 s later a fresh ten stand; off the deck or down a gutter (no climbing out) into the pit, and back on your lane's approach 1 s after; the last 15 s pay double; 90 s |
 
 **The ball** (`src/bumper.wat`: it began as bumper balls, a game of its own,
@@ -329,17 +329,23 @@ the pickup arrives a round trip later; each nest's floor rolls every ball out,
 so neither side parks in its own; and a knock needs the foe faster into the
 bump (`B_BUMPS` unchanged), so a guard must bump to take an egg. Six rounds of
 16 AI balls laid 36 to 50 eggs a side and stole 26 to 42, nests at the clock
-from 19:1 to 8:8. Bowling's pins never move a ball, as Soccer's footballs
+from 19:1 to 8:8. Its power-ups came after, falling as Swiss Roll's do,
+dropped and taken in `tick`; a hitter touching a carrier that blew up that
+tick (a POW used, a SPRING's landing, read off the uses and flags kept a tick)
+is judged a blast, so a MEGA carrier jolted under a bump's 7.5 m/s still loses
+its egg. Ten rounds of 16 took 19 to 21 of the 22 that fell and knocked 7 to
+17 eggs loose with blasts beside 44 to 60 with bumps, laying 6% fewer eggs and
+stealing 8% fewer. Bowling's pins never move a ball, as Soccer's footballs
 never do; a lane's deck drops 256 ticks after the confirmed world calls the
 lane, as far as the prediction runs (Seesaws' ring, one lane wide), so the
 prediction rolls a ball onto a dropping deck and into the pit bit for bit.
 Only a live roll knocks (from behind the foul line, at 2 m/s or more), so
 nobody waits on a deck for the next rack, and its golden pins come from the
 round's seed, not `$rand`, so laying the lanes out leaves the room's PRNG (and
-the rotation after it) alone. AI rounds of 16 rack 42 to 44 times with 14 to
-21 strikes. A tick of 256 balls costs 0.16 to 0.24 ms in each; Party's wasm is
-211 KB, 90 KB gzipped.
+the rotation after it) alone. Its client module sets the frontend's
+`quietDown`, since every roll ends in the pit: the feed says how the roll
+went, with no DOWN banner. AI rounds of 16 rack 42 to 44 times with 14 to 21
+strikes. A tick of 256 balls costs 0.16 to 0.25 ms in each; Party's wasm is
+213 KB, 90 KB gzipped.
 
-Not done yet: power-ups in more of the minigames (Egg Raid's blast rule is
-tested but no power-up reaches its round); Bowling's DOWN banner, shown after
-every roll, since every roll ends in the pit.
+Not done yet: power-ups in more of the minigames.
