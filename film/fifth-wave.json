@@ -16,7 +16,7 @@
   { "replay": "replays/f100005b-2026-11-02T16-29-48-964Z.qgr", "at": 59, "len": 2.048 },
   { "replay": "replays/f1000023-2026-11-02T16-32-45-986Z.qgr", "at": 13, "len": 3.072, "caption": "EGG RAID\nRED AGAINST BLUE" },
   { "replay": "replays/f1000023-2026-11-02T16-32-45-986Z.qgr", "at": 59, "len": 2.048 },
-  { "replay": "replays/f100002c-2026-11-02T16-32-47-726Z.qgr", "at": 13.2, "len": 4.096, "caption": "BOWLING\nYOU ARE THE BALL" },
+  { "replay": "replays/f100002c-2026-11-02T16-32-47-726Z.qgr", "at": 12.95, "len": 4.096, "caption": "BOWLING\nYOU ARE THE BALL" },
   { "replay": "replays/f1000001-2026-11-02T16-29-48-408Z.qgr", "back": 5.12, "caption": "46 MINIGAMES\nFIREPLACE IN YOUR BROWSER" }
  ]
 }
