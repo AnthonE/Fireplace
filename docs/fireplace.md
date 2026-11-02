@@ -339,6 +339,14 @@ every seat as a local room's AI players are, since a replay keeps no looks,
 and its `"score"` lays one of the game's tunes under the whole cut in place
 of the rooms' own music, its beat 1.024 s, every shot ending on one.
 
+`film/fifth-wave.json` shows Party's four newest minigames in 32 beats: four
+rooms of 32 guests recorded side by side, each on a seed whose first round of
+party is one of them (`record --start 0 --seed 1`, `91`, `35` and `44`: Whack a
+Mole, Balloon Bash, Egg Raid, Bowling; the first round is drawn from the seed
+alone, whoever joins), the camera on P1. At 1920 x 1080 a frame took about
+3.5 s to draw and keep, so its 984 frames were shot as four parts at once
+(`shoot --part k/4`, then `join`), about an hour in all on this 4-core box.
+
 A signed-in player goes by the name their wallet has on Elo Pros, in every
 game's labels and the marshmallow board; the relay looks it up and sends it
 beside the sim ([wire.md](wire.md)). A guest is P1, P2, ...
