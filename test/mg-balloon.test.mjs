@@ -310,6 +310,70 @@ test('blasts: a POW pops one of every ball it shoves, beside it too, none out of
   assert.equal(lost(s, 2), 0);
 });
 
+// The pops since FX n0: [whose, by whom, how (0 a stomp, 1 a ram, 2 a blast), stolen].
+const popped = (g, n0) => fxs(g.v, MC.BL_FX_POP, n0).map((f) => [f.owner, f.shot & 255, (f.shot >> 8) & 3, !!(f.shot & 1024)]);
+
+test('a ROCKET point-blank into a ball touching its owner pops one as a blast, though bumper keeps the owner, touching, as its hitter; one in flight going off beside a ball touching its owner pops that one too', async () => {
+  // fired into P2, its skin 5 cm off P1's: off at once, its slot free again by the tick's end
+  const g = await room(2);
+  flat(g);
+  at(g, 1000);
+  put(g, 0, C, C + 5, { item: L.PU_ROCKET });
+  put(g, 1, C + 2.05, C + 5);
+  g.step([[L.EV_INPUT, 0, partyWord({ yaw: 0 })]]);
+  const n0 = g.v.fxCount();
+  g.step([[L.EV_INPUT, 0, partyWord({ yaw: 0, use: 1 })]]);
+  assert.equal(fxs(g.v, L.FX_BLAST, n0).length, 1, 'it went off');
+  assert.equal(g.v.u8[L.PROJ + L.J_KIND], 0, 'at once');
+  assert.deepEqual([g.v.u8[rec(1) + L.B_HITBY], g.dv.getUint16(rec(1) + L.B_HITT, true)], [0, L.CREDIT_TICKS - 1], 'P1 its hitter this tick');
+  assert.deepEqual(popped(g, n0), [[1, 0, 2, false]], 'P2 blasted');
+  for (let k = 0; k < 20; k++) g.step();
+  assert.deepEqual([lost(g, 0), lost(g, 1)], [0, 1]);
+  // fired at P3 5 m off, past P2 sitting against P1's side: in flight a few ticks, its blast takes both
+  const h = await room(3);
+  flat(h);
+  at(h, 1000);
+  put(h, 0, C, C + 5, { item: L.PU_ROCKET });
+  put(h, 1, C, C + 7.05);
+  put(h, 2, C + 5, C + 5);
+  h.step([[L.EV_INPUT, 0, partyWord({ yaw: 0 })]]);
+  const n1 = h.v.fxCount();
+  h.step([[L.EV_INPUT, 0, partyWord({ yaw: 0, use: 1 })]]);
+  assert.equal(h.v.u8[L.PROJ + L.J_KIND], L.K_ROCKET, 'in flight');
+  assert.ok(until(h, () => fxs(h.v, L.FX_BLAST, n1).length > 0, 40), 'it went off');
+  assert.equal(h.v.u8[rec(1) + L.B_HITBY], 0);
+  assert.deepEqual(popped(h, n1), [[1, 0, 2, false], [2, 0, 2, false]], 'P2 and P3 blasted');
+  assert.deepEqual([lost(h, 0), lost(h, 1), lost(h, 2)], [0, 1, 1]);
+});
+
+test('a ball blasted and bumped on the same tick: the blast pops one, the blaster\'s, though bumper keeps the bump; the bump is judged as a bump, rammed it is guarded, ramming it pops the other', async () => {
+  // P1's POW 9 m off P2 as P3, out of its reach, meets P2 at 9 m/s: P3 rams P2, or P2 rams P3
+  const run = async (ramming) => {
+    const g = await room(3);
+    flat(g);
+    at(g, 1000);
+    put(g, 0, C, C + 5, { item: L.PU_POW });
+    const x = ramming ? C + 8.95 : C + 9.5;
+    put(g, 1, x, C + 5, { vx: ramming ? 9 : 0 });
+    put(g, 2, x + 2.11, C + 5, { vx: ramming ? 0 : -9 });
+    const words = (use) => [[L.EV_INPUT, 0, partyWord({ yaw: 0, use })], [L.EV_INPUT, 1, partyWord({ yaw: 0, move: ramming ? 1 : 0 })],
+      [L.EV_INPUT, 2, partyWord({ yaw: 8192, move: ramming ? 0 : 1 })]];
+    g.step(words(0));
+    assert.equal(g.dv.getUint16(rec(1) + L.B_HITT, true), 0, 'apart till the POW\'s tick');
+    const n0 = g.v.fxCount();
+    g.step(words(1));
+    assert.equal(fxs(g.v, L.FX_BLAST, n0).length, 1, 'the POW');
+    assert.deepEqual([g.v.u8[rec(1) + L.B_HITBY], g.v.u8[rec(2) + L.B_HITBY], g.dv.getUint16(rec(2) + L.B_HITT, true)], [2, 1, L.CREDIT_TICKS - 1], 'bumper keeps the bump');
+    return { pops: popped(g, n0), lost: [lost(g, 0), lost(g, 1), lost(g, 2)] };
+  };
+  const rammed = await run(false);
+  assert.deepEqual(rammed.pops, [[1, 0, 2, false]], 'P2 blasted, then guarded from P3\'s ram');
+  assert.deepEqual(rammed.lost, [0, 1, 0]);
+  const ramming = await run(true);
+  assert.deepEqual(ramming.pops, [[1, 0, 2, false], [2, 1, 1, true]], 'P2 blasted, then its ram on P3 steals one back');
+  assert.deepEqual(ramming.lost, [0, 0, 1]);
+});
+
 test('the guard: nobody loses one in play\'s first BL_GUARD0; after a pop, not another for BL_GUARD; it blinks on the client\'s clock as on the sim\'s', async () => {
   const rammed = (g) => {
     put(g, 0, C - 5, C, { vx: 9, lost: lost(g, 0) });

@@ -21,9 +21,12 @@
 ;; ball onto, off and into the crates and against the closing wall exactly
 ;; as the confirmed world will. The pops are ball against ball, or a blast:
 ;; the confirmed world's tick reads them off bumper's own bookkeeping (a
-;; fresh B_HITT), with each ball's speed as the last tick ended kept in PG_S
-;; to tell how fast it came in, and their effect on your ball (a balloon,
-;; a stomp's bounce) comes a round trip later, as a bump does.
+;; fresh B_HITT), with each ball's speed as the last tick ended kept in
+;; PG_BIG to tell how fast it came in. Bumper keeps one hitter, so the tick
+;; finds every blast that went off itself, from what it kept as the last
+;; tick ended (each ball's record, PROJ's rockets), and where. Their effect
+;; on your ball (a balloon, a stomp's bounce) comes a round trip later, as a
+;; bump does.
 
 ;; The wall's radius on bank d's tick: the start's until BL_CLOSE0, then in
 ;; a straight line to BL_RMIN by BL_CLOSE1.
@@ -350,17 +353,202 @@
   (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $qb)) (!at f32 @(PLAYERS + P_PZ) (local.get $pb))))
   (f32.lt (!dot3 (local.get $dx) (local.get $dy) (local.get $dz) (local.get $dx) (local.get $dy) (local.get $dz)) (f32.mul (local.get $rs) (local.get $rs))))
 
-;; Did ball q blow up this tick: a POW used (its shots counted on and a POW
-;; held as the last tick ended), or its SPRING's landing (PF_STOMP gone)?
-(func $bl_blew (param $q i32) (result i32)
-  (local $qb i32) (local $r i32)
-  (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
-  (local.set $r (i32.shl (local.get $q) (i32.const 4)))
-  (i32.or
-    (i32.and (i32.ne (!at u16 @(PLAYERS + P_SHOTS) (local.get $qb)) (i32.load16_u offset=@(PG_S + BL_REC + 12) (local.get $r)))
-             (i32.eq (i32.load8_u offset=@(PG_S + BL_REC + 14) (local.get $r)) (i32.const @PU_POW)))
-    (i32.and (i32.ne (i32.and (i32.load8_u offset=@(PG_S + BL_REC + 15) (local.get $r)) (i32.const @PF_STOMP)) (i32.const 0))
-             (i32.eqz (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $qb)) (i32.const @PF_STOMP))))))
+;; This tick's blasts, in the order bumper set them off, into BL_BL: each
+;; ball's POW and SPRING landing as it moved, in slot order (told from its
+;; record as the last tick ended: its shots on with a POW held, PF_STOMP
+;; gone), then the rockets in PROJ's slot order, told from PROJ's rockets as
+;; the last tick ended: one there short of its fizzle and gone now went off;
+;; a slot free then took the next ROCKET used this tick, in slot order, as
+;; $b_use fills them, and is free now if that one went off at once. The
+;; copy of PROJ is brought up to date as it goes. Returns how many.
+(func $bl_blasts (result i32)
+  (local $n i32) (local $nu i32) (local $u i32) (local $o i32) (local $ob i32) (local $r i32) (local $fl i32) (local $item i32)
+  (local $j i32) (local $jb i32) (local $sb i32) (local $live i32) (local $h i32) (local $hi i32)
+  (local $rad f32) (local $s f32) (local $c f32)
+  (!for $o (i32.const 0) (i32.const @NPLAYER)
+    (local.set $ob (i32.shl (local.get $o) (i32.const 6)))
+    (local.set $r (i32.add (i32.const @(PG_BIG + BL_REC)) (i32.shl (local.get $o) (i32.const 5))))
+    (local.set $fl (!at u8 @(PLAYERS + P_FL) (local.get $ob)))
+    ;; (a ball that left, or is out, moved nowhere this tick)
+    (if (i32.eq (i32.and (local.get $fl) (i32.const @(PF_LIVE | PF_DEAD))) (i32.const @PF_LIVE))
+      (then
+        (if (i32.ne (!at u16 @(PLAYERS + P_SHOTS) (local.get $ob)) (i32.load16_u offset=24 (local.get $r)))
+          (then
+            (local.set $item (i32.load8_u offset=26 (local.get $r)))
+            ;; a POW at its centre as its move began, its radius then the one it has now
+            (if (i32.eq (local.get $item) (i32.const @PU_POW))
+              (then
+                (call $bl_add (local.get $n) (local.get $o) (i32.const @BL_BPOW) (f32.load offset=12 (local.get $r))
+                              (f32.add (f32.load offset=16 (local.get $r)) (call $b_rad (local.get $ob))) (f32.load offset=20 (local.get $r)))
+                (!inc $n)))
+            (if (i32.eq (local.get $item) (i32.const @PU_ROCKET))
+              (then (!st u8 @(PG_BIG + BL_RU) (local.get $nu) (local.get $o)) (!inc $nu)))))
+        ;; a landing where it stands now: its height exact, across by any push or bump since
+        (if (i32.and (i32.ne (i32.and (i32.load8_u offset=27 (local.get $r)) (i32.const @PF_STOMP)) (i32.const 0))
+                     (i32.eqz (i32.and (local.get $fl) (i32.const @PF_STOMP))))
+          (then
+            (call $bl_add (local.get $n) (local.get $o) (i32.const @BL_BSPRING) (!at f32 @(PLAYERS + P_PX) (local.get $ob))
+                          (!at f32 @(PLAYERS + P_PY) (local.get $ob)) (!at f32 @(PLAYERS + P_PZ) (local.get $ob)))
+            (!inc $n))))))
+  (local.set $h (i32.load (i32.const @(PG_BIG + BL_NJ))))
+  (block $done
+    (loop $more
+      (br_if $done (i32.ge_u (local.get $j) (i32.const @NPROJ)))
+      (br_if $done (i32.and (i32.ge_u (local.get $j) (local.get $h)) (i32.ge_u (local.get $u) (local.get $nu))))
+      (local.set $jb (i32.shl (local.get $j) (i32.const 5)))
+      (local.set $sb (i32.add (i32.const @(PG_BIG + BL_PJ)) (local.get $jb)))
+      (local.set $live (!at u8 @(PROJ + J_KIND) (local.get $jb)))
+      (if (i32.load8_u offset=@J_KIND (local.get $sb))
+        (then
+          (if (i32.and (i32.eqz (local.get $live)) (i32.lt_u (i32.load16_u offset=@J_AGE (local.get $sb)) (i32.const 375)))
+            (then
+              (call $bl_rocket (local.get $n) (i32.load8_u offset=@J_OWNER (local.get $sb))
+                               (f32.load offset=@J_PX (local.get $sb)) (f32.load offset=@J_PY (local.get $sb)) (f32.load offset=@J_PZ (local.get $sb))
+                               (f32.load offset=@J_VX (local.get $sb)) (f32.load offset=@J_VZ (local.get $sb)))
+              (!inc $n))))
+        (else
+          (if (i32.lt_u (local.get $u) (local.get $nu))
+            (then
+              (local.set $o (!ld u8 @(PG_BIG + BL_RU) (local.get $u)))
+              (!inc $u)
+              (if (i32.eqz (local.get $live))
+                (then
+                  ;; fired as $b_use fires it, from where it stood as the last tick ended, the way it faces
+                  (local.set $ob (i32.shl (local.get $o) (i32.const 6)))
+                  (local.set $r (i32.add (i32.const @(PG_BIG + BL_REC)) (i32.shl (local.get $o) (i32.const 5))))
+                  (local.set $rad (call $b_rad (local.get $ob)))
+                  (call $sincos (!at i32 @(PLAYERS + P_IN) (local.get $ob)))
+                  (local.set $c) (local.set $s)
+                  (call $bl_rocket (local.get $n) (local.get $o)
+                                   (!madd (local.get $c) (f32.add (local.get $rad) (f32.const 0.8)) (f32.load offset=12 (local.get $r)))
+                                   (f32.add (f32.load offset=16 (local.get $r)) (local.get $rad))
+                                   (!madd (local.get $s) (f32.add (local.get $rad) (f32.const 0.8)) (f32.load offset=20 (local.get $r)))
+                                   (f32.mul (local.get $c) (f32.const @ROCKET_BV)) (f32.mul (local.get $s) (f32.const @ROCKET_BV)))
+                  (!inc $n)))))))
+      (if (local.get $live)
+        (then
+          (memory.copy (local.get $sb) (i32.add (i32.const @PROJ) (local.get $jb)) (i32.const @JSIZE))
+          (local.set $hi (i32.add (local.get $j) (i32.const 1))))
+        (else (i32.store8 offset=@J_KIND (local.get $sb) (i32.const 0))))
+      (!inc $j)
+      (br $more)))
+  (i32.store (i32.const @(PG_BIG + BL_NJ)) (local.get $hi))
+  (local.get $n))
+
+;; Blast n of the tick's: o's, of a kind (BL_B*), at (x, y, z).
+(func $bl_add (param $n i32) (param $o i32) (param $kind i32) (param $x f32) (param $y f32) (param $z f32)
+  (local $a i32)
+  (local.set $a (i32.add (i32.const @(PG_BIG + BL_BL)) (i32.shl (local.get $n) (i32.const 4))))
+  (f32.store (local.get $a) (local.get $x))
+  (f32.store offset=4 (local.get $a) (local.get $y))
+  (f32.store offset=8 (local.get $a) (local.get $z))
+  (i32.store8 offset=12 (local.get $a) (local.get $o))
+  (i32.store8 offset=13 (local.get $a) (local.get $kind)))
+
+;; Is there a ball in, not o, for a rocket of o's at (x, y, z) to meet, as
+;; $b_rockets measures?
+(func $bl_meets (param $o i32) (param $x f32) (param $y f32) (param $z f32) (result i32)
+  (local $q i32) (local $qb i32) (local $rq f32) (local $dx f32) (local $dy f32) (local $dz f32)
+  (!for $q (i32.const 0) (i32.const @NPLAYER)
+    (local.set $qb (i32.shl (local.get $q) (i32.const 6)))
+    (if (i32.and (call $b_in (local.get $qb)) (i32.ne (local.get $q) (local.get $o)))
+      (then
+        (local.set $rq (call $b_rad (local.get $qb)))
+        (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $qb)) (local.get $x)))
+        (local.set $dy (f32.sub (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $qb)) (local.get $rq)) (local.get $y)))
+        (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $qb)) (local.get $z)))
+        (local.set $rq (f32.add (local.get $rq) (f32.const 0.35)))
+        (if (f32.lt (!dot3 (local.get $dx) (local.get $dy) (local.get $dz) (local.get $dx) (local.get $dy) (local.get $dz)) (f32.mul (local.get $rq) (local.get $rq)))
+          (then (return (i32.const 1)))))))
+  (i32.const 0))
+
+;; Blast n of the tick's: a rocket of o's that went off, from where
+;; $b_rockets took it (x, y, z), flying at (vx, vz): at its first half step
+;; if a ball is there to meet it (where the balls stand now, which is where
+;; it found them but for the bumps' separating), else at its second.
+(func $bl_rocket (param $n i32) (param $o i32) (param $x f32) (param $y f32) (param $z f32) (param $vx f32) (param $vz f32)
+  (local.set $x (!madd (local.get $vx) (f32.const @(DT / 2)) (local.get $x)))
+  (local.set $z (!madd (local.get $vz) (f32.const @(DT / 2)) (local.get $z)))
+  (if (i32.eqz (call $bl_meets (local.get $o) (local.get $x) (local.get $y) (local.get $z)))
+    (then
+      (local.set $x (!madd (local.get $vx) (f32.const @(DT / 2)) (local.get $x)))
+      (local.set $z (!madd (local.get $vz) (f32.const @(DT / 2)) (local.get $z)))))
+  (call $bl_add (local.get $n) (local.get $o) (i32.const @BL_BROCKET) (local.get $x) (local.get $y) (local.get $z)))
+
+;; Did blast k of the tick's reach ball p: p in, not its owner (nor, in a
+;; team round without PGF_MATES, its mate), its centre within the blast's
+;; radius of where it went off, as $b_blast measures, and where it found p.
+;; A POW or a landing goes off in its owner's move, before a ball later by
+;; slot has moved: that one is judged where it stood as the last tick ended,
+;; exactly; any other where it stands now, which is where the blast found it
+;; but for the bumps' separating.
+(func $bl_reach (param $k i32) (param $p i32) (result i32)
+  (local $a i32) (local $o i32) (local $kind i32) (local $pb i32) (local $r i32)
+  (local $rq f32) (local $rr f32) (local $px f32) (local $py f32) (local $pz f32) (local $dx f32) (local $dy f32) (local $dz f32) (local $hd f32)
+  (local.set $a (i32.add (i32.const @(PG_BIG + BL_BL)) (i32.shl (local.get $k) (i32.const 4))))
+  (local.set $o (i32.load8_u offset=12 (local.get $a)))
+  (local.set $kind (i32.load8_u offset=13 (local.get $a)))
+  (if (i32.eq (local.get $o) (local.get $p)) (then (return (i32.const 0))))
+  (if (i32.and (i32.eq (i32.and (i32.load (i32.const @PG_FLAGS)) (i32.const @(PGF_TEAMS | PGF_MATES))) (i32.const @PGF_TEAMS))
+               (call $p_mates (local.get $p) (local.get $o)))
+    (then (return (i32.const 0))))
+  (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
+  (if (i32.and (i32.ne (local.get $kind) (i32.const @BL_BROCKET)) (i32.gt_u (local.get $p) (local.get $o)))
+    (then
+      (local.set $r (i32.add (i32.const @(PG_BIG + BL_REC)) (i32.shl (local.get $p) (i32.const 5))))
+      (if (i32.ne (i32.and (i32.load8_u offset=27 (local.get $r)) (i32.const @(PF_LIVE | PF_DEAD | PF_FALL))) (i32.const @PF_LIVE))
+        (then (return (i32.const 0))))
+      (local.set $rq (f32.load offset=28 (local.get $r)))
+      (local.set $px (f32.load offset=12 (local.get $r)))
+      (local.set $py (f32.load offset=16 (local.get $r)))
+      (local.set $pz (f32.load offset=20 (local.get $r))))
+    (else
+      (if (i32.eqz (call $b_in (local.get $pb))) (then (return (i32.const 0))))
+      (local.set $rq (call $b_rad (local.get $pb)))
+      (local.set $px (!at f32 @(PLAYERS + P_PX) (local.get $pb)))
+      (local.set $py (!at f32 @(PLAYERS + P_PY) (local.get $pb)))
+      (local.set $pz (!at f32 @(PLAYERS + P_PZ) (local.get $pb)))))
+  (local.set $rr (select (f32.const @POW_R) (select (f32.const @STOMP_R) (f32.const @BROCKET_R) (i32.eq (local.get $kind) (i32.const @BL_BSPRING)))
+                         (i32.eq (local.get $kind) (i32.const @BL_BPOW))))
+  (local.set $dx (f32.sub (local.get $px) (f32.load (local.get $a))))
+  (local.set $dy (f32.sub (f32.add (local.get $py) (local.get $rq)) (f32.load offset=4 (local.get $a))))
+  (local.set $dz (f32.sub (local.get $pz) (f32.load offset=8 (local.get $a))))
+  (local.set $hd (f32.add (f32.mul (local.get $dx) (local.get $dx)) (f32.mul (local.get $dz) (local.get $dz))))
+  (f32.lt (!madd (local.get $dy) (local.get $dy) (local.get $hd)) (f32.mul (local.get $rr) (local.get $rr))))
+
+;; Did a blast of o's, of the tick's first nb, reach ball p?
+(func $bl_by (param $o i32) (param $p i32) (param $nb i32) (result i32)
+  (local $k i32)
+  (!for $k (i32.const 0) (local.get $nb)
+    (if (i32.eq (i32.load8_u offset=@(PG_BIG + BL_BL + 12) (i32.shl (local.get $k) (i32.const 4))) (local.get $o))
+      (then (if (call $bl_reach (local.get $k) (local.get $p)) (then (return (i32.const 1)))))))
+  (i32.const 0))
+
+;; Who blasted ball p, hit this tick (255 nobody): the hitter bumper kept, if
+;; a blast of its reached p, or it blew up this tick and isn't touching p
+;; (bumper's word that its hit was a blast); else, its hit a bump that came
+;; after, the last blast of the tick's nb to reach p.
+(func $bl_blasted (param $p i32) (param $nb i32) (result i32)
+  (local $h i32) (local $k i32) (local $blew i32)
+  (if (i32.eqz (local.get $nb)) (then (return (i32.const 255))))
+  (local.set $h (!at u8 @(PLAYERS + B_HITBY) (i32.shl (local.get $p) (i32.const 6))))
+  (if (i32.and (i32.lt_u (local.get $h) (i32.const @NPLAYER)) (i32.ne (local.get $h) (local.get $p)))
+    (then
+      (!for $k (i32.const 0) (local.get $nb)
+        (if (i32.eq (i32.load8_u offset=@(PG_BIG + BL_BL + 12) (i32.shl (local.get $k) (i32.const 4))) (local.get $h))
+          (then
+            (if (call $bl_reach (local.get $k) (local.get $p)) (then (return (local.get $h))))
+            (local.set $blew (i32.const 1)))))
+      (if (i32.and (local.get $blew) (i32.eqz (call $bl_touch (local.get $p) (local.get $h)))) (then (return (local.get $h))))))
+  (local.set $k (local.get $nb))
+  (block $none
+    (loop $back
+      (br_if $none (i32.eqz (local.get $k)))
+      (local.set $k (i32.sub (local.get $k) (i32.const 1)))
+      (if (call $bl_reach (local.get $k) (local.get $p))
+        (then (return (i32.load8_u offset=@(PG_BIG + BL_BL + 12) (i32.shl (local.get $k) (i32.const 4))))))
+      (br $back)))
+  (i32.const 255))
 
 ;; Ball s came down on ball v: v loses one to it, and s bounces up (guarded or not).
 (func $bl_stomp (param $s i32) (param $v i32)
@@ -381,8 +569,8 @@
   (local.set $ib (i32.shl (local.get $i) (i32.const 6)))
   (local.set $jb (i32.shl (local.get $j) (i32.const 6)))
   (if (i32.eqz (i32.and (call $p_in (local.get $ib)) (call $p_in (local.get $jb)))) (then (return)))
-  (local.set $ri (i32.add (i32.const @(PG_S + BL_REC)) (i32.shl (local.get $i) (i32.const 4))))
-  (local.set $rj (i32.add (i32.const @(PG_S + BL_REC)) (i32.shl (local.get $j) (i32.const 4))))
+  (local.set $ri (i32.add (i32.const @(PG_BIG + BL_REC)) (i32.shl (local.get $i) (i32.const 5))))
+  (local.set $rj (i32.add (i32.const @(PG_BIG + BL_REC)) (i32.shl (local.get $j) (i32.const 5))))
   (local.set $radi (call $b_rad (local.get $ib)))
   (local.set $raj (call $b_rad (local.get $jb)))
   (local.set $dx (f32.sub (!at f32 @(PLAYERS + P_PX) (local.get $jb)) (!at f32 @(PLAYERS + P_PX) (local.get $ib))))
@@ -505,44 +693,48 @@
                   (memory.fill (local.get $o) (i32.const 0) (i32.const 16))
                   (br $gone)))))))))))
 
-;; Once a tick in play, after the bumps: the wall's call; the balls in hit
-;; this tick (bumper's fresh B_HITT), in slot order: each blasted (its
-;; hitter not touching it, or blowing up beside it) loses one, then every
-;; pair of them touching meets; the power-ups; then every slot's speed,
-;; shots, power-up and flags kept for the next.
+;; Once a tick in play, after the bumps: the wall's call; the tick's blasts;
+;; the balls in hit this tick (bumper's fresh B_HITT), in slot order: each
+;; blasted loses one, then every pair of them touching, neither in a blast
+;; of the other's, meets; the power-ups; then every slot's speed, place,
+;; shots, power-up, flags and radius kept for the next.
 (func $bl_tick
-  (local $t i32) (local $p i32) (local $q i32) (local $pb i32) (local $nf i32) (local $a i32) (local $b i32) (local $r i32)
+  (local $t i32) (local $p i32) (local $q i32) (local $pb i32) (local $nf i32) (local $nb i32) (local $a i32) (local $b i32) (local $r i32)
   (local.set $t (call $p_t (i32.const 0)))
   (if (i32.eq (local.get $t) (i32.const @BL_CLOSE0))
     (then (call $fx (i32.const 0) (i32.const @BL_FX_CLOSE) (i32.const 255) (i32.const 0)
                     (f32.load (i32.const @PG_CX)) (f32.const @PLAT_Y) (f32.load (i32.const @PG_CX)) (f32.const @BL_RMIN))))
+  (local.set $nb (call $bl_blasts))
   (!for $p (i32.const 0) (i32.const @NPLAYER)
     (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
     (if (i32.and (call $p_in (local.get $pb)) (i32.eq (!at u16 @(PLAYERS + B_HITT) (local.get $pb)) (i32.const @CREDIT_TICKS)))
       (then (!st u8 @B_SCR (local.get $nf) (local.get $p)) (!inc $nf))))
   (!for $a (i32.const 0) (local.get $nf)
     (local.set $p (!ld u8 @B_SCR (local.get $a)))
-    (local.set $q (!at u8 @(PLAYERS + B_HITBY) (i32.shl (local.get $p) (i32.const 6))))
-    (if (i32.and (i32.lt_u (local.get $q) (i32.const @NPLAYER)) (i32.ne (local.get $q) (local.get $p)))
-      (then
-        (if (i32.or (i32.eqz (call $bl_touch (local.get $p) (local.get $q))) (call $bl_blew (local.get $q)))
-          (then (drop (call $bl_pop (local.get $p) (local.get $q) (i32.const 2))))))))
+    (local.set $q (call $bl_blasted (local.get $p) (local.get $nb)))
+    (if (i32.ne (local.get $q) (i32.const 255)) (then (drop (call $bl_pop (local.get $p) (local.get $q) (i32.const 2))))))
   (!for $a (i32.const 0) (local.get $nf)
     (local.set $p (!ld u8 @B_SCR (local.get $a)))
     (!for $b (i32.add (local.get $a) (i32.const 1)) (local.get $nf)
       (local.set $q (!ld u8 @B_SCR (local.get $b)))
-      (if (i32.and (call $bl_touch (local.get $p) (local.get $q)) (i32.eqz (i32.or (call $bl_blew (local.get $p)) (call $bl_blew (local.get $q)))))
-        (then (call $bl_meet (local.get $p) (local.get $q))))))
+      (if (call $bl_touch (local.get $p) (local.get $q))
+        (then
+          (if (i32.eqz (i32.or (call $bl_by (local.get $p) (local.get $q) (local.get $nb)) (call $bl_by (local.get $q) (local.get $p) (local.get $nb))))
+            (then (call $bl_meet (local.get $p) (local.get $q))))))))
   (call $bl_orbs (local.get $t))
   (!for $p (i32.const 0) (i32.const @NPLAYER)
     (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
-    (local.set $r (i32.add (i32.const @(PG_S + BL_REC)) (i32.shl (local.get $p) (i32.const 4))))
+    (local.set $r (i32.add (i32.const @(PG_BIG + BL_REC)) (i32.shl (local.get $p) (i32.const 5))))
     (f32.store (local.get $r) (!at f32 @(PLAYERS + P_VX) (local.get $pb)))
     (f32.store offset=4 (local.get $r) (!at f32 @(PLAYERS + P_VY) (local.get $pb)))
     (f32.store offset=8 (local.get $r) (!at f32 @(PLAYERS + P_VZ) (local.get $pb)))
-    (i32.store16 offset=12 (local.get $r) (!at u16 @(PLAYERS + P_SHOTS) (local.get $pb)))
-    (i32.store8 offset=14 (local.get $r) (!at u8 @(PLAYERS + B_ITEM) (local.get $pb)))
-    (i32.store8 offset=15 (local.get $r) (!at u8 @(PLAYERS + P_FL) (local.get $pb)))))
+    (f32.store offset=12 (local.get $r) (!at f32 @(PLAYERS + P_PX) (local.get $pb)))
+    (f32.store offset=16 (local.get $r) (!at f32 @(PLAYERS + P_PY) (local.get $pb)))
+    (f32.store offset=20 (local.get $r) (!at f32 @(PLAYERS + P_PZ) (local.get $pb)))
+    (i32.store16 offset=24 (local.get $r) (!at u16 @(PLAYERS + P_SHOTS) (local.get $pb)))
+    (i32.store8 offset=26 (local.get $r) (!at u8 @(PLAYERS + B_ITEM) (local.get $pb)))
+    (i32.store8 offset=27 (local.get $r) (!at u8 @(PLAYERS + P_FL) (local.get $pb)))
+    (f32.store offset=28 (local.get $r) (call $b_rad (local.get $pb)))))
 
 (func $bl_over (result i32) (i32.const 0))
 (func $bl_out (param $p i32))
