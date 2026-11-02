@@ -5,8 +5,9 @@
 // to lay it there, into the other side's carrying nothing to take one of
 // theirs. A carrier bumped hard by a foe, or shoved by a blast, drops its
 // egg, sliding off the way it was knocked. A golden egg worth 3 drops into
-// the middle every 20 s. A side's score is the value of its nest, live; the
-// bigger nest at 90 s wins, a draw allowed.
+// the middle every 20 s, and bumper's power-ups fall onto the yard. A side's
+// score is the value of its nest, live; the bigger nest at 90 s wins, a draw
+// allowed.
 // Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The yard: a rounded rectangle EG_ASP times as long as wide, EG_A0 m² plus
@@ -70,8 +71,8 @@ export const EG_LOW = 1;
 // (bumper's B_BUMPS for the other one), if its velocity jumped more than
 // EG_HARD m/s since the last tick (a bump between two balls of a weight
 // jolts each 2.5 m/s plus the speed they closed at: 5 m/s of closing);
-// else by a blast (nobody touching it), if it jumped more than EG_SHOVE m/s
-// level. The egg pops out from its carrier's centre sliding EG_POPK of that
+// else by a blast (its hitter not touching it, or blowing up beside it: a
+// POW used, a SPRING's landing), if it jumped more than EG_SHOVE m/s level. The egg pops out from its carrier's centre sliding EG_POPK of that
 // jump (at most EG_POPMAX m/s), nobody's to take for EG_LOCK ticks and not
 // its carrier's for EG_REGRAB (nor a steal by it).
 export const EG_TOUCH = 0.5;
@@ -95,6 +96,28 @@ export const EG_PT_KNOCK = 1;
 // EG_GN x EG_GN cells of EG_CELL m from the yard's centre less half of it.
 export const EG_CELL = 4;
 export const EG_GN = 32;
+// Bumper's power-ups fall from ORB_Y onto the yard, a minor spice beside the
+// eggs: the first EG_DROP0 into play (6 s), then one every EG_DROPGAP ticks
+// (8 s) and one more for every EG_DROPN balls in (2 at a time for 16, 17 for
+// 256: 22 a round for 16). Each over a random spot EG_DROPIN m or more inside
+// the fence and EG_DROPNEST m or more past a nest's rim (EG_DROPTRY tries,
+// else none), falling at ORB_FALL (3.6 s) and lying EG_ORBLIFE ticks (10 s),
+// EG_NORB at once at most; the first ball in, by slot, holding none, that
+// rolls into one takes it. Of each hundred: EG_PPOW POW and EG_PROCKET
+// ROCKET (a blast knocks a carrier's egg loose), EG_PDASH DASH (an egg run
+// home, a carrier caught), EG_PSPRING SPRING, the rest MEGA.
+export const EG_DROP0 = 750;
+export const EG_DROPGAP = 1000;
+export const EG_DROPN = 16;
+export const EG_DROPIN = 2;
+export const EG_DROPNEST = 2;
+export const EG_DROPTRY = 8;
+export const EG_ORBLIFE = 1250;
+export const EG_NORB = 32;
+export const EG_PPOW = 25;
+export const EG_PROCKET = 25;
+export const EG_PDASH = 30;
+export const EG_PSPRING = 15;
 // Its header, byte offsets in PG_H (in the prediction's copy).
 export const EG_HX = 0; // f32 the yard's half length, x
 export const EG_HZ = 4; // f32 its half width, z
@@ -103,7 +126,11 @@ export const EG_NR = 12; // f32 a nest's radius
 export const EG_NX = 16; // f32 a nest's centre from the yard's, along x (red's at -, blue's at +)
 export const EG_PR = 20; // f32 the pile's radius as laid out
 export const EG_NE = 24; // u32 eggs in the pile (the golden ones are the next EG_NGOLD records)
-// In PG_S: the eggs, EG_NMAX + EG_NGOLD of EG_ESIZE bytes.
+export const EG_DROP = 28; // u32 ticks into play of the next power-up drop
+// In PG_S: the eggs, EG_NMAX + EG_NGOLD of EG_ESIZE bytes; then from EG_ORBS
+// the power-ups, EG_NORB of 16 bytes (bumper's orbs, as Swiss Roll keeps
+// them): f32 x, y (its centre), z | u8 PU_* (0 none) | u8 1 falling, 2 lying
+// | u16 ticks left lying.
 export const EG_EGG = 0;
 export const EG_ESIZE = 24;
 export const EG_EST = 0; // u8 EG_NONE (a golden egg still to come), EG_FREE, EG_HELD or EG_NEST
@@ -119,6 +146,7 @@ export const EG_NONE = 0;
 export const EG_FREE = 1;
 export const EG_HELD = 2;
 export const EG_NEST = 3;
+export const EG_ORBS = 3200;
 // In PG_BIG: EG_SSIZE bytes a slot; then the grid's heads (u16 a cell,
 // 0xffff empty) and its links (u16 a slot).
 export const EG_SLOT = 0;
@@ -132,6 +160,9 @@ export const EG_SKNOCKS = 14; // u16 foes' eggs knocked loose
 export const EG_SLOST = 16; // u16 its own knocked loose
 export const EG_SGOLD = 18; // u16 golden eggs laid
 export const EG_SNEXT = 20; // u32 tick into play it may take an egg again
+export const EG_SSHOTS = 24; // u16 its P_SHOTS at the last tick's end (a POW used since: its count moved on)
+export const EG_SITEM = 26; // u8 its B_ITEM then
+export const EG_SFL = 27; // u8 its P_FL then (a SPRING's landing since: PF_STOMP gone)
 export const EG_GRID = 0x2000;
 export const EG_GNEXT = 0x2800;
 // A ball's own field (PG_M): the egg it carries plus 1, 0 none.
