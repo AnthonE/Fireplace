@@ -20,10 +20,10 @@ Chrome (its modules, workers, themes and wasm), each gzipped:
 
 | Page | Files | Gzipped |
 | --- | --- | --- |
-| `client/party.html` | 135 | 730 KB (wasm 80 KB; the 42 minigames' client modules are most of the files) |
-| `client/fireplace.html` | 152 | 978 KB (wasm 246 KB: the four games, Box Canyon and Skyways) |
-| `client/arena.html` | 111 | 387 KB (wasm 59 KB) |
-| `client/flight.html` | 108 | 410 KB (wasm 106 KB, most of it Skyways) |
+| `client/party.html` | 137 | 778 KB (wasm 88 KB; the 46 minigames' client modules are most of the files) |
+| `client/fireplace.html` | 158 | 1,037 KB (wasm 254 KB: the four games, Box Canyon and Skyways) |
+| `client/arena.html` | 106 | 387 KB (wasm 59 KB) |
+| `client/flight.html` | 104 | 412 KB (wasm 107 KB, most of it Skyways) |
 
 No textures, models, sound files or fonts: sounds are synthesized, the HUD's
 text is the system's sans drawn into an atlas at startup, every shape is
