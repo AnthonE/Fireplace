@@ -1,0 +1,73 @@
+{
+  "game": "Fireplace",
+  "about": "The reference board: each view is one fixed picture of the game, shot with no GPU, beside its references and the operator's last word on it. node tools/board.mjs look shoots every view and draws the sheet; docs/look.md is the loop.",
+  "refs": "refs",
+  "private_refs_env": "ELO_REF_DIR",
+  "views": [
+    {
+      "id": "looks",
+      "what": "every look (matte, plastic, ice, metal, hazard, glow, paint, checker, wood, rubber) on every shape, in daylight, with riders between them",
+      "take": "materials read apart at a glance; the toy-box palette",
+      "shoot": [
+        "node",
+        "tools/party-shot.mjs",
+        "--scenes",
+        "looks,crowd,horizon@sunset,thinice~over"
+      ],
+      "png": "traces/party-render-looks.png",
+      "refs": []
+    },
+    {
+      "id": "crowd",
+      "what": "a full party stage of riders, the camera the game follows them with",
+      "take": "every rider findable in a crowd; the stage reads before the players do",
+      "shoot": [
+        "node",
+        "tools/party-shot.mjs",
+        "--scenes",
+        "looks,crowd,horizon@sunset,thinice~over"
+      ],
+      "png": "traces/party-render-crowd.png",
+      "refs": []
+    },
+    {
+      "id": "horizon@sunset",
+      "what": "the sea, the sky and the stage's edge at sunset",
+      "take": "the backdrop's mood; the horizon line and the sun",
+      "shoot": [
+        "node",
+        "tools/party-shot.mjs",
+        "--scenes",
+        "looks,crowd,horizon@sunset,thinice~over"
+      ],
+      "png": "traces/party-render-horizon-sunset.png",
+      "refs": []
+    },
+    {
+      "id": "thinice~over",
+      "what": "Thin Ice from above, the view when there is nobody to follow",
+      "take": "a minigame's rules readable from the picture alone",
+      "shoot": [
+        "node",
+        "tools/party-shot.mjs",
+        "--scenes",
+        "looks,crowd,horizon@sunset,thinice~over"
+      ],
+      "png": "traces/party-render-thinice~over.png",
+      "refs": []
+    },
+    {
+      "id": "couch",
+      "what": "the living room from the couch, in Grandma's theme, the TV showing a game",
+      "take": "a warm room people want to sit in; the TV the brightest thing in it",
+      "shoot": [
+        "node",
+        "tools/theme-shots.mjs",
+        "--themes",
+        "grandma"
+      ],
+      "png": "traces/themes/grandma.png",
+      "refs": []
+    }
+  ]
+}

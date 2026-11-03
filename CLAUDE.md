@@ -36,6 +36,7 @@ node tools/roblox.mjs place.rbxl [maps/<name>] [--brief]   # a Roblox place (.rb
 node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs/vox.md), through the same back half (tools/scene-map.mjs); the editor opens one too
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
+node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
