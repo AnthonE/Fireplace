@@ -68,6 +68,8 @@ struct U {
   map: vec4f,     // boxes, groups, sides (0 none, 1 one against the rest, 2 red and blue), the zones' height band (m)
   zn: vec4f,      // how many zones, boxes in my hands
   hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px), the focal length unzoomed (px) (client/lowpoly.mjs)
+  storm: vec4f,   // a battle royale's wall: centre x, z, radius, 1 on (0 none)
+  snext: vec4f,   // its next circle: centre x, z, radius, 1 shown
   zones: array<vec4f, ${2 * MAX_ZONE}>, // two a zone, a disc painted on the ground: centre x, z, radius, the height it's at | its colour, how hard it pulses (0..1)
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -121,6 +123,43 @@ fn zone(c: vec3f, w: vec2f, y: f32, z: f32) -> vec3f {
   return o;
 }
 
+// A battle royale's zone (client/am/royale.mjs) on what a pixel landed on at
+// w across: outside the wall the storm's violet over it, and the next
+// circle a white line a pixel or more wide.
+const STORM = vec3f(0.62, 0.3, 0.95);
+fn stormGround(c: vec3f, w: vec2f, z: f32) -> vec3f {
+  if (u.storm.w == 0.0) { return c; }
+  var o = c;
+  if (distance(w, u.storm.xy) >= u.storm.z) { o = mix(o, STORM, 0.38); }
+  if (u.snext.w != 0.0 && abs(distance(w, u.snext.xy) - u.snext.z) < max(0.25, 1.2 * z / u.cam.w)) { o = mix(o, vec3f(1.0), 0.75); }
+  return o;
+}
+// And its wall: a curtain wherever the eye's ray (across d a metre ahead,
+// rising rise) crosses the wall's circle short of t, banded and drifting; an
+// eye outside the wall sees everything through the storm's haze.
+fn stormWall(c: vec3f, d: vec2f, rise: f32, t: f32) -> vec3f {
+  if (u.storm.w == 0.0) { return c; }
+  let o2 = u.cam.xz - u.storm.xy;
+  let a = dot(d, d);
+  let b = dot(d, o2);
+  let k = dot(o2, o2) - u.storm.z * u.storm.z;
+  var col = c;
+  if (k > 0.0) { col = mix(col, STORM * 0.6, 0.3); }
+  let disc = b * b - a * k;
+  if (disc <= 0.0) { return col; }
+  let q = sqrt(disc);
+  for (var i = 0; i < 2; i++) {
+    let s = (-b + select(-q, q, i == 1)) / a;
+    if (s > 0.3 && s < t) {
+      let p = u.cam.xz + d * s - u.storm.xy;
+      let y = u.cam.y + rise * s;
+      let bands = 0.5 + 0.5 * sin(atan2(p.y, p.x) * max(u.storm.z, 1.0) * 0.4 + y * 0.5 - u.view.w * 1.5);
+      col = mix(col, STORM, 0.22 + 0.16 * bands);
+    }
+  }
+  return col;
+}
+
 struct VOut { @builtin(position) pos: vec4f };
 @vertex fn vs_full(@builtin(vertex_index) i: u32) -> VOut {
   var o: VOut;
@@ -158,7 +197,8 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     var c = boxColor(bh.k, w, bh.n, bh.t / u.cam.w);
     if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) { c *= light(bh.n, sunlit(w + bh.n * 0.01)); }
     if (bh.n.y > 0.5) { c = zone(c, w.xz, w.y, bh.t); }
-    o.color = vec4f(fogged(c, bh.t), 1.0);
+    c = stormGround(c, w.xz, bh.t);
+    o.color = vec4f(stormWall(fogged(c, bh.t), dir, rise, bh.t), 1.0);
     o.depth = bh.t / u.screen.z;
     return o;
   }
@@ -171,7 +211,7 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     if (a < 0.16) { c = mix(c, vec3f(0.62, 0.66, 0.78) * (0.7 + 0.3 * (pd.y - pc.y + 0.16) / 0.32), 0.85); }
     let ring = abs(a - 0.24) < 0.012 && abs(pd.y - pc.y) < 0.06;
     if (ring) { c = mix(c, vec3f(0.85, 0.85, 0.9), 0.6); }
-    o.color = vec4f(c, 1.0);
+    o.color = vec4f(stormWall(c, dir, rise, 1e9), 1.0);
     o.depth = 1.0;
     return o;
   }
@@ -188,7 +228,8 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   var c = groundColor(w, fc) * grain(w, z);
   c *= light(fc.xyz, select(1.0, sunlit(vec3f(w.x, u.cam.y + rise * z + 0.05, w.y)), z < 160.0));
   c = zone(c, w, u.cam.y + rise * z, z);
-  o.color = vec4f(fogged(c, z), 1.0);
+  c = stormGround(c, w, z);
+  o.color = vec4f(stormWall(fogged(c, z), dir, rise, z), 1.0);
   o.depth = z / u.screen.z;
   return o;
 }
@@ -510,6 +551,16 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
       if (brow) { c = vec3f(0.1, 0.06, 0.05); }
       if (mouth) { c = select(vec3f(0.18, 0.02, 0.03), vec3f(0.98, 0.96, 0.88), teeth); }
     }
+    case 16u: { // a crate: a box in the sprite's colour, lit from the top, dark edges and a brace across, a light band round its middle
+      let x = s.uv.x;
+      let y = s.uv.y;
+      let m = max(abs(x), abs(y));
+      if (m > 0.96) { discard; }
+      c *= 0.9 - 0.25 * y;
+      if (m > 0.8) { c = vec3f(0.16, 0.15, 0.14); }
+      else if (abs(y) < 0.1) { c = mix(c, vec3f(1.0), 0.5); }
+      else if (abs(abs(x) - abs(y)) < 0.09) { c *= 0.55; }
+    }
     case 14u: { // a terminal: a grey cabinet on a post, its screen in the sprite's colour with scan lines, a row of keys under it
       let x = s.uv.x;
       let y = s.uv.y;
@@ -714,7 +765,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
 
-  const ubuf = device.createBuffer({ size: 4 * (40 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 4 * (48 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, its look word, its avatar
   const projBuf = storage(L.NPROJ * L.JSIZE);
@@ -769,7 +820,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
   const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
 
-  const uf = new Float32Array(40 + 8 * MAX_ZONE);
+  const uf = new Float32Array(48 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);
   const spriteData = new Float32Array(MAX_SPRITE * 12);
   const beamData = new Float32Array(MAX_BEAM * 12);
@@ -805,7 +856,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     //      beams: [{ a, b, width, color: [r,g,b,a] }], rects: [[x0, y0, x1, y1, r, g, b, a]],
     //      crosshair, gap, marker, hurt, scope, text, graph, sides (0 colour by slot, 1 one side against the rest, 2 red and blue by PF_BLUE),
     //      zone (null, or { x, z, r, y, h, color: [r,g,b], pulse }: a disc painted on the terrain and box tops within h of y, any height
-    //      without y; or a list of up to MAX_ZONE of them, all in the first one's band) }
+    //      without y; or a list of up to MAX_ZONE of them, all in the first one's band),
+    //      storm (null, or a battle royale's zone { x, z, r, next: { x, z, r } | null }: client/am/royale.mjs) }
     frame(u8, s, target) {
       // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
       if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
@@ -819,7 +871,9 @@ export async function createRenderer(canvas, { present = true, device: shared = 
         rows, Math.min(s.rects.length, MAX_RECT), s.crosshair, s.marker, s.hurt, s.scope ? 1 : 0, s.graph ? 1 : 0, s.gap, s.dtPred ?? s.dt, ...(s.tracker || [0, 0, 0]),
         nbox, ngroup, Number(s.sides) || 0, z ? (z.y === undefined ? 1e9 : z.h ?? 2) : 0, zs.length, s.viewmodel ? Math.min(MAX_VM, s.viewmodel.length / 12) : 0, 0, 0, hs, hudX, hudY, focalFor(W, H)]);
       if (s.viewmodel?.length) device.queue.writeBuffer(vmBuf, 0, s.viewmodel.subarray(0, MAX_VM * 12));
-      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 40 + 8 * k));
+      const st = s.storm, sn = st?.next;
+      uf.set([st ? st.x : 0, st ? st.z : 0, st ? st.r : 0, st ? 1 : 0, sn ? sn.x : 0, sn ? sn.z : 0, sn ? sn.r : 0, sn ? 1 : 0], 40);
+      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 48 + 8 * k));
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);

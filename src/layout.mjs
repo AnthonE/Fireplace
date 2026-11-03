@@ -671,6 +671,13 @@ export const M_ESCAPE = 14;
 //   1 a second, 5 s to respawn; the most KOs at the clock win. Its constants
 //   in src/am/crossroads.mjs.
 export const M_CROSSROADS = 15;
+// Battle royale, on the kit with no sides, last in the rotation:
+//   M_ROYALE: one life each; everyone put down spread over the map with a
+//   weak pistol, guns from crates and pads; a zone closes in stages, damage
+//   outside it growing, to nothing; the last standing wins, the rest place
+//   by when they went out. Its constants in src/am/royale.mjs. (Flight's Ring
+//   Race moved to 17 for it.)
+export const M_ROYALE = 16;
 // name is what a player sees (the M_* and FIESTA names are only the code's)
 export const MODES = [
   { name: FIESTA ? 'GRAB BAG' : 'FREE FOR ALL', rules: FIESTA ? 'RANDOM GUNS  MOST KILLS IN 10 MIN' : `${FRAG_LIMIT} KILLS WIN`, ticks: MATCH_TICKS },
@@ -689,10 +696,11 @@ export const MODES = [
   { name: 'EVADE', rules: 'RUN FROM THE CHASERS  REVIVE THE DOWNED  SURVIVE', ticks: 26250, team: 0 },
   { name: 'ESCAPE', rules: 'HACK THE TERMINALS  REACH AN EXIT  OUTRUN THE HUNTER', ticks: 30000, team: 0 },
   { name: 'CROSSROADS', rules: 'SWORD  ROCKET  SUPERBALL  MOST KOS IN 10 MIN', ticks: 75000, team: 0 },
+  { name: 'BATTLE ROYALE', rules: 'ONE LIFE  LOOT THE CRATES  STAY IN THE ZONE  LAST ONE STANDING WINS', ticks: 48750, team: 0, pads: 1 },
 ];
 export const MODE_TICKS = MODES.map((m) => m.ticks);
-// a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks, Evade and Escape before it comes round
-export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT, M_LUCKY, M_EVADE, M_ESCAPE];
+// a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks, Evade, Escape and Battle Royale before it comes round
+export const ARENA_MODES = [M_FIESTA, M_SLAYER, M_HEADHUNT, M_INFECTION, M_CTF, M_TERRITORY, M_GUNGAME, M_ODDBALL, M_VIP, M_JUGGERNAUT, M_HILL, M_ASSAULT, M_LUCKY, M_EVADE, M_ESCAPE, M_ROYALE];
 export const FORCE_MODE = 0xa8;
 export const TEAMED = MODES.reduce((b, m, k) => (m.team ? b | (1 << k) : b), 0); // red against blue
 export const PAD_MODES = MODES.reduce((b, m, k) => (m.pads ? b | (1 << k) : b), 0); // the FIESTA build lays the map's pads for these
@@ -770,6 +778,7 @@ export const AM = [
   { mode: M_EVADE, key: 'evade', prefix: 'ed', hooks: ['strike', 'spawn'] },
   { mode: M_ESCAPE, key: 'escape', prefix: 'es', hooks: ['spawn', 'hurt'] },
   { mode: M_CROSSROADS, key: 'crossroads', prefix: 'cx', hooks: ['spawn', 'hurt'] },
+  { mode: M_ROYALE, key: 'royale', prefix: 'ry', hooks: ['spawn'] },
 ];
 export const AM_HOOKS = ['start', 'tick', 'kill', 'bar']; // every mode on the kit has these
 export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on the kit, sides or none

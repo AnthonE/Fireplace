@@ -32,7 +32,7 @@ const COLOR = { // per weapon: tracer colour, viewmodel body
 };
 const SHORT = { [L.W_AR]: 'AR', [L.W_BR]: 'BR', [L.W_MAGNUM]: 'MAGNUM', [L.W_SNIPER]: 'SNIPER', [L.W_SHOTGUN]: 'SHOTGUN', [L.W_ROCKET]: 'ROCKET',
   [L.W_PLASMA]: 'PLASMA', [L.W_NEEDLER]: 'SEEKER', [L.W_SWORD]: 'SWORD', [L.KILL_GREN]: 'FRAG', [L.KILL_MELEE]: 'MELEE', [L.KILL_BEHIND]: 'ASSASSINATION',
-  [L.KILL_SUPER]: 'OVERLOAD', [L.KILL_FALL]: 'FALL', [AC.CX_KILL_BALL]: 'SUPERBALL' };
+  [L.KILL_SUPER]: 'OVERLOAD', [L.KILL_FALL]: 'FALL', [AC.CX_KILL_BALL]: 'SUPERBALL', [AC.RY_KILL_ZONE]: 'ZONE' };
 const CROSS = { [L.W_AR]: 0, [L.W_BR]: 1, [L.W_MAGNUM]: 1, [L.W_SNIPER]: 1, [L.W_SHOTGUN]: 2, [L.W_ROCKET]: 3, [L.W_PLASMA]: 4, [L.W_NEEDLER]: 4, [L.W_SWORD]: 5 };
 const RUNGS = L.LADDER.length;
 // How a fighter stands under the match's mode, higher is better: the sim's $a_key, for the board while play goes on.
@@ -249,7 +249,9 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         const infected = md.mode === L.M_INFECTION && f.owner !== f.shot && view.fighter(f.owner).zombie;
         // a team mode's lines in the killer's side's colour, but for your own
         const other = md.teamed ? SIDE_C[sideOf(view, f.owner)] : C.WHITE;
-        if (!infected) say(f.owner === f.shot ? `${name(f.shot)} DIED` : `${name(f.owner)} [${cause}] ${name(f.shot)}`, f.owner === slot ? C.GREEN : f.shot === slot ? C.RED : other, now);
+        // (the battle royale's zone takes a fighter by its own hand, the cause saying so)
+        const own = f.size === AC.RY_KILL_ZONE ? `${name(f.shot)} [ZONE]` : `${name(f.shot)} DIED`;
+        if (!infected) say(f.owner === f.shot ? own : `${name(f.owner)} [${cause}] ${name(f.shot)}`, f.owner === slot ? C.GREEN : f.shot === slot ? C.RED : other, now);
         glows.push({ pos: [f.pos[0], f.pos[1] + 1, f.pos[2]], size: 1.4, color: [1, 0.3, 0.2, 0.8], kind: 3, born: now, life: 400 });
         if (f.owner === slot && f.shot !== slot) {
           multi = now - lastKill < 4500 ? multi + 1 : 1;
@@ -526,7 +528,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     // the team mode's objective: its sprites, glows and beams ahead of everything else's, its waypoints and zone
     const md = view.mode();
     const kit = AMC[md.mode];
-    const out = { solid: [], glow: [], beams: [], markers: [], zone: null };
+    const out = { solid: [], glow: [], beams: [], markers: [], zone: null, storm: null };
     const playT = h.state === L.H_PLAY ? (h.tick - h.start) * 0.008 + dt : 0;
     // the fighter whose eyes the camera has: yours, or the one a spectator watches (none for a fixed camera)
     const shown = FIXED ? -1 : tgt ? watched : slot;
@@ -588,7 +590,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const spread = ARMS[f?.weapon]?.spread || 0;
     last = {
       cam, yaw: camYaw, pitch: camPitch, zoom, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, slot: tgt ? watched : slot < 0 ? 999 : slot,
-      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone,
+      solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone, storm: out.storm,
       crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, cam) ? 8 : 0), gap: spread / 30 + kick * 3,
       tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
     };
