@@ -157,7 +157,7 @@ crate, `rust/mg/<key>/src/lib.rs`, and `node tools/rust.mjs` turns it into
 `src/mg/<key>.wat` after each change (docs/rust.md; SUMO RING is the worked
 example).
 
-Then make it yours. The forty-six in `src/mg/` are worked examples, and
+Then make it yours. The forty-nine in `src/mg/` are worked examples, and
 the top of `src/party.wat` and `client/party-game.mjs` says what each hook is
 given and may do. The rules every machine must agree on are CLAUDE.md's "The
 sim's rules", and the build refuses some of them outright. The ones that bite
@@ -247,7 +247,7 @@ there. Then play it with bots:
 
 ```sh
 node net/play.mjs --arena --map <folder>                # open the URL it prints
-node net/play.mjs --flight --mode 16 --map <folder>     # Dogfight's Ring Race, on a map with gates
+node net/play.mjs --flight --mode 17 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
 
 A Roblox place makes a map too: in the editor, **open… > a Roblox place…**

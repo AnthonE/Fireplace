@@ -13,3 +13,4 @@ export * from './lucky.mjs';
 export * from './evade.mjs';
 export * from './escape.mjs';
 export * from './crossroads.mjs';
+export * from './royale.mjs';

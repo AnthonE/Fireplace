@@ -1849,6 +1849,7 @@
   (local.set $r (i32.shl (local.get $p) (i32.const 3)))
   (if (i32.eq (local.get $m) (i32.const @M_EVADE)) (then (return (call $ed_key (local.get $p)))))
   (if (i32.eq (local.get $m) (i32.const @M_ESCAPE)) (then (return (call $es_key (local.get $p)))))
+  (if (i32.eq (local.get $m) (i32.const @M_ROYALE)) (then (return (call $ry_key (local.get $p)))))
   (if (i32.and (i32.shl (i32.const 1) (local.get $m)) (i32.const @TEAMED))
     (then
       (local.set $n (!at u16 @(MODE_REC + MR_POINTS) (local.get $r)))
@@ -2146,3 +2147,4 @@
 #include "am/evade.wat"
 #include "am/escape.wat"
 #include "am/crossroads.wat"
+#include "am/royale.wat"

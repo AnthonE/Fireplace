@@ -8,7 +8,7 @@ sit down: the camera closes in on the TV until its glass fills the screen, and
 you're in whatever the room is playing. When a game ends it pulls back to the
 room, and the TV shows the marshmallows and what's on next; then it closes in
 again. The room plays the playlist through: party (three minigames), the
-arena (one three-minute match of any of its fifteen modes, drawn for it), party again, a three-minute Dogfight (a free-for-all,
+arena (one three-minute match of any of its sixteen modes, drawn for it), party again, a three-minute Dogfight (a free-for-all,
 red against blue, the juggernaut or Ring Race, drawn for it), a hole of golf, and round
 again; the top three of each game get 3, 2 and 1 marshmallows. Join any time,
 into whatever is on (or the next round of it); leave any time.
@@ -58,12 +58,13 @@ built on that seed, and everyone in the room is joined into it on that tick
 when the two games read the same word (golf's, which party shares; the arena's and Dogfight's are alike but mean other things, so neither
 keeps the other's). The seed is a hash of the room's PRNG and the games played (`FP_NEXT`,
 `REGION + 0xe400`). The arena's forces a mode: `0xA8` in its top byte, the
-mode in the next, drawn by `$rand` from the fifteen (`ARENA_MODES`), never the one the arena
+mode in the next, drawn by `$rand` from the sixteen (`ARENA_MODES`), never the one the arena
 played last (`FP_MODE`, `REGION + 0xe404`), and drawn as the game before ends
 so the TV can name it; whatever the mode, the match is cut to 90 s
 (`FP_ARENA_TICKS`: Infection loses 90 s, Evade and Escape 2 or 2.5 min, the
 rest 3.5 to 8.5 min; Escape's exits, opening 60 s before the clock, open
-30 s in), and a team
+30 s in; Battle Royale's zone comes in with the clock, its last circle closed
+at 80 s), and a team
 match cut short goes to the side ahead. Dogfight's forces one of flight's
 four modes the same way, drawn by `$rand` (any of them, the last one too)
 and cut to 90 s (a race cut short places by gates passed). Golf's hole is

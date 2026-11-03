@@ -103,8 +103,9 @@ shell whose own command line contains the name: it kills that shell.
 - The arena's match modes (`M_*`: Fiesta, Infection, gun game, Juggernaut,
   and the team modes Team Slayer, Capture the Flag, Oddball, King of the
   Hill, Headhunter, Territories, VIP, Assault, and the kit modes without
-  sides Lucky Blocks, Evade and Escape, and Crossroads, which only a map
-  naming it plays) are picked per match at run time, not built: `AH_MODE` to `AH_END`
+  sides Lucky Blocks, Evade, Escape and Battle Royale (`M_ROYALE`, 16:
+  crates and a zone in `AO`, the dead out for the match), and Crossroads,
+  which only a map naming it plays) are picked per match at run time, not built: `AH_MODE` to `AH_END`
   at `REGION + 0x48..0x74` (the team modes' scores, target and winner
   included), a side in `P_FL` (`PF_ZOMBIE`, `PF_JUGG`, `PF_BLUE`, and
   `PF_CARRY` for a flag's, the skull's or the bomb's carrier, `PF_FAST` for
@@ -146,8 +147,8 @@ shell whose own command line contains the name: it kills that shell.
   (`$a_arm`, pickups) must stay off a ship. A ship's position is its
   centre. It builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
   drawn by `tools/skyways.mjs`; `--flight-map` gives it another);
-  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 16: `MODES.length`, its news past every kit
-  mode's MX codes, which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
+  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 17: `MODES.length`, its news past every kit
+  mode's MX codes (120 and 121), which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
   arena's build never sees it: its clock is `FLIGHT_TICKS`, its course the
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
   meeting (`$f_collide`) touch two records, so they are confirmed-only.

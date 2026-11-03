@@ -7,8 +7,8 @@ match is a Grab Bag: ten minutes, everyone spawns with two guns drawn at
 random, the most kills at the end wins; the matches after it go round the
 [modes](#modes), a free-for-all and then two [red against blue](#teams): Team
 Deathmatch, Skull Hunt, Zombies, Capture the Flag, Territories, gun game, Keep
-Away, VIP, Juggernaut, King of the Hill, Assault, then Lucky Blocks, Evade
-and Escape. All of them are on
+Away, VIP, Juggernaut, King of the Hill, Assault, then Lucky Blocks, Evade,
+Escape and Battle Royale. All of them are on
 [Box Canyon](#box-canyon-structures-and-maps): a canyon walled all round with
 a base at each end you can walk into and up onto, a teleporter behind each, a
 cave through the north ridge, boulders for cover. (Set `FIESTA = 0` in
@@ -137,18 +137,18 @@ node --test test/map.test.mjs
 
 ## Modes
 
-Each match plays one of fifteen modes, chosen as its countdown starts: match k
-of a room plays `ARENA_MODES[k % 15]` (`src/layout.mjs`), Fiesta, Team Slayer,
+Each match plays one of sixteen modes, chosen as its countdown starts: match k
+of a room plays `ARENA_MODES[k % 16]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
-Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, Escape, and round
-again: a free-for-all, then two [team modes](#teams), and the three kit modes
-without sides last. A sixteenth, [Crossroads](#crossroads), is in no
+Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, Escape, Battle
+Royale, and round again: a free-for-all, then two [team modes](#teams), and
+the four kit modes without sides last. A seventeenth, [Crossroads](#crossroads), is in no
 rotation: a map that names it plays it every match. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it ([fireplace.md](fireplace.md)). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads, 16 Battle Royale) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
@@ -296,6 +296,81 @@ or 16 AI fighters run 57 to 144 s, 2 of 7 to 13 of 15 survivors escaping;
 online with 64, 28 escaped in 90 s (5,623 hashes, all equal).
 `test/arena-escape.test.mjs` (13 tests).
 
+Battle Royale (mode 16) is one life each, everyone for itself. As play starts
+everyone in the room is put down over the whole map, spread as a sunflower's
+seeds are (a golden angle a step, out to the ellipse 3 m inside the bounds,
+turned by a hash of the room's seed and match), each on the ground or a floor
+clear of every box and above any void, with a magnum in each hand, a magazine
+and one more each, and no frags. Crates lie on the map's objective spots and
+at clear spots drawn over the bounds, 12 and one more for every two fighters
+(48 at most, 4 m apart): walk into one and it opens if what it holds is of use
+to you, a gun in place of the magnum (the hand you hold first; out of 64, 10
+an assault rifle, 8 a burst rifle, 7 a shotgun, 6 plasma, 5 a seeker, 3 a
+sniper rifle, 2 a rocket launcher, 2 a sword), ammo for a gun you carry, an
+overshield, health or two frags. The map's pads are laid as in a team mode,
+and a fighter who goes out drops the gun in its hands as a crate. The zone is
+seven circles the room's PRNG draws as play starts: circle 0 round the bounds
+(half their diagonal and 3 m: 178 m on Box Canyon), each next 55, 33, 20, 11,
+5 and 0% of that across and wholly inside the one before, pulled inside the
+bounds as far as its size lets it. The next circle is on the ground and the
+minimap from the start; at 1:00, 2:20, 3:20, 4:10, 4:50 and 5:25 the wall
+closes in to it over 40 to 20 s, with a warning 10 s before; outside it you
+take 2, 4, 7, 10, 15 and 25 a second by stage (shields first, and they don't
+come back while it lasts), and 50 once the last circle has closed to nothing
+at 5:45, so nobody outlasts it: two fighters who never move are both gone
+within 8 s of it, inside the 6:30 clock. In Fireplace's 90 s every time comes in with the
+clock (the last close at 80 s). The last standing wins on that tick; the rest
+place by when they went out, later better, then by kills (a tick's outs
+share). The dead are out (`PF_DEAD`, `A_RESPAWN` past the clock) and watch
+someone standing. A join before the first close comes in at random inside the
+next circle; after it, out and watching, placed last (a fighter who leaves
+and comes back then is out too), so nobody joins to dodge the zone.
+
+How it fits: a kit mode with no sides and the spawn hook. The circles, the
+wall as it stands, the counts and the crates are `AO` (960 B of it); when each
+fighter went out, its crates and the zone's damage to it are its `MODE_REC`.
+The wall each tick is a function of the circles, the tick of play and the
+match's clock alone (`$ry_zone`), on the confirmed world, and the zone's hits
+are confirmed-only, so the prediction reads none of it. The zone's kill is a
+death by your own hand with nothing taken off your kills (cause 21, ZONE in
+the feed). The page draws the storm in the renderer's terrain pass: the ground
+and boxes outside the wall violet, the wall a banded curtain wherever the
+eye's ray crosses its circle, the next circle a white line on the ground; a
+crate is a box in its loot's colour (a gun by rarity, shields blue, health
+red, frags orange); a minimap at the top right holds both circles and you;
+waypoints go to the next circle while you are outside it and, holding the
+magnum alone, to the nearest crate of use. The AI fighter runs straight in
+from outside the wall, fighting nobody; walks into the next circle while that
+still leaves it time to spare, shooting on the way; goes for the nearest crate
+of use holding the magnum alone, one within 30 m once armed; and otherwise
+holds a point inside the next circle, fighting whoever it sees; a fighter
+holding only the magnum takes any pad's gun.
+
+The AI fighters fight hard and the zone mostly herds them: 16 of them on
+Box Canyon (six matches, three seeds) were down to one in 81 to 336 s, five
+of the six before the second close; 64 in 259 and 343 s; 256, joined at once,
+in 335 s, 108 out in the first 10 s of play and the last three held to the
+last circle. A match opens 15 to 41 crates and takes 10 to 20 guns off pads;
+the zone took 2 fighters in those 8 matches. A tick of 256 AI fighters in Battle
+Royale is 0.16 ms (p99 0.35) over the first 10 s of play, 0.06 ms by 30 s
+with 87 standing (a Fiesta of 256, 0.33 to 0.40). `test/arena-royale.test.mjs`
+(10 tests): the rules and the numbering; the circles nested in each other and
+the bounds and 2, 16 and 256 fighters spread over Box Canyon clear of every
+box, crates on the map's spots; 16 on `maps/lifts` laid at run time, over its
+void; loot (each kind of crate, of use or not, ammo, a drop as a fighter goes
+out); the zone's news, the wall moving on the tick and its hits by stage;
+places and the three ends; joins before and after the first close; the end
+inside the clock on its own and on Fireplace's; a Fiesta after it exactly a
+Fiesta's region; the client module; and 8 and 16 AI fighters over a whole
+clock on the debug build (matches of 175 and 218 s, 187 and 83 s), the same
+hash every tick on 1 and 4 threads. The matrix replays 20,000 ticks of eight
+AI fighters: all 27 configurations agree, 0.040 to 0.054 ms a tick on
+TurboFan in Deno and Chrome. Online, Chrome and 15 AI fighters for 90 s: 16
+sessions, 1,408 hashes checked, all equal, 8.3 B a closed tick, 4.1 KB/s
+down a session, three matches (the first over in 36 s); Chrome and 127 for
+60 s: 128 sessions, 7,456 hashes, all equal, 43.3 B a tick, 12.8 KB/s down,
+the match won at 51 s. The arena's wasm grows 5,005 B (2,027 gzip).
+
 ### Crossroads
 
 Crossroads (mode 15) is Roblox's Crossroads as its place played it, ported
@@ -328,7 +403,8 @@ its tick hook heals, refills and puts the superball back in hand (A_GRENS 0
 or 1, its wait in MODE_REC). The superball is a projectile kind of its own
 (7, `$cx_ball`), stepped on either bank like a frag; the throw reads
 `AH_MODE` from the bank's own header, so the prediction throws it as the
-confirmed world will. Flight's Ring Race moved to 16 to make room.
+confirmed world will. Flight's Ring Race moved to 16 to make room (and to
+17 for Battle Royale).
 `test/arena-crossroads.test.mjs` (9 tests): the loadout and no sides; no
 shields, health a point every 125 ticks of the clock; four sword swings and a
 butt that does nothing; the respawn; a superball's speed, its 55, the
@@ -348,7 +424,7 @@ the Flag, Oddball, King of the Hill, Headhunter, Territories, VIP and Assault.
 Two of them follow each free-for-all in the rotation (`ARENA_MODES`: Fiesta,
 Team Slayer, Headhunter, Infection, Capture the Flag, Territories, gun game,
 Oddball, VIP, Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade,
-Escape) and Fireplace draws them
+Escape, Battle Royale) and Fireplace draws them
 too; `node net/play.mjs --arena --mode 5` is a room of Capture
 the Flag only.
 

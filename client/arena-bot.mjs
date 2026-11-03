@@ -436,8 +436,9 @@ export class Fighter {
     const coast = !!obj?.still && Math.hypot(obj.pos[0] - me.pos[0], obj.pos[2] - me.pos[2]) < (obj.r ?? 2) + 0.25 * Math.hypot(me.vel[0], me.vel[2]);
 
     let move = 0, jump = 0;
-    // a gun worth having underfoot: pick it up, in place of the worse one (a carrier has no hands)
-    const pads = me.carry ? [] : view.pads().filter((p) => !p.wait && !me.gun.includes(p.weapon) && (POWER.has(p.weapon) || me.gun.includes(L.W_AR)));
+    // a gun worth having underfoot: pick it up, in place of the worse one (a carrier has no hands;
+    // a fighter with a magnum alone, the battle royale's starter, takes any)
+    const pads = me.carry ? [] : view.pads().filter((p) => !p.wait && !me.gun.includes(p.weapon) && (POWER.has(p.weapon) || me.gun.includes(L.W_AR) || me.gun.every((g) => g === L.W_MAGNUM)));
     const here = pads.find((p) => Math.hypot(p.pos[0] - me.pos[0], p.pos[2] - me.pos[2]) < 1.4);
     if (here) {
       this.slotOut = POWER.has(me.gun[0]) && !POWER.has(me.gun[1]) ? 1 : POWER.has(me.gun[1]) && !POWER.has(me.gun[0]) ? 0 : me.gun[0] === L.W_AR ? 0 : 1;

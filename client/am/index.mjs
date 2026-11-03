@@ -48,8 +48,11 @@
 //     'crown' | undefined (a diamond) }, clamped to the screen's edge when off
 //     it), zone: null or one ground disc the renderer paints on the terrain
 //     and box tops, { x, z, r, y (only surfaces within h of it; omit for
-//     any), h (default 2), color: [r, g, b], pulse (0..1) } }. Objectives'
-//     sprites go before the FX (MAX_SPRITE caps them together).
+//     any), h (default 2), color: [r, g, b], pulse (0..1) }, storm: null or
+//     a battle royale's zone, { x, z, r (the wall), next: { x, z, r } or
+//     null }: outside the wall tinted, the wall a curtain, the next circle a
+//     line on the ground }. Objectives' sprites go before the FX (MAX_SPRITE
+//     caps them together); kind 16 a crate.
 //   cols: the board's columns between the name and KILLS / DEATHS: [{ head,
 //     get(o) -> string }], o a fighter().
 //   goal(view, me, ctx): the AI fighter's objective, or null to fight and
@@ -90,9 +93,10 @@ import lucky from './lucky.mjs';
 import evade from './evade.mjs';
 import escape from './escape.mjs';
 import crossroads from './crossroads.mjs';
+import royale from './royale.mjs';
 
 export const AMC = [];
-for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault, lucky, evade, escape, crossroads]) AMC[m.mode] = m;
+for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault, lucky, evade, escape, crossroads, royale]) AMC[m.mode] = m;
 // the module whose MX codes a news item's size falls in (MX_AM + 8k for AM[k]), or undefined
 export const newsOf = (size) => (size >= L.MX_AM ? AMC[L.AM[(size - L.MX_AM) >> 3]?.mode] : undefined);
 export { SIDE, SIDE_C, SIDE_RGB, sideOf } from './sides.mjs';
