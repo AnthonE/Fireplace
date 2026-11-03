@@ -4,60 +4,106 @@
 <title>Studio · look</title>
 <link rel="icon" href="data:,">
 <style>
-  :root { --bg: #0b0d14; --panel: #131722; --line: #262c3b; --ink: #cfd3e0; --dim: #7d8499; --hot: #ffcf5a; --bad: #ff7a6b; --ok: #8fd18a; }
+  :root { --bg: #0b0d14; --panel: #131722; --card: #10141e; --line: #262c3b; --ink: #cfd3e0; --dim: #7d8499; --hot: #ffcf5a; --bad: #ff7a6b; --ok: #8fd18a; --col: 300px; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-monospace, monospace; }
-  header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, sans-serif; }
+  code, .mono, header, footer { font-family: ui-monospace, monospace; }
+  header { position: sticky; top: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
   header .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
   header b { color: var(--hot); margin-right: 6px; }
   header nav.kit-tabs { display: flex; gap: 2px; margin-right: 4px; }
   header nav.kit-tabs a { color: var(--dim); text-decoration: none; padding: 3px 8px; border: 1px solid transparent; border-radius: 4px; }
   header nav.kit-tabs a:hover { color: var(--ink); border-color: var(--line); }
   header nav.kit-tabs a[aria-current] { color: var(--hot); border-color: var(--hot); background: #3b3220; }
-  main { padding: 8px 12px 40px; }
-  .intro { color: var(--dim); max-width: 900px; margin: 6px 0 10px; }
-  section { border-top: 1px solid var(--line); padding: 10px 0; }
-  h2 { margin: 0; font-size: 14px; color: var(--ink); }
-  .what { color: var(--dim); margin: 2px 0; }
-  .aim { color: var(--ok); margin: 2px 0; }
-  .marks { margin: 4px 0; }
-  .marks .right { color: var(--ok); } .marks .wrong { color: var(--bad); } .marks .note { color: #b8c0ff; }
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-top: 6px; }
-  figure { margin: 0; width: 320px; }
-  figure img { width: 320px; display: block; border: 1px solid var(--line); background: #000; }
-  figcaption { font-size: 12px; color: var(--dim); }
-  .st { display: block; color: var(--ink); }
-  .st .d { color: var(--hot); }
-  .drop { width: 320px; height: 192px; display: grid; place-items: center; text-align: center; padding: 12px; border: 1px dashed #3a4258; color: var(--dim); border-radius: 4px; }
-  .drop.over { border-color: var(--hot); color: var(--hot); }
-  .empty { width: 320px; height: 192px; display: grid; place-items: center; border: 1px dashed var(--line); color: var(--dim); }
-  .act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
-  input[type=text] { font: inherit; color: var(--ink); background: #0e1119; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; width: 320px; }
-  button, select { font: inherit; color: var(--ink); background: #1b2030; border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px; }
-  button { cursor: pointer; }
+  header .grow { flex: 1; }
+  #progress { color: var(--dim); }
+  #progress b { color: var(--ok); margin: 0; }
+  main { padding: 10px 14px 48px; max-width: 1180px; }
+  ol.steps { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 4px 0 14px; padding: 0; list-style: none; counter-reset: s; color: var(--dim); }
+  ol.steps li { counter-increment: s; }
+  ol.steps li::before { content: counter(s); display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 50%; background: #262c3b; color: var(--ink); font-size: 11px; }
+  ol.steps b { color: var(--ink); font-weight: 600; }
+  section.view { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px 14px; margin: 0 0 14px; }
+  .vhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  h2 { margin: 0; font-size: 15px; }
+  .badge { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--dim); }
+  .badge.right { color: var(--ok); border-color: #2f5a33; background: #16261a; }
+  .badge.wrong { color: var(--bad); border-color: #5a2f2f; background: #2a1616; }
+  .what { color: var(--dim); margin: 2px 0 0; }
+  .aim { margin: 2px 0 0; } .aim span { color: var(--dim); }
+  .said { margin: 6px 0 0; padding: 6px 10px; border-left: 3px solid var(--line); color: var(--ink); background: #0c0f17; }
+  .said.wrong { border-left-color: var(--bad); } .said.right { border-left-color: var(--ok); }
+  .said .when { color: var(--dim); font-size: 12px; margin-left: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(3, var(--col)); gap: 14px; margin-top: 12px; }
+  .colh { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin-bottom: 4px; }
+  .pic { position: relative; width: var(--col); aspect-ratio: 16 / 10; border: 1px solid var(--line); border-radius: 4px; background: #05070b; overflow: hidden; }
+  .pic img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+  .pic .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 14px; color: var(--dim); }
+  .pic .busy { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; color: var(--hot); background: #05070bcc; }
+  .pic .busy::before { content: ""; width: 18px; height: 18px; border: 2px solid var(--hot); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .pic .busy::before { animation: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .thumbs { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .thumbs button { padding: 0; width: 56px; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 3px; }
+  .thumbs button img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumbs button.on { border-color: var(--hot); }
+  .drop { width: var(--col); aspect-ratio: 16 / 10; display: grid; place-items: center; text-align: center; padding: 14px; border: 1px dashed #3a4258; border-radius: 4px; color: var(--dim); cursor: pointer; }
+  .drop.small { aspect-ratio: auto; padding: 6px; margin-top: 6px; }
+  .drop.over, .drop:hover { border-color: var(--hot); color: var(--hot); }
+  .refnote { margin-top: 6px; display: grid; gap: 4px; }
+  .readout { margin-top: 6px; color: var(--dim); font-size: 12px; min-height: 1.4em; }
+  .readout .diff { color: var(--ink); }
+  .verdict { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .verdict input { flex: 1; min-width: 220px; }
+  input[type=text], select { font: inherit; color: var(--ink); background: #0e1119; border: 1px solid var(--line); border-radius: 4px; padding: 4px 7px; }
+  input[type=text]:focus, select:focus, button:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
+  button { font: inherit; color: var(--ink); background: #1b2030; border: 1px solid var(--line); border-radius: 4px; padding: 4px 9px; cursor: pointer; }
   button:hover { border-color: #3a4258; }
   button:disabled { opacity: .45; cursor: default; }
-  .x { padding: 0 5px; margin-left: 4px; }
+  button.good { border-color: #2f5a33; color: var(--ok); }
+  button.notyet { border-color: #5a2f2f; color: var(--bad); }
+  button.primary { border-color: var(--hot); color: var(--hot); background: #3b3220; }
+  button.link { background: none; border: 0; color: var(--dim); padding: 0 4px; text-decoration: underline; }
+  .x { padding: 0 6px; }
   footer { position: sticky; bottom: 0; padding: 4px 8px; border-top: 1px solid var(--line); background: var(--panel); color: var(--dim); }
   #shooters { position: fixed; left: -10000px; top: 0; width: 960px; height: 600px; }
   #shooters iframe { width: 960px; height: 600px; border: 0; }
+  #zoom { position: fixed; inset: 0; z-index: 5; background: #05070bf2; display: grid; grid-template-rows: auto 1fr auto; padding: 14px; gap: 10px; }
+  #zoom[hidden] { display: none; }
+  #zoom .zh { display: flex; gap: 10px; align-items: center; }
+  #zoom .zh h3 { margin: 0; font-size: 14px; flex: 1; }
+  #zoom .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; }
+  #zoom figure { margin: 0; display: flex; flex-direction: column; min-height: 0; }
+  #zoom figure img { width: 100%; flex: 1; min-height: 0; object-fit: contain; background: #000; border-radius: 4px; }
+  #zoom figcaption { color: var(--dim); padding-top: 4px; }
+  #zoom .zf { color: var(--dim); display: grid; gap: 2px; }
+  #zoom .zf b { color: var(--ink); font-weight: 400; }
   a { color: var(--hot); }
+  @media (max-width: 1000px) { :root { --col: 100%; } .grid { grid-template-columns: 1fr; } .pic, .drop { width: 100%; } #zoom .pair { grid-template-columns: 1fr; } }
 </style>
 <script src="../coi.js"></script>
 <header>
   <b>Studio</b>
   <nav class="kit-tabs" aria-label="the studio"><a href="map-editor.html">maps</a><a href="studio.html">minigames</a><a href="look.html" aria-current="page">look</a></nav>
-  <button id="shoot" title="draw every view now, in this page">shoot</button>
-  <span class="sep"></span>
-  <button id="brief" title="copy a brief for an AI agent: the views marked wrong, what they aim at, the references">brief for an agent</button>
-  <button id="send" title="download the board, the marks and your references, and open GitHub's upload page">send it in</button>
+  <button id="shoot" title="draw every view again, as the game draws it now">draw again</button>
+  <span id="progress" aria-live="polite"></span>
+  <span class="grow"></span>
+  <button id="brief" title="copy a brief for an AI agent: what's not right yet, what each view aims at, what the references say">brief for an agent</button>
+  <button id="send" class="primary" title="download the board, your verdicts and your references, and open GitHub's upload page">send it in</button>
 </header>
 <main>
-  <p class="intro">Each view is one fixed picture of the game. Drop pictures of what it should look like on the left, say what to take from each, shoot, and compare.
-    When a view looks right, mark it right; when it doesn't, say what's wrong. Your words are the bar: an agent working on the look stops when a view is marked right.
-    The numbers under each picture are luma (whole frame, the sky band at the top, the near band at the bottom) and chroma, 0 to 255, read the same way on both sides.</p>
+  <ol class="steps">
+    <li><b>Add references:</b> pictures of how a view should look, and what to take from each.</li>
+    <li><b>Compare:</b> each view is drawn here as the game draws it now.</li>
+    <li><b>Say if it's right:</b> your words are what anyone working on the look aims at.</li>
+  </ol>
   <div id="views">loading the board…</div>
 </main>
-<footer id="foot">loading…</footer>
+<footer id="foot" aria-live="polite">loading…</footer>
+<div id="zoom" hidden role="dialog" aria-modal="true" aria-label="compare">
+  <div class="zh"><h3 id="zoom-title"></h3><button id="zoom-prev" title="the previous reference (←)">←</button><button id="zoom-next" title="the next reference (→)">→</button><button id="zoom-close" title="close (Esc)">close</button></div>
+  <div class="pair"><figure><img id="zoom-a" alt=""><figcaption id="zoom-ac"></figcaption></figure><figure><img id="zoom-b" alt=""><figcaption id="zoom-bc"></figcaption></figure></div>
+  <div class="zf" id="zoom-f"></div>
+</div>
 <div id="shooters" aria-hidden="true"></div>
 <script type="module" src="./look.mjs"></script>

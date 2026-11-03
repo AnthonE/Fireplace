@@ -44,10 +44,17 @@ An agent records a mark only when the operator has said it.
 minigames) is the same board: each view is drawn there by the page that draws
 it for the shooter (`page` in the board: `party-render-demo.html`'s
 `__demo.shot`, `room.html`'s `__room.shot`), with the same measurements
-(`test/look.test.mjs` holds the two `measure()`s equal). Drop a picture on a
-view, say what to take from it, mark the view, and **send it in** downloads
-the board, the marks and the pictures for a pull request; **brief for an
-agent** copies what an agent running the elo-look skill needs to start.
+(`test/look.test.mjs` holds the two `measure()`s equal), read out in plain
+words against the references ("darker at the top, less colourful"; a
+difference under 6 of 255 reads as close) with the numbers on hover. The page
+draws every view when it opens (`?shoot=0` skips it); a view is references,
+now and the shot before, in three fixed columns, and clicking a picture opens
+a reference beside now, large. Drop a picture on a view, say what to take
+from it, say whether the view **looks right** or **not yet** (not yet needs
+your words), and **send it in** downloads the board, the marks and the
+pictures for a pull request; **brief for an agent** copies what an agent
+running the elo-look skill needs to start. A view's `name` is what the page
+and the sheet call it.
 
 `tools/board.mjs` is vendored from the Elo Pros agent kit
 (`skills/elo-look/scripts/board.mjs` in elo-pros-launcher): fix it there and copy it
