@@ -80,7 +80,11 @@ async function build({ key, wat, consts }) {
   return { ...out, ms: Math.round(performance.now() - t0), size: out.bytes.length };
 }
 
-async function check({ debug, mg, ticks = 4000, bots = 12 }) {
+// Plays until the first round is over (up to `ticks`: the longest round,
+// three minutes, plus the start), so "did anyone score" is asked of a finished
+// round: a survival minigame's round can last its whole length when the AI
+// balls play it well, and a fixed 4000 ticks once called that nobody scoring.
+async function check({ debug, mg, ticks = 24000, bots = 12 }) {
   const t0 = performance.now();
   let lastSent = 0, at = 0;
   const onTick = (t) => {
@@ -89,7 +93,7 @@ async function check({ debug, mg, ticks = 4000, bots = 12 }) {
   };
   let played;
   try {
-    played = await playParty({ bytes: debug, mg, bots, ticks, seed: 7, leaveAt: Math.floor(ticks / 3), onTick });
+    played = await playParty({ bytes: debug, mg, bots, ticks, seed: 7, leaveAt: 1333, untilRoundOver: true, onTick });
   } catch (e) {
     // the debug build's (!chk): a NaN or an infinity, or a trap of the wasm's own
     throw new Error(`the debug build trapped on tick ${at}: ${e?.message || e}`);
@@ -102,7 +106,7 @@ async function check({ debug, mg, ticks = 4000, bots = 12 }) {
   let differ = -1;
   for (let t = 0; t < runs[0].length; t++) if (runs[0][t] !== runs[1][t]) { differ = t; break; }
   return {
-    ticks, bots, rounds: played.rounds, played: played.games.map((g) => L.MINIGAMES[g]?.name ?? `minigame ${g}`),
+    ticks: played.ticks, cap: ticks, bots, rounds: played.rounds, played: played.games.map((g) => L.MINIGAMES[g]?.name ?? `minigame ${g}`),
     scored: scored.length, best: played.scores.reduce((a, s) => Math.max(a, s.pts), 0),
     splitEqual: differ < 0, differ, ms: Math.round(performance.now() - t0),
   };

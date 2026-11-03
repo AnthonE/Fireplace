@@ -52,7 +52,7 @@ const worker = new Worker(new URL('./studio-worker.mjs', import.meta.url), { typ
 let pending = null;
 worker.onmessage = (e) => {
   const m = e.data;
-  if (m.progress) { say(m.progress.stage === 'play' ? `checking: tick ${m.progress.t} of ${m.progress.ticks}` : 'checking: the log split two ways'); return; }
+  if (m.progress) { say(m.progress.stage === 'play' ? `checking: AI balls are playing a round, ${(m.progress.t / 125).toFixed(0)} s in` : 'checking: the round again, with the work split two ways'); return; }
   const done = pending;
   pending = null;
   done?.(m);
@@ -130,10 +130,10 @@ async function check() {
   if (stale() && !(await build())) return;
   st.busy = 'check';
   render();
-  const m = await ask({ check: { debug: st.built.debug, mg: st.mg, ticks: 4000, bots: 12 } });
+  const m = await ask({ check: { debug: st.built.debug, mg: st.mg, ticks: 24000, bots: 12 } });
   st.busy = '';
   if (m.error) { st.checkError = m.error; st.checked = null; say('the check failed'); }
-  else { st.checkError = ''; st.checked = m.checked; say(m.checked.splitEqual && m.checked.scored ? 'the check passed' : 'the check found something'); }
+  else { st.checkError = ''; st.checked = m.checked; say(m.checked.splitEqual && m.checked.scored && m.checked.rounds ? 'the check passed' : 'the check found something'); }
   render();
 }
 
@@ -193,8 +193,8 @@ function render() {
   const line = (t, cls = 'state') => el('div', { className: cls, textContent: t });
   const act = (...b) => el('div', { className: 'act' }, ...b);
   const k = st.checked;
-  const built = st.built && !stale(), checked = !!k && !stale() && k.splitEqual && k.scored;
-  const checkFailed = st.checkError || (k && !stale() && !(k.splitEqual && k.scored));
+  const built = st.built && !stale(), checked = !!k && !stale() && k.splitEqual && k.scored && k.rounds > 0;
+  const checkFailed = st.checkError || (k && !stale() && !(k.splitEqual && k.scored && k.rounds > 0));
 
   const steps = el('ol', { className: 'steps' },
     step(dirty ? 'done' : 'now', 1, 'Change it',
@@ -210,7 +210,9 @@ function render() {
       st.busy === 'check' ? line('checking: AI balls are playing it…')
         : st.checkError ? line(st.checkError, 'bad')
           : k && !stale() ? el('div', {},
-            line(k.scored ? `${k.bots} AI balls played ${k.ticks.toLocaleString()} ticks with no trap; ${k.scored} scored` : `${k.bots} AI balls played ${k.ticks.toLocaleString()} ticks and nobody scored: can a round be won?`, k.scored ? 'state' : 'bad'),
+            line(!k.rounds ? `${k.bots} AI balls played ${Math.round(k.ticks / 125)} s and the round never ended: does it end?`
+              : k.scored ? `${k.bots} AI balls played a whole round (${Math.round(k.ticks / 125)} s) with no trap; ${k.scored} scored`
+                : `${k.bots} AI balls played a whole round and nobody scored: can a round be won?`, k.rounds && k.scored ? 'state' : 'bad'),
             line(k.splitEqual ? 'the same result when the work is split two ways' : `the result changed when the work was split two ways (from tick ${k.differ}): something reads a ball another thread may be writing`, k.splitEqual ? 'state' : 'bad'))
             : line('AI balls play the debug build, then again with the work split two ways: the same bits, or a bug. CI runs the same.'),
       act(btn('check', check, { title: 'the debug build played by AI balls, then split two ways' }))),
