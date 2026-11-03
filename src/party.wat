@@ -60,6 +60,9 @@
 #include "mg/balloon.wat"
 #include "mg/eggs.wat"
 #include "mg/bowl.wat"
+#include "mg/fallball.wat"
+#include "mg/tug.wat"
+#include "mg/minigolf.wat"
 
 ;; ---- the room and the round
 

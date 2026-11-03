@@ -47,5 +47,8 @@ import mole from './mole.mjs';
 import balloon from './balloon.mjs';
 import eggs from './eggs.mjs';
 import bowl from './bowl.mjs';
+import fallball from './fallball.mjs';
+import tug from './tug.mjs';
+import minigolf from './minigolf.mjs';
 
-export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw, kart, disaster, slap, trap, parry, mingle, honey, dodge, volley, soccer, sumo, cheese, mole, balloon, eggs, bowl];
+export const MG = [thinice, color, sweep, light, bombs, wall, pads, hill, potato, coins, paint, race, chute, tag, snowball, tilt, lava, gale, drums, hoops, pinball, trails, maze, bullseye, cannon, rope, glass, gates, stomp, seesaw, kart, disaster, slap, trap, parry, mingle, honey, dodge, volley, soccer, sumo, cheese, mole, balloon, eggs, bowl, fallball, tug, minigolf];
