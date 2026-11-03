@@ -108,9 +108,10 @@ node net/play.mjs --fireplace            # the relay, the page and 15 AI guests;
 node net/play.mjs --fireplace --bots 0   # just people
 ```
 
-Click (or Enter) to sit down; then each game's own controls. While the room is
-in view, T changes the theme, B, H and P your ball, hat and body, L your
-achievements. In Party, 1 to 4 wave, cheer, dance and spin.
+Click (or Enter) to sit down; then each game's own controls. On the couch the
+wardrobe panel picks your ball, hat and body, the room's theme, and lists your
+achievements; while the room is in view the keys do the same: T the theme, B,
+H and P your ball, hat and body, L your achievements. In Party, 1 to 4 wave, cheer, dance and spin.
 `?watch=1` spectates, `?bot=1` sits an AI guest at your controls, F goes
 fullscreen. Each game also runs alone, with its own page:
 

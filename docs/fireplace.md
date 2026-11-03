@@ -25,6 +25,15 @@ is in view, T changes its theme (`?theme=<id>` picks one), B, H and P your
 ball, hat and body, and L lists your achievements (`?look=<word>` wears a look
 for one visit). In party, 1 to 4 wave, cheer, dance and spin.
 
+**The wardrobe** (`client/wardrobe.mjs`) is those keys as a panel, on the
+right of the couch (a sheet along the bottom on a phone): your look drawn big,
+every ball, hat and body as a tile (a shut one dimmed and locked, saying which
+achievement opens it), the room's theme with a button each way, the
+achievements folded under a button, and SIT DOWN AND PLAY. It shows while the
+room is in view and the pointer is free, so on the couch and between games
+once Esc lets the mouse go; × folds it to a YOUR LOOK button, remembered in
+this browser. A guest at the controls, a spectator and a film get none.
+
 **How it fits on the engine.** `build/fireplace/game.wasm` is golf, the arena,
 party and flight's Dogfight in one module: `tools/asm.mjs` expands each
 exactly as its own build is (the arena on Box Canyon, flight on Skyways, each
@@ -195,7 +204,7 @@ wherever the left thumb lands, which holds W, A, S and D in the game's own
 keys; a drag anywhere else to look, through the game's own mouse look as if
 the pointer were locked; and round buttons on the right, the first and
 biggest in the corner (jump in party, fire in the arena,
-golf and Dogfight). The couch gets a bar for B, H, P, T, L and F.
+golf and Dogfight). The couch's keys are the wardrobe's buttons.
 
 ![Party on a phone: the stick, the drag, the buttons](p5-phone.png)
 
