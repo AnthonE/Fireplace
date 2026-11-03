@@ -2,7 +2,7 @@
 
 ![Fruit Chute with 128 balls: the belt carrying everyone down, fruit rolling down the lanes](p1-chute-128.png)
 
-Every player a ball, and every round a different minigame: forty-six of them,
+Every player a ball, and every round a different minigame: forty-nine of them,
 after Mario Party, Mario Kart's battle mode, Fall Guys, Squid Game and Roblox, up to 256 in a room.
 `src/` built with `BUMPER` and `PARTY` set (`build/party/game.wasm`), with the
 same lockstep, relays, keyframes, prediction, spectators and replays.
@@ -70,6 +70,9 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 43 | BALLOON BASH | last one in | every ball carries three balloons into a walled arena, 14 m plus 2.5 m times the root of the balls in, nobody falling; a tower in the middle (a base a hop high, a top tier a hop more) and crates round it, low ones a hop high and tall ones with a step; come down on a ball's top (your bottom over its centre, falling) and it loses one and you bounce up at 8 m/s; ram it faster than 7 m/s, and faster than it comes at you (3.5 m/s for a MEGA ball), and it loses one; a ROCKET's or POW's blast or a SPRING's landing pops one of every ball it shoves; a pop steals the balloon if you have fewer than three, and the loser is guarded 1.5 s (everyone the first 2 s); out of balloons, out, the KO to whoever popped the last; power-ups fall every 3 s, one more for every 16 balls in; from 35 s the wall closes in to an 8 m ring round the tower by 70 s, each crate sinking as it reaches it; in that last ring a ram takes 4.5 m/s, nothing is stolen and power-ups fall every 1.5 s; 90 s, then everyone still in shares the win |
 | 44 | EGG RAID | the side with the bigger nest | red against blue in a fenced farmyard 1.6 times as long as wide, its corners rounded (47 by 30 m for 16, 114 by 71 for 256); a straw nest near each end, 3.1 to 4.9 m in radius, whose floor rolls any ball off it at 25 m/s², and an egg for every ball (10 to 128) piled in the middle; roll over a loose egg to carry it, one at a time, 15% slower (8.5 m/s flat out); into your own nest it's laid, into theirs carrying nothing you take their best; a golden egg worth 3 lands in the middle at 20, 40, 60 and 80 s, called 2 s ahead; power-ups fall onto the yard, never into a nest, from 6 s and every 8 s after, one more for every 16 balls in, each lying 10 s (a quarter POW, a quarter ROCKET, 30% DASH, 15% SPRING, 5% MEGA); a foe faster into the bump than you at over 5 m/s of closing, or a blast (a POW or a SPRING's landing beside you counts), knocks your egg loose, sliding half the jolt, yours again only after 1 s; a side's score is its nest's value, live; points of your own: an egg laid its value, a steal or a knock 1; 90 s, draws allowed |
 | 45 | BOWLING | points | lanes side by side over the sea, one for every 6 balls (2 to 43), each 6 m of maple with a gutter either side (2.2 m across, 0.45 m down, on past the pins) and a divider to the next; from a 9 m approach, 40 m to ten pins in a triangle 1.6 m apart, then the pit; a slick lane (14.7 m/s flat out), no hop, bumps without the kick; roll from behind the foul line and keep rolling (2 m/s at least) and you knock every pin your edge reaches, never slowed: it flies off at 1.5 times the speed you close at, slides, topples over 0.32 s and knocks the standing pins it meets, all credited to you; a point a pin, a strike (all ten of a rack yours) 5 more, a golden pin in one rack in 3 worth 3; a lane is called once its ten are down or 3 s after its first went, nothing scores there, 2 s on its deck drops into the pit and 1 s later a fresh ten stand; off the deck or down a gutter (no climbing out) into the pit, and back on your lane's approach 1 s after; the last 15 s pay double; 90 s |
+| 46 | FALL BALL | the side with more goals | red against blue on a pitch over the sea, 1.5 times as long as wide (34 by 22.7 m for 1, 52.2 by 34.8 for 16, 108.3 by 72.2 for 256); at each end a wall with a goal mouth half the pitch's width (13 to 36 m) and a net box 8 m deep; the sides open over the void but for kerbs 0.7 m high by the corners and the halfway line; giant balls 3 m in radius and five balls heavy drop from 34 m onto a spot ringed on the floor 2.2 s ahead: one on the centre spot at the kickoff, one more every 8 s up to a cap of 1 for every 10 balls plus 1 (2 to 16), and a golden one worth 2 at 90 s, past the cap; one landing on you throws you out at 9 m/s and up; one ball pushing moves a giant ball at about 2 m/s, three at 4 or more, and a ram at 8 m/s sends a still one off at 2.1; all the way into a goal scores for the side attacking it, off a side it's lost, and either way a new one drops 2 s later; fall off and you're down 1.5 s, then drop back in on your own side; points of your own: a touch 1 (once a second), a goal 5 times its worth to your side's last toucher, an assist 2, a foe bumped off 2; 120 s, draws allowed |
+| 47 | TUG O WAR | the side to 3 pulls | red against blue on two decks over a mud pit 3.5 m wide (19.6 by 20.4 m each for 16, 30.4 by 39.6 for 256), a rope down the middle of both; on your own deck within the band beside it (2 m for 16, 3.2 for 256) you hold it: dug in along it, free across it, pulling by how much your keys point away from the mud; each side's pull is the root of its holders' sum over half the room, the rope easing toward 16 m/s times the difference (5 m/s at most), the losing side's holders dragged with it; the flag past a line, closing from 6 m to 1 m over 12 s, wins the pull: the losers are reeled toward the pit at 3 m/s, gripped till they hop, and 2 s later the front 4 m of their deck tips them into the mud for 1 s; back 1 s after you're down; next pull 3.5 s after the tip; hop the pit to knock their holders off the rope across it; at the 120 s clock with pulls level, the flag's side of the middle takes a decider |
+| 48 | MINI GOLF | fewest strokes | every ball the golf ball, on a putt-putt course of 3 to 6 walled holes side by side 28 m apart, picked and mirrored from the seed out of six: a windmill whose blades shut its 3.2 m door 34% of the time, a dogleg with a bank and a bumper, a gate whose 3.4 m gap slides 5.3 m either way over 4 s before a ramp up 1.2 m to a raised green, five bumper posts over a hump, two baffles over a dip, a 9.2 m bar spinning a turn in 3.85 s before a bowl round the cup; no rolling: aim with the mouse, hold Space (or click, then click again) to charge, 1.28 s to full (19 m/s), let go to putt; 3 m/s² of friction (60 m flat out); a ball under 5 m/s over the cup drops in; balls pass through each other and everyone plays at their own pace; 6 strokes still out and you're picked up for 7; once half are home the rest have 30 s; a hole not finished counts 7, ties go to whoever holed out first |
 
 **The ball** (`src/bumper.wat`: it began as bumper balls, a game of its own,
 whose wheel of cheese is SWISS ROLL now) rolls up to 10 m/s with a slippery
@@ -347,5 +350,50 @@ the rotation after it) alone. Its client module sets the frontend's
 went, with no DOWN banner. AI rounds of 16 rack 42 to 44 times with 14 to 21
 strikes. A tick of 256 balls costs 0.16 to 0.25 ms in each; Party's wasm is
 213 KB, 90 KB gzipped.
+
+**The sixth wave.** Three more (46 to 48), the same way, beside the arena's
+Battle Royale: slots reserved with `tools/new-mg.mjs`, then one agent each in
+its own worktree, 53 to 59 minutes apiece, all at once, none touching a file
+outside its own four. 14 to 16 tests a file; each one's recorded log of 16 AI
+balls equal in all 27 configurations; each forced online with Chrome and 15
+AI balls and with 127, every hash equal (943 at 16, 7,269 to 7,398 at 128).
+Fall Ball is Soccer's pitch with the side walls taken off and the ball made
+too heavy for one. The giant balls are the confirmed world's, in `PG_S`, and a
+ball meets one in `tick` as a bump: put apart by weight, the two sharing 1.6
+times the speed they close at. Unlike a football, a giant ball pushes back
+(one that didn't was rolled straight through), but only in `tick`, so a shove
+reaches you a round trip late; the prediction runs the floor, the end walls,
+the nets and the kerbs, all fixed at setup, and is exact over an open side to
+the fall. Its AI first sent every ball at the giant balls, and the sides met
+head on: 0 goals in 3 of 3 rounds of 16. Backs (the 15% nearest their own
+goal) and forwards, with a keeper a side from 8 balls a side, score 6.4 goals
+a round at 16 (1 to 10 over 8 rounds) and 18 at 64; the golden ball went in
+once in 12 rounds. Tug o' War's rope is the confirmed world's, built from
+every holder's keys: each side's pull is the root of its holders' sum over
+half the room, so three against two get half the linear edge and 128 against
+128 answer to the share pulling. A losing holder is dragged in `push` at bank
+d's rope speed, which the prediction holds at its starting value, so a change
+in the drag arrives a round trip late; the losers' deck front tips 256 ticks
+after the confirmed world calls the pull (Seesaws' ring again), so the
+prediction reels a ball onto it and into the mud bit for bit. Holders are dug
+in along the rope rather than slowed: with a speed cap they crept back to
+their rails and every pull stalled. The first tuning stalled pulls for 12 to
+68 s; a rope 16 m/s times the difference, with lines closing to 1 m over 12 s,
+made them contested: 20 rounds of 16 played 82 pulls of 3 to 36 s (median 11),
+won 3-0 six times, 3-1 six and 3-2 eight, each side 16 of 32 rounds. A fifth
+of each side's AI raids, hopping the pit to knock holders off. Mini Golf turns
+the roll off as Kart Grab does and putts from the word: the hop bit held (or
+a click, then another) charges in the sim, 1.28 s to full, and the yaw aims,
+since the party page always sends pitch 512. Bumps are off, so nobody blocks a
+putt and 256 play one course, each at their own pace (holes in lockstep would
+only wait on the slowest putter); the course is fixed in `PG_S` at setup and
+every obstacle runs on the tick into play, so `push` plays the whole game for
+its ball on either bank and the prediction test compares the whole record.
+The crowd waits on a lawn behind the first hole, 2.2 m apart, and is put on the
+tee 0.4 s into play. Its AI walks a distance field round the walls, aims at
+the farthest point of that path it can see and tries 10 putts a think on a JS
+copy of the roll: 10 rounds of 16 took 2.65 strokes a hole and finished 637 of
+640 holes. A tick of 256 balls costs 0.05 to 0.18 ms in each; Party's wasm is
+228 KB, 96 KB gzipped.
 
 Not done yet: power-ups in more of the minigames.
