@@ -1072,6 +1072,10 @@ function renderSide() {
   if (!st.spec) return;
   const sp = st.spec;
   side.replaceChildren();
+  side.append(el('ol', { className: 'steps' },
+    el('li', {}, el('b', { textContent: 'Shape it' }), ': the tools above raise and paint the ground and place boxes, spawns, pads and hills.'),
+    el('li', {}, el('b', { textContent: 'Play it' }), ' here with AI fighters, as often as you like.'),
+    el('li', {}, el('b', { textContent: 'Send it in' }), ' to have it played by everyone.')));
   // the map
   side.append(h3('The map'));
   const name = el('input', { type: 'text', value: sp.name || '' });
@@ -1092,8 +1096,8 @@ function renderSide() {
   side.append(row(el('label', { textContent: 'folder' }), folder));
   side.append(hint(`ground: ${st.W} x ${st.H} samples, ${st.W * SP} x ${st.H * SP} m from ${st.ox}, ${st.oz}. Beyond it the game raises mountains.`));
   const b = sp.bounds;
-  side.append(hint('Where fighters can go (drag its edges too):'));
-  side.append(row(...['x0', 'x1', 'z0', 'z1'].map((n, k) => num(n, () => b[k], (v) => { b[k] = v; }, { stepBy: 1 }))));
+  side.append(hint('Where fighters can go: its edges, in metres (or drag them on the map).'));
+  side.append(row(...['west', 'east', 'north', 'south'].map((n, k) => num(n, () => b[k], (v) => { b[k] = v; }, { stepBy: 1 }))));
   side.append(row(num('ceiling', () => sp.ceiling, (v) => { if (v === undefined) delete sp.ceiling; else sp.ceiling = v; }, { blank: `auto${st.result ? ` (${st.result.ceiling})` : ''}`, stepBy: 1 })));
   side.append(row(el('label', { textContent: 'x-ray' }), Object.assign(el('input', { type: 'checkbox', checked: st.xray, title: 'X' }), { onchange: (e) => { st.xray = e.target.checked; draw(); } })));
 
@@ -1103,7 +1107,7 @@ function renderSide() {
   else side.append(h3('Nothing picked'), hint('Pick something with the select tool (V), or add with the tools above. Drag with the right button (or Space) to pan; the wheel zooms; 0 fits the map.'));
 
   // the check
-  side.append(h3('Check'));
+  side.append(h3('Ready to play?'));
   checkBox = el('div');
   side.append(checkBox);
   renderCheck();
@@ -1248,18 +1252,24 @@ function selectionPanel(sel) {
 }
 
 function renderCheck() {
+  // the header's pill and buttons say the same as this section, in a word
+  const pill = $('ready');
+  pill.className = `pill${st.error ? ' bad' : st.result ? ' ok' : ''}`;
+  pill.textContent = st.error ? '✗ won\'t build yet' : st.result ? '✓ playable' : 'checking…';
+  $('play-top').disabled = !st.result || !!st.error;
+  $('play-top').title = st.error ? `not yet: ${st.error}` : 'the arena on this map, you and AI fighters, in a new tab';
   if (!checkBox || !st.spec) return;
   checkBox.replaceChildren();
   if (st.error) {
-    checkBox.append(el('p', { className: 'bad', textContent: st.error }), hint('The build refuses the map until this is fixed.'));
+    checkBox.append(el('p', { className: 'bad', textContent: st.error }), hint('The game can\'t build the map until this is fixed. Everything else keeps working: fix it, and this turns green.'));
     return;
   }
   const m = st.result;
   if (!m) return;
   const lim = (n, max, what) => `${n} ${what} (of ${max})`;
   checkBox.append(
-    el('p', { className: 'ok', textContent: 'The build takes it.' }),
-    hint([
+    el('p', { className: 'ok', textContent: 'Yes: the game builds it.' }),
+    el('ul', { className: 'facts' }, ...[
       lim(m.boxes.length, L.NBOX, 'boxes') + ' in ' + lim(m.groups.length, L.NGROUP, 'structures'),
       `${lim(m.spawns.length, L.NSPAWN, 'spawns')}: red's half ${m.sides[0]}, blue's ${m.sides[1]}`,
       lim(m.pads.length, L.NPAD, 'weapon pads'),
@@ -1268,7 +1278,7 @@ function renderCheck() {
       m.race.length ? lim(m.race.length, NGATE, 'race gates') : 'no race (Dogfight\'s Ring Race needs 2 gates or more)',
       `ships fly up to ${m.ceiling} m; ${m.bytes.length.toLocaleString()} B in the wasm`,
       ...(m.void !== null ? [`a fighter below ${m.void} m dies by falling`] : []),
-    ].join(' · ')),
+    ].map((t) => el('li', { textContent: t }))),
     ...(st.report ? [el('p', { className: 'hint', textContent: st.reportFrom }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
     ...(st.brief ? [
       el('p', { className: 'hint', textContent: `Its game is ${st.brief.summary.scripts} scripts (${st.brief.summary.lines.toLocaleString('en')} lines). The port brief is them as files and port.md, what they do and lean on: hand it to an agent to write the rules here.` }),
@@ -1304,6 +1314,9 @@ function buildHeader() {
     } catch (err) { if (err.name !== 'AbortError') say(`could not open it: ${err.message || err}`); }
   };
   $('save').onclick = save;
+  $('play-top').onclick = () => playHere('arena');
+  $('send-top').onclick = sendIn;
+  $('ready').onclick = () => checkBox && checkBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
   for (const b of $('modes').children) b.onclick = () => setMode(b.dataset.mode);
   $('undo').onclick = () => restore(undo, redo);
   $('redo').onclick = () => restore(redo, undo);

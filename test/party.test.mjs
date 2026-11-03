@@ -451,6 +451,19 @@ test('Partier: AI balls on Thin Ice keep rolling, none out in the first 8 s; the
   assert.ok(first > 8 * 125, `the first out ${(first / 125).toFixed(1)} s in`);
 });
 
+test("untilRoundOver (the studio's check): it stops on the tick the first round is over, and the log is that long; without it, nothing moves", async () => {
+  const bytes = partyBytes();
+  const whole = await playParty({ bytes, mg: L.MG_THINICE, bots: 8, ticks: 4500 });
+  const stop = await playParty({ bytes, mg: L.MG_THINICE, bots: 8, ticks: 4500, untilRoundOver: true });
+  assert.equal(whole.ticks, 4500);
+  assert.equal(parseLog(whole.log).ticks, 4500);
+  assert.ok(stop.rounds === 1 && stop.ticks < 4500, `stopped at ${stop.ticks}`);
+  assert.equal(parseLog(stop.log).ticks, stop.ticks);
+  assert.ok(stop.scores.some((s) => s.wins > 0), 'the round is scored by the tick it is over');
+  const capped = await playParty({ bytes, mg: L.MG_THINICE, bots: 8, ticks: 500, untilRoundOver: true });
+  assert.ok(capped.rounds === 0 && capped.ticks === 500, 'ticks is a cap: a round not over by then is said, not waited for');
+});
+
 test('rounds of AI balls on the debug build, no trap: Thin Ice, then the rotation; equal on every tick on 1 and 4 threads', async () => {
   const bytes = partyBytes(true);
   // Thin Ice forced (through the seed), a ball leaving and coming back

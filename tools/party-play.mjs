@@ -13,10 +13,13 @@ export const partySeed = (seed, mg = null) => (mg === null || mg === undefined ?
 // Each ball's word lands `delay` ticks after it decides it, from the world as
 // it is then (its lag: delay). Balls join a tick apart; one leaves at
 // `leaveAt` and comes back 500 ticks later. onTick(t, sim, view) after every
-// step. Returns the log, every ball's tally, the rounds over, the minigames
-// played (in order), the bots' think time (thinkMs in all, playMs a tick
-// while a round plays).
-export async function playParty({ bytes, seed = 7, mg = null, bots = 16, ticks = 20000, delay = 6, leaveAt = 0, onTick } = {}) {
+// step. With untilRoundOver, it stops on the tick the first round is over
+// (ticks is then a cap), and the log is that long: a round of a survival
+// minigame can run its full length (two minutes) when the bots play well.
+// Returns the log, every ball's tally, the rounds over, the minigames played
+// (in order), the ticks played, the bots' think time (thinkMs in all, playMs
+// a tick while a round plays).
+export async function playParty({ bytes, seed = 7, mg = null, bots = 16, ticks = 20000, delay = 6, leaveAt = 0, untilRoundOver = false, onTick } = {}) {
   const memory = newMemory();
   const sim = new Sim(await instantiate(await WebAssembly.compile(bytes), memory), memory);
   const roomSeed = partySeed(seed, mg);
@@ -25,7 +28,7 @@ export async function playParty({ bytes, seed = 7, mg = null, bots = 16, ticks =
   const balls = Array.from({ length: bots }, (_, k) => ({ r: new Partier(k, seed, 0.3 + 0.6 * ((k * 5) % bots) / bots), join: k, queue: [], last: -1, live: false }));
   const recs = [];
   const games = [];
-  let rounds = 0, state = -1, thinkMs = 0, playMs = 0, playTicks = 0;
+  let rounds = 0, state = -1, thinkMs = 0, playMs = 0, playTicks = 0, ran = ticks;
   for (let t = 0; t < ticks; t++) {
     const now = [];
     const a = performance.now();
@@ -52,7 +55,8 @@ export async function playParty({ bytes, seed = 7, mg = null, bots = 16, ticks =
     if (s === L.H_OVER && state !== L.H_OVER) rounds++;
     state = s;
     onTick?.(t, sim, view);
+    if (untilRoundOver && rounds > 0) { ran = t + 1; break; }
   }
   const scores = balls.map((p) => { const b = view.partier(p.r.slot); return { slot: p.r.slot, pts: b.pts, wins: b.wins, kos: b.kos, rounds: b.rounds }; });
-  return { log: encodeLog({ courseSeed: roomSeed, ticks, recs }), scores, rounds, games, state, thinkMs, playMs: playTicks ? playMs / playTicks : 0, sim, view };
+  return { log: encodeLog({ courseSeed: roomSeed, ticks: ran, recs }), scores, rounds, games, state, ticks: ran, thinkMs, playMs: playTicks ? playMs / playTicks : 0, sim, view };
 }

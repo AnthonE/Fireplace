@@ -99,8 +99,9 @@ try {
   await editor.goto(`${base}/client/map-editor.html`);
   await editor.waitForFunction(() => document.querySelector('#foot')?.textContent !== 'loading…', null, { timeout: 30000 });
   await editor.selectOption('#open', 'canyon');
-  await editor.waitForFunction(() => /The build takes it/.test(document.querySelector('#side')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
-  report.editor = { checked: await editor.evaluate(() => /The build takes it/.test(document.querySelector('#side')?.textContent || '')), foot: await editor.textContent('#foot') };
+  // the header's pill turns ok when the map compiles (renderCheck)
+  await editor.waitForFunction(() => document.querySelector('#ready')?.classList.contains('ok'), null, { timeout: 30000 }).catch(() => {});
+  report.editor = { checked: await editor.evaluate(() => !!document.querySelector('#ready')?.classList.contains('ok')), foot: await editor.textContent('#foot') };
   // the studio: party assembled in the page, checked, and played from its build
   const studio = await ctx.newPage();
   watch(studio, 'studio');

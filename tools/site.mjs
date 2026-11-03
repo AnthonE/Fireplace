@@ -41,6 +41,9 @@ const PARTS = [
   ].includes(f), false],
   ['node_modules/wabt', (f) => f === 'index.js' || f === 'LICENSE', false],
   ['maps', (f) => f === 'map.json' || f.endsWith('.png'), true],
+  // the reference board (client/look.html): the board, its marks and the references that are ours
+  ['board', (f) => f === 'board.json' || f === 'marks.jsonl', false],
+  ['board/refs', (f) => /\.(png|jpe?g|webp)$/i.test(f), false],
 ];
 
 const INDEX = `<!doctype html>
@@ -66,6 +69,7 @@ export function buildSite(out = join(ROOT, 'site')) {
   mkdirSync(out, { recursive: true });
   let n = 0, bytes = 0;
   for (const [dir, keep, deep] of PARTS) {
+    if (!existsSync(join(ROOT, dir))) continue; // board/refs/ before its first reference
     for (const path of files(join(ROOT, dir), keep, deep)) {
       // wabt's licence as LICENSE.txt: a file with no extension is one a
       // static host may refuse (Elo Pros' web builds do)
