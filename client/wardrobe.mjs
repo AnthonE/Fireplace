@@ -5,9 +5,13 @@
 // the room is in view and the pointer is free: on the couch, and between
 // games once Esc lets the mouse go. B, H, P, T, L and Enter do what they
 // always did; the panel only says so. Drawing and picking only, like the look.
+// The arena's, party's and Dogfight's own pages (pageWardrobe) show it while
+// the mouse is free, with PLAY to take the controls again.
 
-import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, drawLook, lookName } from './looks.mjs';
-import { ACHIEVEMENTS } from './achievements.mjs';
+import * as L from '../src/layout.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, drawLook, lookName, saveLook } from './looks.mjs';
+import { ACHIEVEMENTS, loadTally, gotSet } from './achievements.mjs';
+import { touchWanted } from './touch.mjs';
 
 const CSS = `
 #wardrobe { position: fixed; top: 12px; right: 12px; bottom: 12px; width: 312px; z-index: 25; display: flex; flex-direction: column;
@@ -75,15 +79,20 @@ const el = (tag, props = {}, ...kids) => {
   return e;
 };
 const keyCap = (k) => el('kbd', { textContent: k });
+const noCap = () => '';
 const nice = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const COLLAPSED = 'fireplace.wardrobe.closed';
-const remembered = () => { try { return localStorage.getItem(COLLAPSED) === '1'; } catch { return false; } };
+// folded: what a browser that never said is shown (a phone: the pill, so the game stays clear)
+const remembered = (folded) => { try { const v = localStorage.getItem(COLLAPSED); return v === null ? folded : v === '1'; } catch { return folded; } };
 const remember = (v) => { try { localStorage.setItem(COLLAPSED, v ? '1' : '0'); } catch { /* this visit only */ } };
 
 // s: what the page knows, read when drawn: look() the word worn, wear(w),
 // got() the open achievements (a Set of ids), tally(), slot(), avatar(),
-// theme() { name, by }, and what the buttons do: turn(dir) the theme, sit(), fullscreen()
+// theme() { name, by }, and what the buttons do: turn(dir) the theme (none:
+// no room row), sit(), fullscreen(). keys: false on a page whose keys are the
+// game's, so no key is named; play: the big button's word; folded: see remembered
 export function createWardrobe(s) {
+  const cap = s.keys === false ? noCap : keyCap;
   if (!document.getElementById('wardrobe-css')) document.head.append(el('style', { id: 'wardrobe-css', textContent: CSS }));
   const dpr = Math.min(2, devicePixelRatio || 1);
   const canvasOf = (w, h) => { const c = el('canvas', { width: w * dpr, height: h * dpr }); c.getContext('2d').scale(dpr, dpr); return c; };
@@ -117,7 +126,7 @@ export function createWardrobe(s) {
       return { b, c, x, k };
     });
     scroll.append(el('div', { className: 'wd-part' },
-      el('div', { className: 'wd-head' }, el('span', { className: 'wd-label' }, `${p.label} `, keyCap(p.cap)), p.name),
+      el('div', { className: 'wd-head' }, el('span', { className: 'wd-label' }, `${p.label} `, cap(p.cap)), p.name),
       el('div', { className: 'wd-tiles' }, ...p.tiles.map((t) => t.b)), p.hint));
   }
   const about = (x) => ACHIEVEMENTS.find((a) => a.id === x.unlock)?.about ?? '';
@@ -129,8 +138,8 @@ export function createWardrobe(s) {
   const next = el('button', { className: 'wd-btn', type: 'button', textContent: '▶', title: 'The next theme (T)' });
   prev.addEventListener('click', () => { s.turn(-1); prev.blur(); });
   next.addEventListener('click', () => { s.turn(1); next.blur(); });
-  scroll.append(el('div', { className: 'wd-row' }, el('div', { className: 'wd-grow' },
-    el('div', { className: 'wd-label' }, 'ROOM ', keyCap('T')), themeName, themeBy), prev, next));
+  if (s.turn) scroll.append(el('div', { className: 'wd-row' }, el('div', { className: 'wd-grow' },
+    el('div', { className: 'wd-label' }, 'ROOM ', cap('T')), themeName, themeBy), prev, next));
 
   // the achievements, folded until asked for
   const count = el('div', { className: 'wd-name', style: 'text-align:left' });
@@ -138,9 +147,9 @@ export function createWardrobe(s) {
   const list = el('ul', { className: 'wd-list', hidden: true });
   toggle.addEventListener('click', () => { list.hidden = !list.hidden; toggle.textContent = list.hidden ? 'Show' : 'Hide'; drawn = ''; toggle.blur(); });
   scroll.append(el('div', { className: 'wd-row' }, el('div', { className: 'wd-grow' },
-    el('div', { className: 'wd-label' }, 'ACHIEVEMENTS ', keyCap('L')), count), toggle), list);
+    el('div', { className: 'wd-label' }, 'ACHIEVEMENTS ', cap('L')), count), toggle), list);
 
-  const play = el('button', { className: 'wd-play', type: 'button', textContent: 'SIT DOWN AND PLAY' });
+  const play = el('button', { className: 'wd-play', type: 'button', textContent: s.play || 'SIT DOWN AND PLAY' });
   play.addEventListener('click', () => s.sit());
   const keys = el('div', { className: 'wd-keys' });
   const full = el('button', { className: 'wd-btn wd-full', type: 'button', style: 'margin-top:8px;width:100%' }, 'FULLSCREEN ', keyCap('F'));
@@ -150,7 +159,7 @@ export function createWardrobe(s) {
   const pill = el('button', { id: 'wardrobe-pill', type: 'button', hidden: true }, 'YOUR LOOK');
   // nothing in the panel reaches the room under it (a click there sits you down)
   for (const n of [panel, pill]) for (const ev of ['click', 'pointerdown', 'mousedown']) n.addEventListener(ev, (e) => e.stopPropagation());
-  let closed = remembered();
+  let closed = remembered(!!s.folded);
   close.addEventListener('click', () => { closed = true; remember(true); });
   pill.addEventListener('click', () => { closed = false; remember(false); pill.blur(); });
   document.body.append(panel, pill);
@@ -158,7 +167,7 @@ export function createWardrobe(s) {
   let drawn = '';
   function redraw() {
     const w = s.look(), got = s.got(), slot = Math.max(0, s.slot()), av = s.avatar();
-    const l = unpackLook(w), th = s.theme(), tally = s.tally();
+    const l = unpackLook(w), th = s.theme?.() ?? { name: '', by: '' }, tally = s.tally();
     const key = `${w}|${[...got].sort()}|${th.name}|${th.by}|${slot}|${av}|${list.hidden}`;
     if (key === drawn) return;
     drawn = key;
@@ -198,8 +207,8 @@ export function createWardrobe(s) {
       pill.hidden = !shown || !closed;
       if (!shown || closed) return;
       play.hidden = !couch;
-      keys.replaceChildren(...(couch
-        ? ['or click the TV, or press ', keyCap('Enter')]
+      keys.replaceChildren(...(s.note ? [s.note]
+        : couch ? ['or click the TV, or press ', keyCap('Enter')]
         : ['Click the room to take the controls again']));
       redraw();
       const g = me.getContext('2d');
@@ -208,4 +217,23 @@ export function createWardrobe(s) {
     },
     get element() { return panel; },
   };
+}
+
+// One game's own page (client/arena.mjs, party.mjs, flight.mjs): the look as
+// host.mjs wears it, the achievements this browser keeps (read only: those
+// pages count none), shown while the mouse is free, PLAY clicking the game's
+// canvas as a player would. None for a guest at the controls or a spectator.
+export function pageWardrobe(h, { canvas, q, watch = false }) {
+  if (watch || q.get('bot') === '1' || q.get('watch') === '1') return null;
+  const tally = loadTally(), got = gotSet(tally);
+  const fullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().then(() => navigator.keyboard?.lock?.()).catch(() => {});
+  };
+  const w = createWardrobe({
+    look: () => h.get(L.CL_LOOK) >>> 0, wear: (x) => { h.set(L.CL_LOOK, x); saveLook(x); }, got: () => got, tally: () => tally,
+    slot: () => h.get(L.CL_SLOT), avatar: () => h.avatar(h.get(L.CL_SLOT)), sit: () => canvas.click(), fullscreen,
+    keys: false, play: 'PLAY', note: 'or click the game', folded: touchWanted(q),
+  });
+  return { frame: (now) => w.frame(!document.pointerLockElement, true, now) };
 }

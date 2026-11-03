@@ -128,7 +128,9 @@ bump, a pass, a tag, a claim) is the confirmed world's and comes a round trip
 later, eased in like any correction. The minigames' tests check the
 prediction bit for bit against the confirmed ball through each hazard.
 
-`client/party.html` is the page (`client/party-game.mjs`), and
+`client/party.html` is the page (`client/party-game.mjs`; while the mouse
+is free, the wardrobe, `client/wardrobe.mjs`, picks your look, but not in the
+studio's frame), and
 `client/party-render.mjs` its renderer: the look bumper balls had, made general. The
 stage is instanced solids (boxes, cylinders, hex prisms, spheres, each turned
 by a yaw and a roll, so a table tips and a drum lies on its side) in ten

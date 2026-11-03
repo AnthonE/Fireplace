@@ -30,8 +30,11 @@ Click to play. The mouse aims, WASD runs, Space jumps, left click fires
 (hold it for the automatics), right click zooms the guns that have a scope,
 1/2, X or the wheel swap your two guns, Q melee, G throws a frag, R reloads,
 E picks up the gun on the pad you stand on, Tab shows the scores, F goes
-fullscreen, N the net graph. `?bot=1` hands your slot to an AI fighter;
-`?watch=1` spectates. More fighters for a running room (up to 255, one
+fullscreen, N the net graph. While the mouse is free (before the first
+click, or after Esc), the wardrobe (`client/wardrobe.mjs`, as on Fireplace's
+couch) picks your ball, hat and body, and PLAY takes the controls again; on a
+phone it waits folded under a YOUR LOOK button. `?bot=1` hands your slot to an
+AI fighter; `?watch=1` spectates. More fighters for a running room (up to 255, one
 process, one shared copy of the world):
 `node net/bot-host.mjs --arena --relay 127.0.0.1:4434 --bots 50 [--skill 0.6] [--slips]`.
 `--slips` gives them a person's slips, as a local room's AI and `net/play.mjs`'s

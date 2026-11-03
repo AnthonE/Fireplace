@@ -32,7 +32,9 @@ achievement opens it), the room's theme with a button each way, the
 achievements folded under a button, and SIT DOWN AND PLAY. It shows while the
 room is in view and the pointer is free, so on the couch and between games
 once Esc lets the mouse go; × folds it to a YOUR LOOK button, remembered in
-this browser. A guest at the controls, a spectator and a film get none.
+this browser. A guest at the controls, a spectator and a film get none. The
+arena's, party's and Dogfight's own pages show it too (`pageWardrobe`), while
+the mouse is free, with PLAY in place of sitting down.
 
 **How it fits on the engine.** `build/fireplace/game.wasm` is golf, the arena,
 party and flight's Dogfight in one module: `tools/asm.mjs` expands each

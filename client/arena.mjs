@@ -6,6 +6,7 @@
 //   ?map=<name> a map the site publishes (build/maps/<name>.qgmap), ?map=<url> any packed map;
 //   the line along the bottom offers to take it online (client/online.mjs)
 import { createHost, fitSize } from './host.mjs';
+import { pageWardrobe } from './wardrobe.mjs';
 import { onlineLine } from './online.mjs';
 import { mount } from './arena-game.mjs';
 
@@ -22,7 +23,8 @@ async function main() {
   const line = await onlineLine(h, q, '../build/arena/game.wasm');
   window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool() }), capture: game.capture };
   note.remove();
-  const loop = (now) => { requestAnimationFrame(loop); game.frame(now); };
+  const wardrobe = pageWardrobe(h, { canvas, q, watch: !!fixed }); // your look while the mouse is free (client/wardrobe.mjs), none on a fixed camera
+  const loop = (now) => { requestAnimationFrame(loop); game.frame(now); wardrobe?.frame(now); };
   requestAnimationFrame(loop);
 }
 
