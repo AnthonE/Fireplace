@@ -10,7 +10,7 @@
 // Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill).
 // --flight runs it on flight's sim (build/flight/game.wasm): Dogfight, every
 // fighter a ship over Skyways, with --bots AI pilots (net/bot-host.mjs
-// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 16 Ring Race).
+// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 17 Ring Race).
 // --party runs it on Party's sim (build/party/game.wasm): a minigame a round,
 // with --bots AI balls in it (net/bot-host.mjs --party); --mg k plays only
 // minigame k (src/layout.mjs MINIGAMES), through the room's seed.

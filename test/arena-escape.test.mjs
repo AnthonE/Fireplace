@@ -136,7 +136,7 @@ function spots(v) {
 
 test('Escape: on the kit with no sides; nothing of it before play; as play starts one hunter for every ES_PER fighters (rounded, at least one, never the last), PF_JUGG with the sword, at the spawn point farthest from everyone; the rest no guns, no frags; news', async () => {
   assert.ok((L.KIT >> L.M_ESCAPE) & 1 && !((L.TEAMED >> L.M_ESCAPE) & 1) && (L.TEAM_MODES >> L.M_ESCAPE) & 1);
-  assert.deepEqual([L.MODES[L.M_ESCAPE].name, L.MODES[L.M_ESCAPE].ticks, L.ARENA_MODES.at(-1)], ['ESCAPE', 30000, L.M_ESCAPE]);
+  assert.deepEqual([L.MODES[L.M_ESCAPE].name, L.MODES[L.M_ESCAPE].ticks, L.ARENA_MODES.at(-2)], ['ESCAPE', 30000, L.M_ESCAPE]);
   assert.equal(AC.ES_MX_DOWN, L.MX_AM + 8 * L.AM.findIndex((m) => m.mode === L.M_ESCAPE), 'its news codes are its own');
   assert.equal(AC.ES_RATE.length, 4);
   assert.ok(AC.ES_T + AC.ES_TMAX * AC.ES_TSIZE <= AC.ES_HELP && AC.ES_HELP + 2 * L.NPLAYER <= L.AO_SIZE, 'AO holds it');

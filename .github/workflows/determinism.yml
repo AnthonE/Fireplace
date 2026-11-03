@@ -104,6 +104,10 @@ jobs:
         run: |
           node tools/genarena.mjs --bots 8 --ticks 20000 --mode 14 --out logs/arena-escape.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/arena-escape.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena's Battle Royale (one life, crates, a zone closing in stages), eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --mode 16 --out logs/arena-royale.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-royale.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
       - name: The arena's Crossroads (Roblox's classic sword, rocket and superball, a Humanoid's health), eight AI fighters
         run: |
           node tools/genarena.mjs --bots 8 --ticks 20000 --mode 15 --out logs/arena-crossroads.qgl
@@ -114,7 +118,7 @@ jobs:
           node harness/matrix.mjs --ticks 20000 --log logs/flight.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
           node tools/genflight.mjs --bots 8 --ticks 20000 --mode 4 --out logs/flight-slayer.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/flight-slayer.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
-          node tools/genflight.mjs --bots 8 --ticks 20000 --mode 16 --out logs/flight-race.qgl
+          node tools/genflight.mjs --bots 8 --ticks 20000 --mode 17 --out logs/flight-race.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/flight-race.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
       - name: Party (build/party/), sixteen AI balls through the rotation of minigames
         run: |
@@ -288,6 +292,8 @@ jobs:
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 13
       - name: The arena's Escape online (64 AI fighters, every hash checked)
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 14
+      - name: The arena's Battle Royale online (64 AI fighters, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 16
       - name: Crossroads on its own map laid at run time (maps/crossroads, Roblox's, through map_load in the referee and the bot host; its Humanoid's walk, jump and gravity, the map's Crossroads mode; 64 AI fighters, every hash checked)
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --map crossroads
       - name: The arena on moving boxes (maps/lifts: lifts up two towers, platforms sliding over a pit; 64 AI fighters, every hash checked)
@@ -297,7 +303,7 @@ jobs:
           node net/run-flight.mjs --chrome 0 --bots 256 --seconds 40
           node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 4
           node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 3
-          node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 15
+          node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 17
       - name: Party online, full (a relay on Party's sim, 256 AI balls through its native door, the rotation, a round placed, every hash checked)
         run: node net/run-party.mjs --chrome 0 --bots 256 --seconds 100
       - name: SUMO RING online (the minigame written in Rust forced, 64 AI balls, every hash checked)
