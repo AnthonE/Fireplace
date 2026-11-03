@@ -41,5 +41,5 @@ latest mark is `right`; the numbers keep a floor and never overrule a mark.
 An agent records a mark only when the operator has said it.
 
 `tools/board.mjs` is vendored from the Elo Pros agent kit
-(`skills/elo-look/board.mjs` in elo-pros-launcher): fix it there and copy it
+(`skills/elo-look/scripts/board.mjs` in elo-pros-launcher): fix it there and copy it
 back. `test/board.test.mjs` holds what it promises.

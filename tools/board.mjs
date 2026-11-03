@@ -26,7 +26,7 @@
 // name and measurements are written down. A reference is a target for the
 // look, never an asset: nothing is traced or copied from it.
 //
-// Canonical copy: the Elo Pros agent kit, skills/elo-look/board.mjs. A game
+// Canonical copy: the Elo Pros agent kit, skills/elo-look/scripts/board.mjs. A game
 // repo vendors it as tools/board.mjs; fix it upstream and copy it back.
 // No dependencies but Node; the sheet needs Playwright (or playwright-core)
 // and its Chromium, which every Elo Pros game's gates already load.
