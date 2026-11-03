@@ -42,9 +42,25 @@
   .bad { color: var(--bad); white-space: pre-wrap; }
   .ok { color: var(--ok); }
   code { color: var(--hot); user-select: all; word-break: break-all; }
-  .tools { display: flex; gap: 3px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 3px; }
+  header .grow { flex: 1; }
+  header .break { flex-basis: 100%; height: 0; }
+  button.primary { border-color: var(--hot); color: var(--hot); background: #3b3220; }
+  button:disabled { opacity: .45; cursor: default; }
+  .pill { padding: 2px 9px; border-radius: 10px; border: 1px solid var(--line); color: var(--dim); cursor: pointer; white-space: nowrap; }
+  .pill.ok { color: var(--ok); border-color: #2f5a33; background: #16261a; }
+  .pill.bad { color: var(--bad); border-color: #5a2f2f; background: #2a1616; }
+  aside { font: 13px/1.45 system-ui, sans-serif; }
+  aside code, aside input, aside select, aside button { font-family: ui-monospace, monospace; }
+  ol.steps { list-style: none; margin: 2px 0 10px; padding: 8px 10px; display: grid; gap: 4px; background: #0e1119; border: 1px solid var(--line); border-radius: 6px; counter-reset: s; color: var(--dim); }
+  ol.steps li { counter-increment: s; }
+  ol.steps li::before { content: counter(s); display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 6px; border-radius: 50%; background: #262c3b; color: var(--ink); font-size: 10px; }
+  ol.steps b { color: var(--ink); font-weight: 600; }
+  ul.facts { margin: 4px 0; padding-left: 18px; color: var(--dim); }
+  ul.facts li { margin: 1px 0; }
   @media (max-width: 760px) {
-    body { grid-template: "top" auto "map" 1fr "foot" auto "side" 40vh / 1fr; }
+    body { grid-template: "top" auto "map" 1fr "foot" auto "side" 40vh / minmax(0, 1fr); }
+    header .grow, header .sep { display: none; }
     aside { border-left: 0; border-top: 1px solid var(--line); }
   }
 </style>
@@ -63,8 +79,12 @@
   </select>
   <button id="save" title="write map.json, height.png and surface.png (Ctrl+S)">save</button>
   <span id="modes" title="the map from above, as the game draws it, or both"><button data-mode="2d">2D</button><button data-mode="3d">3D</button><button data-mode="split">both</button></span>
-  <span class="sep"></span>
-  <span class="tools" id="tools"></span>
+  <span class="grow"></span>
+  <span id="ready" class="pill" role="status" title="whether the game can build this map; click for the details">checking…</span>
+  <button id="play-top" class="primary" title="the arena on this map, you and AI fighters, in a new tab">▶ play it</button>
+  <button id="send-top" title="download the map's files and open GitHub's upload page">send it in</button>
+  <span class="break"></span>
+  <span class="tools" id="tools" aria-label="tools"></span>
   <span class="sep"></span>
   <span id="brush">
     <label>size <input id="radius" type="range" min="2" max="60" value="12"></label>
