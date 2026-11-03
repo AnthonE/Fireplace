@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio · look</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #0b0d14; --panel: #131722; --line: #262c3b; --ink: #cfd3e0; --dim: #7d8499; --hot: #ffcf5a; --bad: #ff7a6b; --ok: #8fd18a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-monospace, monospace; }
+  header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+  header b { color: var(--hot); margin-right: 6px; }
+  header nav.kit-tabs { display: flex; gap: 2px; margin-right: 4px; }
+  header nav.kit-tabs a { color: var(--dim); text-decoration: none; padding: 3px 8px; border: 1px solid transparent; border-radius: 4px; }
+  header nav.kit-tabs a:hover { color: var(--ink); border-color: var(--line); }
+  header nav.kit-tabs a[aria-current] { color: var(--hot); border-color: var(--hot); background: #3b3220; }
+  main { padding: 8px 12px 40px; }
+  .intro { color: var(--dim); max-width: 900px; margin: 6px 0 10px; }
+  section { border-top: 1px solid var(--line); padding: 10px 0; }
+  h2 { margin: 0; font-size: 14px; color: var(--ink); }
+  .what { color: var(--dim); margin: 2px 0; }
+  .aim { color: var(--ok); margin: 2px 0; }
+  .marks { margin: 4px 0; }
+  .marks .right { color: var(--ok); } .marks .wrong { color: var(--bad); } .marks .note { color: #b8c0ff; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-top: 6px; }
+  figure { margin: 0; width: 320px; }
+  figure img { width: 320px; display: block; border: 1px solid var(--line); background: #000; }
+  figcaption { font-size: 12px; color: var(--dim); }
+  .st { display: block; color: var(--ink); }
+  .st .d { color: var(--hot); }
+  .drop { width: 320px; height: 192px; display: grid; place-items: center; text-align: center; padding: 12px; border: 1px dashed #3a4258; color: var(--dim); border-radius: 4px; }
+  .drop.over { border-color: var(--hot); color: var(--hot); }
+  .empty { width: 320px; height: 192px; display: grid; place-items: center; border: 1px dashed var(--line); color: var(--dim); }
+  .act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+  input[type=text] { font: inherit; color: var(--ink); background: #0e1119; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; width: 320px; }
+  button, select { font: inherit; color: var(--ink); background: #1b2030; border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px; }
+  button { cursor: pointer; }
+  button:hover { border-color: #3a4258; }
+  button:disabled { opacity: .45; cursor: default; }
+  .x { padding: 0 5px; margin-left: 4px; }
+  footer { position: sticky; bottom: 0; padding: 4px 8px; border-top: 1px solid var(--line); background: var(--panel); color: var(--dim); }
+  #shooters { position: fixed; left: -10000px; top: 0; width: 960px; height: 600px; }
+  #shooters iframe { width: 960px; height: 600px; border: 0; }
+  a { color: var(--hot); }
+</style>
+<script src="../coi.js"></script>
+<header>
+  <b>Studio</b>
+  <nav class="kit-tabs" aria-label="the studio"><a href="map-editor.html">maps</a><a href="studio.html">minigames</a><a href="look.html" aria-current="page">look</a></nav>
+  <button id="shoot" title="draw every view now, in this page">shoot</button>
+  <span class="sep"></span>
+  <button id="brief" title="copy a brief for an AI agent: the views marked wrong, what they aim at, the references">brief for an agent</button>
+  <button id="send" title="download the board, the marks and your references, and open GitHub's upload page">send it in</button>
+</header>
+<main>
+  <p class="intro">Each view is one fixed picture of the game. Drop pictures of what it should look like on the left, say what to take from each, shoot, and compare.
+    When a view looks right, mark it right; when it doesn't, say what's wrong. Your words are the bar: an agent working on the look stops when a view is marked right.
+    The numbers under each picture are luma (whole frame, the sky band at the top, the near band at the bottom) and chroma, 0 to 255, read the same way on both sides.</p>
+  <div id="views">loading the board…</div>
+</main>
+<footer id="foot">loading…</footer>
+<div id="shooters" aria-hidden="true"></div>
+<script type="module" src="./look.mjs"></script>

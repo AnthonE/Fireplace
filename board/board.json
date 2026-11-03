@@ -1,6 +1,6 @@
 {
   "game": "Fireplace",
-  "about": "The reference board: each view is one fixed picture of the game, shot with no GPU, beside its references and the operator's last word on it. node tools/board.mjs look shoots every view and draws the sheet; docs/look.md is the loop.",
+  "about": "The reference board: each view is one fixed picture of the game, shot with no GPU, beside its references and the operator's last word on it. node tools/board.mjs look shoots every view and draws the sheet; docs/look.md is the loop; client/look.html is the same board in the page (each view's page names the page that draws it there).",
   "refs": "refs",
   "private_refs_env": "ELO_REF_DIR",
   "views": [
@@ -15,7 +15,12 @@
         "looks,crowd,horizon@sunset,thinice~over"
       ],
       "png": "traces/party-render-looks.png",
-      "refs": []
+      "refs": [],
+      "page": {
+        "src": "party-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "looks"
+      }
     },
     {
       "id": "crowd",
@@ -28,7 +33,12 @@
         "looks,crowd,horizon@sunset,thinice~over"
       ],
       "png": "traces/party-render-crowd.png",
-      "refs": []
+      "refs": [],
+      "page": {
+        "src": "party-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "crowd"
+      }
     },
     {
       "id": "horizon@sunset",
@@ -41,7 +51,12 @@
         "looks,crowd,horizon@sunset,thinice~over"
       ],
       "png": "traces/party-render-horizon-sunset.png",
-      "refs": []
+      "refs": [],
+      "page": {
+        "src": "party-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "horizon@sunset"
+      }
     },
     {
       "id": "thinice~over",
@@ -54,7 +69,12 @@
         "looks,crowd,horizon@sunset,thinice~over"
       ],
       "png": "traces/party-render-thinice~over.png",
-      "refs": []
+      "refs": [],
+      "page": {
+        "src": "party-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "thinice~over"
+      }
     },
     {
       "id": "couch",
@@ -67,7 +87,12 @@
         "grandma"
       ],
       "png": "traces/themes/grandma.png",
-      "refs": []
+      "refs": [],
+      "page": {
+        "src": "room.html?present=0&live=0&res=960x600&theme=grandma",
+        "api": "__room",
+        "shot": "grandma"
+      }
     }
   ]
 }

@@ -40,6 +40,15 @@ only its name and what to take from it are written in the board.
 latest mark is `right`; the numbers keep a floor and never overrule a mark.
 An agent records a mark only when the operator has said it.
 
+**In the page**, `client/look.html` (the studio's third tab, beside maps and
+minigames) is the same board: each view is drawn there by the page that draws
+it for the shooter (`page` in the board: `party-render-demo.html`'s
+`__demo.shot`, `room.html`'s `__room.shot`), with the same measurements
+(`test/look.test.mjs` holds the two `measure()`s equal). Drop a picture on a
+view, say what to take from it, mark the view, and **send it in** downloads
+the board, the marks and the pictures for a pull request; **brief for an
+agent** copies what an agent running the elo-look skill needs to start.
+
 `tools/board.mjs` is vendored from the Elo Pros agent kit
 (`skills/elo-look/scripts/board.mjs` in elo-pros-launcher): fix it there and copy it
 back. `test/board.test.mjs` holds what it promises.
