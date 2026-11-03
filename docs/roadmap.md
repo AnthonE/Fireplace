@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-62 games, each gated online: golf, the arena's fifteen modes
-(Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, and red against blue: Team
+66 games, each gated online: golf, the arena's sixteen modes
+(Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, Battle Royale, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 46 minigames (bumper balls, once a
+Territories, VIP, Assault) and Party's 49 minigames (bumper balls, once a
 game of its own, among them as Swiss Roll). Fireplace plays them in turn.
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
@@ -65,8 +65,8 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 46 | 60 | Mini Golf; with teams: Fall Ball, Tug o' War |
-| Arena (the fighter) | 16 | 24 | Slayer at run time, Battle Royale (a zone and loot pads), Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Party (the ball) | 49 | 60 | with teams: a relay race, capture the flag on balls |
+| Arena (the fighter) | 17 | 24 | Slayer at run time, Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
@@ -347,8 +347,8 @@ do yet, and each names what it would need first; the first is built.
 1. Teams; the champion kit and FFA ARAM; Team Slayer, CTF, Oddball and King of
    the Hill in the arena. The arena's half is done (its teams, the kit and the
    four modes: one session of about five and a half hours, up to four agents at once);
-   Party's teams are in, with Dodgeball, Volleyball, Soccer and Egg Raid; their
-   other games (Fall Ball, Tug o' War), the champion kit and FFA ARAM are left.
+   Party's teams are in, with Dodgeball, Volleyball, Soccer, Egg Raid, Fall
+   Ball and Tug o' War; the champion kit and FFA ARAM are left.
 2. The grid kit: Tetris 99, Bomberman 128, Snake, Puyo 99.
 3. The vehicle kit and karts. A kart's handling exists already, as one
    Party minigame's push on the ball (Kart Grab, `src/mg/kart.wat`): a
