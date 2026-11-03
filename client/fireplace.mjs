@@ -5,9 +5,11 @@
 // then it closes in again. One host (client/host.mjs) on Fireplace's sim,
 // every game's frontend mounted in turn on its own canvas (golf, the arena,
 // party, Dogfight); while the room is in view, the game draws into a
-// texture the TV shows. B and H, while the room is in view, change your ball
-// and hat (client/looks.mjs), which everyone in the room sees; L lists your
-// achievements (client/achievements.mjs). Both are kept in this browser.
+// texture the TV shows. B, H and P, while the room is in view, change your
+// ball, hat and body (client/looks.mjs), which everyone in the room sees; L
+// lists your achievements (client/achievements.mjs). Both are kept in this
+// browser. The wardrobe (client/wardrobe.mjs) is the same keys as a panel to
+// click, there while the room is in view and the pointer is free.
 //   ?theme=<id> the room in client/themes/<id>.json (T cycles them while the room is in view)
 //   ?bot=1 sits a guest (client/fireplace-bot.mjs) at the controls, and sits down at once
 //   ?look=<word> wears that look (client/looks.mjs packLook) for this visit, earned or not, and keeps nothing
@@ -31,6 +33,7 @@ import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, got
 import { filmClock, filmSound, scoreTrack, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 import { touchWanted } from './touch.mjs';
+import { createWardrobe } from './wardrobe.mjs';
 
 const q = new URLSearchParams(location.search);
 const TOUCH = touchWanted(q); // a phone: no pointer lock, buttons for the couch's keys (client/touch.mjs)
@@ -133,7 +136,8 @@ async function main() {
   };
   stage.addEventListener('click', () => { if (scene === 'couch') sitDown(); else if (!document.pointerLockElement && !BOT && !WATCH && !TOUCH) stage.requestPointerLock(); });
   addEventListener('keydown', (e) => {
-    if (scene === 'couch' && (e.code === 'Enter' || e.code === 'Space')) sitDown();
+    // Enter or Space on a focused button in the wardrobe is that button's
+    if (scene === 'couch' && (e.code === 'Enter' || e.code === 'Space') && !e.target.closest?.('#wardrobe')) sitDown();
     const roomInView = !(scene === 'in' && zoom >= 0.999);
     if (e.code === 'KeyT' && !e.repeat && roomInView) nextTheme();
     if (KEEP && roomInView && !e.repeat) {
@@ -149,30 +153,23 @@ async function main() {
         lookAt = -1e9;
       }
     }
-    if (e.code === 'KeyF' && !e.repeat) {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen().then(() => navigator.keyboard?.lock?.()).catch(() => {});
-    }
+    if (e.code === 'KeyF' && !e.repeat) fullscreen();
   });
-  // on a phone, the couch's keys as buttons: the look, the theme, the list, fullscreen (client/touch.mjs)
-  if (KEEP && TOUCH) {
-    const bar = document.createElement('div');
-    bar.style.cssText = 'position:fixed;top:10px;right:10px;z-index:30;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:70vw';
-    for (const [label, code] of [['BALL', 'KeyB'], ['HAT', 'KeyH'], ['BODY', 'KeyP'], ['ROOM', 'KeyT'], ['LIST', 'KeyL'], ['FULL', 'KeyF']]) {
-      const b = document.createElement('button');
-      b.textContent = label;
-      b.style.cssText = 'min-width:56px;min-height:40px;border-radius:20px;border:2px solid rgba(255,255,255,.45);background:rgba(20,22,30,.55);color:#fff;font:800 12px system-ui,sans-serif';
-      b.addEventListener('click', (e) => { e.stopPropagation(); dispatchEvent(new KeyboardEvent('keydown', { code })); });
-      bar.appendChild(b);
-    }
-    document.body.appendChild(bar);
+  function fullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().then(() => navigator.keyboard?.lock?.()).catch(() => {});
   }
+  // the couch's keys as a panel, on a phone the only way to them (client/wardrobe.mjs)
+  const wardrobe = KEEP && !FILM ? createWardrobe({
+    look: () => look, wear, got: () => got, tally: () => tally, slot: () => get(L.CL_SLOT), avatar: () => host.avatar(get(L.CL_SLOT)),
+    theme: () => room.theme, turn: (dir) => nextTheme(dir), sit: sitDown, fullscreen,
+  }) : null;
 
-  // T, while the room is in view: the next theme the build bundled, kept for next time
+  // T, while the room is in view: the next theme the build bundled (the one before, from the wardrobe), kept for next time
   let themeAt = -1e9;
-  async function nextTheme() {
+  async function nextTheme(dir = 1) {
     const ids = await themeList();
-    const id = ids[(ids.indexOf(room.theme.id) + 1) % ids.length];
+    const id = ids[(ids.indexOf(room.theme.id) + dir + ids.length) % ids.length];
     try { room.setTheme(await loadTheme(id)); saveTheme(id); themeAt = performance.now(); } catch (e) { console.warn(e.message); }
   }
 
@@ -383,6 +380,7 @@ async function main() {
     if (st >= 1 && g !== game && !mounting) mountGame(g);
     drive();
     showLine(!(scene === 'in' && zoom >= 0.999));
+    wardrobe?.frame(!(scene === 'in' && zoom >= 0.999) && !document.pointerLockElement, scene === 'couch', now);
     // where the scene goes next
     if (scene === 'tuning' && st === 2 && frontend && game === g) { scene = 'in'; zoomBy(1, now); cardTo = 0; }
     if (scene === 'in' && held) { scene = 'out'; zoomBy(0, now); }

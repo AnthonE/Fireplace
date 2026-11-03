@@ -15,7 +15,9 @@ node net/play.mjs --flight --bots 0     # just people
 
 ![Dogfight in Chrome, against AI pilots](fl1-dogfight.png)
 
-Click to fly. The mouse aims and the ship's nose follows it, so the camera
+Click to fly; while the mouse is free, the wardrobe (`client/wardrobe.mjs`,
+as on Fireplace's couch) picks your look, and PLAY takes the controls again.
+The mouse aims and the ship's nose follows it, so the camera
 rides behind the ship looking where you aim: a ring at the screen's centre
 is the aim, two green squares (30 and 90 m out) are where the nose and the
 lasers point; they turn red over an enemy in range. Left click fires lasers

@@ -5,6 +5,7 @@
 //   ?watch=1 spectates; ?url=, ?hash=, ?impair=, ?sens=, ?res=, ?hud=, ?music=0 as golf's
 //   ?wasm=blob:... plays a build the studio made in this origin (client/studio.html), in a local room
 import { createHost, fitSize } from './host.mjs';
+import { pageWardrobe } from './wardrobe.mjs';
 import { mount } from './party-game.mjs';
 
 const q = new URLSearchParams(location.search);
@@ -23,7 +24,9 @@ async function main() {
     hud: Number(q.get('hud')) || 0, present: q.get('present') !== '0', showGraph: q.get('net') === '1' });
   window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: game.state, capture: game.capture };
   note.remove();
-  const loop = (now) => { requestAnimationFrame(loop); game.frame(now); };
+  // your look, while the mouse is free (client/wardrobe.mjs); not in the studio's frame, where a build is tried
+  const wardrobe = pageWardrobe(h, { canvas, q, watch: !!built });
+  const loop = (now) => { requestAnimationFrame(loop); game.frame(now); wardrobe?.frame(now); };
   requestAnimationFrame(loop);
 }
 
