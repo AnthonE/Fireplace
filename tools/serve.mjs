@@ -16,6 +16,7 @@ const TYPES = {
   '.js': 'text/javascript; charset=utf-8',
   '.wasm': 'application/wasm',
   '.json': 'application/json',
+  '.png': 'image/png',
   '.qgl': 'application/octet-stream',
   '.qgr': 'application/octet-stream',
 };

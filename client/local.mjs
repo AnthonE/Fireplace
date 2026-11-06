@@ -79,6 +79,7 @@ async function run({ local: { kind = '', bots = 0, seed }, memory, simPort, watc
   u32.fill(0, L.CL_LOOKS >> 2, (L.CL_LOOKS >> 2) + L.NPLAYER);
   new Uint8Array(memory.buffer).fill(0, L.CL_NAMES, L.CL_NAMES + L.NPLAYER * L.NAME_BYTES);
   u32.fill(0, L.CL_AVATARS >> 2, (L.CL_AVATARS >> 2) + L.NPLAYER);
+  u32.fill(0, L.CL_BADGES >> 2, (L.CL_BADGES >> 2) + L.NPLAYER);
   // the AI players' looks and avatars, drawing only
   for (let k = 0; k < guests.length; k++) { u32[(L.CL_LOOKS >> 2) + me + 1 + k] = guestLook(me + 1 + k); u32[(L.CL_AVATARS >> 2) + me + 1 + k] = guestAvatar(me + 1 + k); }
   simPort.onmessage = () => {}; // its hash reports and resync asks have nobody to go to

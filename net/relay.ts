@@ -150,6 +150,7 @@ type Slot = {
   looks?: boolean; // its hello asked for the room's looks (W.HELLO_LOOKS)
   avatars?: boolean; // and for its avatars (W.HELLO_AVATARS)
   names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
+  badges?: boolean; // and for their badges (W.HELLO_BADGES)
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
   wallet?: string; // the wallet signed in on this slot
   since?: number; // when it signed in, unix seconds
@@ -201,6 +202,24 @@ const nameDirty = new Set<number>();
 const nameTable = () => names.map((n, p) => [p, n] as [number, string]).filter(([, n]) => n);
 const sendNames = (s: Slot, pairs: [number, string][]) => { if (s.names && pairs.length) s.ctl.write(W.encodeNames(pairs)).catch(() => {}); };
 const setName = (p: number, name: string) => { const n = W.cleanName(name); if (names[p] !== n) { names[p] = n; nameDirty.add(p); } };
+// Each signed-in slot's badges, read off its wallet's items on Elo Pros when it
+// signs in (Elo.badgesOf): drawing only, as a look is, sent to the sessions that
+// asked (W.HELLO_BADGES) the same way. A client has no way to say its own.
+const badges = new Uint32Array(W.NP);
+const badgeDirty = new Set<number>();
+const badgeTable = () => [...badges.keys()].filter((p) => badges[p]).map((p) => [p, badges[p]] as [number, number]);
+const sendBadges = (s: Slot, pairs: [number, number][]) => { if (s.badges && pairs.length) s.ctl.write(W.encodeLooks(pairs, W.T_BADGE)).catch(() => {}); };
+const setBadge = (p: number, w: number) => { if (badges[p] !== w >>> 0) { badges[p] = w >>> 0; badgeDirty.add(p); } };
+// Never waited for: the sign-in has its answer already, and a read that fails
+// is no badge.
+async function readBadges(s: Slot, wallet: string) {
+  try {
+    const r = await fetch(`${eloOrigin}/api/items/sol/of/${wallet}`, { signal: AbortSignal.timeout(8000) });
+    const j = r.ok ? await r.json() : null;
+    if (gone(s) || s.wallet !== wallet) return;
+    setBadge(s.slot, Elo.badgesOf(j, eloWho.split('/')[0] || 'fireplace'));
+  } catch (e) { log(`items: ${wallet}: ${e}`); /* no badge */ }
+}
 // Both off the wallet's Elo Pros face (GET /api/face/<wallet>), read once as
 // it signs in; the slot may have emptied, or signed in as another wallet,
 // while Elo Pros answered.
@@ -408,9 +427,11 @@ async function signIn(s: Slot, message: string, signature: string) {
     seats.push({ slot: s.slot, wallet, from: closed + 1, to: Infinity });
     setName(s.slot, '');
     setAvatar(s.slot, 0);
+    setBadge(s.slot, 0);
     if (seats.length > SEATS) seats.splice(0, seats.length - SEATS);
     stats.elo.signed++;
     readFace(s, wallet);
+    readBadges(s, wallet);
   } else if (status === Elo.SIGNIN.UNCHECKED) stats.elo.unchecked++;
   else stats.elo.refused++;
   log(`slot ${s.slot} sign-in: ${status}${wallet ? ' ' + wallet : ''}`);
@@ -612,7 +633,7 @@ function closeTick(T: number, now: number) {
   for (let p = 0; p < W.NP; p++) {
     const s = slots[p];
     if (!s || T < s.joinTick) continue;
-    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setAvatar(p, 0); setName(p, ''); continue; }
+    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setAvatar(p, 0); setBadge(p, 0); setName(p, ''); continue; }
     if (s.leaveTick === Infinity && now - Math.max(s.lastRecv, stallEnd) > SILENT_MS) {
       stats.leaves.silent = (stats.leaves.silent || 0) + 1;
       stats.leaveAt.push(Number(((now - E) / 1000).toFixed(2)));
@@ -745,7 +766,7 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
@@ -760,6 +781,7 @@ async function admit(d: Door) {
   log(`${watch ? 'a spectator' : `slot ${p}`} joins at ${joinTick}, room ${roomStart}${d.token ? ' (native)' : ''}`);
   sendLooks(s, lookTable());
   sendAvatars(s, avatarTable());
+  sendBadges(s, badgeTable());
   sendNames(s, nameTable());
   if (hello!.signin && !watch) {
     if (signinDomains.length) { s.nonce = Elo.newNonce(); d.sw.write(W.encodeSigninNonce(s.nonce)).catch(() => {}); }
@@ -1124,6 +1146,11 @@ setInterval(() => {
     const pairs = [...avatarDirty].map((p) => [p, avatars[p]] as [number, number]);
     avatarDirty.clear();
     for (const s of everyone()) sendAvatars(s, pairs);
+  }
+  if (badgeDirty.size) {
+    const pairs = [...badgeDirty].map((p) => [p, badges[p]] as [number, number]);
+    badgeDirty.clear();
+    for (const s of everyone()) sendBadges(s, pairs);
   }
 }, LOOKS_MS);
 setInterval(() => {

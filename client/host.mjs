@@ -80,6 +80,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   // a slot's Elo Pros avatar (client/avatar.mjs) as the relay sent it once it signed in; ?avatar=<word> wears one on this page
   const myAvatar = q.has('avatar') ? Number(q.get('avatar')) >>> 0 : 0;
   h.avatar = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) && myAvatar ? myAvatar : h.u32[(L.CL_AVATARS >> 2) + p] >>> 0);
+  // a slot's badges as the relay sent them, what it read off the wallet's items (net/wire.mjs BADGE_*)
+  h.badges = (p) => (p < 0 || p >= L.NPLAYER ? 0 : h.u32[(L.CL_BADGES >> 2) + p] >>> 0);
   // a replay keeps no looks (the relay never records them): with ?guests=1 every
   // seat is dressed as a local room's AI players are, from its slot (the film's "guests")
   if (q.get('replay') && q.get('guests') === '1') {

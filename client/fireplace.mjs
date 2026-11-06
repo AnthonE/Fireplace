@@ -33,6 +33,7 @@ import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, got
 import { filmClock, filmSound, scoreTrack, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 import { touchWanted } from './touch.mjs';
+import { BADGE_PILL } from '../net/wire.mjs';
 import { createWardrobe } from './wardrobe.mjs';
 
 const q = new URLSearchParams(location.search);
@@ -215,6 +216,9 @@ async function main() {
   const g2 = room.card.getContext('2d');
   const text = (s, x, y, px, color, align) => cardText(g2, s, x, y, px, color, align);
   const pixelFire = (cx, cy, s, t) => cardFire(g2, cx, cy, s, t);
+  // the Pill's badge, before a wallet's name on the board; not landed, no badge
+  const pill = new Image();
+  pill.src = new URL('pill-badge.png', import.meta.url).href;
   // the room's theme and who made it: on the title, and for a while after T changes it
   const roomLine = () => {
     const s = `ROOM: ${room.theme.name} BY ${room.theme.by}  -  T FOR ANOTHER`;
@@ -262,6 +266,7 @@ async function main() {
       const you = x.p === slot;
       if (you) { g2.fillStyle = '#3a2c14'; g2.fillRect(70, y - 6, 500, 28); }
       text(`${list.indexOf(x) + 1}`, 110, y, 4, you ? '#ffcf6a' : '#c9b89a', 'right');
+      if (host.badges(x.p) & BADGE_PILL && pill.naturalWidth) g2.drawImage(pill, 111, y, 18, 18); // the gap between the place and the name
       text(you ? 'YOU' : host.label(x.p).slice(0, 9), 130, y, 4, you ? '#ffcf6a' : '#ffffff'); // 9 of the font's 16 px reach the marshmallows at 290
       for (let i = 0; i < Math.min(x.m, 12); i++) { g2.fillStyle = '#f4ecdc'; g2.fillRect(290 + i * 18, y, 12, 14); g2.fillStyle = '#d9cbb0'; g2.fillRect(290 + i * 18, y + 10, 12, 4); }
       if (x.m > 12) text(`+${x.m - 12}`, 290 + 12 * 18 + 4, y, 3, '#c9b89a');
