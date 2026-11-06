@@ -166,6 +166,7 @@ export const CL_LOOKS = NET + 2048; // u32[256] every slot's look as the relay l
 export const NAME_BYTES = 16; // net/wire.mjs NAME_MAX: the font's characters, 0 after the last
 export const CL_NAMES = NET + 8192; // u8[256 * NAME_BYTES], every slot's name ('' for none: P1, P2, ...)
 export const CL_AVATARS = NET + 3072; // u32[256] every signed-in slot's Elo Pros avatar as the relay last sent it (0: none; client/avatar.mjs)
+export const CL_BADGES = NET + 4096; // u32[256] every signed-in slot's badges as the relay last sent them (net/wire.mjs BADGE_*)
 // Input words by server tick (& 255), written by the net worker as it samples them:
 export const CL_WORDS = NET + 1024;
 export const PLAY_BASE = 2; // ticks of playout delay past the earliest arrival, before jitter

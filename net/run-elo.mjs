@@ -13,13 +13,18 @@
 // guest comes with 24 games and PULL UP A CHAIR already); and when every guest
 // was sent the names the stand-in's faces give the signed-in wallets
 // (/api/face), cleaned to what the font draws, and none for a wallet with none,
-// and heard the avatar each face gives (client/avatar.mjs), on its slot.
+// and heard the avatar each face gives (client/avatar.mjs), on its slot; and
+// when every guest heard the Pill's badge on the one slot whose wallet holds it
+// and on nobody else, with the stand-in's other answers about a wallet's items
+// (another title's Pill, dark, a 503, could not look) signing their guests in
+// all the same.
 //   node net/run-elo.mjs [--bots 6] [--seconds 360] [--port 4441: the relay's, its native door the next, the stand-in the one after]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { generateKeyPairSync, verify as edVerify, createHash } from 'node:crypto';
 import * as Elo from './elo.mjs';
+import * as W from './wire.mjs';
 import * as L from '../src/layout.mjs';
 import { serverText } from './elo.mjs';
 
@@ -39,6 +44,15 @@ const SEEDED = walletOf(2);
 // the names the stand-in's faces give, and what the relay may send for them
 const FACES = { [walletOf(0)]: 'Lucky 7', [walletOf(3)]: '  ana ü  #3 — a very long name indeed' };
 const SENT = { [walletOf(0)]: 'LUCKY 7', [walletOf(3)]: 'ANA #3 A VERY LO' };
+// what the stand-in says each wallet holds on Solana (/api/items/sol/of)
+const PILL = walletOf(0);
+const ITEMS = {
+  [PILL]: [200, { reachable: true, wallet: PILL, items: [{ title: 'fireplace', item: 'pill', name: 'The Pill', chain_label: 'Solana' }], count: 1 }],
+  [walletOf(2)]: [200, { reachable: true, wallet: walletOf(2), items: [{ title: 'gates', item: 'pill', name: 'The Pill' }], count: 1 }],
+  [walletOf(3)]: [200, { reachable: true, dark: true, why: 'no title has items on Solana yet.', wallet: walletOf(3), items: [] }],
+  [walletOf(4)]: [503, { error: 'unavailable' }],
+  [walletOf(5)]: [200, { reachable: false, why: 'the wallet links could not be read', wallet: walletOf(5), items: [] }],
+};
 
 execFileSync('sh', ['tools/cert.sh'], { stdio: 'inherit' });
 execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
@@ -50,7 +64,7 @@ writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }), { mo
 // The stand-in: a sign-in is good when it was made on DOMAIN with the nonce
 // asked about (the wallet is the message's own; the signature goes unchecked),
 // except REFUSED's; a report is good when its signature is.
-const signins = [], reports = [], statReports = [], asked = [], faces = [];
+const signins = [], reports = [], statReports = [], asked = [], faces = [], itemsAsked = [];
 const signedBy = (req, body) => {
   const h = req.headers;
   const text = serverText('POST', req.url, h['x-elo-server'], h['x-elo-time'], h['x-elo-nonce'], createHash('sha256').update(body).digest('hex'));
@@ -75,6 +89,11 @@ const stub = createServer((req, res) => {
       faces.push(w);
       // every wallet's avatar but the first signed-in guest's, which has none
       return answer(200, { wallet: w, name: FACES[w] ?? null, picture: null, avatar: avatarOf(w) });
+    }
+    if (req.url.startsWith('/api/items/sol/of/')) {
+      const w = req.url.split('/').pop();
+      itemsAsked.push(w);
+      return answer(...(ITEMS[w] ?? [200, { reachable: true, wallet: w, solana: null, items: [], count: 0 }]));
     }
     if (req.url.startsWith('/api/gamestats/fireplace/of/')) {
       const w = req.url.split('/').pop();
@@ -140,6 +159,10 @@ const heard = signed.filter((s) => avatarOf(s.wallet) !== null);
 must(heard.length >= 1 && joined.every((o) => heard.every((s) => o.avatars?.[s.slot] === avatarOf(s.wallet)))
   && joined.every((o) => !o.avatars?.[signed.find((s) => avatarOf(s.wallet) === null)?.slot ?? -1]),
   `every guest heard each signed-in guest's avatar on its slot, and none for the one with none (${heard.length})`);
+must(lc(itemsAsked) === lc(signed.map((s) => s.wallet)), `the relay asked Elo Pros for each signed-in guest's items once (${itemsAsked.length})`);
+const pills = Object.fromEntries(signed.filter((s) => s.wallet === PILL).map((s) => [s.slot, W.BADGE_PILL]));
+must(Object.keys(pills).length === 1 && joined.every((s) => JSON.stringify(s.badges) === JSON.stringify(pills)),
+  `every guest heard the Pill on the one slot that holds it, and no other badge (${JSON.stringify(pills)})`);
 must(bs.results?.length >= 1, `the room's first game ended (${bs.results?.length ?? 0} results seen)`);
 must(reports.length >= 1 && reports.every((r) => r.ok), `the relay reported it, signed with the game's server key (${reports.length} reports)`);
 const first = bs.results?.[0], match = reports[0]?.body?.matches?.[0];

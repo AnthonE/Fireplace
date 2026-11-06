@@ -46,6 +46,29 @@ test("the names message: a hello asks, the relay sends slot and name pairs, clea
   assert.deepEqual(await W.readControl(sr), { type: W.T_NAMES, names: [[3, 'LUCKY 7'], [200, ''], [9, 'AB']] });
 });
 
+test('the wire carries badges as it carries avatars: a hello flag, then [slot, word] pairs', async () => {
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: new Uint8Array(8), badges: true })).badges, true);
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: new Uint8Array(8), looks: true, avatars: true, names: true })).badges, false);
+  const sr = reader(W.encodeLooks([[3, W.BADGE_PILL], [200, 0]], W.T_BADGE));
+  assert.deepEqual(await W.readControl(sr), { type: W.T_BADGE, badges: [[3, W.BADGE_PILL], [200, 0]] });
+  assert.ok(L.CL_BADGES >= L.CL_AVATARS + 1024 && L.CL_BADGES + 1024 <= L.CL_NAMES, 'its slots touch no other');
+});
+
+test("a wallet's badges, off its Solana items: this game's Pill is the one thing that sets a bit", () => {
+  const row = (title, item) => ({ reachable: true, items: [{ title, item, name: 'The Pill', chain_label: 'Solana' }], count: 1 });
+  assert.equal(Elo.badgesOf(row('fireplace', 'pill'), 'fireplace'), W.BADGE_PILL);
+  assert.equal(Elo.badgesOf(row('FIREPLACE', 'pill'), 'fireplace'), W.BADGE_PILL);
+  assert.equal(Elo.badgesOf({ reachable: false, items: row('fireplace', 'pill').items, unread: [{ title: 'gates' }] }, 'fireplace'), W.BADGE_PILL, 'read, though another title was not');
+  assert.equal(Elo.badgesOf(row('gates', 'pill'), 'fireplace'), 0, "another title's");
+  assert.equal(Elo.badgesOf(row('fireplace', 'crown'), 'fireplace'), 0, 'another item, whatever it is called');
+  assert.equal(Elo.badgesOf(row('fireplace', null), 'fireplace'), 0, 'an item the record does not name');
+  // the route's dark and unlinked answers, and what a failed read leaves
+  assert.equal(Elo.badgesOf({ reachable: true, dark: true, why: 'no title has items on Solana yet.', chain_label: 'Solana', wallet: 'x', items: [] }, 'fireplace'), 0);
+  assert.equal(Elo.badgesOf({ reachable: true, wallet: '0xab', solana: null, items: [], count: 0 }, 'fireplace'), 0);
+  assert.equal(Elo.badgesOf({ reachable: false, why: 'x', items: [] }, 'fireplace'), 0);
+  for (const junk of [null, undefined, {}, { items: 'pill' }, { items: [null, 3] }, 'pill']) assert.equal(Elo.badgesOf(junk, 'fireplace'), 0);
+});
+
 test("a sign-in's domain and nonce, read off the message the SDK writes; anything else isn't one", () => {
   assert.deepEqual(Elo.parseSignIn(siwe('game.elopros.com', 'abcDEF123456')),
     { domain: 'game.elopros.com', chain: 'evm', address: '0x' + 'ab'.repeat(20), nonce: 'abcDEF123456' });

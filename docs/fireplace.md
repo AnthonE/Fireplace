@@ -363,5 +363,11 @@ A signed-in player goes by the name their wallet has on Elo Pros, in every
 game's labels and the marshmallow board; the relay looks it up and sends it
 beside the sim ([wire.md](wire.md)). A guest is P1, P2, ...
 
+A wallet holding the Pill (a free Solana item, for ten minutes of hosted play)
+has its badge before its name on the marshmallow board, read by the relay at
+sign-in and sent the same way. It changes how the row looks and nothing else:
+no tick, record or hash carries it, and with no collection yet, or Elo Pros
+out of reach, it simply isn't there.
+
 Not done yet: a vote for what's next, and a way to lean back from the TV
 mid-game.

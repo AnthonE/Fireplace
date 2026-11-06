@@ -54,7 +54,7 @@ player for 2 s takes them as gone.
 
 | message | bytes | layout |
 | --- | --- | --- |
-| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm), or with a map from outside the build SHA-256(game.wasm then the packed map) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 avatars, 32 names) · u8 slot · 2 B 0 |
+| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm), or with a map from outside the build SHA-256(game.wasm then the packed map) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 avatars, 32 names, 64 badges) · u8 slot · 2 B 0 |
 | welcome | 32 | `0x11` · u8 slot · u16 server max datagram · u32 join_tick · u32 seed · u32 server_tick · u32 tick_us · u8 send_every · u8 nb · u16 np · u32 room_start · u32 token |
 | watching | 32 | `0x17`, then as a welcome with slot 0: you're a spectator |
 | reject | 4 | `0x1f` · u8 reason · 2 B 0 |
@@ -86,6 +86,7 @@ After the welcome, every stream message opens with 16 bytes:
 | signed | `0x1a` · u8 answer · u8 address bytes · 13 B 0, then the wallet signed in, UTF-8 |
 | avatars | `0x1b` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 avatar word) |
 | names | `0x1c` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · 16 B name, 0 after its last character) |
+| badges | `0x1d` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 badge word) |
 
 Looks are optional. A client that sets hello flag 4 gets every slot's look
 after its welcome, then the ones that changed, and may send its own; a client
@@ -127,6 +128,15 @@ the ones that changed: the name each wallet's face has on Elo Pros
 (codes 32 to 95), 16 at most (`cleanName` in `net/wire.mjs`). An empty name
 clears a slot's, as its player leaves or signs in again; a guest, or a wallet
 with no name, has none and goes by P1, P2, ...
+
+Badges ride the same way, and are drawing only too. A client that sets hello
+flag 64 gets every signed-in slot's badge word after its welcome, then the
+ones that changed; a client that doesn't never sees one. The relay reads them
+when the slot signs in, from `GET /api/items/sol/of/<wallet>` on Elo Pros
+(`badgesOf` in `net/elo.mjs`); no client can say its own. Bit 0 is the Pill, a
+free cosmetic for ten minutes of hosted play. A slot with none, or that
+empties, is 0. So is any answer but the item itself, a read that failed
+included: sign-in never waits for this read and never turns on it.
 
 Sync reasons, which are also a key's reason:
 - 0: join
