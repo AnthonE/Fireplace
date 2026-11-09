@@ -488,3 +488,39 @@ test('the client module: draws every phase, frames the floor, writes its HUD lin
   assert.equal(pads.brain.danger(g.v, C + 100, C, T + playT(g)), 1, 'off the floor');
   assert.equal(pads.brain.danger(g.v, C, C, T + playT(g)), 0);
 });
+
+for (const ahead of [125, 126, 200, 201, L.PRED_MAX]) {
+  test(`a prediction ${ahead} ticks across a claim keeps the same floor`, async () => {
+    const g = await room(16, { seed: 29 });
+    const s = stage(g.v);
+    stepTo(g, s.claim);
+    // Two survivors on stationary pads just inside the old rim. The claim
+    // shrinks the floor; prediction cannot know its outcome in advance.
+    for (let i = 0; i < s.npad; i++) {
+      const x = i < 2 ? C + (i ? -1 : 1) * (s.rimA - MC.MP_EDGE) : C + ((i - 2) % 3 - 1) * 6;
+      const z = i < 2 ? C : C + (i < 5 ? -6 : 6);
+      for (const [off, value] of [[0, x], [4, z], [8, x], [12, z]])
+        g.dv.setFloat32(L.PG_S + 16 * i + off, value, true);
+    }
+    // The pads keep their normal edge clearance; each survivor is 1.9 m
+    // from its pad centre, within the 2 m claim radius.
+    put(g, 0, C + s.rimA - 0.6, C);
+    put(g, 1, C - s.rimA + 0.6, C);
+    for (let p = 2; p < 16; p++) put(g, p, C + 100 + p * 3, C);
+    const word = partyWord({});
+    for (let i = 0; i < ahead; i++) g.dv.setUint32(L.PWORDS + i * 4, word, true);
+    const before = g.sim.u8.slice(L.REGION, L.REGION + L.REGION_SIZE);
+    g.sim.x.predict(0, ahead);
+    assert.deepEqual(g.sim.u8.slice(L.REGION, L.REGION + L.REGION_SIZE), before, 'prediction leaves confirmed state alone');
+    const physics = (d) => [...Array(6)].map((_, i) => g.dv.getUint32(rec(0) + d + L.P_PX + i * 4, true));
+    const expected = physics(L.PRED_D);
+    for (let i = 0; i < ahead; i++) g.step([[L.EV_INPUT, 0, word]]);
+    assert.ok(stage(g.v).rimB < s.rimA, 'the claim scheduled a smaller floor');
+    assert.ok(!g.v.partier(0).out, 'the predicted ball survived the claim');
+    assert.deepEqual(physics(0), expected, 'position and velocity match bit for bit');
+  });
+}
+
+test('the floor shrink notice covers the prediction capacity', () => {
+  assert.ok(MC.MP_SHRINK0 >= L.PRED_MAX);
+});

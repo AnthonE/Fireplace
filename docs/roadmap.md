@@ -118,8 +118,7 @@ only of your own body), physics sandboxes, open worlds.
 5. Pipelines compiled before a Fireplace switch: on SwiftShader the first
    switch into Party held the page's GPU about 40 s while its shaders
    compiled (every hash still equal). Then a frame rate on a real laptop GPU.
-6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
-   less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
+6. Smaller debts: Seesaws' ground is exact only while the prediction runs less
    than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); the
    arena's and flight's pages load Party's constants through `layout.mjs`'s
    `MG_CONSTS` (26 KB gzipped).
