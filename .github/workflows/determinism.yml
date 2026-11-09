@@ -156,6 +156,10 @@ jobs:
         run: |
           node tools/genparty.mjs --mg 47 --bots 16 --ticks 20000 --out logs/tug.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/tug.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: RELAY RACE, sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 49 --bots 16 --ticks 20000 --out logs/relay.qgl
+          node harness/matrix.mjs --log logs/relay.qgl --wasm build/party/game.wasm
       - name: MINI GOLF (holes putted in strokes, every ball the golf ball), sixteen AI balls
         run: |
           node tools/genparty.mjs --mg 48 --bots 16 --ticks 20000 --out logs/minigolf.qgl
@@ -296,7 +300,7 @@ jobs:
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 16
       - name: Crossroads on its own map laid at run time (maps/crossroads, Roblox's, through map_load in the referee and the bot host; its Humanoid's walk, jump and gravity, the map's Crossroads mode; 64 AI fighters, every hash checked)
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --map crossroads
-      - name: The arena on moving boxes (maps/lifts: lifts up two towers, platforms sliding over a pit; 64 AI fighters, every hash checked)
+      - name: "The arena on moving boxes (maps/lifts: lifts up two towers, platforms sliding over a pit; 64 AI fighters, every hash checked)"
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --map lifts
       - name: Flight online, full (a relay on flight's sim, 256 AI pilots through its native door, every hash checked), and its team, juggernaut and race modes
         run: |
@@ -321,6 +325,8 @@ jobs:
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 46
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 47
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 48
+      - name: RELAY RACE online, 64 AI balls
+        run: node net/run-party.mjs --chrome 0 --bots 64 --seconds 100 --mg 49
       - name: 256 players in one room (the bot host's golfers, impaired, the 257th refused)
         run: node net/run-n1.mjs --chrome 0 --seconds 60
       - name: Spectators through a tree of relays (two edges on the root, a third two deep, 100 verifying spectators each, a player turned away at an edge)
