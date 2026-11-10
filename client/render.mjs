@@ -2,8 +2,8 @@
 // pitch by shearing) and painted as a cartoon's (client/lowpoly.mjs: three
 // flat tones, the hills' shadows, rock in strata, a summer sky), writing
 // depth; then bodies as depth-tested splats uploaded straight from the
-// sim's shared memory (balls, the golfers as the arena's blocky figures, and
-// trees of boxes in the rough with their shadows); the frame finished by
+// sim's shared memory (balls, the golfers as the arena's figures,
+// client/figure.mjs, and trees of boxes in the rough with their shadows); the frame finished by
 // client/post.mjs (ink lines, bloom, FXAA); then a HUD on a 320 x 200 grid
 // scaled to the screen, onto the finished frame.
 // Nothing here is hashed, so any math goes.
@@ -13,6 +13,7 @@ import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
+import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 
@@ -159,66 +160,35 @@ struct SOut {
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
 };
 ${BLOCK_RAY_WGSL}
+${FIGURE_WGSL}
+const HAIRS = array<vec3f, ${HAIRS.length}>(${HAIRS.map(vec3).join(', ')});
+const EYES = array<vec3f, ${EYES.length}>(${EYES.map(vec3).join(', ')});
 const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
 const FACES = array<u32, ${FACES.length}>(${FACES.map((f) => `${f}u`).join(', ')});
 const AV_PALETTE = array<vec3f, 32>(${AV_PALETTE.map(vec3).join(', ')});
 fn avc(a: u32, k: u32) -> vec3f { return AV_PALETTE[(a >> (5u * k)) & 31u]; }
 
-// A golfer as a blocky figure, the arena's fighter (client/arena-render.mjs)
-// with the launcher in its hands: legs stepping with its speed, arms out
-// along its aim, a head with a face. The nearest of its boxes on the ray.
-fn figure(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
-  let S = 1.35;
-  let yaw = s.pose.x;
-  let f = vec3f(cos(yaw), 0.0, sin(yaw));
-  let side = vec3f(-f.z, 0.0, f.x);
-  let up = vec3f(0.0, 1.0, 0.0);
+// A golfer's colours for the figure (client/figure.mjs), as the arena's
+// fighter's: its body's skin or its avatar's parts, its shirt its seat's
+// colour, hair and eyes by its slot, and the launcher on its shoulder.
+fn kitOf(s: SOut) -> Kit {
+  var k: Kit;
   let c = s.color.rgb;
   let av = select(0u, s.av, (s.av >> 31u) == 1u);
-  var best: Block;
-  best.hit = false;
-  best.t = 1e9;
-  for (var i = 0u; i < 7u; i++) {
-    let k = select(-1.0, 1.0, (i & 1u) == 1u);
-    var ctr = vec3f(0.0);
-    var h = vec3f(0.12, 0.25, 0.12) * S;
-    var pitch = 0.0;
-    var splay = 0.0;
-    var col = c;
-    var part = 0u;
-    if (i < 2u) { // a leg
-      pitch = sin(s.pose.z) * 0.7 * s.pose.w * k;
-      let ay = up * cos(pitch) - f * sin(pitch);
-      ctr = s.feet + up * 0.5 * S + side * 0.125 * S * k - ay * 0.25 * S;
-      col = select(c * 0.5, avc(av, select(4u, 5u, k > 0.0)), av != 0u);
-    } else if (i < 4u) { // an arm
-      pitch = 1.5 + s.pose.y;
-      splay = -0.22 * k;
-      let u0 = up * cos(pitch) - f * sin(pitch);
-      let ay = u0 * cos(splay) - side * sin(splay);
-      ctr = s.feet + up * 0.92 * S + side * 0.375 * S * k - ay * 0.17 * S;
-      col = select(s.skin.rgb, avc(av, select(2u, 3u, k > 0.0)), av != 0u);
-    } else if (i == 4u) { // the torso
-      ctr = s.feet + up * 0.75 * S;
-      h = vec3f(0.25, 0.25, 0.125) * S;
-      if (av != 0u) { col = avc(av, 1u); }
-    } else if (i == 5u) { // the head
-      ctr = s.feet + up * 1.1825 * S;
-      h = vec3f(0.16, 0.15, 0.15) * 1.15 * S;
-      col = select(s.skin.rgb, avc(av, 0u), av != 0u);
-      part = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
-    } else { // the launcher, on the shoulder along the aim
-      let g = f * cos(s.pose.y) + up * sin(s.pose.y);
-      ctr = s.feet + up * 0.95 * S + g * 0.5 * S + side * 0.08 * S;
-      h = vec3f(0.08, 0.08, 0.42) * S;
-      pitch = s.pose.y;
-      col = vec3f(0.3, 0.42, 0.22);
-      part = 3u;
-    }
-    let b = blockRay(e, d, fwd, u.cam.w, ctr, h, yaw, pitch, part + 16u * u32(round(splay / 0.05) + 64.0), col);
-    if (b.hit && b.t < best.t) { best = b; }
-  }
-  return best;
+  let face = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
+  let h = (u32(s.color.a + 0.5) * 2654435761u) >> 7u;
+  k.kind = select(0u, 2u, face == 4u);
+  k.gun = 2u;
+  k.cut = (h >> 5u) % 3u;
+  k.skin = select(s.skin.rgb, avc(av, 0u), av != 0u);
+  k.hair = HAIRS[h % ${HAIRS.length}u];
+  k.eye = EYES[(h >> 11u) % ${EYES.length}u];
+  k.torso = select(c, avc(av, 1u), av != 0u);
+  k.larm = select(k.skin, avc(av, 2u), av != 0u);
+  k.rarm = select(k.skin, avc(av, 3u), av != 0u);
+  k.lleg = select(c * 0.5, avc(av, 4u), av != 0u);
+  k.rleg = select(c * 0.5, avc(av, 5u), av != 0u);
+  return k;
 }
 
 // A tree in the rough, of boxes: a trunk under a round top of two (style 0,
@@ -322,7 +292,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + p] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body]));
     o.av = players[${L.NPLAYER * L.PSIZE / 4 + 2 * L.NPLAYER}u + p];
-    color = vec4f(tintOf(p, slotColor(p)), 1.0);
+    // its alpha carries its slot, for its hair and eyes (client/figure.mjs)
+    color = vec4f(tintOf(p, slotColor(p)), f32(p));
     kind = 1u;
     minpx = 1.0;
   } else if (i < ${L.BALL_CAP + L.NPLAYER + L.NPROJ}u) {
@@ -413,8 +384,15 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (s.kind == 1u || s.kind == 6u) {
     let fwd = vec3f(u.view.x, 0.0, u.view.y);
     let d = pixelRay(s.pos.xy);
-    var b: Block;
-    if (s.kind == 1u) { b = figure(u.cam.xyz, d, fwd, s); } else { b = tree(u.cam.xyz, d, fwd, s); }
+    if (s.kind == 1u) {
+      let g = figureRay(u.cam.xyz, d, fwd, 1.0 / u.cam.w, s.feet, s.pose, kitOf(s));
+      if (!g.hit) { discard; }
+      let c = g.alb * light(g.n, hillLit(g.p + vec3f(0.0, 0.3, 0.0), u.hole.z)) + g.glow * 1.6;
+      o.color = vec4f(fogged(mix(vec3f(0.1, 0.09, 0.2) * (0.5 + c), c, g.ink), g.z), 1.0);
+      o.depth = g.z / u.screen.z;
+      return o;
+    }
+    let b = tree(u.cam.xyz, d, fwd, s);
     if (!b.hit || b.cover < 0.5) { discard; }
     o.color = vec4f(fogged(shadeBlock(b), b.z), 1.0);
     o.depth = b.z / u.screen.z;

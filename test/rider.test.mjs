@@ -75,10 +75,12 @@ test('juice: a bump jolts both riders and fades; confetti thrown up falls, turni
   assert.equal(j.cheer(5, 100, [0, 0, 0]), null);
 });
 
-test('the arena draws its fighters as figures of the same boxes, with every body\'s skin', () => {
+test('the arena draws its fighters as the cartoon figure, with every body\'s skin, and the gun in your hands of the riders\' boxes', () => {
   const src = readFileSync('client/arena-render.mjs', 'utf8');
-  assert.match(src, /\$\{BLOCK_RAY_WGSL\}/);
-  assert.match(src, /fn figure\(/);
+  assert.match(src, /\$\{BLOCK_RAY_WGSL\}/, 'the viewmodel is boxes');
+  assert.match(src, /\$\{FIGURE_WGSL\}/);
+  assert.match(src, /fn kitOf\(s: SOut\) -> Kit/);
+  assert.match(src, /figureRay\(u\.cam\.xyz, normalize\(ray\), fwd, 1\.0 \/ u\.cam\.w, s\.feet, s\.pose, kitOf\(s\)\)/);
   assert.match(src, /kind = 15u;/);
   assert.match(readFileSync('client/arena-game.mjs', 'utf8'), /looks: looksOf\(host\)/);
 });

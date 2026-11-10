@@ -19,6 +19,7 @@ import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
+import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
@@ -260,74 +261,40 @@ struct SOut {
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
 };
 ${BLOCK_RAY_WGSL}
+${FIGURE_WGSL}
+const HAIRS = array<vec3f, ${HAIRS.length}>(${HAIRS.map(vec3).join(', ')});
+const EYES = array<vec3f, ${EYES.length}>(${EYES.map(vec3).join(', ')});
 const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
 const FACES = array<u32, ${FACES.length}>(${FACES.map((f) => `${f}u`).join(', ')});
 const AV_PALETTE = array<vec3f, 32>(${AV_PALETTE.map(vec3).join(', ')});
 // part k's colour in avatar word a
 fn avc(a: u32, k: u32) -> vec3f { return AV_PALETTE[(a >> (5u * k)) & 31u]; }
 
-// A fighter as a blocky figure (client/rider.mjs's, a size up to 1.83 m): its
-// legs stepping with its speed, its arms out holding its gun level with its
-// aim (a zombie's reaching, empty), its head with a face. The nearest of its
-// boxes along the pixel's ray.
-fn figure(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
-  let S = 1.35;
-  let yaw = s.pose.x;
-  let f = vec3f(cos(yaw), 0.0, sin(yaw));
-  let side = vec3f(-f.z, 0.0, f.x);
-  let up = vec3f(0.0, 1.0, 0.0);
+// A fighter's colours for the figure (client/figure.mjs): its body's skin, or
+// its avatar's six parts; its shirt its seat's colour, or its side's or its
+// role's whatever it wears; hair, eyes and a cut by its slot. A zombie is
+// its green all over and reaches, empty-handed.
+fn kitOf(s: SOut) -> Kit {
+  var k: Kit;
   let flags = u32(s.skin.w + 0.5) >> 4u;
   let zombie = (flags & ${L.PF_ZOMBIE}u) != 0u;
   let c = s.color.rgb;
-  let skin = select(s.skin.rgb, c, zombie);
-  // an avatar dresses it, but a side's or a role's colour stays on the shirt, and a zombie is all green
   let av = select(0u, s.av, (s.av >> 31u) == 1u && !zombie);
   let sided = u.map.z > 0.5 || (flags & ${L.PF_JUGG}u) != 0u;
-  var best: Block;
-  best.hit = false;
-  best.t = 1e9;
-  for (var i = 0u; i < 7u; i++) {
-    let k = select(-1.0, 1.0, (i & 1u) == 1u);
-    var ctr = vec3f(0.0);
-    var h = vec3f(0.12, 0.25, 0.12) * S;
-    var pitch = 0.0;
-    var splay = 0.0;
-    var col = c;
-    var part = 0u;
-    if (i < 2u) { // a leg
-      pitch = sin(s.pose.z) * 0.7 * s.pose.w * k;
-      let ay = up * cos(pitch) - f * sin(pitch);
-      ctr = s.feet + up * 0.5 * S + side * 0.125 * S * k - ay * 0.25 * S;
-      col = select(c * 0.5, avc(av, select(4u, 5u, k > 0.0)), av != 0u);
-    } else if (i < 4u) { // an arm
-      pitch = select(1.5 + s.pose.y, 1.55, zombie);
-      splay = select(-0.22 * k, 0.0, zombie);
-      let u0 = up * cos(pitch) - f * sin(pitch);
-      let ay = u0 * cos(splay) - side * sin(splay);
-      ctr = s.feet + up * 0.92 * S + side * 0.375 * S * k - ay * 0.17 * S;
-      col = select(skin, avc(av, select(2u, 3u, k > 0.0)), av != 0u);
-    } else if (i == 4u) { // the torso
-      ctr = s.feet + up * 0.75 * S;
-      h = vec3f(0.25, 0.25, 0.125) * S;
-      if (av != 0u && !sided) { col = avc(av, 1u); }
-    } else if (i == 5u) { // the head
-      ctr = s.feet + up * 1.1825 * S;
-      h = vec3f(0.16, 0.15, 0.15) * 1.15 * S;
-      col = select(skin, avc(av, 0u), av != 0u);
-      part = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
-    } else { // the gun, in both hands, along the aim
-      if (zombie) { continue; }
-      let g = f * cos(s.pose.y) + up * sin(s.pose.y);
-      ctr = s.feet + up * 0.92 * S + g * 0.62 * S;
-      h = vec3f(0.05, 0.08, 0.3) * S;
-      pitch = s.pose.y;
-      col = vec3f(0.16, 0.17, 0.19);
-      part = 3u;
-    }
-    let b = blockRay(e, d, fwd, u.cam.w, ctr, h, yaw, pitch, part + 16u * u32(round(splay / 0.05) + 64.0), col);
-    if (b.hit && b.t < best.t) { best = b; }
-  }
-  return best;
+  let face = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
+  let h = (u32(s.color.a + 0.5) * 2654435761u) >> 7u;
+  k.kind = select(select(0u, 2u, face == 4u), 1u, zombie);
+  k.gun = select(1u, 0u, zombie);
+  k.cut = (h >> 5u) % 3u;
+  k.skin = select(select(s.skin.rgb, avc(av, 0u), av != 0u), c, zombie);
+  k.hair = select(HAIRS[h % ${HAIRS.length}u], c * 0.3, zombie);
+  k.eye = EYES[(h >> 11u) % ${EYES.length}u];
+  k.torso = select(select(c, avc(av, 1u), av != 0u && !sided), c * 0.6, zombie);
+  k.larm = select(k.skin, avc(av, 2u), av != 0u);
+  k.rarm = select(k.skin, avc(av, 3u), av != 0u);
+  k.lleg = select(c * 0.5, avc(av, 4u), av != 0u);
+  k.rleg = select(c * 0.5, avc(av, 5u), av != 0u);
+  return k;
 }
 
 fn pf(base: u32, off: u32) -> f32 { return bitcast<f32>(players[(base + off) / 4u]); }
@@ -387,6 +354,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     else if (u.map.z > 0.5) { color = vec4f(0.3, 0.5, 0.95, 1.0); }
     if ((fl & ${L.PF_ZOMBIE}u) != 0u) { color = vec4f(0.35, 0.95, 0.25, 1.0); }
     if ((fl & ${L.PF_JUGG}u) != 0u) { color = vec4f(1.0, 0.72, 0.15, 1.0); }
+    // a figure's alpha carries its slot, for its hair and eyes (client/figure.mjs); the downed card below takes it back
+    color.a = f32(i);
     kind = 15u;
     minpx = 1.0;
     // Evade's downed (both PF_DOWN bits): lying on the ground, pulsing
@@ -482,12 +451,13 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (s.kind == 15u) {
     let fwd = vec3f(u.view.x, 0.0, u.view.y);
     let ray = fwd + vec3f(-u.view.y, 0.0, u.view.x) * ((s.pos.x - u.screen.x * 0.5) / u.cam.w) + vec3f(0.0, (u.view.z - s.pos.y) / u.cam.w, 0.0);
-    let b = figure(u.cam.xyz, normalize(ray), fwd, s);
-    if (!b.hit || b.cover < 0.5) { discard; }
+    let b = figureRay(u.cam.xyz, normalize(ray), fwd, 1.0 / u.cam.w, s.feet, s.pose, kitOf(s));
+    if (!b.hit) { discard; }
     // in a box's shadow or a cliff's as the ground under it is
     var k = sunlit(b.p + b.n * 0.02);
     if (k > 0.0) { k = hillLit(b.p + vec3f(0.0, 0.3, 0.0), u.misc.z); }
-    o.color = vec4f(fogged((b.alb * light(b.n, k) + b.glow * 1.6) * mix(1.0, b.ink, 0.75), b.z), 1.0);
+    let c = b.alb * light(b.n, k) + b.glow * 1.6;
+    o.color = vec4f(fogged(mix(vec3f(0.1, 0.09, 0.2) * (0.5 + c), c, b.ink), b.z), 1.0);
     o.depth = b.z / u.screen.z;
     return o;
   }

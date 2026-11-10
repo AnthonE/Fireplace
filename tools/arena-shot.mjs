@@ -5,8 +5,11 @@
 // traces/<game>-look-<view>.png. A view is a page and a query: a camera held
 // over the map (?cam=), a spectator's, or a bot's own eyes; the room's seed
 // is fixed so the match is the same one. board/board.json's arena and
-// Dogfight views are these. Frame times mean nothing on a software GPU.
-//   node tools/arena-shot.mjs [--views track,rim,ships] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
+// Dogfight views are these. --scenes shoots the arena renderer's own demo
+// page instead (client/arena-render-demo.mjs: fighters held still up close,
+// no sim) into traces/arena-demo-<scene>.png. Frame times mean nothing on a
+// software GPU.
+//   node tools/arena-shot.mjs [--views track,rim,ships] [--scenes figures,teams,effects] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { serve } from './serve.mjs';
@@ -44,7 +47,21 @@ const browser = await chromium.launch({
 let failed = false;
 try {
   mkdirSync('traces', { recursive: true });
-  for (const name of opt('views', 'track,rim,yard,base,sky,ships').split(',')) {
+  if (opt('scenes', '')) {
+    const page = await browser.newPage({ viewport: { width: W, height: H } });
+    page.on('pageerror', (e) => { failed = true; process.stderr.write(`[chrome demo] ${e.message}\n`); });
+    await page.goto(`http://127.0.0.1:${port}/client/arena-render-demo.html?present=0&res=${res}`);
+    await page.waitForFunction(() => window.__demo, null, { timeout: 180000 });
+    const err = await page.evaluate(() => window.__demo.error);
+    if (err) throw new Error(err);
+    for (const name of opt('scenes', '').split(',')) {
+      const f = `traces/arena-demo-${name}${opt('tag', '') ? `-${opt('tag')}` : ''}.png`;
+      writeFileSync(f, Buffer.from(await page.evaluate((n) => window.__demo.shot(n), name), 'base64'));
+      console.log(f);
+    }
+    await page.close();
+  }
+  for (const name of opt('scenes', '') && !opt('views', '') ? [] : opt('views', 'track,rim,yard,base,sky,ships').split(',')) {
     const [game, , , hook] = VIEWS[name] || [];
     if (!game) throw new Error(`no view ${name}: ${Object.keys(VIEWS).join(', ')}`);
     const page = await browser.newPage({ viewport: { width: W, height: H } });
