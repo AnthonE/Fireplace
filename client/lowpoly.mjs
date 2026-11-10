@@ -408,7 +408,7 @@ fn boxColor(k: u32, w: vec3f, n: vec3f, pw: f32) -> vec3f {
     if (r < 0.14) { c *= 1.0 + 0.07 * near; }
     else if (r < 0.18) { c *= 1.0 - 0.22 * near * (0.5 + 0.5 * dot(g / max(length(g), 1e-4), -normalize(SUN.xz))); }
   }
-  if (m == 5u) { c *= 2.2; }
+  if (m == 5u) { c *= 1.7; }
   else if (abs(n.y) < 0.5) { c *= 0.84 + 0.16 * smoothstep(0.0, 1.0, (w.y - lo.y) / min(hi.y - lo.y, 5.0)); }
   return mix(c, vec3f(0.1, 0.09, 0.2) * (0.5 + c), select(0.0, 0.78, e < max(0.05, pw * 0.9)));
 }

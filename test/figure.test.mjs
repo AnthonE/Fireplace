@@ -51,7 +51,7 @@ test('the arena and golf dress the figure: a body\'s skin, an avatar\'s parts, a
 test('the demo page holds fighters still, and the shot tool shoots its scenes', () => {
   const demo = read('client/arena-render-demo.mjs');
   for (const scene of ['figures', 'faces', 'teams', 'effects']) assert.match(demo, new RegExp(`\\n  ${scene}\\(s\\) \\{`), scene);
-  assert.match(demo, /window\.__demo = \{ ready: true, names: Object\.keys\(SCENES\), shot: /);
+  assert.match(demo, /window\.__demo = \{ ready: true, names: Object\.keys\(SCENES\), shot\(name\) \{/);
   assert.match(read('client/arena-render-demo.html'), /<script type="module" src="\.\/arena-render-demo\.mjs"><\/script>/);
   const tool = read('tools/arena-shot.mjs');
   assert.match(tool, /arena-render-demo\.html\?present=0&res=\$\{res\}/);

@@ -15,9 +15,11 @@ node tools/board.mjs mark couch wrong "the fire outshines the TV"
 **A view** is one fixed picture: a demo scene in `client/party-render-demo.mjs`
 (`looks`, `crowd`, `thinice~over`, `horizon@sunset`, ...) shot by
 `tools/party-shot.mjs`, a room theme from the couch by
-`tools/theme-shots.mjs`, or the arena or Dogfight in a local room on a fixed
-seed (`track`, `rim`, `sky`, `ships`: a camera held over Box Canyon, or a
-bot's own) by `tools/arena-shot.mjs`. All run Chromium on SwiftShader with `?present=0`,
+`tools/theme-shots.mjs`, or the arena or Dogfight by `tools/arena-shot.mjs`:
+in a local room on a fixed seed and a held hour (`track`, `rim`, `sky`,
+`dusk`, `night`, `ships`: a camera held over Box Canyon, or a bot's own), or
+on the arena renderer's demo page with no sim (`faces`, `figures`). All run
+Chromium on SwiftShader with `?present=0`,
 so a box with no graphics card draws the real frame (a second or more each).
 Views that share a shooter are shot by one run of it. A new view is a line in
 the board naming its shooter, the PNG it writes, what it shows (`what`) and
@@ -114,7 +116,14 @@ What stands on it:
 - **What glows** (`FX_WGSL`): a blast is a spiked burst in three flat bands,
   white-hot inside, breaking up in holes from its rim as it ages; a spark a
   four-pointed glint; a shield or a spawn a ring of dashes; a tracer a white
-  core in its colour's sheath. All past white, so they bloom.
+  core in its colour's sheath. All past white, so they bloom. Boosting in
+  Dogfight draws speed lines in from the screen's edge, a new set 14 times a
+  second, eased in over 120 ms.
+
+Party keeps its own renderer and its toy-box materials
+(`client/party-render.mjs`), but its sun now falls in the same flat steps:
+turned to it at all, and square to it, a shadow's soft edge drawn in to a
+crisp one. The living room is as it was.
 
 `client/arena-render-demo.html` is the arena's renderer on a memory laid out
 by hand, no sim (`figures`, `faces`, `teams`, `effects`; `?env=` the hour):

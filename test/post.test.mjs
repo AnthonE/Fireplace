@@ -110,12 +110,22 @@ test("the arena's and Dogfight's pages shoot their own view for the board", () =
   const tool = read('tools/arena-shot.mjs');
   const board = JSON.parse(read('board/board.json'));
   const seed = Number(/const SEED = (\d+);/.exec(tool)[1]);
-  const ours = board.views.filter((v) => v.shoot[1] === 'tools/arena-shot.mjs');
+  const ours = board.views.filter((v) => v.shoot[1] === 'tools/arena-shot.mjs' && v.shoot[2] === '--views');
   assert.ok(ours.length >= 4, 'the arena and Dogfight are on the board');
+  // and the demo page's scenes beside them
+  const scenes = board.views.filter((v) => v.shoot[1] === 'tools/arena-shot.mjs' && v.shoot[2] === '--scenes');
+  assert.ok(scenes.length >= 1);
+  for (const v of scenes) {
+    assert.equal(v.png, `traces/arena-demo-${v.page.shot}.png`, v.id);
+    assert.equal(v.page.src, 'arena-render-demo.html?present=0&res=960x600', v.id);
+    assert.equal(v.page.api, '__demo', v.id);
+    assert.ok(v.shoot[3].split(',').includes(v.page.shot), v.id);
+  }
   for (const v of ours) {
     const row = new RegExp(`\\n  ${v.page.shot}: \\['(\\w+)', '([\\w.]+)', '([^']+)', '(\\w+)'\\],`).exec(tool);
     assert.ok(row, `${v.id} is one of the tool's views`);
-    assert.match(row[3], /&env=day&/, `${v.id} is held at day, the hour it was marked in`);
+    // held at one hour, day but for the two views of the others: a mark is on a picture that stays the same
+    assert.match(row[3], new RegExp(`&env=${v.id === 'dusk' || v.id === 'night' ? v.id : 'day'}&`), `${v.id} is held at its hour`);
     assert.equal(v.png, `traces/${row[1]}-look-${v.page.shot}.png`, v.id);
     assert.equal(v.page.src, `${row[2]}?${row[3]}&seed=${seed}&present=0&res=960x600`, `${v.id}: the page draws what the tool shoots`);
     assert.equal(v.page.api, row[4], v.id);

@@ -7,7 +7,8 @@ own page, `client/index.html`, plays it alone, with a netcode graph and
 replays; Fireplace mounts the lean frontend, `client/golf-game.mjs`. Both
 draw with `client/render.mjs`: the course as a cartoon's under a summer sky
 (`client/lowpoly.mjs`, the arena's and Dogfight's look too), the golfers as
-the arena's blocky figures, and trees of boxes in the rough. The trees are
+the arena's cartoon figures with the launcher on a shoulder
+(`client/figure.mjs`), and trees of boxes in the rough. The trees are
 drawing only, so a ball flies through one; they stand where there is nothing
 but rough for 16 m round them.
 

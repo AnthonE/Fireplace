@@ -180,7 +180,7 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
   Dogfight share one look, a cartoon's (`client/lowpoly.mjs`: light in
   three flat tones, cliffs in strata, a summer sky; `client/post.mjs`: ink
   lines from the frame's depth, bloom, FXAA), their HUDs a
-  320 x 200 grid scaled to the window. The whole page, 168 files,
+  320 x 200 grid scaled to the window. The whole page, 169 files,
   is 1.1 MB gzipped.
 
 The long form, with what each part measured, is

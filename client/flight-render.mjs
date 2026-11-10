@@ -67,7 +67,7 @@ struct U {
   map: vec4f,     // boxes, groups, sides (0 none, 1 one against the rest, 2 red and blue), the ceiling (m)
   bounds: vec4f,  // the map's edge: x0, x1, z0, z1
   fx: vec4f,      // net graph shown, the radar's centre x, y and radius (px)
-  hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px) (client/lowpoly.mjs hudFrame)
+  hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px) (client/lowpoly.mjs hudFrame); how hard I am rushing (0..1)
 };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var hmap: texture_2d<f32>;
@@ -570,6 +570,15 @@ ${HUD_FONT_WGSL}
   }
   let edge = max(abs(d.x) / c.x, abs(d.y) / c.y);
   if (u.hud.w > 0.0 && edge > 0.8) { return vec4f(0.8, 0.05, 0.05, u.hud.w * (edge - 0.8) * 3.0); }
+  // boosting: a cartoon's speed lines, white streaks in from the screen's edge toward its middle, a new set 14 times a second
+  if (u.hudv.w > 0.0) {
+    let dn = d / c;
+    let turn = atan2(dn.y, dn.x) / 6.2832 * 96.0;
+    let h = fract(sin(floor(turn) * 91.7 + floor(u.fwd.w * 14.0) * 13.1) * 43758.5453);
+    let start = 0.6 + 0.35 * h;
+    let rr = length(dn);
+    if (h > 0.5 && abs(fract(turn) - 0.5) < 0.1 + 0.25 * (rr - start) && rr > start) { return vec4f(1.0, 1.0, 1.0, u.hudv.w * 0.5 * smoothstep(start, start + 0.2, rr)); }
+  }
   discard;
   return vec4f(0.0);
 }
@@ -708,7 +717,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       uf.set([s.cam[0], s.cam[1], s.cam[2], focalOf(s, W, H), f[0], f[1], f[2], s.time, r[0], r[1], r[2], FAR, u[0], u[1], u[2], hmax + 2,
         W, H, s.dt, s.dtPred ?? s.dt, s.slot, sprites.length, Math.min(s.beams.length, MAX_BEAM), Math.min(s.rects.length, MAX_RECT),
         rows, s.crosshair, s.marker, s.hurt, nbox, ngroup, Number(s.sides) || 0, s.ceiling || 400,
-        ...bounds, s.graph ? 1 : 0, ...radar, hs, hudX, hudY, 0]);
+        ...bounds, s.graph ? 1 : 0, ...radar, hs, hudX, hudY, s.rush || 0]);
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);

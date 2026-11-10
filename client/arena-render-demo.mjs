@@ -122,7 +122,7 @@ async function main() {
     return s;
   };
   // a still for the board and the shooter: the scene at 2.2 s, a stride's middle
-  window.__demo = { ready: true, names: Object.keys(SCENES), shot: (name) => capturePng(r, u8, build(name, 2.2), 1) };
+  window.__demo = { ready: true, names: Object.keys(SCENES), shot(name) { return capturePng(r, u8, build(name, 2.2), 1); } };
   note.remove();
   if (!present) return;
   const name = SCENES[q.get('scene')] ? q.get('scene') : 'figures';

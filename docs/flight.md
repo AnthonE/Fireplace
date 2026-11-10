@@ -40,7 +40,7 @@ own, Ring Race (below). A seed that forces any other mode plays a Dogfight.
 
 ## Ring Race
 
-![Ring Race: gate 2 of 6 on the second lap, the waypoint on the next gate](fl3-race.png)
+![Ring Race: boosting through a gate, its ring lit as the next one](fl3-race.png)
 
 Through the map's gates in order, three laps, the first home wins; five
 minutes, and when the clock runs out the ships place by gates passed, then
@@ -123,7 +123,8 @@ straight down a dive. Each ship is ray-traced in a quad round it: a
 distance field of a fuselage, a canopy, swept wings, fins at the tips and
 an engine, in the ship's own frame, shaded in three tones on a few facets,
 banked into the turn its pilot asks for and spun through a roll, its
-engine white while it boosts. Your own ship is the prediction's. The HUD:
+engine white while it boosts, speed lines in from the screen's edge while
+yours does. Your own ship is the prediction's. The HUD:
 shields and hull, the boost meter, the charge, bombs, brackets on the 32
 nearest ships (the lock in yellow), a radar of 300 m, a kill feed, PULL UP,
 TURN BACK and the board. The map's edge shows as a red grid as you near
@@ -187,7 +188,7 @@ pilots learned to swerve); median height over the ground 37 m, median
 speed 33 m/s. The match recorded for the matrix is 2 MB for
 160 s: a pilot's aim moves every tick, so its word does too.
 
-![Skyways from over the red base](fl2-skyways.png)
+![Skyways from above: its road between the buttes and the gates](fl2-skyways.png)
 
 ## Skyways
 

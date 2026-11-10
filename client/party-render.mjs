@@ -8,7 +8,8 @@
 // rubber), a rounded bevel and a soft ink line on its edges. One shadow map
 // from the sun covers the action's square (s.focus, s.extent): the solids and
 // the balls cast into it (a ball and its rider as spheres) and everything
-// samples it soft, the sea included. Decals are flat glowing rings and discs.
+// samples it soft, the sea included; the sun on a solid or a ball falls in
+// two flat steps with a crisp shadow edge, as the other games' light does. Decals are flat glowing rings and discs.
 // The paint layer is a grid of colour indices over the floor, uploaded when
 // its version changes. The balls are impostors (beach-ball stripes
 // turning as they roll, an ink outline, a rider), with its orbs, rockets and
@@ -307,7 +308,11 @@ fn turn(v: vec3f, k: vec3f, a: f32) -> vec3f {
 // ---- light
 fn ambient(n: vec3f) -> vec3f { return mix(u.ambGnd.rgb, u.ambSky.rgb, n.y * 0.5 + 0.5); }
 fn shade(albedo: vec3f, n: vec3f, sun: f32, ao: f32) -> vec3f {
-  return albedo * (u.sunc.rgb * max(dot(n, u.sun.xyz), 0.0) * sun + ambient(n) * ao);
+  // the sun in two flat steps, as golf's, the arena's and Dogfight's light is (client/lowpoly.mjs cel): turned to
+  // it at all, and square to it; a shadow's soft edge drawn in to a crisp one, so it is one step and not a ring of two
+  let l = max(dot(n, u.sun.xyz), 0.0);
+  let band = (0.5 * smoothstep(0.02, 0.08, l) + 0.38 * smoothstep(0.52, 0.6, l)) * smoothstep(0.35, 0.65, sun);
+  return albedo * (u.sunc.rgb * band + ambient(n) * ao);
 }
 // the sun's highlight, normalised so a tight one is as bright as it is small
 fn sunSpec(n: vec3f, v: vec3f, power: f32, k: f32) -> vec3f {
