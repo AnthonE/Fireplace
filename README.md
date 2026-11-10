@@ -177,8 +177,10 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
   drawn on the GPU (WebGPU), sounds and music are synthesized, and the HUD's
   text is the system's own sans, a rounded one where there is one, drawn
   into an atlas at startup (`client/hudfont.mjs`). Golf, the arena and
-  Dogfight share one low-poly look (`client/lowpoly.mjs`), their HUDs a
-  320 x 200 grid scaled to the window. The whole page, 167 files,
+  Dogfight share one look, a cartoon's (`client/lowpoly.mjs`: light in
+  three flat tones, cliffs in strata, a summer sky; `client/post.mjs`: ink
+  lines from the frame's depth, bloom, FXAA), their HUDs a
+  320 x 200 grid scaled to the window. The whole page, 169 files,
   is 1.1 MB gzipped.
 
 The long form, with what each part measured, is

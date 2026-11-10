@@ -1,15 +1,19 @@
-// Golf's WebGPU renderer, three passes: the terrain ray-marched per pixel
-// (voxel space, pitch by shearing) and drawn low-poly, flat triangles in
-// clean colours under a blue sky with clouds, writing depth; then bodies as
-// depth-tested splats uploaded straight from the sim's shared memory (balls,
-// the golfers as the arena's blocky figures, and trees of boxes in the rough
-// with their shadows); then a HUD on a 320 x 200 grid scaled to the screen.
+// Golf's WebGPU renderer: the terrain ray-marched per pixel (voxel space,
+// pitch by shearing) and painted as a cartoon's (client/lowpoly.mjs: three
+// flat tones, the hills' shadows, rock in strata, a summer sky), writing
+// depth; then bodies as depth-tested splats uploaded straight from the
+// sim's shared memory (balls, the golfers as the arena's figures,
+// client/figure.mjs, and trees of boxes in the rough with their shadows); the frame finished by
+// client/post.mjs (ink lines, bloom, FXAA); then a HUD on a 320 x 200 grid
+// scaled to the screen, onto the finished frame.
 // Nothing here is hashed, so any math goes.
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
+import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
+import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 
@@ -51,6 +55,7 @@ struct U {
 @group(0) @binding(8) var<storage, read> font: array<u32>;
 @group(0) @binding(9) var<storage, read> graph: array<vec4f>;
 @group(0) @binding(10) var<storage, read> trees: array<vec4f>; // two a tree: x, ground y, z, size | turn, style, leaf colour (rgba8 bits), 0
+${ENV_WGSL}@group(0) @binding(11) var<uniform> env: Env;
 
 const FOG = 700.0;
 ${LOWPOLY_WGSL}
@@ -70,8 +75,8 @@ fn hgt(x: f32, z: f32) -> f32 {
 fn surfColor(sw: vec2f, w: vec2f, tint: f32) -> vec3f {
   let stripe = select(0.93, 1.07, (i32(floor(dot(w, vec2f(-u.hole.y, u.hole.x)) / 6.0)) & 1) == 0);
   switch u32(sw.x) {
-    case 0u: { return vec3f(0.36, 0.74, 0.24) * stripe; }
-    case 1u: { return vec3f(0.22, 0.54, 0.17) * (0.92 + 0.14 * tint); }
+    case 0u: { return vec3f(0.4, 0.78, 0.24) * stripe; }
+    case 1u: { return vec3f(0.24, 0.58, 0.2) * (0.94 + 0.1 * tint); }
     case 2u: { return select(vec3f(0.98, 0.88, 0.6), vec3f(0.86, 0.74, 0.48), sw.y < 0.62); }
     default: { return vec3f(0.44, 0.84, 0.32) * select(0.97, 1.03, ((i32(floor(w.x / 3.0)) + i32(floor(w.y / 3.0))) & 1) == 0); }
   }
@@ -120,12 +125,17 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   z = b;
   let w = u.cam.xz + dir * z;
+  let y = u.cam.y + rise * z;
   let fc = facetAt(w, z);
-  let n = fc.xyz;
+  // the light goes by the ground's slope more than the facet's, over a wider span far off (client/lowpoly.mjs)
+  let n = normalize(mix(fc.xyz, slopeN(w, clamp(z / 25.0, 3.0, 12.0)), mix(0.8, 1.0, smoothstep(60.0, 160.0, z))));
   var c = surfColor(surfAt(w), w, fc.w);
-  // steep ground is rock, faceted grey
-  c = select(c, vec3f(0.55, 0.53, 0.5) * (0.88 + 0.2 * fc.w), n.y < 0.72);
-  c *= grain(w, z) * light(n, 1.0);
+  // steep ground is rock, in strata
+  if (slopeN(w, 3.0).y < 0.72) { c = cliff(w, y, z, z / u.cam.w); }
+  // the sun's share past the hills
+  var sun = 1.0;
+  if (z < 320.0) { sun = hillLit(vec3f(w.x, y + 0.4, w.y), u.hole.z); }
+  c *= grain(w, z) * light(n, sun) * cloudShade(vec3f(w.x, y, w.y), u.view.w);
   // the slipgate: a dark swirl in the green with a lit rim
   let dc = distance(w, u.cup.xz);
   if (dc < 0.62) {
@@ -151,66 +161,35 @@ struct SOut {
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
 };
 ${BLOCK_RAY_WGSL}
+${FIGURE_WGSL}
+const HAIRS = array<vec3f, ${HAIRS.length}>(${HAIRS.map(vec3).join(', ')});
+const EYES = array<vec3f, ${EYES.length}>(${EYES.map(vec3).join(', ')});
 const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
 const FACES = array<u32, ${FACES.length}>(${FACES.map((f) => `${f}u`).join(', ')});
 const AV_PALETTE = array<vec3f, 32>(${AV_PALETTE.map(vec3).join(', ')});
 fn avc(a: u32, k: u32) -> vec3f { return AV_PALETTE[(a >> (5u * k)) & 31u]; }
 
-// A golfer as a blocky figure, the arena's fighter (client/arena-render.mjs)
-// with the launcher in its hands: legs stepping with its speed, arms out
-// along its aim, a head with a face. The nearest of its boxes on the ray.
-fn figure(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
-  let S = 1.35;
-  let yaw = s.pose.x;
-  let f = vec3f(cos(yaw), 0.0, sin(yaw));
-  let side = vec3f(-f.z, 0.0, f.x);
-  let up = vec3f(0.0, 1.0, 0.0);
+// A golfer's colours for the figure (client/figure.mjs), as the arena's
+// fighter's: its body's skin or its avatar's parts, its shirt its seat's
+// colour, hair and eyes by its slot, and the launcher on its shoulder.
+fn kitOf(s: SOut) -> Kit {
+  var k: Kit;
   let c = s.color.rgb;
   let av = select(0u, s.av, (s.av >> 31u) == 1u);
-  var best: Block;
-  best.hit = false;
-  best.t = 1e9;
-  for (var i = 0u; i < 7u; i++) {
-    let k = select(-1.0, 1.0, (i & 1u) == 1u);
-    var ctr = vec3f(0.0);
-    var h = vec3f(0.12, 0.25, 0.12) * S;
-    var pitch = 0.0;
-    var splay = 0.0;
-    var col = c;
-    var part = 0u;
-    if (i < 2u) { // a leg
-      pitch = sin(s.pose.z) * 0.7 * s.pose.w * k;
-      let ay = up * cos(pitch) - f * sin(pitch);
-      ctr = s.feet + up * 0.5 * S + side * 0.125 * S * k - ay * 0.25 * S;
-      col = select(c * 0.5, avc(av, select(4u, 5u, k > 0.0)), av != 0u);
-    } else if (i < 4u) { // an arm
-      pitch = 1.5 + s.pose.y;
-      splay = -0.22 * k;
-      let u0 = up * cos(pitch) - f * sin(pitch);
-      let ay = u0 * cos(splay) - side * sin(splay);
-      ctr = s.feet + up * 0.92 * S + side * 0.375 * S * k - ay * 0.17 * S;
-      col = select(s.skin.rgb, avc(av, select(2u, 3u, k > 0.0)), av != 0u);
-    } else if (i == 4u) { // the torso
-      ctr = s.feet + up * 0.75 * S;
-      h = vec3f(0.25, 0.25, 0.125) * S;
-      if (av != 0u) { col = avc(av, 1u); }
-    } else if (i == 5u) { // the head
-      ctr = s.feet + up * 1.1825 * S;
-      h = vec3f(0.16, 0.15, 0.15) * 1.15 * S;
-      col = select(s.skin.rgb, avc(av, 0u), av != 0u);
-      part = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
-    } else { // the launcher, on the shoulder along the aim
-      let g = f * cos(s.pose.y) + up * sin(s.pose.y);
-      ctr = s.feet + up * 0.95 * S + g * 0.5 * S + side * 0.08 * S;
-      h = vec3f(0.08, 0.08, 0.42) * S;
-      pitch = s.pose.y;
-      col = vec3f(0.3, 0.42, 0.22);
-      part = 3u;
-    }
-    let b = blockRay(e, d, fwd, u.cam.w, ctr, h, yaw, pitch, part + 16u * u32(round(splay / 0.05) + 64.0), col);
-    if (b.hit && b.t < best.t) { best = b; }
-  }
-  return best;
+  let face = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
+  let h = (u32(s.color.a + 0.5) * 2654435761u) >> 7u;
+  k.kind = select(0u, 2u, face == 4u);
+  k.gun = 2u;
+  k.cut = (h >> 5u) % 3u;
+  k.skin = select(s.skin.rgb, avc(av, 0u), av != 0u);
+  k.hair = HAIRS[h % ${HAIRS.length}u];
+  k.eye = EYES[(h >> 11u) % ${EYES.length}u];
+  k.torso = select(c, avc(av, 1u), av != 0u);
+  k.larm = select(k.skin, avc(av, 2u), av != 0u);
+  k.rarm = select(k.skin, avc(av, 3u), av != 0u);
+  k.lleg = select(c * 0.5, avc(av, 4u), av != 0u);
+  k.rleg = select(c * 0.5, avc(av, 5u), av != 0u);
+  return k;
 }
 
 // A tree in the rough, of boxes: a trunk under a round top of two (style 0,
@@ -314,7 +293,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + p] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body]));
     o.av = players[${L.NPLAYER * L.PSIZE / 4 + 2 * L.NPLAYER}u + p];
-    color = vec4f(tintOf(p, slotColor(p)), 1.0);
+    // its alpha carries its slot, for its hair and eyes (client/figure.mjs)
+    color = vec4f(tintOf(p, slotColor(p)), f32(p));
     kind = 1u;
     minpx = 1.0;
   } else if (i < ${L.BALL_CAP + L.NPLAYER + L.NPROJ}u) {
@@ -395,7 +375,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
 
 // a box's pixel lit as the ground is, with its edges inked
 fn shadeBlock(b: Block) -> vec3f {
-  return (b.alb * light(b.n, 1.0) + b.glow) * mix(1.0, b.ink, 0.6);
+  return (b.alb * light(b.n, 1.0) + b.glow * 1.6) * mix(1.0, b.ink, 0.75);
 }
 
 struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
@@ -405,8 +385,15 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (s.kind == 1u || s.kind == 6u) {
     let fwd = vec3f(u.view.x, 0.0, u.view.y);
     let d = pixelRay(s.pos.xy);
-    var b: Block;
-    if (s.kind == 1u) { b = figure(u.cam.xyz, d, fwd, s); } else { b = tree(u.cam.xyz, d, fwd, s); }
+    if (s.kind == 1u) {
+      let g = figureRay(u.cam.xyz, d, fwd, 1.0 / u.cam.w, s.feet, s.pose, kitOf(s));
+      if (!g.hit) { discard; }
+      let c = g.alb * light(g.n, hillLit(g.p + vec3f(0.0, 0.3, 0.0), u.hole.z)) + g.glow * 1.6;
+      o.color = vec4f(fogged(mix(vec3f(0.1, 0.09, 0.2) * (0.5 + c), c, g.ink), g.z), 1.0);
+      o.depth = g.z / u.screen.z;
+      return o;
+    }
+    let b = tree(u.cam.xyz, d, fwd, s);
     if (!b.hit || b.cover < 0.5) { discard; }
     o.color = vec4f(fogged(shadeBlock(b), b.z), 1.0);
     o.depth = b.z / u.screen.z;
@@ -419,11 +406,13 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
       if (r2 > 1.0) { discard; }
       let n = vec3f(s.uv.x, -s.uv.y, sqrt(1.0 - r2));
       let l = normalize(vec3f(0.3, 0.8, 0.5));
-      c = c * (0.5 + 0.6 * max(dot(n, l), 0.0)) + vec3f(0.5) * pow(max(dot(n, normalize(l + vec3f(0.0, 0.0, 1.0))), 0.0), 24.0);
+      // the three tones, a hard glint, and a dark rim for its outline
+      c = c * cel(dot(n, l) * 0.95) + vec3f(0.9) * step(0.94, dot(n, normalize(l + vec3f(0.0, 0.0, 1.0))));
+      c = mix(c, vec3f(0.1, 0.09, 0.2), smoothstep(0.72, 0.86, r2) * 0.8);
     }
     case 2u: { // a rocket: hot core, glow
       if (r2 > 1.0) { discard; }
-      c = mix(vec3f(1.0, 1.0, 0.85), c, sqrt(r2));
+      c = mix(vec3f(1.0, 1.0, 0.85), c, sqrt(r2)) * 2.0;
     }
     case 4u: { // the flag: pole and pennant, rippling
       let pole = abs(s.uv.x + 0.85) < 0.1;
@@ -446,10 +435,10 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   let r2 = dot(s.uv, s.uv);
   if (r2 > 1.0) { discard; }
   let a = s.color.a * (1.0 - r2);
-  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.8), (1.0 - r2) * a) * a, a);
+  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.8), (1.0 - r2) * a) * a * 1.7, a);
 }
 
-// A tree's shadow: the pixel's ray met with the level of its foot, a soft
+// A tree's shadow: the pixel's ray met with the level of its foot, a flat
 // dark disc there, its depth pulled a metre nearer so slopes don't cut it.
 struct SH { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
 @fragment fn fs_shadow(s: SOut) -> SH {
@@ -460,9 +449,10 @@ struct SH { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   let q = u.cam.xyz + d * t;
   let r = distance(q.xz, s.feet.xz) / (2.2 * s.pose.y);
   if (r > 1.0 || t < 0.0) { discard; }
-  let a = 0.4 * (1.0 - smoothstep(0.6, 1.0, r));
+  // a flat shadow with a crisp edge, the violet the tones' shadow is
+  let a = 0.42 * (1.0 - smoothstep(0.9, 1.0, r));
   let z = t * dot(d, vec3f(u.view.x, 0.0, u.view.y));
-  o.color = vec4f(0.0, 0.0, 0.0, a);
+  o.color = vec4f(0.1, 0.12, 0.42, a);
   o.depth = clamp((z - 1.5) / u.screen.z, 0.0, 1.0);
   return o;
 }
@@ -601,7 +591,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const W = canvas.width, H = canvas.height;
   const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
   const rows = Math.floor(200 / 6);
-  const module = device.createShaderModule({ code: WGSL });
+  const module = device.createShaderModule({ code: withEnv(WGSL) });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
@@ -617,10 +607,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const fontBuf = storage(fontAll.length * 4);
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const treeBuf = storage(MAX_TREE * 32);
+  // the hour (client/lowpoly.mjs ENVS): golf is played by day, its trees' shadows drawn for that sun
+  const envBuf = device.createBuffer({ size: ENV_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(envBuf, 0, envPack('day'));
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-  const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+  // the world is drawn into the post's float texture and depth; ink, bloom and the HUD come after (client/post.mjs)
+  const post = createPost(device, { W, H, format, far: FAR });
 
   const layout = device.createBindGroupLayout({
     entries: [
@@ -628,6 +622,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
       ...[3, 4, 5, 6, 7, 8, 9, 10].map((b) => ({ binding: b, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      { binding: 11, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
   });
   const bind = device.createBindGroup({
@@ -637,22 +632,26 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, resource: hmap.createView() },
       { binding: 2, resource: smap.createView() },
       ...[ballBuf, playerBuf, projBuf, flashBuf, hudBuf, fontBuf, graphBuf, treeBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
+      { binding: 11, resource: { buffer: envBuf } },
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
   const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => device.createRenderPipeline({
     layout: pl,
     vertex: { module, entryPoint: vs },
-    fragment: { module, entryPoint: fs, targets: [{ format, blend }] },
+    fragment: { module, entryPoint: fs, targets: [{ format: SCENE_FORMAT, blend }] },
     primitive: { topology: 'triangle-list' },
-    depthStencil: { format: 'depth32float', depthWriteEnabled: depthWrite, depthCompare },
+    depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: depthWrite, depthCompare },
   });
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const terrain = pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' });
   const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
   const shadow = pipe('vs_splat', 'fs_shadow', { depthWrite: false, depthCompare: 'less', blend: over });
   const flash = pipe('vs_splat', 'fs_flash', { depthWrite: false, depthCompare: 'less', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } });
-  const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
+  // the HUD goes straight onto the finished frame
+  const hudPipe = device.createRenderPipeline({
+    layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
+  });
 
   const uf = new Float32Array(32);
   const uu = new Uint32Array(uf.buffer);
@@ -709,8 +708,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(hudBuf, 0, hud);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
-        colorAttachments: [{ view: (target || ctx.getCurrentTexture()).createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
-        depthStencilAttachment: { view: depth.createView(), depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
+        colorAttachments: [{ view: post.sceneView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+        depthStencilAttachment: { view: post.depthView, depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
       });
       pass.setBindGroup(0, bind);
       pass.setPipeline(terrain);
@@ -725,9 +724,12 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       if (ntree) pass.draw(6, ntree, 0, trees0);
       pass.setPipeline(flash);
       if (s.flashes.length) pass.draw(6, Math.min(s.flashes.length, MAX_FLASH), 0, L.BALL_CAP + L.NPLAYER + L.NPROJ);
-      pass.setPipeline(hudPipe);
-      pass.draw(3);
       pass.end();
+      post.finish(enc, (target || ctx.getCurrentTexture()).createView(), (last) => {
+        last.setBindGroup(0, bind);
+        last.setPipeline(hudPipe);
+        last.draw(3);
+      });
       device.queue.submit([enc.finish()]);
     },
 

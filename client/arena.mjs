@@ -21,7 +21,18 @@ async function main() {
   const game = await mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.7), sens: Number(q.get('sens') || 3), fixed,
     present: q.get('present') !== '0', showGraph: q.get('net') === '1' });
   const line = await onlineLine(h, q, '../build/arena/game.wasm');
-  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool() }), capture: game.capture };
+  // a picture for the reference board (client/look.html, tools/board.mjs, tools/arena-shot.mjs): this page's view once
+  // its room has played for `after` s. The frames are stepped from here, since a hidden page gets none of its own.
+  const playing = { since: 0 };
+  async function shot(_name, after = 2) {
+    for (;;) {
+      game.frame(performance.now());
+      if (game.state().clState === 2) playing.since ||= performance.now();
+      if (playing.since && performance.now() - playing.since > after * 1000) { const png = await game.capture(1); if (png) return png; }
+      await new Promise((ok) => setTimeout(ok, 50));
+    }
+  }
+  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool() }), capture: game.capture, ready: true, shot };
   note.remove();
   const wardrobe = pageWardrobe(h, { canvas, q, watch: !!fixed }); // your look while the mouse is free (client/wardrobe.mjs), none on a fixed camera
   const loop = (now) => { requestAnimationFrame(loop); game.frame(now); wardrobe?.frame(now); };

@@ -139,7 +139,8 @@ export function carryBoxes(kind, color, m) {
 
 // The boxes' pixel, in WGSL beside BLOCK_RAY_WGSL and lowpoly's light: the
 // nearest of n boxes (in `vm`) along the pixel's ray from an eye of focal
-// length focal (px), lit from over the left shoulder; alpha 0 for none.
+// length focal (px), lit from over the left shoulder in lowpoly's three
+// tones; alpha 0 for none.
 export const VIEWMODEL_WGSL = /* wgsl */ `
 fn viewModel(px: vec2f, n: u32, focal: f32) -> vec4f {
   let d = normalize(vec3f((px.x - u.screen.x * 0.5) / focal, (u.screen.y * 0.5 - px.y) / focal, 1.0));
@@ -156,7 +157,7 @@ fn viewModel(px: vec2f, n: u32, focal: f32) -> vec4f {
     if (bl.hit && bl.t < best.t) { best = bl; glow = c.w - f32(part) * 2.0; }
   }
   if (!best.hit || best.cover < 0.5) { return vec4f(0.0); }
-  let lit = AMB * (0.85 + 0.15 * best.n.y) + SUNC * 0.8 * max(dot(best.n, normalize(vec3f(-0.4, 0.8, -0.45))), 0.0);
-  return vec4f(mix(best.alb * lit, best.alb * 1.3, glow) * mix(1.0, best.ink, 0.6) + best.glow, 1.0);
+  let lit = cel(dot(best.n, normalize(vec3f(-0.4, 0.8, -0.45))) * 0.9) * (0.93 + 0.07 * best.n.y);
+  return vec4f(mix(best.alb * lit, best.alb * 1.3, glow) * mix(1.0, best.ink, 0.75) + best.glow, 1.0);
 }
 `;

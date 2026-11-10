@@ -93,9 +93,12 @@ frame, and hits and kills a round trip later. Projectiles (rockets, bolts,
 needles, frags) are checked where things are now.
 
 `client/arena.html` is the page: the same net and sim workers, the arena's
-renderer (`client/arena-render.mjs`: golf's ray-marched terrain drawn
-low-poly and its splats, the map's boxes as plastic with studs on top, metal
-in panels and rock in strata, plus tracers as beams, glowing sprites, the
+renderer (`client/arena-render.mjs`: golf's ray-marched terrain and its
+splats in the cartoon's look golf, the arena and Dogfight share, the map's
+boxes as plastic with studs on top, metal in panels and rock in strata,
+the fighters as cartoon figures (`client/figure.mjs`) with their shadows on
+the ground, the match's hour its seed's (day, dusk or night:
+[look.md](look.md)), plus tracers as beams, blasts in flat bands, the
 gun in your hands as boxes ray-traced in the HUD pass like the fighters'
 own (`client/viewmodel.mjs`), all at the window's size (`?res=` to set
 one), and a HUD on a 320 x 200 grid scaled to fit the screen and centred
@@ -155,7 +158,7 @@ Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
-![Infection in Chrome: the humans in blue keep together; P10 has just infected P14](a4-infection.png)
+![Infection in Chrome: a human in blue fires a shotgun on two zombies; P14 has just infected P12](a4-infection.png)
 
 | Mode | Spawns with | Ends | Places |
 | --- | --- | --- | --- |
@@ -431,7 +434,7 @@ Escape, Battle Royale) and Fireplace draws them
 too; `node net/play.mjs --arena --mode 5` is a room of Capture
 the Flag only.
 
-![Capture the Flag in Chrome, on blue's side: red has just brought blue's flag home](a5-ctf.png)
+![Capture the Flag in Chrome, on red's side: blue's flag in your hands, red's own taken by P10](a5-ctf.png)
 
 | Mode | Wins | How it plays |
 | --- | --- | --- |

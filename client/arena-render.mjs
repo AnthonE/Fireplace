@@ -1,25 +1,31 @@
 // The arena's WebGPU renderer: golf's look (the terrain ray-marched per pixel
-// and drawn low-poly, client/lowpoly.mjs; bodies as depth-tested splats, a
-// HUD on a 320 x 200 grid scaled to the screen), the map's boxes ray-traced in
+// and painted as a cartoon's, client/lowpoly.mjs: three flat tones, the
+// hills' shadows, a summer sky; bodies as depth-tested splats, a HUD on a
+// 320 x 200 grid scaled to the screen), the map's boxes ray-traced in
 // the same pass as plastic, metal and rock (walls, roofs, the cave's roof: a
 // slab test per box, a group's bounds first, and a ray to the sun from
-// whatever a pixel lands on for its shadow), with what a
+// whatever a pixel lands on for its shadow), a fighter's own shadow on the
+// ground under it, with what a
 // shooter needs on top: tracers as beams, sprites for blasts, sparks and
 // weapon pads, the team modes' flags and skull, zones painted on the ground
 // for a hill or the territories, and a HUD of rectangles under the text for
 // the gun in your hands, the shield and health bars, the crosshair, the scope
-// and the hit marker. Fighters and projectiles come straight from shared memory;
+// and the hit marker. The world goes into client/post.mjs's float texture
+// (lights, tracers and blasts past white) and comes out inked, bloomed and
+// smoothed; the HUD is drawn onto that. Fighters and projectiles come straight from shared memory;
 // everything else from the main thread each frame. Nothing here is hashed.
 import { moverBoxes, drawnTick } from './movers.mjs';
 import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
+import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, FX_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { VIEWMODEL_WGSL, MAX_VM } from './viewmodel.mjs';
+import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 256;
@@ -86,11 +92,13 @@ struct U {
 @group(0) @binding(11) var<storage, read> boxes: array<vec4f>;  // two a box: x0, y0, z0, material | x1, y1, z1, 0
 @group(0) @binding(12) var<storage, read> groups: array<vec4f>; // two a group: x0, y0, z0, first box | x1, y1, z1, count
 @group(0) @binding(13) var<storage, read> vm: array<vec4f>;     // what I hold (client/viewmodel.mjs): three a box
+${ENV_WGSL}@group(0) @binding(14) var<uniform> env: Env;                   // the hour (client/lowpoly.mjs ENVS)
 
 const FOG = 600.0;
 ${LOWPOLY_WGSL}
 ${GROUND_WGSL}
 ${BOXES_WGSL}
+${FX_WGSL}
 
 fn hgt(x: f32, z: f32) -> f32 {
   let g = clamp(vec2f(x, z) * 0.5, vec2f(0.0), vec2f(510.99));
@@ -195,7 +203,11 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (bh.k != 0xffffffffu && (!hit || bh.t < z)) {
     let w = u.cam.xyz + ray * bh.t;
     var c = boxColor(bh.k, w, bh.n, bh.t / u.cam.w);
-    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) { c *= light(bh.n, sunlit(w + bh.n * 0.01)); }
+    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) {
+      var sun = sunlit(w + bh.n * 0.01);
+      if (sun > 0.0 && bh.t < 320.0) { sun = hillLit(w + bh.n * 0.3, u.misc.z); }
+      c *= light(bh.n, sun) * cloudShade(w, u.view.w);
+    }
     if (bh.n.y > 0.5) { c = zone(c, w.xz, w.y, bh.t); }
     c = stormGround(c, w.xz, bh.t);
     o.color = vec4f(stormWall(fogged(c, bh.t), dir, rise, bh.t), 1.0);
@@ -208,9 +220,10 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     // a ringed planet low in the sky, for the look
     let pc = normalize(vec3f(-0.6, 0.32, 0.74));
     let a = acos(clamp(dot(pd, pc), -1.0, 1.0));
-    if (a < 0.16) { c = mix(c, vec3f(0.62, 0.66, 0.78) * (0.7 + 0.3 * (pd.y - pc.y + 0.16) / 0.32), 0.85); }
+    // a day moon's two tones: pale where the sun is on it, the sky's own blue showing through its dark side
+    if (a < 0.16) { c = mix(c, vec3f(0.93, 0.95, 1.0), select(0.16, 0.8, dot(pd - pc, SUN) > -0.035 + 0.02 * sin(pd.y * 60.0))); }
     let ring = abs(a - 0.24) < 0.012 && abs(pd.y - pc.y) < 0.06;
-    if (ring) { c = mix(c, vec3f(0.85, 0.85, 0.9), 0.6); }
+    if (ring) { c = mix(c, vec3f(0.95, 0.96, 1.0), 0.7); }
     o.color = vec4f(stormWall(c, dir, rise, 1e9), 1.0);
     o.depth = 1.0;
     return o;
@@ -224,10 +237,14 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   z = hi;
   let w = u.cam.xz + dir * z;
-  let fc = facetAt(w, z);
-  var c = groundColor(w, fc) * grain(w, z);
-  c *= light(fc.xyz, select(1.0, sunlit(vec3f(w.x, u.cam.y + rise * z + 0.05, w.y)), z < 160.0));
-  c = zone(c, w, u.cam.y + rise * z, z);
+  let y = u.cam.y + rise * z;
+  let g = groundPaint(w, y, z, z / u.cam.w);
+  // the sun's share: past the hills and cliffs, then past the boxes
+  var sun = 1.0;
+  if (z < 320.0) { sun = hillLit(vec3f(w.x, y + 0.4, w.y), u.misc.z); }
+  if (sun > 0.0 && z < 160.0) { sun *= sunlit(vec3f(w.x, y + 0.05, w.y)); }
+  var c = g.c * light(g.n, sun) * cloudShade(vec3f(w.x, y, w.y), u.view.w);
+  c = zone(c, w, y, z);
   c = stormGround(c, w, z);
   o.color = vec4f(stormWall(fogged(c, z), dir, rise, z), 1.0);
   o.depth = z / u.screen.z;
@@ -246,74 +263,40 @@ struct SOut {
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
 };
 ${BLOCK_RAY_WGSL}
+${FIGURE_WGSL}
+const HAIRS = array<vec3f, ${HAIRS.length}>(${HAIRS.map(vec3).join(', ')});
+const EYES = array<vec3f, ${EYES.length}>(${EYES.map(vec3).join(', ')});
 const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
 const FACES = array<u32, ${FACES.length}>(${FACES.map((f) => `${f}u`).join(', ')});
 const AV_PALETTE = array<vec3f, 32>(${AV_PALETTE.map(vec3).join(', ')});
 // part k's colour in avatar word a
 fn avc(a: u32, k: u32) -> vec3f { return AV_PALETTE[(a >> (5u * k)) & 31u]; }
 
-// A fighter as a blocky figure (client/rider.mjs's, a size up to 1.83 m): its
-// legs stepping with its speed, its arms out holding its gun level with its
-// aim (a zombie's reaching, empty), its head with a face. The nearest of its
-// boxes along the pixel's ray.
-fn figure(e: vec3f, d: vec3f, fwd: vec3f, s: SOut) -> Block {
-  let S = 1.35;
-  let yaw = s.pose.x;
-  let f = vec3f(cos(yaw), 0.0, sin(yaw));
-  let side = vec3f(-f.z, 0.0, f.x);
-  let up = vec3f(0.0, 1.0, 0.0);
+// A fighter's colours for the figure (client/figure.mjs): its body's skin, or
+// its avatar's six parts; its shirt its seat's colour, or its side's or its
+// role's whatever it wears; hair, eyes and a cut by its slot. A zombie is
+// its green all over and reaches, empty-handed.
+fn kitOf(s: SOut) -> Kit {
+  var k: Kit;
   let flags = u32(s.skin.w + 0.5) >> 4u;
   let zombie = (flags & ${L.PF_ZOMBIE}u) != 0u;
   let c = s.color.rgb;
-  let skin = select(s.skin.rgb, c, zombie);
-  // an avatar dresses it, but a side's or a role's colour stays on the shirt, and a zombie is all green
   let av = select(0u, s.av, (s.av >> 31u) == 1u && !zombie);
   let sided = u.map.z > 0.5 || (flags & ${L.PF_JUGG}u) != 0u;
-  var best: Block;
-  best.hit = false;
-  best.t = 1e9;
-  for (var i = 0u; i < 7u; i++) {
-    let k = select(-1.0, 1.0, (i & 1u) == 1u);
-    var ctr = vec3f(0.0);
-    var h = vec3f(0.12, 0.25, 0.12) * S;
-    var pitch = 0.0;
-    var splay = 0.0;
-    var col = c;
-    var part = 0u;
-    if (i < 2u) { // a leg
-      pitch = sin(s.pose.z) * 0.7 * s.pose.w * k;
-      let ay = up * cos(pitch) - f * sin(pitch);
-      ctr = s.feet + up * 0.5 * S + side * 0.125 * S * k - ay * 0.25 * S;
-      col = select(c * 0.5, avc(av, select(4u, 5u, k > 0.0)), av != 0u);
-    } else if (i < 4u) { // an arm
-      pitch = select(1.5 + s.pose.y, 1.55, zombie);
-      splay = select(-0.22 * k, 0.0, zombie);
-      let u0 = up * cos(pitch) - f * sin(pitch);
-      let ay = u0 * cos(splay) - side * sin(splay);
-      ctr = s.feet + up * 0.92 * S + side * 0.375 * S * k - ay * 0.17 * S;
-      col = select(skin, avc(av, select(2u, 3u, k > 0.0)), av != 0u);
-    } else if (i == 4u) { // the torso
-      ctr = s.feet + up * 0.75 * S;
-      h = vec3f(0.25, 0.25, 0.125) * S;
-      if (av != 0u && !sided) { col = avc(av, 1u); }
-    } else if (i == 5u) { // the head
-      ctr = s.feet + up * 1.1825 * S;
-      h = vec3f(0.16, 0.15, 0.15) * 1.15 * S;
-      col = select(skin, avc(av, 0u), av != 0u);
-      part = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
-    } else { // the gun, in both hands, along the aim
-      if (zombie) { continue; }
-      let g = f * cos(s.pose.y) + up * sin(s.pose.y);
-      ctr = s.feet + up * 0.92 * S + g * 0.62 * S;
-      h = vec3f(0.05, 0.08, 0.3) * S;
-      pitch = s.pose.y;
-      col = vec3f(0.16, 0.17, 0.19);
-      part = 3u;
-    }
-    let b = blockRay(e, d, fwd, u.cam.w, ctr, h, yaw, pitch, part + 16u * u32(round(splay / 0.05) + 64.0), col);
-    if (b.hit && b.t < best.t) { best = b; }
-  }
-  return best;
+  let face = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
+  let h = (u32(s.color.a + 0.5) * 2654435761u) >> 7u;
+  k.kind = select(select(0u, 2u, face == 4u), 1u, zombie);
+  k.gun = select(1u, 0u, zombie);
+  k.cut = (h >> 5u) % 3u;
+  k.skin = select(select(s.skin.rgb, avc(av, 0u), av != 0u), c, zombie);
+  k.hair = select(HAIRS[h % ${HAIRS.length}u], c * 0.3, zombie);
+  k.eye = EYES[(h >> 11u) % ${EYES.length}u];
+  k.torso = select(select(c, avc(av, 1u), av != 0u && !sided), c * 0.6, zombie);
+  k.larm = select(k.skin, avc(av, 2u), av != 0u);
+  k.rarm = select(k.skin, avc(av, 3u), av != 0u);
+  k.lleg = select(c * 0.5, avc(av, 4u), av != 0u);
+  k.rleg = select(c * 0.5, avc(av, 5u), av != 0u);
+  return k;
 }
 
 fn pf(base: u32, off: u32) -> f32 { return bitcast<f32>(players[(base + off) / 4u]); }
@@ -373,6 +356,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     else if (u.map.z > 0.5) { color = vec4f(0.3, 0.5, 0.95, 1.0); }
     if ((fl & ${L.PF_ZOMBIE}u) != 0u) { color = vec4f(0.35, 0.95, 0.25, 1.0); }
     if ((fl & ${L.PF_JUGG}u) != 0u) { color = vec4f(1.0, 0.72, 0.15, 1.0); }
+    // a figure's alpha carries its slot, for its hair and eyes (client/figure.mjs); the downed card below takes it back
+    color.a = f32(i);
     kind = 15u;
     minpx = 1.0;
     // Evade's downed (both PF_DOWN bits): lying on the ground, pulsing
@@ -420,6 +405,48 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   return o;
 }
 
+// ---- a fighter's shadow on the ground: an ellipse lying away from the sun from its feet, on the level it
+// stands on, drawn only where the sun gets to (a shadow in a shadow is no darker), multiplied into the frame
+struct HOut { @builtin(position) pos: vec4f, @location(0) @interpolate(flat) feet: vec3f };
+@vertex fn vs_shade(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> HOut {
+  var o: HOut;
+  o.pos = vec4f(2.0, 2.0, 2.0, 1.0);
+  let b = i * ${L.PSIZE}u;
+  let fl = players[(b + ${L.P_FL}u) / 4u] & 255u;
+  if ((fl & ${L.PF_LIVE}u) == 0u || (fl & ${L.PF_DEAD}u) != 0u) { return o; }
+  // mine comes from the prediction's bank as the eye does, a step ahead of the confirmed world's
+  let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
+  o.feet = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u), pf(b, ${L.P_PZ}u)) + vel * u.screen.w;
+  if (i == u32(u.misc.x)) { o.feet = vec3f(u.cam.x, o.feet.y, u.cam.z); }
+  // as long as the sun is low, up to four of the figure's heights
+  let reach = min(length(SUN.xz) / max(SUN.y, 0.05), 4.0);
+  let pr = project(o.feet - normalize(vec3f(SUN.x, 0.0, SUN.z)) * (0.1 + 0.9 * reach));
+  if (pr.z < 0.3 || pr.z > 220.0) { return o; }
+  let s = vec2f(pr.x, pr.y) + CORNERS[v] * (1.1 + 0.95 * reach) * pr.w;
+  o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, 0.5, 1.0);
+  return o;
+}
+struct HFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
+@fragment fn fs_shade(h: HOut) -> HFrag {
+  var o: HFrag;
+  let fwd = u.view.xy;
+  let dir = fwd + vec2f(-fwd.y, fwd.x) * ((h.pos.x - u.screen.x * 0.5) / u.cam.w);
+  let rise = (u.view.z - h.pos.y) / u.cam.w;
+  // where the pixel's ray meets the level of the feet
+  let t = (h.feet.y + 0.04 - u.cam.y) / rise;
+  if (rise >= 0.0 || t < 0.3) { discard; }
+  let p = vec3f(u.cam.x + dir.x * t, h.feet.y, u.cam.z + dir.y * t);
+  let s0 = normalize(SUN.xz);
+  let reach = min(length(SUN.xz) / max(SUN.y, 0.05), 4.0);
+  let q = p.xz - (h.feet.xz - s0 * (0.1 + 0.9 * reach));
+  let e = length(vec2f(dot(q, s0) / (0.3 + 0.9 * reach), dot(q, vec2f(-s0.y, s0.x)) / 0.46));
+  if (e > 1.0) { discard; }
+  if (hillLit(p + vec3f(0.0, 0.4, 0.0), u.misc.z) < 0.5 || sunlit(p + vec3f(0.0, 0.05, 0.0)) < 0.5) { discard; }
+  o.color = vec4f(mix(TONE_SHADE / TONE_LIT, vec3f(1.0), smoothstep(0.86, 1.0, e)), 1.0);
+  o.depth = max(t - 0.35, 0.0) / u.screen.z;
+  return o;
+}
+
 // solid splats: 0 a ball, 1 a soldier card, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block,
 // 12 an Evade chaser's face, 13 a downed fighter (the soldier on its side), 14 an Escape terminal, 15 a fighter (figure above)
 struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
@@ -429,9 +456,13 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (s.kind == 15u) {
     let fwd = vec3f(u.view.x, 0.0, u.view.y);
     let ray = fwd + vec3f(-u.view.y, 0.0, u.view.x) * ((s.pos.x - u.screen.x * 0.5) / u.cam.w) + vec3f(0.0, (u.view.z - s.pos.y) / u.cam.w, 0.0);
-    let b = figure(u.cam.xyz, normalize(ray), fwd, s);
-    if (!b.hit || b.cover < 0.5) { discard; }
-    o.color = vec4f(fogged((b.alb * light(b.n, 1.0) + b.glow) * mix(1.0, b.ink, 0.6), b.z), 1.0);
+    let b = figureRay(u.cam.xyz, normalize(ray), fwd, 1.0 / u.cam.w, s.feet, s.pose, kitOf(s));
+    if (!b.hit) { discard; }
+    // in a box's shadow or a cliff's as the ground under it is
+    var k = sunlit(b.p + b.n * 0.02);
+    if (k > 0.0) { k = hillLit(b.p + vec3f(0.0, 0.3, 0.0), u.misc.z); }
+    let c = b.alb * light(b.n, k) + b.glow * 1.6;
+    o.color = vec4f(fogged(mix(vec3f(0.1, 0.09, 0.2) * (0.5 + c), c, b.ink), b.z), 1.0);
     o.depth = b.z / u.screen.z;
     return o;
   }
@@ -459,7 +490,7 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     }
     case 2u: {
       if (r2 > 1.0) { discard; }
-      c = mix(vec3f(1.0, 1.0, 0.95), c, sqrt(r2));
+      c = mix(vec3f(1.0, 1.0, 0.95), c, sqrt(r2)) * 2.0;
     }
     case 4u: { // a weapon on its pad: a bar of its colour over a ring of light
       let bar = abs(s.uv.y + 0.2) < 0.18 && abs(s.uv.x) < 0.9;
@@ -583,11 +614,9 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
 
 // glowing sprites, blended: 3 a blast, 5 a spark, 6 a shield shimmer
 @fragment fn fs_glow(s: SOut) -> @location(0) vec4f {
-  let r2 = dot(s.uv, s.uv);
-  if (r2 > 1.0) { discard; }
-  var a = s.color.a * (1.0 - r2);
-  if (s.kind == 6u) { a = s.color.a * smoothstep(0.5, 1.0, r2) * 2.0; }
-  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a, a);
+  let c = celGlow(s.uv, s.kind, s.color, u.view.w);
+  if (c.a <= 0.0) { discard; }
+  return c;
 }
 
 // ---- beams: tracers, a quad between two projected points
@@ -616,8 +645,7 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @locatio
   return o;
 }
 @fragment fn fs_beam(b: BOut) -> @location(0) vec4f {
-  let a = b.color.a * (1.0 - abs(b.across) * 0.6);
-  return vec4f(b.color.rgb * a, a);
+  return celBeam(b.across, b.color);
 }
 
 // ---- HUD
@@ -760,7 +788,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const W = canvas.width, H = canvas.height;
   const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
   const rows = Math.floor(200 / 6);
-  const module = device.createShaderModule({ code: WGSL });
+  const module = device.createShaderModule({ code: withEnv(WGSL) });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
@@ -780,11 +808,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const groupBuf = storage(L.NGROUP * 32);
   let movers = null; // the map's moving boxes (client/movers.mjs), rewritten each frame
   const vmBuf = storage(MAX_VM * 48);
+  const envBuf = device.createBuffer({ size: ENV_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  let envNow = null;
   let nbox = 0, ngroup = 0;
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-  const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+  // the world is drawn into the post's float texture and depth; ink, bloom and the HUD come after (client/post.mjs)
+  const post = createPost(device, { W, H, format, far: FAR });
 
   const layout = device.createBindGroupLayout({
     entries: [
@@ -793,6 +824,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
       // the bodies, projectiles, sprites and beams are read by the vertex stage, the rest by the fragment's: at most 8 a stage
       ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((b) => ({ binding: b, visibility: b <= 6 ? GPUShaderStage.VERTEX : GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      { binding: 14, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
   });
   const bind = device.createBindGroup({
@@ -802,23 +834,29 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, resource: hmap.createView() },
       { binding: 2, resource: smap.createView() },
       ...[playerBuf, projBuf, spriteBuf, beamBuf, rectBuf, hudBuf, fontBuf, graphBuf, boxBuf, groupBuf, vmBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
+      { binding: 14, resource: { buffer: envBuf } },
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
   const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => device.createRenderPipeline({
     layout: pl,
     vertex: { module, entryPoint: vs },
-    fragment: { module, entryPoint: fs, targets: [{ format, blend }] },
+    fragment: { module, entryPoint: fs, targets: [{ format: SCENE_FORMAT, blend }] },
     primitive: { topology: 'triangle-list' },
-    depthStencil: { format: 'depth32float', depthWriteEnabled: depthWrite, depthCompare },
+    depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: depthWrite, depthCompare },
   });
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const add = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const terrain = pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' });
+  const times = { color: { srcFactor: 'zero', dstFactor: 'src' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } };
+  const shade = pipe('vs_shade', 'fs_shade', { depthWrite: false, depthCompare: 'less', blend: times });
   const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
   const glow = pipe('vs_splat', 'fs_glow', { depthWrite: false, depthCompare: 'less', blend: add });
   const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
-  const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
+  // the HUD goes straight onto the finished frame
+  const hudPipe = device.createRenderPipeline({
+    layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
+  });
 
   const uf = new Float32Array(48 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);
@@ -857,11 +895,13 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     //      crosshair, gap, marker, hurt, scope, text, graph, sides (0 colour by slot, 1 one side against the rest, 2 red and blue by PF_BLUE),
     //      zone (null, or { x, z, r, y, h, color: [r,g,b], pulse }: a disc painted on the terrain and box tops within h of y, any height
     //      without y; or a list of up to MAX_ZONE of them, all in the first one's band),
-    //      storm (null, or a battle royale's zone { x, z, r, next: { x, z, r } | null }: client/am/royale.mjs) }
+    //      storm (null, or a battle royale's zone { x, z, r, next: { x, z, r } | null }: client/am/royale.mjs),
+    //      env (the hour: 'day', 'dusk' or 'night', client/lowpoly.mjs ENVS; day without one) }
     frame(u8, s, target) {
       // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
       if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
       if (!ctx && !target) return;
+      if ((s.env || 'day') !== envNow) { envNow = s.env || 'day'; device.queue.writeBuffer(envBuf, 0, envPack(envNow)); }
       const { focal, horizon } = lens(s, W, H);
       const sprites = [...s.solid, ...s.glow].slice(0, MAX_SPRITE);
       const zs = (Array.isArray(s.zone) ? s.zone : s.zone ? [s.zone] : []).slice(0, MAX_ZONE);
@@ -894,12 +934,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(hudBuf, 0, hud);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
-        colorAttachments: [{ view: (target || ctx.getCurrentTexture()).createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
-        depthStencilAttachment: { view: depth.createView(), depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
+        colorAttachments: [{ view: post.sceneView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+        depthStencilAttachment: { view: post.depthView, depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
       });
       pass.setBindGroup(0, bind);
       pass.setPipeline(terrain);
       pass.draw(3);
+      pass.setPipeline(shade);
+      pass.draw(6, L.NPLAYER);
       pass.setPipeline(splat);
       pass.draw(6, L.NPLAYER + L.NPROJ, 0, 0);
       if (s.solid.length) pass.draw(6, Math.min(s.solid.length, MAX_SPRITE), 0, L.NPLAYER + L.NPROJ);
@@ -908,9 +950,12 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       pass.setPipeline(glow);
       const ng = sprites.length - s.solid.length;
       if (ng > 0) pass.draw(6, ng, 0, L.NPLAYER + L.NPROJ + s.solid.length);
-      pass.setPipeline(hudPipe);
-      pass.draw(3);
       pass.end();
+      post.finish(enc, (target || ctx.getCurrentTexture()).createView(), (last) => {
+        last.setBindGroup(0, bind);
+        last.setPipeline(hudPipe);
+        last.draw(3);
+      });
       device.queue.submit([enc.finish()]);
     },
 

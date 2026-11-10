@@ -98,6 +98,158 @@
         "api": "__room",
         "shot": "grandma"
       }
+    },
+    {
+      "id": "track",
+      "name": "The canyon floor",
+      "what": "Box Canyon from the grass beside the sand track, a held camera looking down it to the blue base under the far wall",
+      "take": "flat tones with crisp edges; the wall's shadow a violet, not a grey; the ground reads as painted, not tiled",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,dusk,night,ships"
+      ],
+      "png": "traces/arena-look-track.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&env=day&cam=440,24,500,20,-6&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "track"
+      }
+    },
+    {
+      "id": "rim",
+      "name": "The canyon from above",
+      "what": "Box Canyon from 50 m over its floor: the walls in strata, their shadow across the grass, the base and the fighters small",
+      "take": "the whole map readable at a glance; every cliff outlined; fighters findable",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,dusk,night,ships"
+      ],
+      "png": "traces/arena-look-rim.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&env=day&cam=440,70,470,25,-20&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "rim"
+      }
+    },
+    {
+      "id": "sky",
+      "name": "The sky over the canyon",
+      "what": "the sun, the flat clouds and the cliff's rim from the canyon floor, looking up toward the sun",
+      "take": "a summer sky: cobalt overhead, clouds in two flat colours, the sun blooming",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,dusk,night,ships"
+      ],
+      "png": "traces/arena-look-sky.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&env=day&cam=440,24,500,42,24&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "sky"
+      }
+    },
+    {
+      "id": "ships",
+      "name": "Dogfight from the chase camera",
+      "what": "an AI pilot's ship over Skyways from its own chase camera, with the HUD",
+      "take": "the ship read by its outline and three tones; engines and shots the brightest things",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,dusk,night,ships"
+      ],
+      "png": "traces/flight-look-ships.png",
+      "refs": [],
+      "page": {
+        "src": "flight.html?local=1&env=day&bot=1&seed=3163387923&present=0&res=960x600",
+        "api": "__qf",
+        "shot": "ships"
+      }
+    },
+    {
+      "id": "dusk",
+      "name": "The canyon at dusk",
+      "what": "Box Canyon from its floor with the sun 15 degrees up behind the far wall: the walls' shadows across the grass, the red base far off",
+      "take": "golden light and long violet shadows; the floor still readable where the walls shade it",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,dusk,night,ships"
+      ],
+      "png": "traces/arena-look-dusk.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&env=dusk&cam=600,26,560,200,-8&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "dusk"
+      }
+    },
+    {
+      "id": "night",
+      "name": "The canyon at night",
+      "what": "Box Canyon from beside the sand track under the moon, the blue base under the far wall",
+      "take": "a blue night you can still fight in: fighters and the base findable, what glows the brightest",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,dusk,night,ships"
+      ],
+      "png": "traces/arena-look-night.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&env=night&cam=440,24,500,20,-6&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "night"
+      }
+    },
+    {
+      "id": "faces",
+      "name": "Four fighters up close",
+      "what": "a peach body, a cocoa one, a robot and a zombie from 2.8 m, by day (the arena renderer's demo page, no sim)",
+      "take": "a face you can read: eyes, hair, a mouth; each kind told apart at a glance",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--scenes",
+        "faces,figures"
+      ],
+      "png": "traces/arena-demo-faces.png",
+      "refs": [],
+      "page": {
+        "src": "arena-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "faces"
+      }
+    },
+    {
+      "id": "figures",
+      "name": "Fighters standing and running",
+      "what": "every body, an avatar, a zombie and a juggernaut in a row from 7.5 m, five more running behind",
+      "take": "a fighter read at range by its outline and its shirt; knees and elbows that bend",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--scenes",
+        "faces,figures"
+      ],
+      "png": "traces/arena-demo-figures.png",
+      "refs": [],
+      "page": {
+        "src": "arena-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "figures"
+      }
     }
   ]
 }

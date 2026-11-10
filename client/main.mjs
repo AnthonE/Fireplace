@@ -184,7 +184,7 @@ async function main() {
   let boardUp = false;
   const flashes = [];
   let fxSeen = 0;
-  let seed = -1;
+  let seed = -1, keysSeen = -1;
   let faced = -1;
   let banner = { text: '', until: 0 };
   let cue = -1; // hole state and seconds left, last frame
@@ -273,7 +273,10 @@ async function main() {
     const st = get(L.CL_STATE);
     const slot = get(L.CL_SLOT);
     const h = view.hole();
-    if (st >= 1 && view.dv.getUint32(L.HDR_SEED, true) !== seed && welcome) {
+    // the ground and the map as the sim laid them: at a new seed, and again after every keyframe, since a keyframe
+    // (a join's comes right behind the welcome) lays them afresh in the sim's own time, maybe under a read of them here
+    if (st >= 1 && welcome && (view.dv.getUint32(L.HDR_SEED, true) !== seed || get(L.CL_KEYS) !== keysSeen)) {
+      keysSeen = get(L.CL_KEYS);
       seed = view.dv.getUint32(L.HDR_SEED, true);
       renderer.setTerrain(u8);
     }
