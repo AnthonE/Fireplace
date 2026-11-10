@@ -23,7 +23,7 @@ import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, FX_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { VIEWMODEL_WGSL, MAX_VM } from './viewmodel.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 
@@ -92,11 +92,13 @@ struct U {
 @group(0) @binding(11) var<storage, read> boxes: array<vec4f>;  // two a box: x0, y0, z0, material | x1, y1, z1, 0
 @group(0) @binding(12) var<storage, read> groups: array<vec4f>; // two a group: x0, y0, z0, first box | x1, y1, z1, count
 @group(0) @binding(13) var<storage, read> vm: array<vec4f>;     // what I hold (client/viewmodel.mjs): three a box
+${ENV_WGSL}@group(0) @binding(14) var<uniform> env: Env;                   // the hour (client/lowpoly.mjs ENVS)
 
 const FOG = 600.0;
 ${LOWPOLY_WGSL}
 ${GROUND_WGSL}
 ${BOXES_WGSL}
+${FX_WGSL}
 
 fn hgt(x: f32, z: f32) -> f32 {
   let g = clamp(vec2f(x, z) * 0.5, vec2f(0.0), vec2f(510.99));
@@ -416,9 +418,11 @@ struct HOut { @builtin(position) pos: vec4f, @location(0) @interpolate(flat) fee
   let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
   o.feet = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u), pf(b, ${L.P_PZ}u)) + vel * u.screen.w;
   if (i == u32(u.misc.x)) { o.feet = vec3f(u.cam.x, o.feet.y, u.cam.z); }
-  let pr = project(o.feet - vec3f(SUN.x, 0.0, SUN.z) * 1.3);
+  // as long as the sun is low, up to four of the figure's heights
+  let reach = min(length(SUN.xz) / max(SUN.y, 0.05), 4.0);
+  let pr = project(o.feet - normalize(vec3f(SUN.x, 0.0, SUN.z)) * (0.1 + 0.9 * reach));
   if (pr.z < 0.3 || pr.z > 220.0) { return o; }
-  let s = vec2f(pr.x, pr.y) + CORNERS[v] * 2.2 * pr.w;
+  let s = vec2f(pr.x, pr.y) + CORNERS[v] * (1.1 + 0.95 * reach) * pr.w;
   o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, 0.5, 1.0);
   return o;
 }
@@ -433,8 +437,9 @@ struct HFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (rise >= 0.0 || t < 0.3) { discard; }
   let p = vec3f(u.cam.x + dir.x * t, h.feet.y, u.cam.z + dir.y * t);
   let s0 = normalize(SUN.xz);
-  let q = p.xz - (h.feet.xz - s0 * 1.05);
-  let e = length(vec2f(dot(q, s0) / 1.25, dot(q, vec2f(-s0.y, s0.x)) / 0.46));
+  let reach = min(length(SUN.xz) / max(SUN.y, 0.05), 4.0);
+  let q = p.xz - (h.feet.xz - s0 * (0.1 + 0.9 * reach));
+  let e = length(vec2f(dot(q, s0) / (0.3 + 0.9 * reach), dot(q, vec2f(-s0.y, s0.x)) / 0.46));
   if (e > 1.0) { discard; }
   if (hillLit(p + vec3f(0.0, 0.4, 0.0), u.misc.z) < 0.5 || sunlit(p + vec3f(0.0, 0.05, 0.0)) < 0.5) { discard; }
   o.color = vec4f(mix(TONE_SHADE / TONE_LIT, vec3f(1.0), smoothstep(0.86, 1.0, e)), 1.0);
@@ -609,11 +614,9 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
 
 // glowing sprites, blended: 3 a blast, 5 a spark, 6 a shield shimmer
 @fragment fn fs_glow(s: SOut) -> @location(0) vec4f {
-  let r2 = dot(s.uv, s.uv);
-  if (r2 > 1.0) { discard; }
-  var a = s.color.a * (1.0 - r2);
-  if (s.kind == 6u) { a = s.color.a * smoothstep(0.5, 1.0, r2) * 2.0; }
-  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a * 1.7, a);
+  let c = celGlow(s.uv, s.kind, s.color, u.view.w);
+  if (c.a <= 0.0) { discard; }
+  return c;
 }
 
 // ---- beams: tracers, a quad between two projected points
@@ -642,8 +645,7 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @locatio
   return o;
 }
 @fragment fn fs_beam(b: BOut) -> @location(0) vec4f {
-  let a = b.color.a * (1.0 - abs(b.across) * 0.6);
-  return vec4f(b.color.rgb * a * 2.0, a);
+  return celBeam(b.across, b.color);
 }
 
 // ---- HUD
@@ -786,7 +788,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const W = canvas.width, H = canvas.height;
   const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
   const rows = Math.floor(200 / 6);
-  const module = device.createShaderModule({ code: WGSL });
+  const module = device.createShaderModule({ code: withEnv(WGSL) });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
@@ -806,6 +808,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const groupBuf = storage(L.NGROUP * 32);
   let movers = null; // the map's moving boxes (client/movers.mjs), rewritten each frame
   const vmBuf = storage(MAX_VM * 48);
+  const envBuf = device.createBuffer({ size: ENV_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  let envNow = null;
   let nbox = 0, ngroup = 0;
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -820,6 +824,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
       // the bodies, projectiles, sprites and beams are read by the vertex stage, the rest by the fragment's: at most 8 a stage
       ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((b) => ({ binding: b, visibility: b <= 6 ? GPUShaderStage.VERTEX : GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      { binding: 14, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
   });
   const bind = device.createBindGroup({
@@ -829,6 +834,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, resource: hmap.createView() },
       { binding: 2, resource: smap.createView() },
       ...[playerBuf, projBuf, spriteBuf, beamBuf, rectBuf, hudBuf, fontBuf, graphBuf, boxBuf, groupBuf, vmBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
+      { binding: 14, resource: { buffer: envBuf } },
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
@@ -889,11 +895,13 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     //      crosshair, gap, marker, hurt, scope, text, graph, sides (0 colour by slot, 1 one side against the rest, 2 red and blue by PF_BLUE),
     //      zone (null, or { x, z, r, y, h, color: [r,g,b], pulse }: a disc painted on the terrain and box tops within h of y, any height
     //      without y; or a list of up to MAX_ZONE of them, all in the first one's band),
-    //      storm (null, or a battle royale's zone { x, z, r, next: { x, z, r } | null }: client/am/royale.mjs) }
+    //      storm (null, or a battle royale's zone { x, z, r, next: { x, z, r } | null }: client/am/royale.mjs),
+    //      env (the hour: 'day', 'dusk' or 'night', client/lowpoly.mjs ENVS; day without one) }
     frame(u8, s, target) {
       // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
       if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
       if (!ctx && !target) return;
+      if ((s.env || 'day') !== envNow) { envNow = s.env || 'day'; device.queue.writeBuffer(envBuf, 0, envPack(envNow)); }
       const { focal, horizon } = lens(s, W, H);
       const sprites = [...s.solid, ...s.glow].slice(0, MAX_SPRITE);
       const zs = (Array.isArray(s.zone) ? s.zone : s.zone ? [s.zone] : []).slice(0, MAX_ZONE);

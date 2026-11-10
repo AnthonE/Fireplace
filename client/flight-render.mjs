@@ -18,7 +18,7 @@ import * as L from '../src/layout.mjs';
 import * as F from '../src/flight.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, FX_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 
 export const COLS = 80;
@@ -82,11 +82,13 @@ struct U {
 @group(0) @binding(10) var<storage, read> graph: array<vec4f>;
 @group(0) @binding(11) var<storage, read> boxes: array<vec4f>;  // two a box: x0, y0, z0, material | x1, y1, z1, 0
 @group(0) @binding(12) var<storage, read> groups: array<vec4f>; // two a group: x0, y0, z0, first box | x1, y1, z1, count
+${ENV_WGSL}@group(0) @binding(13) var<uniform> env: Env; // the hour (client/lowpoly.mjs ENVS)
 
 const FOG = 800.0;
 ${LOWPOLY_WGSL}
 ${GROUND_WGSL}
 ${BOXES_WGSL}
+${FX_WGSL}
 
 fn hgt(x: f32, z: f32) -> f32 {
   let g = clamp(vec2f(x, z) * 0.5, vec2f(0.0), vec2f(510.99));
@@ -446,11 +448,10 @@ fn fireball(uv: vec2f, age: f32) -> vec4f {
 
 // glowing sprites, blended: 3 a blast, 5 a spark, 6 a ring
 @fragment fn fs_glow(s: SOut) -> @location(0) vec4f {
-  let r2 = dot(s.uv, s.uv);
-  if (r2 > 1.0 || s.kind == 7u) { discard; }
-  var a = s.color.a * (1.0 - r2);
-  if (s.kind == 6u) { a = s.color.a * smoothstep(0.5, 1.0, r2) * 2.0; }
-  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a * 1.7, a);
+  if (s.kind == 7u) { discard; }
+  let c = celGlow(s.uv, s.kind, s.color, u.fwd.w);
+  if (c.a <= 0.0) { discard; }
+  return c;
 }
 
 // ---- beams: lasers and trails, a quad between two projected points
@@ -478,8 +479,7 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @locatio
   return o;
 }
 @fragment fn fs_beam(b: BOut) -> @location(0) vec4f {
-  let a = b.color.a * (1.0 - abs(b.across) * 0.6);
-  return vec4f(mix(b.color.rgb, vec3f(1.0), (1.0 - abs(b.across)) * 0.5) * a * 2.0, a);
+  return celBeam(b.across, b.color);
 }
 
 // ---- HUD
@@ -589,7 +589,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const W = canvas.width, H = canvas.height;
   const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
   const rows = Math.floor(200 / 6);
-  const module = device.createShaderModule({ code: WGSL });
+  const module = device.createShaderModule({ code: withEnv(WGSL) });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
@@ -610,6 +610,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const groupBuf = storage(L.NGROUP * 32);
   let movers = null; // the map's moving boxes (client/movers.mjs), rewritten each frame
   let nbox = 0, ngroup = 0, bounds = [0, 1024, 0, 1024];
+  const envBuf = device.createBuffer({ size: ENV_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  let envNow = null; // the hour last written: s.env ('day', 'dusk' or 'night', client/lowpoly.mjs ENVS), day without one
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -623,6 +625,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
       ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((b) => ({ binding: b, visibility: b <= 6 ? GPUShaderStage.VERTEX : GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      { binding: 13, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
   });
   const bind = device.createBindGroup({
@@ -632,6 +635,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, resource: hmap.createView() },
       { binding: 2, resource: smap.createView() },
       ...[playerBuf, projBuf, spriteBuf, beamBuf, rectBuf, hudBuf, fontBuf, graphBuf, boxBuf, groupBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
+      { binding: 13, resource: { buffer: envBuf } },
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
@@ -697,6 +701,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
       if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
       if (!ctx && !target) return;
+      if ((s.env || 'day') !== envNow) { envNow = s.env || 'day'; device.queue.writeBuffer(envBuf, 0, envPack(envNow)); }
       const sprites = s.glow.slice(0, MAX_SPRITE);
       const { f, r, u } = s.basis;
       const radar = s.radar || [0, 0, 0];

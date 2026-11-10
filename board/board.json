@@ -113,7 +113,7 @@
       "png": "traces/arena-look-track.png",
       "refs": [],
       "page": {
-        "src": "arena.html?local=1&cam=440,24,500,20,-6&seed=3163387923&present=0&res=960x600",
+        "src": "arena.html?local=1&env=day&cam=440,24,500,20,-6&seed=3163387923&present=0&res=960x600",
         "api": "__qa",
         "shot": "track"
       }
@@ -132,7 +132,7 @@
       "png": "traces/arena-look-rim.png",
       "refs": [],
       "page": {
-        "src": "arena.html?local=1&cam=440,70,470,25,-20&seed=3163387923&present=0&res=960x600",
+        "src": "arena.html?local=1&env=day&cam=440,70,470,25,-20&seed=3163387923&present=0&res=960x600",
         "api": "__qa",
         "shot": "rim"
       }
@@ -151,7 +151,7 @@
       "png": "traces/arena-look-sky.png",
       "refs": [],
       "page": {
-        "src": "arena.html?local=1&cam=440,24,500,42,24&seed=3163387923&present=0&res=960x600",
+        "src": "arena.html?local=1&env=day&cam=440,24,500,42,24&seed=3163387923&present=0&res=960x600",
         "api": "__qa",
         "shot": "sky"
       }
@@ -170,7 +170,7 @@
       "png": "traces/flight-look-ships.png",
       "refs": [],
       "page": {
-        "src": "flight.html?local=1&bot=1&seed=3163387923&present=0&res=960x600",
+        "src": "flight.html?local=1&env=day&bot=1&seed=3163387923&present=0&res=960x600",
         "api": "__qf",
         "shot": "ships"
       }

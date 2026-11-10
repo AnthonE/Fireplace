@@ -6,9 +6,10 @@
 // close up, rock in strata; the sky runs from cobalt overhead to a pale
 // horizon, cumulus piled along it and flat clouds overhead, each white on
 // its sunny side and lavender under, their shadows drifting over the ground;
-// far things fade into the horizon's haze. Colours may go past 1: the frame
-// is finished by client/post.mjs (ink lines, bloom, the roll-off). A renderer
-// brings `hgt(x, z)`, the surface texture `smap` and FOG (metres); the box
+// far things fade into the horizon's haze. The hour is a uniform (day, dusk
+// or night: ENVS). Colours may go past 1: the frame is finished by
+// client/post.mjs (ink lines, bloom, the roll-off). A renderer brings
+// `hgt(x, z)`, the surface texture `smap`, FOG (metres) and `env`; the box
 // half (BOXES_WGSL) also wants `boxes`, `groups` and u.map. Drawing only,
 // like everything a renderer does.
 
@@ -25,18 +26,44 @@ export function hudFrame(W, H) {
 // shows more at the sides, not less up and down (party's rule).
 export const focalFor = (W, H, k = 0.62) => Math.min(W, H * 1.6) * k;
 
+// The hour: where the light comes from and every colour that follows from
+// it, a uniform each renderer declares as \`env\` (ENV_WGSL is its struct) and
+// writes each frame from envPack(name). In the WGSL below, and in the
+// renderers' own once it has been through withEnv(), the names SUN, SUNC,
+// SKY_TOP, SKY_HOR, HAZE, TONE_SHADE, TONE_MID, TONE_LIT, CLOUD_LIT and
+// CLOUD_SHADE read it. Day is the look as first drawn; dusk has the sun 15
+// degrees up in the west, so shadows run long and what is lit goes gold;
+// night is the moon's, blue, with stars, and what glows shows the more.
+// Drawing only: a match's hour comes from its seed (envOf), so a room sees
+// one sky, but nothing in the sim knows it.
+const dir = (az, el) => { const a = az * Math.PI / 180, e = el * Math.PI / 180; return [Math.cos(e) * Math.cos(a), Math.sin(e), Math.cos(e) * Math.sin(a)]; };
+export const ENVS = {
+  //        toward the light        its colour, its disc past white   the sky overhead        at the horizon          what far things fade to
+  day: { sun: [0.5528, 0.6634, 0.5025], stars: 0, sunc: [1.0, 0.96, 0.86], disc: 6, skyTop: [0.09, 0.34, 0.86], skyHor: [0.72, 0.9, 1.0], haze: [0.78, 0.92, 1.0],
+    // what a colour is multiplied by in shadow, turned from the light, and in it; a cloud's lit side and its other
+    shade: [0.5, 0.53, 0.82], mid: [0.82, 0.85, 0.97], lit: [1.06, 1.03, 0.95], cloudLit: [1.04, 1.03, 1.0], cloudShade: [0.7, 0.78, 0.97] },
+  dusk: { sun: dir(205, 15), stars: 0, sunc: [1.0, 0.72, 0.42], disc: 5, skyTop: [0.2, 0.26, 0.66], skyHor: [1.0, 0.7, 0.5], haze: [1.0, 0.78, 0.62],
+    shade: [0.44, 0.42, 0.74], mid: [0.8, 0.7, 0.78], lit: [1.14, 0.98, 0.78], cloudLit: [1.12, 0.86, 0.68], cloudShade: [0.62, 0.5, 0.74] },
+  night: { sun: dir(130, 50), stars: 1, sunc: [0.5, 0.58, 0.85], disc: 2.2, skyTop: [0.02, 0.04, 0.15], skyHor: [0.09, 0.16, 0.38], haze: [0.1, 0.17, 0.38],
+    shade: [0.17, 0.25, 0.6], mid: [0.3, 0.44, 0.86], lit: [0.46, 0.66, 1.08], cloudLit: [0.44, 0.54, 0.86], cloudShade: [0.14, 0.2, 0.46] },
+};
+export const ENV_FLOATS = 40;
+export const envPack = (name) => {
+  const e = ENVS[name] || ENVS.day;
+  // lit.w: how squarely a surface must face the light for the lit tone, level ground always making it
+  return Float32Array.of(...e.sun, e.stars, ...e.sunc, e.disc, ...e.skyTop, 0, ...e.skyHor, 0, ...e.haze, 0, ...e.shade, 0, ...e.mid, 0, ...e.lit, e.sun[1] * 0.85, ...e.cloudLit, 0, ...e.cloudShade, 0);
+};
+// A match's hour, from its seed: day four times in six, dusk once, night once.
+export const envOf = (seed) => ['day', 'dusk', 'day', 'night', 'day', 'day'][(Math.imul(seed >>> 0, 0x9e3779b1) >>> 0) % 6];
+export const ENV_WGSL = /* wgsl */ `
+struct Env { sun: vec4f, sunc: vec4f, skyTop: vec4f, skyHor: vec4f, haze: vec4f, shade: vec4f, mid: vec4f, lit: vec4f, cloudLit: vec4f, cloudShade: vec4f };
+`;
+const ENV_NAMES = { SUNC: 'env.sunc.rgb', SUN: 'env.sun.xyz', SKY_TOP: 'env.skyTop.rgb', SKY_HOR: 'env.skyHor.rgb', HAZE: 'env.haze.rgb', TONE_SHADE: 'env.shade.rgb',
+  TONE_MID: 'env.mid.rgb', TONE_LIT: 'env.lit.rgb', CLOUD_LIT: 'env.cloudLit.rgb', CLOUD_SHADE: 'env.cloudShade.rgb' };
+// A renderer's whole WGSL with the hour's names read from its \`env\`.
+export const withEnv = (wgsl) => wgsl.replace(/\b(SUNC|SUN|SKY_TOP|SKY_HOR|HAZE|TONE_SHADE|TONE_MID|TONE_LIT|CLOUD_LIT|CLOUD_SHADE)\b/g, (m) => ENV_NAMES[m]);
+
 export const LOWPOLY_WGSL = /* wgsl */ `
-const SKY_HOR = vec3f(0.72, 0.9, 1.0);
-const SKY_TOP = vec3f(0.09, 0.34, 0.86);
-const HAZE = vec3f(0.78, 0.92, 1.0);
-const SUN = vec3f(0.5528, 0.6634, 0.5025); // unit
-const SUNC = vec3f(1.0, 0.96, 0.86);
-// what a colour is multiplied by in shadow, turned from the sun, and in it
-const TONE_SHADE = vec3f(0.5, 0.53, 0.82);
-const TONE_MID = vec3f(0.82, 0.85, 0.97);
-const TONE_LIT = vec3f(1.06, 1.03, 0.95);
-const CLOUD_LIT = vec3f(1.04, 1.03, 1.0);
-const CLOUD_SHADE = vec3f(0.7, 0.78, 0.97);
 
 fn hash2(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
 fn vnoise(p: vec2f) -> f32 {
@@ -105,9 +132,10 @@ fn surfAt(w: vec2f) -> vec2f {
 fn grain(w: vec2f, z: f32) -> f32 { return 1.0 + (vnoise(w * 2.5) + vnoise(w * 0.9) - 1.0) * 0.07 * (1.0 - smoothstep(10.0, 40.0, z)); }
 
 // The three tones, by how squarely a surface faces the light (l, the cosine,
-// 0 in a shadow): the edges between them a few hundredths wide.
+// 0 in a shadow): the edges between them a few hundredths wide. Level ground
+// in the open is always in the lit one, however low the sun.
 fn cel(l: f32) -> vec3f {
-  return mix(mix(TONE_SHADE, TONE_MID, smoothstep(0.0, 0.05, l)), TONE_LIT, smoothstep(0.56, 0.61, l));
+  return mix(mix(TONE_SHADE, TONE_MID, smoothstep(0.0, 0.05, l)), TONE_LIT, smoothstep(env.lit.w, env.lit.w + 0.05, l));
 }
 // Sun and sky on a surface facing n, the sun's share by k (0 in a shadow);
 // what faces up is a little lighter in any tone, for the sky on it.
@@ -144,7 +172,7 @@ fn cloudAt(q: vec2f) -> f32 { return vnoise(q / 210.0) * 0.62 + vnoise(q / 70.0)
 // And their shadows on the world at p, drifting with them: what to multiply a colour by.
 fn cloudShade(p: vec3f, time: f32) -> vec3f {
   let q = p.xz + SUN.xz * ((300.0 - p.y) / SUN.y) + vec2f(time * 2.0, 0.0);
-  return mix(vec3f(1.0), vec3f(0.86, 0.89, 0.97), smoothstep(0.56, 0.62, cloudAt(q)));
+  return mix(vec3f(1.0), vec3f(0.86, 0.89, 0.97), smoothstep(0.56, 0.62, cloudAt(q)) * step(0.05, SUN.y));
 }
 
 // A cumulus's lumps at a round the horizon and el up it, 0 in a crease to 1 on a lump's crown.
@@ -162,7 +190,12 @@ fn sky(d: vec3f, e: vec3f, time: f32) -> vec3f {
   var c = mix(SKY_HOR, SKY_TOP, pow(y, 0.5));
   c = mix(c, HAZE, exp(-y * 10.0) * 0.8);
   let sd = max(dot(d, SUN), 0.0);
-  c += SUNC * (pow(sd, 6.0) * 0.16 + pow(sd, 90.0) * 0.5 + smoothstep(0.9989, 0.9993, sd) * 6.0);
+  c += SUNC * (pow(sd, 6.0) * 0.16 + pow(sd, 90.0) * 0.5 + smoothstep(0.9989, 0.9993, sd) * env.sunc.w);
+  // stars, a night's: a dot in three cells in two hundred of the sky's
+  if (env.sun.w > 0.0 && d.y > 0.0) {
+    let g = d * 120.0;
+    if (hash3(floor(g)) > 0.985 && length(fract(g) - 0.5) < 0.24) { c += vec3f(0.9, 0.95, 1.0) * env.sun.w * smoothstep(0.0, 0.15, d.y); }
+  }
   // the cumulus: on a cylinder round the eye, a (round it) and el (up it); a skyline of big heaps, their edge in
   // round lumps (the noise folded, so it creases between them), finer ones on those
   let across = length(d.xz);
@@ -249,6 +282,44 @@ fn groundPaint(w: vec2f, y: f32, z: f32, pw: f32) -> Ground {
   }
   g.c = c;
   return g;
+}
+`;
+
+// What glows, drawn flat as a cartoon draws it (the arena's and Dogfight's
+// blended sprites and beams), premultiplied and past white so it blooms:
+// uv across the sprite's square, col its colour with an alpha that runs from
+// its start down to 0 over its life. Kind 3 is a blast (a muzzle's flash, a
+// kill, an explosion): a spiked burst in three flat bands, white-hot inside,
+// breaking up in holes from its rim as it ages. 5 a glint, four points. 6 a
+// ring of dashes going round (a shield, a spawn, a teleporter).
+export const FX_WGSL = /* wgsl */ `
+fn celGlow(uv: vec2f, kind: u32, col: vec4f, time: f32) -> vec4f {
+  let r = length(uv);
+  let ang = atan2(uv.y, uv.x);
+  if (kind == 5u) {
+    let s = sqrt(abs(uv.x)) + sqrt(abs(uv.y));
+    if (s > 1.0) { return vec4f(0.0); }
+    let k = min(col.a * 2.0, 1.0);
+    return vec4f(select(col.rgb * 1.8, vec3f(2.4, 2.4, 2.1), s < 0.6) * k, k);
+  }
+  if (kind == 6u) {
+    if (r > 1.0) { return vec4f(0.0); }
+    let ring = step(0.8, r) * step(r, 0.96) * step(0.35, fract(ang / 6.2832 * 12.0 + time * 0.8));
+    let k = clamp(col.a * 1.5, 0.0, 1.0) * (ring * 0.9 + 0.14);
+    return vec4f(mix(col.rgb, vec3f(1.0), ring * 0.4) * 1.6 * k, k);
+  }
+  let age = 1.0 - col.a;
+  let rim = 0.66 + 0.3 * abs(fract(ang / 6.2832 * 9.0 + 0.11 * sin(ang * 4.0) + age * 0.4) - 0.5) * 2.0;
+  if (r > rim) { return vec4f(0.0); }
+  let k = r / rim;
+  if (vnoise(uv * 3.5 + vec2f(age * 3.0, -age)) < age * 1.6 - 0.55 + k * 0.5) { return vec4f(0.0); }
+  let c = select(select(col.rgb * 0.8, col.rgb * 1.5 + 0.15, k < 0.76), vec3f(2.6, 2.5, 2.1), k < 0.34 - 0.25 * age);
+  return vec4f(c, 1.0);
+}
+// A beam's pixel, across from -1 to 1 over its width: a white-hot core in its colour's sheath.
+fn celBeam(across: f32, col: vec4f) -> vec4f {
+  let a = col.a * step(abs(across), 0.92);
+  return vec4f(select(col.rgb * 1.5, vec3f(2.4, 2.4, 2.2), abs(across) < 0.42) * a, a);
 }
 `;
 

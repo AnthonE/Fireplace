@@ -10,7 +10,7 @@
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
-import { LOWPOLY_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { LOWPOLY_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
@@ -55,6 +55,7 @@ struct U {
 @group(0) @binding(8) var<storage, read> font: array<u32>;
 @group(0) @binding(9) var<storage, read> graph: array<vec4f>;
 @group(0) @binding(10) var<storage, read> trees: array<vec4f>; // two a tree: x, ground y, z, size | turn, style, leaf colour (rgba8 bits), 0
+${ENV_WGSL}@group(0) @binding(11) var<uniform> env: Env;
 
 const FOG = 700.0;
 ${LOWPOLY_WGSL}
@@ -590,7 +591,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const W = canvas.width, H = canvas.height;
   const { hudScale: hs, hudX, hudY } = hudFrame(W, H);
   const rows = Math.floor(200 / 6);
-  const module = device.createShaderModule({ code: WGSL });
+  const module = device.createShaderModule({ code: withEnv(WGSL) });
   const info = await module.getCompilationInfo();
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
@@ -606,6 +607,9 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const fontBuf = storage(fontAll.length * 4);
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const treeBuf = storage(MAX_TREE * 32);
+  // the hour (client/lowpoly.mjs ENVS): golf is played by day, its trees' shadows drawn for that sun
+  const envBuf = device.createBuffer({ size: ENV_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(envBuf, 0, envPack('day'));
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
@@ -618,6 +622,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
       ...[3, 4, 5, 6, 7, 8, 9, 10].map((b) => ({ binding: b, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      { binding: 11, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
   });
   const bind = device.createBindGroup({
@@ -627,6 +632,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       { binding: 1, resource: hmap.createView() },
       { binding: 2, resource: smap.createView() },
       ...[ballBuf, playerBuf, projBuf, flashBuf, hudBuf, fontBuf, graphBuf, treeBuf].map((buffer, k) => ({ binding: 3 + k, resource: { buffer } })),
+      { binding: 11, resource: { buffer: envBuf } },
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });

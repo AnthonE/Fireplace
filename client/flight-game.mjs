@@ -24,6 +24,7 @@ import * as F from '../src/flight.mjs';
 import { flightWord, modeName } from '../src/flight-view.mjs';
 import { unpackArena } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, project, basis } from './flight-render.mjs';
+import { ENVS, envOf } from './lowpoly.mjs';
 import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
@@ -193,6 +194,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   let banner = { text: '', until: 0, color: C.YELLOW };
   let medal = { text: '', until: 0 };
   let marker = 0, hurt = 0;
+  const HOUR = ENVS[host.q?.get('env')] ? host.q.get('env') : '';
   let fxSeen = 0, seed = -1, keysSeen = -1, lastKill = -1e9, multi = 0, spree = 0, matchSeen = -1, dealt = false;
   const played = {};
   const newer = (a, b) => { const d = (a - b) & 0xffff; return d > 0 && d < 0x8000; };
@@ -647,6 +649,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       cam, basis: cv.basis, zoom: 1, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, slot: meRec ? slot : -1, me: meRec, ceiling,
       glow, beams, rects, radar, text, graph, marker, hurt, crosshair: playing && !WATCH && !f.dead && !FIXED ? 1 : 0,
       sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES) !== 0 ? 1 : 0, tints: tintsOf(host),
+      // the hour, the match's own (client/lowpoly.mjs envOf; ?env= holds one)
+      env: HOUR || envOf((seed ^ Math.imul(h.hole + 1, 0x85ebca6b)) >>> 0),
     };
     renderer.frame(u8, last, target);
   }

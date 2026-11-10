@@ -14,6 +14,7 @@ import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
 import { arenaWord, unpackArena, boxRay } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, PALETTE, project } from './arena-render.mjs';
+import { ENVS, envOf } from './lowpoly.mjs';
 import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
@@ -209,6 +210,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   let medal = { text: '', until: 0 };
   let marker = 0, hurt = 0, kick = 0, lastShotAt = -1e9, meleeAt = -1e9, swapAt = -1e9, lastSlot = 0, lastWeapon = 0;
   let dealt = false;
+  const HOUR = ENVS[host.q?.get('env')] ? host.q.get('env') : '';
   let fxSeen = 0, seed = -1, keysSeen = -1, spawnedAt = -1, lastKill = -1e9, multi = 0, spree = 0, matchSeen = -1;
   const played = {}; // kind -> newest of my shot numbers played
   const newer = (a, b) => { const d = (a - b) & 0xffff; return d > 0 && d < 0x8000; };
@@ -593,6 +595,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const spread = ARMS[f?.weapon]?.spread || 0;
     last = {
       cam, yaw: camYaw, pitch: camPitch, zoom, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, slot: tgt ? watched : slot < 0 ? 999 : slot,
+      // the hour, the match's own (client/lowpoly.mjs envOf; ?env= holds one)
+      env: HOUR || envOf((seed ^ Math.imul(h.hole + 1, 0x85ebca6b)) >>> 0),
       solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone, storm: out.storm,
       crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, cam) ? 8 : 0), gap: spread / 30 + kick * 3,
       tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),

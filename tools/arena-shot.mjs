@@ -9,7 +9,7 @@
 // page instead (client/arena-render-demo.mjs: fighters held still up close,
 // no sim) into traces/arena-demo-<scene>.png. Frame times mean nothing on a
 // software GPU.
-//   node tools/arena-shot.mjs [--views track,rim,ships] [--scenes figures,teams,effects] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
+//   node tools/arena-shot.mjs [--views track,rim,ships] [--scenes figures,teams,effects [--env dusk]] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { serve } from './serve.mjs';
@@ -18,14 +18,17 @@ import { serve } from './serve.mjs';
 const SEED = 3163387923;
 // name: [the file's game, the page, its query, the hook the page leaves on window]
 const VIEWS = {
-  track: ['arena', 'arena.html', 'local=1&cam=440,24,500,20,-6', '__qa'],
-  rim: ['arena', 'arena.html', 'local=1&cam=440,70,470,25,-20', '__qa'],
-  yard: ['arena', 'arena.html', 'local=1&cam=600,26,560,200,-8', '__qa'],
-  base: ['arena', 'arena.html', 'local=1&cam=540,23,480,35,-4', '__qa'],
-  sky: ['arena', 'arena.html', 'local=1&cam=440,24,500,42,24', '__qa'],
-  watch: ['arena', 'arena.html', 'local=1&watch=1', '__qa'],
-  eyes: ['arena', 'arena.html', 'local=1&bot=1', '__qa'],
-  ships: ['flight', 'flight.html', 'local=1&bot=1', '__qf'],
+  track: ['arena', 'arena.html', 'local=1&env=day&cam=440,24,500,20,-6', '__qa'],
+  rim: ['arena', 'arena.html', 'local=1&env=day&cam=440,70,470,25,-20', '__qa'],
+  yard: ['arena', 'arena.html', 'local=1&env=day&cam=600,26,560,200,-8', '__qa'],
+  base: ['arena', 'arena.html', 'local=1&env=day&cam=540,23,480,35,-4', '__qa'],
+  sky: ['arena', 'arena.html', 'local=1&env=day&cam=440,24,500,42,24', '__qa'],
+  dusk: ['arena', 'arena.html', 'local=1&env=dusk&cam=600,26,560,200,-8', '__qa'],
+  night: ['arena', 'arena.html', 'local=1&env=night&cam=440,24,500,20,-6', '__qa'],
+  watch: ['arena', 'arena.html', 'local=1&env=day&watch=1', '__qa'],
+  eyes: ['arena', 'arena.html', 'local=1&env=day&bot=1', '__qa'],
+  ships: ['flight', 'flight.html', 'local=1&env=day&bot=1', '__qf'],
+  'ships-dusk': ['flight', 'flight.html', 'local=1&env=dusk&bot=1', '__qf'],
 };
 // A view's page, as the board's page.src has it.
 const srcOf = (name, res = '960x600') => `${VIEWS[name][1]}?${VIEWS[name][2]}&seed=${SEED}&present=0&res=${res}`;
@@ -50,7 +53,7 @@ try {
   if (opt('scenes', '')) {
     const page = await browser.newPage({ viewport: { width: W, height: H } });
     page.on('pageerror', (e) => { failed = true; process.stderr.write(`[chrome demo] ${e.message}\n`); });
-    await page.goto(`http://127.0.0.1:${port}/client/arena-render-demo.html?present=0&res=${res}`);
+    await page.goto(`http://127.0.0.1:${port}/client/arena-render-demo.html?present=0&res=${res}${opt('env', '') ? `&env=${opt('env')}` : ''}`);
     await page.waitForFunction(() => window.__demo, null, { timeout: 180000 });
     const err = await page.evaluate(() => window.__demo.error);
     if (err) throw new Error(err);

@@ -37,7 +37,7 @@ node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
-node tools/arena-shot.mjs [--views track,ships]   # the arena's and Dogfight's views of it alone: a local room on a fixed seed, into traces/
+node tools/arena-shot.mjs [--views track,ships] [--scenes figures,faces [--env night]]   # the arena's and Dogfight's views of it alone (a local room on a fixed seed), or the arena renderer's demo page with no sim, into traces/
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -205,8 +205,12 @@ shell whose own command line contains the name: it kills that shell.
   `target` (a texture) when given one: that is how the TV shows a game.
   Golf's, the arena's and Dogfight's share a cartoon's look (docs/look.md):
   `client/lowpoly.mjs` is the paint (three tones through `cel`/`light`, the
-  hills' shadows, the sky), `client/post.mjs` the finish (ink from depth,
-  bloom, FXAA). Their world's pipelines draw into the post's float texture,
+  hills' shadows, the sky, what glows), `client/figure.mjs` the person
+  (the arena's fighter, golf's golfer: a distance field, dressed by each
+  renderer's `kitOf`), `client/post.mjs` the finish (ink from depth,
+  bloom, FXAA). The hour (day, dusk, night) is a uniform, `env`: a
+  renderer's WGSL names the light as `SUN`, `TONE_LIT`, `HAZE`... and goes
+  through `withEnv()`; a match's hour is its seed's (`envOf`), drawing only. Their world's pipelines draw into the post's float texture,
   colours past 1 allowed, with depth written linear (metres ahead over far);
   the HUD's pipeline draws in the post's last pass, straight onto the frame.
 - A frontend sends the ground and the map to the GPU at a new seed and again

@@ -3,7 +3,7 @@
 // be looked at from 4 m, standing still, in every body, side and pose, which
 // a match never holds still for. tools/arena-shot.mjs reads each scene back
 // with shot() (headless Chrome, ?present=0) into traces/arena-demo-<scene>.png;
-// in a browser it draws the one in ?scene=, moving.
+// in a browser it draws the one in ?scene=, moving; ?env=dusk or night for the hour.
 //   figures: every body (client/looks.mjs), an avatar, a zombie and a juggernaut, standing, running and aiming
 //   faces: four of them from 2.8 m
 //   teams: red and blue facing each other, a flag and a skull between them
@@ -116,7 +116,7 @@ async function main() {
     const s = {
       cam: [CX, FLOOR + 2, CX], yaw: 0, pitch: 0, zoom: 1, time: t, tick: 0, dt: 0, dtPred: 0, proj: L.PROJ, slot: 999,
       solid: [], glow: [], beams: [], rects: [], tracker: null, text, graph: null, marker: 0, hurt: 0, scope: false, sides: 0, zone: null, crosshair: 7, gap: 0,
-      tints, looks, avatars,
+      tints, looks, avatars, env: q.get('env') || 'day',
     };
     SCENES[name](s);
     return s;
