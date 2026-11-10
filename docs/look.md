@@ -14,8 +14,10 @@ node tools/board.mjs mark couch wrong "the fire outshines the TV"
 
 **A view** is one fixed picture: a demo scene in `client/party-render-demo.mjs`
 (`looks`, `crowd`, `thinice~over`, `horizon@sunset`, ...) shot by
-`tools/party-shot.mjs`, or a room theme from the couch by
-`tools/theme-shots.mjs`. Both run Chromium on SwiftShader with `?present=0`,
+`tools/party-shot.mjs`, a room theme from the couch by
+`tools/theme-shots.mjs`, or the arena or Dogfight in a local room on a fixed
+seed (`track`, `rim`, `sky`, `ships`: a camera held over Box Canyon, or a
+bot's own) by `tools/arena-shot.mjs`. All run Chromium on SwiftShader with `?present=0`,
 so a box with no graphics card draws the real frame (a second or more each).
 Views that share a shooter are shot by one run of it. A new view is a line in
 the board naming its shooter, the PNG it writes, what it shows (`what`) and
@@ -55,6 +57,51 @@ your words), and **send it in** downloads the board, the marks and the
 pictures for a pull request; **brief for an agent** copies what an agent
 running the elo-look skill needs to start. A view's `name` is what the page
 and the sheet call it.
+
+## The cartoon: golf's, the arena's and Dogfight's look
+
+Those three share one look in two files, nothing in either hashed.
+`client/lowpoly.mjs` is the paint, WGSL each renderer declares beside its
+own. `client/post.mjs` is the finish, a module each renderer draws its world
+through.
+
+The paint:
+
+- **Three tones.** `cel()` turns the cosine to the sun into what a colour is
+  multiplied by: in shadow (0.5, 0.53, 0.82), turned from the sun
+  (0.82, 0.85, 0.97), in it (1.06, 1.03, 0.95), the edges 0.05 wide. Shadow
+  is violet, not grey. An axis-aligned box comes out one tone a face: its
+  top lit, two walls turned, two in shadow.
+- **Shadows.** The boxes cast them as before (a ray to the sun through the
+  map's boxes). The ground now does too: `hillLit` marches 22 growing steps
+  toward the sun over the heights, 386 m at most, stopping once clear of the
+  highest ground. A fighter's own is an ellipse on the level of its feet,
+  multiplied in where the sun reaches. The flat clouds' shadows drift over
+  the ground and the boxes.
+- **The ground** (`groundPaint`, the arena's and Dogfight's; golf keeps its
+  mown stripes) is lit by its slope over 3 m each way, 12 m far off, rather
+  than a 4 m facet's, so a hill's dark side has a curved edge. Grass is three
+  greens in patches with strokes and a few flowers inside 40 m; anything
+  steeper than 0.74 up is a cliff in strata 2.1 m deep.
+- **The sky**: cobalt overhead to a pale horizon, the sun past white,
+  cumulus piled round the horizon (noise on a cylinder, its lumps the noise
+  folded) and flat clouds on a layer 300 m up, every cloud two flat
+  colours. Far things fade to the horizon's haze by the square of the
+  distance, so near colours stay as painted and the world's far edge is gone.
+
+The finish, per frame: the world into an `rgba16float` texture and a linear
+depth; a bloom of what is past 0.92 (the sun, lights, tracers, blasts,
+engines), five halvings down and back up; ink wherever the second difference
+of 1/depth passes 0.035 (zero across any plane, so only silhouettes and
+creases), 1 px wide at 600 rows, fading over 170 m (320 m in Dogfight, where
+a ship is read by its outline); a roll-off above 0.8 that keeps a colour's
+hue; FXAA; then the HUD, by the renderer's own pipeline in that last pass,
+so text is never blurred.
+
+**Measured**, on SwiftShader at 960 x 600 (a software GPU, with the test
+suite running beside it, so only the ratio means anything): a frame of the
+arena went from 5.3 s to 6.3 s, of Dogfight from 8.5 s to 9.5 s. Not
+measured: any real GPU.
 
 `tools/board.mjs` is vendored from the Elo Pros agent kit
 (`skills/elo-look/scripts/board.mjs` in elo-pros-launcher): fix it there and copy it

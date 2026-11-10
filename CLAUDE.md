@@ -37,6 +37,7 @@ node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
+node tools/arena-shot.mjs [--views track,ships]   # the arena's and Dogfight's views of it alone: a local room on a fixed seed, into traces/
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -202,6 +203,15 @@ shell whose own command line contains the name: it kills that shell.
   `test/studio.test.mjs` holds the page's build to `npm run build`'s bytes.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
+  Golf's, the arena's and Dogfight's share a cartoon's look (docs/look.md):
+  `client/lowpoly.mjs` is the paint (three tones through `cel`/`light`, the
+  hills' shadows, the sky), `client/post.mjs` the finish (ink from depth,
+  bloom, FXAA). Their world's pipelines draw into the post's float texture,
+  colours past 1 allowed, with depth written linear (metres ahead over far);
+  the HUD's pipeline draws in the post's last pass, straight onto the frame.
+- A frontend sends the ground and the map to the GPU at a new seed and again
+  after every keyframe (`CL_KEYS`): the sim lays them afresh on one, in its
+  own time.
 - The room's look is a theme (`client/themes/<id>.json`, `client/themes.mjs`):
   data only the room's shader reads, local to the viewer, never the sim.
   Grandma's writes out every default. A new colour goes in `COLORS`, the

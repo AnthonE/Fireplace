@@ -1,14 +1,17 @@
-// Golf's WebGPU renderer, three passes: the terrain ray-marched per pixel
-// (voxel space, pitch by shearing) and drawn low-poly, flat triangles in
-// clean colours under a blue sky with clouds, writing depth; then bodies as
-// depth-tested splats uploaded straight from the sim's shared memory (balls,
-// the golfers as the arena's blocky figures, and trees of boxes in the rough
-// with their shadows); then a HUD on a 320 x 200 grid scaled to the screen.
+// Golf's WebGPU renderer: the terrain ray-marched per pixel (voxel space,
+// pitch by shearing) and painted as a cartoon's (client/lowpoly.mjs: three
+// flat tones, the hills' shadows, rock in strata, a summer sky), writing
+// depth; then bodies as depth-tested splats uploaded straight from the
+// sim's shared memory (balls, the golfers as the arena's blocky figures, and
+// trees of boxes in the rough with their shadows); the frame finished by
+// client/post.mjs (ink lines, bloom, FXAA); then a HUD on a 320 x 200 grid
+// scaled to the screen, onto the finished frame.
 // Nothing here is hashed, so any math goes.
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
@@ -70,8 +73,8 @@ fn hgt(x: f32, z: f32) -> f32 {
 fn surfColor(sw: vec2f, w: vec2f, tint: f32) -> vec3f {
   let stripe = select(0.93, 1.07, (i32(floor(dot(w, vec2f(-u.hole.y, u.hole.x)) / 6.0)) & 1) == 0);
   switch u32(sw.x) {
-    case 0u: { return vec3f(0.36, 0.74, 0.24) * stripe; }
-    case 1u: { return vec3f(0.22, 0.54, 0.17) * (0.92 + 0.14 * tint); }
+    case 0u: { return vec3f(0.4, 0.78, 0.24) * stripe; }
+    case 1u: { return vec3f(0.24, 0.58, 0.2) * (0.94 + 0.1 * tint); }
     case 2u: { return select(vec3f(0.98, 0.88, 0.6), vec3f(0.86, 0.74, 0.48), sw.y < 0.62); }
     default: { return vec3f(0.44, 0.84, 0.32) * select(0.97, 1.03, ((i32(floor(w.x / 3.0)) + i32(floor(w.y / 3.0))) & 1) == 0); }
   }
@@ -120,12 +123,17 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   z = b;
   let w = u.cam.xz + dir * z;
+  let y = u.cam.y + rise * z;
   let fc = facetAt(w, z);
-  let n = fc.xyz;
+  // the light goes by the ground's slope more than the facet's, over a wider span far off (client/lowpoly.mjs)
+  let n = normalize(mix(fc.xyz, slopeN(w, clamp(z / 25.0, 3.0, 12.0)), mix(0.8, 1.0, smoothstep(60.0, 160.0, z))));
   var c = surfColor(surfAt(w), w, fc.w);
-  // steep ground is rock, faceted grey
-  c = select(c, vec3f(0.55, 0.53, 0.5) * (0.88 + 0.2 * fc.w), n.y < 0.72);
-  c *= grain(w, z) * light(n, 1.0);
+  // steep ground is rock, in strata
+  if (slopeN(w, 3.0).y < 0.72) { c = cliff(w, y, z, z / u.cam.w); }
+  // the sun's share past the hills
+  var sun = 1.0;
+  if (z < 320.0) { sun = hillLit(vec3f(w.x, y + 0.4, w.y), u.hole.z); }
+  c *= grain(w, z) * light(n, sun) * cloudShade(vec3f(w.x, y, w.y), u.view.w);
   // the slipgate: a dark swirl in the green with a lit rim
   let dc = distance(w, u.cup.xz);
   if (dc < 0.62) {
@@ -395,7 +403,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
 
 // a box's pixel lit as the ground is, with its edges inked
 fn shadeBlock(b: Block) -> vec3f {
-  return (b.alb * light(b.n, 1.0) + b.glow) * mix(1.0, b.ink, 0.6);
+  return (b.alb * light(b.n, 1.0) + b.glow * 1.6) * mix(1.0, b.ink, 0.75);
 }
 
 struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
@@ -419,11 +427,13 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
       if (r2 > 1.0) { discard; }
       let n = vec3f(s.uv.x, -s.uv.y, sqrt(1.0 - r2));
       let l = normalize(vec3f(0.3, 0.8, 0.5));
-      c = c * (0.5 + 0.6 * max(dot(n, l), 0.0)) + vec3f(0.5) * pow(max(dot(n, normalize(l + vec3f(0.0, 0.0, 1.0))), 0.0), 24.0);
+      // the three tones, a hard glint, and a dark rim for its outline
+      c = c * cel(dot(n, l) * 0.95) + vec3f(0.9) * step(0.94, dot(n, normalize(l + vec3f(0.0, 0.0, 1.0))));
+      c = mix(c, vec3f(0.1, 0.09, 0.2), smoothstep(0.72, 0.86, r2) * 0.8);
     }
     case 2u: { // a rocket: hot core, glow
       if (r2 > 1.0) { discard; }
-      c = mix(vec3f(1.0, 1.0, 0.85), c, sqrt(r2));
+      c = mix(vec3f(1.0, 1.0, 0.85), c, sqrt(r2)) * 2.0;
     }
     case 4u: { // the flag: pole and pennant, rippling
       let pole = abs(s.uv.x + 0.85) < 0.1;
@@ -446,10 +456,10 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   let r2 = dot(s.uv, s.uv);
   if (r2 > 1.0) { discard; }
   let a = s.color.a * (1.0 - r2);
-  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.8), (1.0 - r2) * a) * a, a);
+  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.8), (1.0 - r2) * a) * a * 1.7, a);
 }
 
-// A tree's shadow: the pixel's ray met with the level of its foot, a soft
+// A tree's shadow: the pixel's ray met with the level of its foot, a flat
 // dark disc there, its depth pulled a metre nearer so slopes don't cut it.
 struct SH { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
 @fragment fn fs_shadow(s: SOut) -> SH {
@@ -460,9 +470,10 @@ struct SH { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   let q = u.cam.xyz + d * t;
   let r = distance(q.xz, s.feet.xz) / (2.2 * s.pose.y);
   if (r > 1.0 || t < 0.0) { discard; }
-  let a = 0.4 * (1.0 - smoothstep(0.6, 1.0, r));
+  // a flat shadow with a crisp edge, the violet the tones' shadow is
+  let a = 0.42 * (1.0 - smoothstep(0.9, 1.0, r));
   let z = t * dot(d, vec3f(u.view.x, 0.0, u.view.y));
-  o.color = vec4f(0.0, 0.0, 0.0, a);
+  o.color = vec4f(0.1, 0.12, 0.42, a);
   o.depth = clamp((z - 1.5) / u.screen.z, 0.0, 1.0);
   return o;
 }
@@ -620,7 +631,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-  const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+  // the world is drawn into the post's float texture and depth; ink, bloom and the HUD come after (client/post.mjs)
+  const post = createPost(device, { W, H, format, far: FAR });
 
   const layout = device.createBindGroupLayout({
     entries: [
@@ -643,16 +655,19 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => device.createRenderPipeline({
     layout: pl,
     vertex: { module, entryPoint: vs },
-    fragment: { module, entryPoint: fs, targets: [{ format, blend }] },
+    fragment: { module, entryPoint: fs, targets: [{ format: SCENE_FORMAT, blend }] },
     primitive: { topology: 'triangle-list' },
-    depthStencil: { format: 'depth32float', depthWriteEnabled: depthWrite, depthCompare },
+    depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: depthWrite, depthCompare },
   });
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const terrain = pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' });
   const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
   const shadow = pipe('vs_splat', 'fs_shadow', { depthWrite: false, depthCompare: 'less', blend: over });
   const flash = pipe('vs_splat', 'fs_flash', { depthWrite: false, depthCompare: 'less', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } });
-  const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
+  // the HUD goes straight onto the finished frame
+  const hudPipe = device.createRenderPipeline({
+    layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
+  });
 
   const uf = new Float32Array(32);
   const uu = new Uint32Array(uf.buffer);
@@ -709,8 +724,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(hudBuf, 0, hud);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
-        colorAttachments: [{ view: (target || ctx.getCurrentTexture()).createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
-        depthStencilAttachment: { view: depth.createView(), depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
+        colorAttachments: [{ view: post.sceneView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+        depthStencilAttachment: { view: post.depthView, depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
       });
       pass.setBindGroup(0, bind);
       pass.setPipeline(terrain);
@@ -725,9 +740,12 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       if (ntree) pass.draw(6, ntree, 0, trees0);
       pass.setPipeline(flash);
       if (s.flashes.length) pass.draw(6, Math.min(s.flashes.length, MAX_FLASH), 0, L.BALL_CAP + L.NPLAYER + L.NPROJ);
-      pass.setPipeline(hudPipe);
-      pass.draw(3);
       pass.end();
+      post.finish(enc, (target || ctx.getCurrentTexture()).createView(), (last) => {
+        last.setBindGroup(0, bind);
+        last.setPipeline(hudPipe);
+        last.draw(3);
+      });
       device.queue.submit([enc.finish()]);
     },
 

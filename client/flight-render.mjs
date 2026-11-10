@@ -1,12 +1,13 @@
 // Flight's WebGPU renderer (src/flight.wat): the arena's look (the terrain
-// ray-marched per pixel and drawn low-poly, client/lowpoly.mjs; the map's
-// boxes ray-traced in the same pass with their shadows; a HUD on a 320 x 200
+// ray-marched per pixel and painted as a cartoon's, client/lowpoly.mjs; the
+// map's boxes ray-traced in the same pass with their shadows; the frame
+// finished by client/post.mjs, ink lines, bloom and FXAA; a HUD on a 320 x 200
 // grid scaled to the screen, over rectangles), seen through a camera that
 // can point anywhere: a full basis (forward, right, up) instead of golf's
 // yaw and sheared pitch, so a chase camera can look straight down a dive.
 // Ships are ray-traced in their own quads: a small distance field (a
 // fuselage, a canopy, swept wings, fins at the tips, an engine) in the
-// ship's frame, flat-shaded, its nose and pitch from the record, banked into
+// ship's frame, in the look's three tones on a few facets with a rim of light, its nose and pitch from the record, banked into
 // its turns and spun through a barrel roll, the engine bright while it
 // boosts. Lasers are beams, charge shots and bombs glowing balls, a ship's
 // end and a bomb's blast solid fireballs, flashes and sparks blended sprites. The map's edge shows as a red grid as you near it. Ships and
@@ -18,6 +19,7 @@ import * as F from '../src/flight.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
+import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 384;
@@ -159,7 +161,11 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (bh.k != 0xffffffffu && (!hit || bh.t < t)) {
     let w = u.cam.xyz + d * bh.t;
     var c = boxColor(bh.k, w, bh.n, bh.t * fz / u.cam.w);
-    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) { c *= light(bh.n, sunlit(w + bh.n * 0.01)); }
+    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) {
+      var sun = sunlit(w + bh.n * 0.01);
+      if (sun > 0.0 && bh.t < 400.0) { sun = hillLit(w + bh.n * 0.3, u.up.w); }
+      c *= light(bh.n, sun) * cloudShade(w, u.fwd.w);
+    }
     c = edge(fogged(c, bh.t), d, bh.t);
     o.color = vec4f(c, 1.0);
     o.depth = bh.t * fz / u.right.w;
@@ -179,9 +185,12 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   t = hi;
   let w = u.cam.xyz + d * t;
-  let fc = facetAt(w.xz, t);
-  var c = groundColor(w.xz, fc) * grain(w.xz, t);
-  c *= light(fc.xyz, select(1.0, sunlit(w + vec3f(0.0, 0.05, 0.0)), t < 200.0));
+  let g = groundPaint(w.xz, w.y, t, t * fz / u.cam.w);
+  // the sun's share: past the hills and cliffs, then past the boxes
+  var sun = 1.0;
+  if (t < 400.0) { sun = hillLit(w + vec3f(0.0, 0.4, 0.0), u.up.w); }
+  if (sun > 0.0 && t < 200.0) { sun *= sunlit(w + vec3f(0.0, 0.05, 0.0)); }
+  let c = g.c * light(g.n, sun) * cloudShade(w, u.fwd.w);
   o.color = vec4f(edge(fogged(c, t), d, t), 1.0);
   o.depth = t * fz / u.right.w;
   return o;
@@ -341,15 +350,15 @@ struct ShipFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   // back to the world for the light
   let nw = normalize(s.f.xyz * n.x + s.up.xyz * n.y + s.r.xyz * n.z);
   var c = vec3f(0.82, 0.84, 0.88);
-  if (part == 1.0) { c = vec3f(0.15, 0.3, 0.55) + vec3f(0.6) * pow(max(dot(reflect(d, nw), SUN), 0.0), 20.0); }
+  // the canopy: dark glass with one hard glint of the sun, past white
+  if (part == 1.0) { c = vec3f(0.14, 0.3, 0.6) + vec3f(1.6) * step(0.86, dot(reflect(d, nw), SUN)); }
   else if (part == 2.0) { c = mix(vec3f(0.85, 0.86, 0.9), s.color.rgb, select(0.35, 1.0, abs(p.z) > 1.3 || abs(p.x + 0.5 * clamp(abs(p.z), 0.3, 2.0) + 0.15) < 0.25)); }
   else if (part == 3.0) { c = s.color.rgb * 0.85; }
   else if (part == 4.0) { c = vec3f(0.3, 0.32, 0.36); }
-  var lit = 0.4 + 0.7 * max(dot(nw, SUN), 0.0) + 0.25 * pow(1.0 - max(dot(nw, -d), 0.0), 3.0);
-  if (part == 1.0) { lit = 1.0; }
-  c *= lit;
+  // the three tones (client/lowpoly.mjs), and a hard rim of light on the edges turned from the eye toward the sun
+  if (part != 1.0) { c = c * light(nw, 1.0) + vec3f(0.3, 0.29, 0.25) * step(0.72, 1.0 - max(dot(nw, -d), 0.0)) * step(0.0, dot(nw, SUN)); }
   // the engine's mouth: the back of the engine glows, white hot while boosting
-  if (part == 4.0 && p.x < -1.95) { c = mix(vec3f(0.3, 0.75, 1.0), vec3f(1.0, 0.95, 0.8), s.f.w) * 1.4; }
+  if (part == 4.0 && p.x < -1.95) { c = mix(vec3f(0.3, 0.75, 1.0), vec3f(1.0, 0.95, 0.8), s.f.w) * 2.6; }
   let w = u.cam.xyz + d * t;
   o.color = vec4f(fogged(c, t), 1.0);
   o.depth = dot(w - u.cam.xyz, u.fwd.xyz) / u.right.w;
@@ -416,7 +425,7 @@ struct SOut {
   let r2 = dot(s.uv, s.uv);
   if (r2 > 1.0 || (s.kind != 2u && s.kind != 7u)) { discard; }
   if (s.kind == 7u) { return fireball(s.uv, 1.0 - s.color.a); }
-  return vec4f(mix(vec3f(1.0, 1.0, 0.95), s.color.rgb, sqrt(r2)), 1.0);
+  return vec4f(mix(vec3f(1.0, 1.0, 0.95), s.color.rgb, sqrt(r2)) * 2.0, 1.0);
 }
 
 // A fireball age (0..1) through its life, drawn solid as the old consoles
@@ -430,7 +439,7 @@ fn fireball(uv: vec2f, age: f32) -> vec4f {
   if (r > rim) { discard; }
   let k = r / rim;
   if (vnoise(uv * 3.2 + vec2f(age * 2.0, -age)) < age * 1.25 - 0.35 + k * 0.4) { discard; }
-  var c = select(select(vec3f(0.88, 0.24, 0.08), vec3f(1.0, 0.56, 0.14), k < 0.72), vec3f(1.0, 0.94, 0.6), k < 0.38 - 0.3 * age);
+  var c = select(select(vec3f(0.88, 0.24, 0.08), vec3f(1.0, 0.56, 0.14) * 1.4, k < 0.72), vec3f(1.0, 0.94, 0.6) * 2.4, k < 0.38 - 0.3 * age);
   c *= 0.86 + 0.24 * -uv.y;
   return vec4f(mix(c, vec3f(0.32, 0.3, 0.3), smoothstep(0.45, 0.95, age)), 1.0);
 }
@@ -441,7 +450,7 @@ fn fireball(uv: vec2f, age: f32) -> vec4f {
   if (r2 > 1.0 || s.kind == 7u) { discard; }
   var a = s.color.a * (1.0 - r2);
   if (s.kind == 6u) { a = s.color.a * smoothstep(0.5, 1.0, r2) * 2.0; }
-  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a, a);
+  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a * 1.7, a);
 }
 
 // ---- beams: lasers and trails, a quad between two projected points
@@ -470,7 +479,7 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @locatio
 }
 @fragment fn fs_beam(b: BOut) -> @location(0) vec4f {
   let a = b.color.a * (1.0 - abs(b.across) * 0.6);
-  return vec4f(mix(b.color.rgb, vec3f(1.0), (1.0 - abs(b.across)) * 0.5) * a, a);
+  return vec4f(mix(b.color.rgb, vec3f(1.0), (1.0 - abs(b.across)) * 0.5) * a * 2.0, a);
 }
 
 // ---- HUD
@@ -604,7 +613,9 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-  const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+  // the world is drawn into the post's float texture and depth; ink, bloom and the HUD come after (client/post.mjs).
+  // The ink carries farther than the arena's: a ship is read by its outline a long way off
+  const post = createPost(device, { W, H, format, far: FAR, inkReach: 320 });
 
   const layout = device.createBindGroupLayout({
     entries: [
@@ -627,9 +638,9 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => device.createRenderPipeline({
     layout: pl,
     vertex: { module, entryPoint: vs },
-    fragment: { module, entryPoint: fs, targets: [{ format, blend }] },
+    fragment: { module, entryPoint: fs, targets: [{ format: SCENE_FORMAT, blend }] },
     primitive: { topology: 'triangle-list' },
-    depthStencil: { format: 'depth32float', depthWriteEnabled: depthWrite, depthCompare },
+    depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: depthWrite, depthCompare },
   });
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const add = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
@@ -638,7 +649,10 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
   const glow = pipe('vs_splat', 'fs_glow', { depthWrite: false, depthCompare: 'less', blend: add });
   const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
-  const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
+  // the HUD goes straight onto the finished frame
+  const hudPipe = device.createRenderPipeline({
+    layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
+  });
 
   const uf = new Float32Array(NU);
   const hud = new Uint32Array(COLS * rows);
@@ -711,8 +725,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(hudBuf, 0, hud);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
-        colorAttachments: [{ view: (target || ctx.getCurrentTexture()).createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
-        depthStencilAttachment: { view: depth.createView(), depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
+        colorAttachments: [{ view: post.sceneView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+        depthStencilAttachment: { view: post.depthView, depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
       });
       pass.setBindGroup(0, bind);
       pass.setPipeline(terrain);
@@ -725,9 +739,12 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       if (nb) pass.draw(6, nb);
       pass.setPipeline(glow);
       if (sprites.length) pass.draw(6, sprites.length, 0, L.NPROJ);
-      pass.setPipeline(hudPipe);
-      pass.draw(3);
       pass.end();
+      post.finish(enc, (target || ctx.getCurrentTexture()).createView(), (last) => {
+        last.setBindGroup(0, bind);
+        last.setPipeline(hudPipe);
+        last.draw(3);
+      });
       device.queue.submit([enc.finish()]);
     },
 

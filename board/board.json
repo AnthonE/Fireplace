@@ -98,6 +98,82 @@
         "api": "__room",
         "shot": "grandma"
       }
+    },
+    {
+      "id": "track",
+      "name": "The canyon floor",
+      "what": "Box Canyon from the grass beside the sand track, a held camera looking down it to the blue base under the far wall",
+      "take": "flat tones with crisp edges; the wall's shadow a violet, not a grey; the ground reads as painted, not tiled",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,ships"
+      ],
+      "png": "traces/arena-look-track.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&cam=440,24,500,20,-6&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "track"
+      }
+    },
+    {
+      "id": "rim",
+      "name": "The canyon from above",
+      "what": "Box Canyon from 50 m over its floor: the walls in strata, their shadow across the grass, the base and the fighters small",
+      "take": "the whole map readable at a glance; every cliff outlined; fighters findable",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,ships"
+      ],
+      "png": "traces/arena-look-rim.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&cam=440,70,470,25,-20&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "rim"
+      }
+    },
+    {
+      "id": "sky",
+      "name": "The sky over the canyon",
+      "what": "the sun, the flat clouds and the cliff's rim from the canyon floor, looking up toward the sun",
+      "take": "a summer sky: cobalt overhead, clouds in two flat colours, the sun blooming",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,ships"
+      ],
+      "png": "traces/arena-look-sky.png",
+      "refs": [],
+      "page": {
+        "src": "arena.html?local=1&cam=440,24,500,42,24&seed=3163387923&present=0&res=960x600",
+        "api": "__qa",
+        "shot": "sky"
+      }
+    },
+    {
+      "id": "ships",
+      "name": "Dogfight from the chase camera",
+      "what": "an AI pilot's ship over Skyways from its own chase camera, with the HUD",
+      "take": "the ship read by its outline and three tones; engines and shots the brightest things",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--views",
+        "track,rim,sky,ships"
+      ],
+      "png": "traces/flight-look-ships.png",
+      "refs": [],
+      "page": {
+        "src": "flight.html?local=1&bot=1&seed=3163387923&present=0&res=960x600",
+        "api": "__qf",
+        "shot": "ships"
+      }
     }
   ]
 }

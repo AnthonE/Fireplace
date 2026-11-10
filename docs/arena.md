@@ -93,9 +93,10 @@ frame, and hits and kills a round trip later. Projectiles (rockets, bolts,
 needles, frags) are checked where things are now.
 
 `client/arena.html` is the page: the same net and sim workers, the arena's
-renderer (`client/arena-render.mjs`: golf's ray-marched terrain drawn
-low-poly and its splats, the map's boxes as plastic with studs on top, metal
-in panels and rock in strata, plus tracers as beams, glowing sprites, the
+renderer (`client/arena-render.mjs`: golf's ray-marched terrain and its
+splats in the cartoon's look golf, the arena and Dogfight share, the map's
+boxes as plastic with studs on top, metal in panels and rock in strata,
+a fighter's shadow on the ground, plus tracers as beams, glowing sprites, the
 gun in your hands as boxes ray-traced in the HUD pass like the fighters'
 own (`client/viewmodel.mjs`), all at the window's size (`?res=` to set
 one), and a HUD on a 320 x 200 grid scaled to fit the screen and centred

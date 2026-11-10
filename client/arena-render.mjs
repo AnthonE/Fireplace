@@ -1,14 +1,18 @@
 // The arena's WebGPU renderer: golf's look (the terrain ray-marched per pixel
-// and drawn low-poly, client/lowpoly.mjs; bodies as depth-tested splats, a
-// HUD on a 320 x 200 grid scaled to the screen), the map's boxes ray-traced in
+// and painted as a cartoon's, client/lowpoly.mjs: three flat tones, the
+// hills' shadows, a summer sky; bodies as depth-tested splats, a HUD on a
+// 320 x 200 grid scaled to the screen), the map's boxes ray-traced in
 // the same pass as plastic, metal and rock (walls, roofs, the cave's roof: a
 // slab test per box, a group's bounds first, and a ray to the sun from
-// whatever a pixel lands on for its shadow), with what a
+// whatever a pixel lands on for its shadow), a fighter's own shadow on the
+// ground under it, with what a
 // shooter needs on top: tracers as beams, sprites for blasts, sparks and
 // weapon pads, the team modes' flags and skull, zones painted on the ground
 // for a hill or the territories, and a HUD of rectangles under the text for
 // the gun in your hands, the shield and health bars, the crosshair, the scope
-// and the hit marker. Fighters and projectiles come straight from shared memory;
+// and the hit marker. The world goes into client/post.mjs's float texture
+// (lights, tracers and blasts past white) and comes out inked, bloomed and
+// smoothed; the HUD is drawn onto that. Fighters and projectiles come straight from shared memory;
 // everything else from the main thread each frame. Nothing here is hashed.
 import { moverBoxes, drawnTick } from './movers.mjs';
 import * as L from '../src/layout.mjs';
@@ -20,6 +24,7 @@ import { PALETTE as AV_PALETTE } from './avatar.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, hudFrame, focalFor } from './lowpoly.mjs';
 import { VIEWMODEL_WGSL, MAX_VM } from './viewmodel.mjs';
+import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 256;
@@ -195,7 +200,11 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (bh.k != 0xffffffffu && (!hit || bh.t < z)) {
     let w = u.cam.xyz + ray * bh.t;
     var c = boxColor(bh.k, w, bh.n, bh.t / u.cam.w);
-    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) { c *= light(bh.n, sunlit(w + bh.n * 0.01)); }
+    if ((u32(boxes[2u * bh.k].w) & 127u) != 5u) {
+      var sun = sunlit(w + bh.n * 0.01);
+      if (sun > 0.0 && bh.t < 320.0) { sun = hillLit(w + bh.n * 0.3, u.misc.z); }
+      c *= light(bh.n, sun) * cloudShade(w, u.view.w);
+    }
     if (bh.n.y > 0.5) { c = zone(c, w.xz, w.y, bh.t); }
     c = stormGround(c, w.xz, bh.t);
     o.color = vec4f(stormWall(fogged(c, bh.t), dir, rise, bh.t), 1.0);
@@ -208,9 +217,10 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     // a ringed planet low in the sky, for the look
     let pc = normalize(vec3f(-0.6, 0.32, 0.74));
     let a = acos(clamp(dot(pd, pc), -1.0, 1.0));
-    if (a < 0.16) { c = mix(c, vec3f(0.62, 0.66, 0.78) * (0.7 + 0.3 * (pd.y - pc.y + 0.16) / 0.32), 0.85); }
+    // a day moon's two tones: pale where the sun is on it, the sky's own blue showing through its dark side
+    if (a < 0.16) { c = mix(c, vec3f(0.93, 0.95, 1.0), select(0.16, 0.8, dot(pd - pc, SUN) > -0.035 + 0.02 * sin(pd.y * 60.0))); }
     let ring = abs(a - 0.24) < 0.012 && abs(pd.y - pc.y) < 0.06;
-    if (ring) { c = mix(c, vec3f(0.85, 0.85, 0.9), 0.6); }
+    if (ring) { c = mix(c, vec3f(0.95, 0.96, 1.0), 0.7); }
     o.color = vec4f(stormWall(c, dir, rise, 1e9), 1.0);
     o.depth = 1.0;
     return o;
@@ -224,10 +234,14 @@ struct TOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   z = hi;
   let w = u.cam.xz + dir * z;
-  let fc = facetAt(w, z);
-  var c = groundColor(w, fc) * grain(w, z);
-  c *= light(fc.xyz, select(1.0, sunlit(vec3f(w.x, u.cam.y + rise * z + 0.05, w.y)), z < 160.0));
-  c = zone(c, w, u.cam.y + rise * z, z);
+  let y = u.cam.y + rise * z;
+  let g = groundPaint(w, y, z, z / u.cam.w);
+  // the sun's share: past the hills and cliffs, then past the boxes
+  var sun = 1.0;
+  if (z < 320.0) { sun = hillLit(vec3f(w.x, y + 0.4, w.y), u.misc.z); }
+  if (sun > 0.0 && z < 160.0) { sun *= sunlit(vec3f(w.x, y + 0.05, w.y)); }
+  var c = g.c * light(g.n, sun) * cloudShade(vec3f(w.x, y, w.y), u.view.w);
+  c = zone(c, w, y, z);
   c = stormGround(c, w, z);
   o.color = vec4f(stormWall(fogged(c, z), dir, rise, z), 1.0);
   o.depth = z / u.screen.z;
@@ -420,6 +434,45 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   return o;
 }
 
+// ---- a fighter's shadow on the ground: an ellipse lying away from the sun from its feet, on the level it
+// stands on, drawn only where the sun gets to (a shadow in a shadow is no darker), multiplied into the frame
+struct HOut { @builtin(position) pos: vec4f, @location(0) @interpolate(flat) feet: vec3f };
+@vertex fn vs_shade(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> HOut {
+  var o: HOut;
+  o.pos = vec4f(2.0, 2.0, 2.0, 1.0);
+  let b = i * ${L.PSIZE}u;
+  let fl = players[(b + ${L.P_FL}u) / 4u] & 255u;
+  if ((fl & ${L.PF_LIVE}u) == 0u || (fl & ${L.PF_DEAD}u) != 0u) { return o; }
+  // mine comes from the prediction's bank as the eye does, a step ahead of the confirmed world's
+  let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
+  o.feet = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u), pf(b, ${L.P_PZ}u)) + vel * u.screen.w;
+  if (i == u32(u.misc.x)) { o.feet = vec3f(u.cam.x, o.feet.y, u.cam.z); }
+  let pr = project(o.feet - vec3f(SUN.x, 0.0, SUN.z) * 1.3);
+  if (pr.z < 0.3 || pr.z > 220.0) { return o; }
+  let s = vec2f(pr.x, pr.y) + CORNERS[v] * 2.2 * pr.w;
+  o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, 0.5, 1.0);
+  return o;
+}
+struct HFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
+@fragment fn fs_shade(h: HOut) -> HFrag {
+  var o: HFrag;
+  let fwd = u.view.xy;
+  let dir = fwd + vec2f(-fwd.y, fwd.x) * ((h.pos.x - u.screen.x * 0.5) / u.cam.w);
+  let rise = (u.view.z - h.pos.y) / u.cam.w;
+  // where the pixel's ray meets the level of the feet
+  let t = (h.feet.y + 0.04 - u.cam.y) / rise;
+  if (rise >= 0.0 || t < 0.3) { discard; }
+  let p = vec3f(u.cam.x + dir.x * t, h.feet.y, u.cam.z + dir.y * t);
+  let s0 = normalize(SUN.xz);
+  let q = p.xz - (h.feet.xz - s0 * 1.05);
+  let e = length(vec2f(dot(q, s0) / 1.25, dot(q, vec2f(-s0.y, s0.x)) / 0.46));
+  if (e > 1.0) { discard; }
+  if (hillLit(p + vec3f(0.0, 0.4, 0.0), u.misc.z) < 0.5 || sunlit(p + vec3f(0.0, 0.05, 0.0)) < 0.5) { discard; }
+  o.color = vec4f(mix(TONE_SHADE / TONE_LIT, vec3f(1.0), smoothstep(0.86, 1.0, e)), 1.0);
+  o.depth = max(t - 0.35, 0.0) / u.screen.z;
+  return o;
+}
+
 // solid splats: 0 a ball, 1 a soldier card, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block,
 // 12 an Evade chaser's face, 13 a downed fighter (the soldier on its side), 14 an Escape terminal, 15 a fighter (figure above)
 struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
@@ -431,7 +484,10 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     let ray = fwd + vec3f(-u.view.y, 0.0, u.view.x) * ((s.pos.x - u.screen.x * 0.5) / u.cam.w) + vec3f(0.0, (u.view.z - s.pos.y) / u.cam.w, 0.0);
     let b = figure(u.cam.xyz, normalize(ray), fwd, s);
     if (!b.hit || b.cover < 0.5) { discard; }
-    o.color = vec4f(fogged((b.alb * light(b.n, 1.0) + b.glow) * mix(1.0, b.ink, 0.6), b.z), 1.0);
+    // in a box's shadow or a cliff's as the ground under it is
+    var k = sunlit(b.p + b.n * 0.02);
+    if (k > 0.0) { k = hillLit(b.p + vec3f(0.0, 0.3, 0.0), u.misc.z); }
+    o.color = vec4f(fogged((b.alb * light(b.n, k) + b.glow * 1.6) * mix(1.0, b.ink, 0.75), b.z), 1.0);
     o.depth = b.z / u.screen.z;
     return o;
   }
@@ -459,7 +515,7 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     }
     case 2u: {
       if (r2 > 1.0) { discard; }
-      c = mix(vec3f(1.0, 1.0, 0.95), c, sqrt(r2));
+      c = mix(vec3f(1.0, 1.0, 0.95), c, sqrt(r2)) * 2.0;
     }
     case 4u: { // a weapon on its pad: a bar of its colour over a ring of light
       let bar = abs(s.uv.y + 0.2) < 0.18 && abs(s.uv.x) < 0.9;
@@ -587,7 +643,7 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (r2 > 1.0) { discard; }
   var a = s.color.a * (1.0 - r2);
   if (s.kind == 6u) { a = s.color.a * smoothstep(0.5, 1.0, r2) * 2.0; }
-  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a, a);
+  return vec4f(mix(s.color.rgb, vec3f(1.0, 1.0, 0.9), (1.0 - r2) * a) * a * 1.7, a);
 }
 
 // ---- beams: tracers, a quad between two projected points
@@ -617,7 +673,7 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @locatio
 }
 @fragment fn fs_beam(b: BOut) -> @location(0) vec4f {
   let a = b.color.a * (1.0 - abs(b.across) * 0.6);
-  return vec4f(b.color.rgb * a, a);
+  return vec4f(b.color.rgb * a * 2.0, a);
 }
 
 // ---- HUD
@@ -784,7 +840,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-  const depth = device.createTexture({ size: [W, H], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+  // the world is drawn into the post's float texture and depth; ink, bloom and the HUD come after (client/post.mjs)
+  const post = createPost(device, { W, H, format, far: FAR });
 
   const layout = device.createBindGroupLayout({
     entries: [
@@ -808,17 +865,22 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => device.createRenderPipeline({
     layout: pl,
     vertex: { module, entryPoint: vs },
-    fragment: { module, entryPoint: fs, targets: [{ format, blend }] },
+    fragment: { module, entryPoint: fs, targets: [{ format: SCENE_FORMAT, blend }] },
     primitive: { topology: 'triangle-list' },
-    depthStencil: { format: 'depth32float', depthWriteEnabled: depthWrite, depthCompare },
+    depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: depthWrite, depthCompare },
   });
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const add = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const terrain = pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' });
+  const times = { color: { srcFactor: 'zero', dstFactor: 'src' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } };
+  const shade = pipe('vs_shade', 'fs_shade', { depthWrite: false, depthCompare: 'less', blend: times });
   const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
   const glow = pipe('vs_splat', 'fs_glow', { depthWrite: false, depthCompare: 'less', blend: add });
   const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
-  const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
+  // the HUD goes straight onto the finished frame
+  const hudPipe = device.createRenderPipeline({
+    layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
+  });
 
   const uf = new Float32Array(48 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);
@@ -894,12 +956,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(hudBuf, 0, hud);
       const enc = device.createCommandEncoder();
       const pass = enc.beginRenderPass({
-        colorAttachments: [{ view: (target || ctx.getCurrentTexture()).createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
-        depthStencilAttachment: { view: depth.createView(), depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
+        colorAttachments: [{ view: post.sceneView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+        depthStencilAttachment: { view: post.depthView, depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1 },
       });
       pass.setBindGroup(0, bind);
       pass.setPipeline(terrain);
       pass.draw(3);
+      pass.setPipeline(shade);
+      pass.draw(6, L.NPLAYER);
       pass.setPipeline(splat);
       pass.draw(6, L.NPLAYER + L.NPROJ, 0, 0);
       if (s.solid.length) pass.draw(6, Math.min(s.solid.length, MAX_SPRITE), 0, L.NPLAYER + L.NPROJ);
@@ -908,9 +972,12 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       pass.setPipeline(glow);
       const ng = sprites.length - s.solid.length;
       if (ng > 0) pass.draw(6, ng, 0, L.NPLAYER + L.NPROJ + s.solid.length);
-      pass.setPipeline(hudPipe);
-      pass.draw(3);
       pass.end();
+      post.finish(enc, (target || ctx.getCurrentTexture()).createView(), (last) => {
+        last.setBindGroup(0, bind);
+        last.setPipeline(hudPipe);
+        last.draw(3);
+      });
       device.queue.submit([enc.finish()]);
     },
 
