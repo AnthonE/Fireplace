@@ -110,11 +110,12 @@ View.prototype.pads = function pads() {
 // says where it is at a tick). movement is the map's own (RU_*: walk and
 // zwalk m/s, accel, jump and zjump m/s, grav m/s a tick), or null for the
 // arena's; mode the M_* it plays every match, or -1. Read once per world and
-// kept: the map never changes after init.
-View.prototype.map = function map() {
+// kept: the map never changes after init. fresh reads it again all the same,
+// for a reader the sim may have been laying it under.
+View.prototype.map = function map(fresh = false) {
   const d = this.dv;
   const key = `${d.getUint32(L.HDR_SEED, true)}:${d.getUint32(L.MAP_NBOX, true)}:${d.getUint32(L.MAP_NGROUP, true)}`;
-  if (this._map?.key === key) return this._map;
+  if (!fresh && this._map?.key === key) return this._map;
   const f = (a) => d.getFloat32(a, true);
   const box = (a) => [0, 1, 2, 3, 4, 5].map((k) => f(a + 4 * k));
   const groups = [], boxes = [], teleporters = [], spawns = [];

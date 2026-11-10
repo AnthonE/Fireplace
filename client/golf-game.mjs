@@ -88,7 +88,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const text = new Uint32Array(COLS * renderer.rows);
   const flashes = [];
   let fxSeen = view.fxCount();
-  let seed = -1;
+  let seed = -1, keysSeen = -1;
   let faced = -1;
   let banner = { text: '', until: 0 };
   let cue = -1;
@@ -113,7 +113,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const st = get(L.CL_STATE);
     const slot = get(L.CL_SLOT);
     const h = view.hole();
-    if (st >= 1 && view.dv.getUint32(L.HDR_SEED, true) !== seed && host.welcome) {
+    // the ground and the map as the sim laid them: at a new seed, and again after every keyframe, since a keyframe
+    // (a join's comes right behind the welcome) lays them afresh in the sim's own time, maybe under a read of them here
+    if (st >= 1 && host.welcome && (view.dv.getUint32(L.HDR_SEED, true) !== seed || get(L.CL_KEYS) !== keysSeen)) {
+      keysSeen = get(L.CL_KEYS);
       seed = view.dv.getUint32(L.HDR_SEED, true);
       renderer.setTerrain(u8);
     }

@@ -193,7 +193,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   let banner = { text: '', until: 0, color: C.YELLOW };
   let medal = { text: '', until: 0 };
   let marker = 0, hurt = 0;
-  let fxSeen = 0, seed = -1, lastKill = -1e9, multi = 0, spree = 0, matchSeen = -1, dealt = false;
+  let fxSeen = 0, seed = -1, keysSeen = -1, lastKill = -1e9, multi = 0, spree = 0, matchSeen = -1, dealt = false;
   const played = {};
   const newer = (a, b) => { const d = (a - b) & 0xffff; return d > 0 && d < 0x8000; };
   let frames = 0, fpsAt = performance.now(), fps = 0, lastFrame = performance.now();
@@ -439,10 +439,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const st = get(L.CL_STATE);
     const slot = get(L.CL_SLOT);
     const h = view.hole();
-    if (st >= 1 && view.dv.getUint32(L.HDR_SEED, true) !== seed && host.welcome) {
+    // the ground and the map as the sim laid them: at a new seed, and again after every keyframe, since a keyframe
+    // (a join's comes right behind the welcome) lays them afresh in the sim's own time, maybe under a read of them here
+    if (st >= 1 && host.welcome && (view.dv.getUint32(L.HDR_SEED, true) !== seed || get(L.CL_KEYS) !== keysSeen)) {
+      keysSeen = get(L.CL_KEYS);
       seed = view.dv.getUint32(L.HDR_SEED, true);
       renderer.setTerrain(u8);
-      renderer.setMap(view.map());
+      renderer.setMap(view.map(true));
     }
     const ceiling = view.dv.getFloat32(L.MAP_CEILING, true) || 200;
     const room = get(L.CL_ROOM);
