@@ -127,7 +127,8 @@ test('a bubble sits over the point it is given, inside the text block, clear of 
 
 test('the chat key is free: no frontend, page or room reads it, and each page has the one chat', () => {
   assert.equal(CHAT_KEY, 'Slash');
-  for (const f of readdirSync('client').filter((f) => f.endsWith('.mjs') && f !== 'chat.mjs')) {
+  // (the shelf, client/games.mjs, is no room and has no chat: there the key finds a game)
+  for (const f of readdirSync('client').filter((f) => f.endsWith('.mjs') && f !== 'chat.mjs' && f !== 'games.mjs')) {
     assert.doesNotMatch(readFileSync(`client/${f}`, 'utf8'), /['"]Slash['"]|key === '\/'/, f);
   }
   // the host makes it for every page it serves; golf's own page makes its own
