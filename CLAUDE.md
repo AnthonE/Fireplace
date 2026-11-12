@@ -259,6 +259,14 @@ shell whose own command line contains the name: it kills that shell.
   checks). Achievements (`client/achievements.mjs`)
   test results read from the confirmed world while a game's end is held, and
   are kept in the browser, like the look.
+- A look may have a `price` in marshmallows in place of an `unlock`: the
+  purse (`client/purse.mjs`: what the tally has won less what was spent) is
+  the browser's, like the tally; the relay cannot see it.
+- The arena's third-person camera is `client/chase.mjs` (pure: the boom
+  against the map, the reticle's point as `$a_ray` finds it, with the map's
+  body), drawing only: the sim fires from the eye whatever the camera does.
+  The frontend takes the eye, the hit shape and the figure's size from
+  `view.map().body`, never a constant.
 - Chat (`client/chat.mjs`, one log and one input the host makes for every
   page; `/` opens it) is drawing only too: the relay carries a line beside
   the ticks (hello flag 128, `T_CHAT`), cleaned and rate-limited by
