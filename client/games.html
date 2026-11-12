@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Games</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #070504; --panel: #100c09; --edge: rgba(232, 214, 192, 0.16); --ink: #e8d6c0; --dim: #a89c88; --cool: #8ea0b8; --hot: #ffcf6a; --ok: #7fdf7f; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 108px; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-monospace, monospace; }
+  a { color: inherit; }
+  header { position: sticky; top: 0; z-index: 5; padding: 12px 20px 8px; background: rgba(7, 5, 4, 0.92); border-bottom: 1px solid var(--edge); backdrop-filter: blur(6px); }
+  header .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; max-width: 1280px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: 4px; color: var(--hot); }
+  #tag { flex: 1; min-width: 12ch; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; font-size: 11px; }
+  #find { width: 240px; max-width: 100%; padding: 7px 10px; border: 1px solid rgba(232, 214, 192, 0.35); border-radius: 6px; background: var(--panel); color: var(--ink);
+    font: inherit; letter-spacing: 1px; outline: none; }
+  #find:focus { border-color: var(--hot); }
+  #find::placeholder { color: var(--dim); opacity: 0.8; }
+  nav { display: flex; gap: 6px; max-width: 1280px; margin: 8px auto 0; overflow-x: auto; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav a { flex: none; padding: 3px 10px; border: 1px solid var(--edge); border-radius: 12px; color: var(--cool); text-decoration: none; font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
+  nav a:hover { color: var(--ink); border-color: rgba(232, 214, 192, 0.5); }
+  nav a b { color: var(--dim); font-weight: 400; margin-left: 5px; }
+  main { max-width: 1320px; margin: 0 auto; padding: 16px 20px 40px; }
+  section { margin-top: 28px; }
+  section:first-child { margin-top: 0; }
+  h2 { margin: 0; font-size: 13px; letter-spacing: 2px; color: var(--hot); }
+  h2 b { color: var(--dim); font-weight: 400; margin-left: 8px; }
+  .about { margin: 2px 0 10px; color: var(--dim); font-size: 11px; letter-spacing: 1px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; }
+  #featured .grid { grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .tile { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--edge); border-radius: 8px; background: var(--panel); text-decoration: none; overflow: hidden;
+    transition: border-color 0.12s, transform 0.12s; }
+  .tile:hover, .tile:focus-visible { border-color: var(--hot); transform: translateY(-2px); outline: none; }
+  .tile[hidden], section[hidden] { display: none; }
+  .pic { position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden;
+    background: linear-gradient(150deg, hsl(var(--hue) 46% 30%), hsl(calc(var(--hue) + 40) 52% 15%)); }
+  .pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  /* a tile with no picture: its colour, and its name large */
+  .pic .drawn { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; text-align: center; font-size: 15px; font-weight: 800; letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.92); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); text-transform: uppercase; overflow-wrap: anywhere; }
+  .pic .play { position: absolute; right: 8px; bottom: 8px; padding: 3px 9px; border-radius: 5px; background: var(--hot); color: #1a1108; font-weight: 800; letter-spacing: 2px;
+    font-size: 11px; opacity: 0; transition: opacity 0.12s; }
+  .tile:hover .play, .tile:focus-visible .play { opacity: 1; }
+  .pic .live { position: absolute; left: 8px; top: 8px; padding: 2px 8px; border-radius: 10px; background: rgba(8, 6, 4, 0.82); color: var(--ok); font-size: 10px; font-weight: 700;
+    letter-spacing: 1px; }
+  .pic .live::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: var(--ok); }
+  .pic .live[hidden] { display: none; }
+  .text { display: flex; flex-direction: column; gap: 3px; flex: 1; padding: 8px 10px 9px; }
+  .name { color: #fff; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; overflow-wrap: anywhere; }
+  .line { flex: 1; color: var(--dim); font-size: 11px; line-height: 1.35; text-transform: uppercase; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  .who { color: var(--cool); font-size: 10px; letter-spacing: 1px; }
+  #featured .name { font-size: 15px; letter-spacing: 2px; color: var(--hot); }
+  #none { margin: 40px 0; text-align: center; color: var(--dim); letter-spacing: 1px; }
+  footer { max-width: 1320px; margin: 0 auto; padding: 0 20px 28px; color: var(--dim); font-size: 11px; letter-spacing: 1px; }
+  footer a { color: var(--cool); margin-right: 14px; white-space: nowrap; }
+  footer a:hover { color: var(--ink); }
+  @media (max-width: 1000px) {
+    #featured .grid { grid-template-columns: repeat(2, 1fr); }
+    #featured .tile:first-child { grid-column: 1 / -1; }
+  }
+  @media (max-width: 560px) {
+    html { scroll-padding-top: 128px; }
+    header { padding: 10px 12px 8px; }
+    h1 { font-size: 17px; letter-spacing: 3px; }
+    #tag { display: none; }
+    #find { flex: 1; width: auto; }
+    main { padding: 12px 12px 32px; }
+    .grid, #featured .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .text { padding: 6px 8px 8px; }
+    .pic .play { display: none; }
+  }
+</style>
+<header>
+  <div class="top">
+    <h1 id="title">FIREPLACE</h1>
+    <span id="tag"></span>
+    <input id="find" type="search" placeholder="FIND A GAME" aria-label="find a game by name" autocomplete="off" spellcheck="false">
+  </div>
+  <nav id="jump" aria-label="sections"></nav>
+</header>
+<main id="shelf"><p id="none">LOADING…</p></main>
+<footer>
+  <a href="studio.html">MAKE A MINIGAME</a><a href="map-editor.html">DRAW A MAP</a><a href="room.html">DRESS THE ROOM</a>
+</footer>
+<script type="module" src="./games.mjs"></script>

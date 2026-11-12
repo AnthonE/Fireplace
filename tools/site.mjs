@@ -6,7 +6,9 @@
 // the built wasm and themes (run npm run build first), coi.js at the root (the
 // service worker that makes the pages cross-origin isolated where the host
 // cannot send the headers), and an index.html that opens Fireplace's page,
-// its query kept. The map editor's half too: the map compiler and the PNG
+// its query kept (an invite's ?room=), from which the corner's link goes to
+// the shelf (client/games.html: every game, minigame, mode and map as a tile,
+// its pictures in client/shelf/). The map editor's half too: the map compiler and the PNG
 // codec it runs in the page (tools/map-compile.mjs, tools/png-codec.mjs), the
 // readers that bring a Roblox place or a MagicaVoxel model in and the back
 // half they share (tools/rbx-*.mjs, tools/vox-*.mjs, tools/scene-map.mjs, the
@@ -14,17 +16,20 @@
 // packed for a sim to lay at run time (build/maps/<name>.qgmap,
 // tools/map-compile.mjs packMap): what a page's
 // ?map=<name> plays, and what the kit's room pool fetches to start a room on
-// it (net/kit-rooms.mjs). And the studio's (client/studio.html): the sim's
+// it (net/kit-rooms.mjs), with the list of them (build/maps/index.json) the
+// shelf reads. And the studio's (client/studio.html): the sim's
 // WAT (src/), the assembler's pure half and party's AI room (tools/asm-core.mjs,
 // tools/party-play.mjs) and wabt's one script (node_modules/wabt/, with its
 // licence). No sources the browser never reads: the relay, tests.
 //   node tools/site.mjs [out]   (default site/)
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './main.mjs';
 import { compileMap } from './map.mjs';
 import { packMap } from './map-compile.mjs';
+import { mapRow } from '../client/shelf.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -50,7 +55,7 @@ const INDEX = `<!doctype html>
 <meta charset="utf-8">
 <title>Loading…</title>
 <script>location.replace('client/fireplace.html' + location.search + location.hash);</script>
-<a href="client/fireplace.html">Play</a>
+<a href="client/fireplace.html">Play</a> · <a href="client/games.html">All games</a>
 `;
 
 function files(dir, keep, deep) {
@@ -61,6 +66,29 @@ function files(dir, keep, deep) {
     else if (keep(name)) out.push(path);
   }
   return out;
+}
+
+// Every map in maps/, packed into dir (<name>.qgmap), and the list of them a
+// page can't read off a static host, index.json: each map as the shelf lists
+// it (client/shelf.mjs mapRow) with its packed bytes' sha256, what the kit's
+// pool names a room on it by. A map that doesn't compile is left out, and
+// said. tools/shelf.mjs packs them into build/maps/ for a dev server.
+export function packMaps(dir = join(ROOT, 'build', 'maps')) {
+  const maps = join(ROOT, 'maps');
+  mkdirSync(dir, { recursive: true });
+  const rows = [];
+  let bytes = 0;
+  for (const name of readdirSync(maps).sort()) {
+    if (!existsSync(join(maps, name, 'map.json'))) continue;
+    let m, packed;
+    try { m = compileMap(join(maps, name)); packed = packMap(m); } catch (e) { console.error(`site: maps/${name} left out: ${e.message}`); continue; }
+    writeFileSync(join(dir, `${name}.qgmap`), packed);
+    rows.push({ ...mapRow(name, JSON.parse(readFileSync(join(maps, name, 'map.json'), 'utf8')), m), sha256: createHash('sha256').update(packed).digest('hex'), bytes: packed.length });
+    bytes += packed.length;
+  }
+  const index = JSON.stringify({ maps: rows }, null, 1) + '\n';
+  writeFileSync(join(dir, 'index.json'), index);
+  return { rows, files: rows.length + 1, bytes: bytes + index.length };
 }
 
 export function buildSite(out = join(ROOT, 'site')) {
@@ -80,17 +108,9 @@ export function buildSite(out = join(ROOT, 'site')) {
       bytes += statSync(path).size;
     }
   }
-  // every map, packed: a map that doesn't compile is left out, and said
-  const maps = join(ROOT, 'maps');
-  mkdirSync(join(out, 'build', 'maps'), { recursive: true });
-  for (const name of readdirSync(maps)) {
-    if (!existsSync(join(maps, name, 'map.json'))) continue;
-    let packed;
-    try { packed = packMap(compileMap(join(maps, name))); } catch (e) { console.error(`site: maps/${name} left out: ${e.message}`); continue; }
-    writeFileSync(join(out, 'build', 'maps', `${name}.qgmap`), packed);
-    n++;
-    bytes += packed.length;
-  }
+  const maps = packMaps(join(out, 'build', 'maps'));
+  n += maps.files;
+  bytes += maps.bytes;
   cpSync(join(ROOT, 'coi.js'), join(out, 'coi.js'));
   // (no .nojekyll: Pages deployed from Actions runs no Jekyll, and a hidden
   // file is one a static host may refuse, as Elo Pros' web builds do)

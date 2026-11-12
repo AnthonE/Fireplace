@@ -131,11 +131,29 @@ node net/play.mjs --fireplace --start 3  # Fireplace from the playlist's entry 3
 node net/play.mjs                        # golf, client/index.html
 ```
 
+**The shelf**, `client/games.html`, is everything the site can play, a tile
+each with a picture: Fireplace, Party and each of its 49 minigames, the arena
+and each of its eighteen modes and four maps, Dogfight and its four modes,
+golf. A click plays the tile in a local room with AI players; the box finds
+one by name. Where a room pool reports rooms, a tile says how many are
+playing and its click takes a seat among them
+([docs/hosting.md](docs/hosting.md#what-the-shelf-reads)). Every page has the
+way back to it in its top left corner while the mouse is free.
+
+```sh
+node tools/serve.mjs 8080                # then http://127.0.0.1:8080/client/games.html
+node tools/shelf.mjs --lines             # packs maps/ into build/maps/, which the shelf lists (the site's build does it too)
+node tools/shelf.mjs [--only arena-5]    # shoots the tiles' pictures again, client/shelf/*.webp
+```
+
 With no relay, a page plays a local room: you and AI players (`?bots=`, 7 by
 default), nothing on the network. That is what a copy's GitHub Pages site
 plays until someone presses **play online with friends** or opens an invite
 (`?room=`), which take it to a room from the kit's room pool;
 `node tools/serve.mjs` and `client/fireplace.html?local=1` show it here.
+Golf's local room is `client/golf.html`, golf's frontend on the page host
+the other games share; `client/index.html` stays the relay's page, with the
+netcode graph and replays.
 
 Every room is saved as a replay when it ends (`replays/`), a few kilobytes a
 minute, and plays back in the page with `?replay=../replays/<file>`.
@@ -207,10 +225,10 @@ protocol, for writing a client in any language, and
 | | |
 | --- | --- |
 | `src/` | the sim: the engine and golf (`game.wat` and friends), the arena (`arena.wat`, its team modes in `am/`), flight (`flight.wat`), Party (`bumper.wat`'s ball, `party.wat`, a minigame a file in `mg/`), the playlist (`fireplace.wat`), and `layout.mjs`, the one memory map everything reads |
-| `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, the map editor (`map-editor.html`), and the studio (`studio.html`), where a Party minigame is edited, built, checked and played in the page |
+| `client/` | the browser: `fireplace.html` and the room, the shelf (`games.html`, its pictures in `shelf/`), each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, the map editor (`map-editor.html`), and the studio (`studio.html`), where a Party minigame is edited, built, checked and played in the page |
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
-| `tools/` | the assembler, the map compiler, a Roblox place's and a MagicaVoxel model's converters (`roblox.mjs`, `vox.mjs`), match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
+| `tools/` | the assembler, the map compiler, a Roblox place's and a MagicaVoxel model's converters (`roblox.mjs`, `vox.mjs`), match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the shelf's pictures (`shelf.mjs`), the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
 | `maps/` | Box Canyon, Skyways, Crossroads (a Roblox place), Lifts (moving boxes) and Sky Steps (an obby): two images and a JSON file each, and Crossroads its licence |
 | `rust/` | Party minigames in Rust (Sumo Ring) and the engine's bindings for them |
 | `test/` | `node:test`, one file per game, mode and minigame |

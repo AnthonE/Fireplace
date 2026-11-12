@@ -26,8 +26,11 @@
 //     as a path, one the site doesn't serve, one map_load refuses, a page
 //     whose map is not the site's; a wasm whose rooms end (exit 3, a sim that
 //     never returns) refuse_after times, by its sha256; and its caps, one
-//     copy's rooms and the pool's.
-//   node net/run-kit-rooms.mjs [--seconds 60]
+//     copy's rooms and the pool's;
+//   · the shelf (client/games.html) counts who is in the pool's rooms on the
+//     tiles of what they play (Fireplace's room, the arena's on its map), a
+//     tile's link the room with a seat, which a page opened from it lands in.
+//   node net/run-kit-rooms.mjs [--seconds 60] [--pool-port 4710] [--ports 4711,4716] [--native 100: a room's native door, past its port]
 import net from 'node:net';
 import dgram from 'node:dgram';
 import { createServer } from 'node:http';
@@ -38,12 +41,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { createRequire } from 'node:module';
 import { extname, join, normalize, resolve } from 'node:path';
 import * as W from './wire.mjs';
+import * as L from '../src/layout.mjs';
 import { setup, botHost, grader, readJson, sleep, opt } from './gate.mjs';
 import { startKitRooms } from './kit-rooms.mjs';
 import { buildSite } from '../tools/site.mjs';
 
 const seconds = Number(opt('seconds', 60));
-const POOL_PORT = 4710, PORTS = [4711, 4716], NATIVE = 100;
+const POOL_PORT = Number(opt('pool-port', 4710)), PORTS = opt('ports', '4711,4716').split(',').map(Number), NATIVE = Number(opt('native', 100));
 const failed = [];
 const report = { seconds, checks: [], errors: [] };
 const check = (name, ok, detail = '') => {
@@ -74,7 +78,7 @@ const BAD = {
 // ── a static host like Pages: the files and their types, no isolation headers ──
 // /good/ is the site; /<bad>/build/fireplace/game.wasm the wasm above; /moved/ redirects;
 // /p1/ /p2/ /p3/ are the site again, for the caps; /m1/ for the map's room; /warped/ with a map no sim lays
-const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.webp': 'image/webp' };
 const fetched = [];
 const pages = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -154,7 +158,8 @@ const watch = (page, label) => {
 };
 const GAME = '&bot=1&present=0&res=320x200&music=0';
 async function open(url, label) {
-  const ctx = await browser.newContext({ viewport: { width: 640, height: 400 } });
+  // a window the wardrobe stands beside the room in: under 720 x 520 it is a sheet along the bottom, over the line's buttons
+  const ctx = await browser.newContext({ viewport: { width: 1024, height: 640 } });
   const page = await ctx.newPage();
   watch(page, label);
   await page.goto(url);
@@ -162,6 +167,15 @@ async function open(url, label) {
 }
 const stateOf = (page) => page.evaluate(() => (window.__qa?.state ? { ...window.__qa.state(), hashes: window.__qa.hashes.slice(), isolated: crossOriginIsolated, line: document.querySelector('#line span')?.textContent, online: !document.getElementById('online')?.hidden, lineShown: !document.getElementById('line')?.hidden } : null)).catch(() => null);
 const playing = (s) => !!s && s.clState === 2 && s.slot >= 0;
+// the shelf on a copy's site, once the pool's count shows on tile id: its tiles by id, as the page has them
+async function shelfOf(name, id, label) {
+  const page = await open(`${site(name)}client/games.html`, label);
+  await page.waitForFunction(() => window.__shelf?.ready || window.__shelf?.error, null, { timeout: 30000 });
+  await until(async () => { await page.evaluate(() => window.__shelf.live?.()); return !!(await page.evaluate((t) => window.__shelf.tiles?.().find((x) => x.id === t)?.live, id)); }, 15000, 1000);
+  const tiles = Object.fromEntries((await page.evaluate(() => window.__shelf.tiles?.() ?? [])).map((t) => [t.id, t]));
+  await page.context().close();
+  return tiles;
+}
 
 const sha = createHash('sha256').update(readFileSync(join(out, 'build/fireplace/game.wasm'))).digest('hex');
 let roomId = null, roomPort = 0;
@@ -209,6 +223,13 @@ try {
   // bots at the room's native door, beside the two pages
   const bots = roomPort ? botHost(join(dir, 'bots.json'), ['--fireplace', '--relay', `127.0.0.1:${roomPort + NATIVE}`, '--bots', '2', '--seconds', String(seconds - 10)]) : null;
   check('the room counts both pages and both bots', await until(() => statusOf(roomPort)?.players === 4, 20000), JSON.stringify(statusOf(roomPort)));
+  // the shelf, while they play: the four counted on Fireplace's tile, its link the room (the invite, without the front door)
+  await until(() => pool.rooms.get(roomId)?.players === 4, 8000);
+  const tiles = await shelfOf('good', 'fireplace', 'shelf');
+  check('the shelf counts the room\'s players on Fireplace\'s tile, its link the room', tiles.fireplace?.live?.playing === 4 && tiles.fireplace.href === `fireplace.html?room=${roomId}`,
+    JSON.stringify(tiles.fireplace));
+  check('  and every other tile plays its local room', Object.values(tiles).every((t) => t.id === 'fireplace' || (!t.live && /[?&]local=1(&|$)/.test(t.href))),
+    JSON.stringify(Object.values(tiles).filter((t) => t.id !== 'fireplace' && (t.live || !/local=1/.test(t.href)))));
   // the pool unreachable: the local room, and a line saying why
   const DEAD = encodeURIComponent(`http://127.0.0.1:${POOL_PORT - 1}/kit/`);
   const c = await open(`${site('good')}?room=${roomId}&pool=${DEAD}${GAME}`, 'c');
@@ -263,6 +284,12 @@ try {
   report.grade = { b: gb, bots: gbots, a: sa?.hashes.length };
   check('the second page and the bots step the same world as the first', gb.compared >= 8 && gb.wrong === 0 && gbots.compared >= 8 && gbots.wrong === 0, JSON.stringify(report.grade));
   check('both pages kept up', playing(sa) && playing(sb) && !sa.error && !sb.error, JSON.stringify([sa?.error, sb?.error]));
+  // a third page, opened from the shelf's tile, lands in the room with them (here, where no page waits behind its shaders compiling)
+  const g = await open(`${site('good')}client/${tiles.fireplace?.href}${GAME}`, 'g');
+  let sg = null;
+  await until(async () => playing(sg = await stateOf(g)) && sg.pool?.id, 60000, 500);
+  check('a page opened from the tile lands in that room', playing(sg) && sg.pool.id === roomId && !sg.pool.why && !sg.pool.local, JSON.stringify(sg && { clState: sg.clState, slot: sg.slot, pool: sg.pool }));
+  await g.context().close();
   await a.context().close();
   await b.context().close();
 
@@ -323,6 +350,13 @@ try {
   let smb = null;
   await until(async () => playing(smb = await stateOf(mb)) && smb.pool?.id && smb.hashes.length > 4, 60000, 500);
   check('a page opened from it lands in the same room', playing(smb) && smb.pool.id === mroom && !smb.pool.why && smb.slot !== sm.slot, JSON.stringify(smb && { slot: smb.slot, pool: smb.pool }));
+  // the shelf: the two counted on the map's tile and on the tile of the mode the map plays, never on the arena's own
+  await until(() => pool.rooms.get(mroom)?.players === 2, 8000);
+  const mtiles = await shelfOf('m1', 'map-crossroads', 'mshelf');
+  const onMap = `arena.html?room=${mroom}&map=crossroads`;
+  check('the shelf counts a map\'s room on the map\'s tile and its mode\'s, their link the room on the map', mtiles['map-crossroads']?.live?.playing === 2 && mtiles['map-crossroads'].href === onMap
+    && mtiles[`arena-${L.M_CROSSROADS}`]?.href === onMap && !mtiles.arena?.live && !mtiles['map-canyon']?.live,
+    JSON.stringify([mtiles['map-crossroads'], mtiles[`arena-${L.M_CROSSROADS}`], mtiles.arena?.live]));
   await sleep(8000);
   [sm, smb] = [await stateOf(ma), await stateOf(mb)];
   const mgrade = grader((sm?.hashes || []).map(([t, h]) => [t, h]))(smb?.hashes);
@@ -347,7 +381,10 @@ try {
   await refuse('a pool with max_rooms open', { site: site('p3'), game: 'party' }, 503, /the pool is full: 2 rooms open/);
   const share = await ask({ site: site('p3'), game: 'golf' });
   check('a copy with the same wasm as an open room joins it, over no cap', share.status === 200 && share.json.room === golf.json.room, share.text);
-  check('the pool says what it holds', (await ask(null, { method: 'GET', path: '' })).json?.rooms === 2);
+  const holds = (await ask(null, { method: 'GET', path: '' })).json;
+  check('the pool says what it holds, each open room by what it runs', holds?.rooms === 2 && holds.open?.length === 2
+    && holds.open.some((r) => r.room === golf.json.room && r.game === 'golf' && r.game_sha256 === golf.json.game_sha256 && r.map === null && r.max_players === 8)
+    && holds.open.some((r) => r.room === flight.json.room && r.game === 'flight') && holds.open.every((r) => !('url' in r) && !('hash' in r)), JSON.stringify(holds));
 } catch (e) {
   report.errors.push(String(e?.stack || e));
   check('the gate ran to its end', false, String(e?.stack || e));

@@ -26,6 +26,11 @@ is in view, T changes its theme (`?theme=<id>` picks one), B, H and P your
 ball, hat and body, and L lists your achievements (`?look=<word>` wears a look
 for one visit). In party, 1 to 4 wave, cheer, dance and spin.
 
+**The shelf** (`client/games.html`) is the other way in: every game,
+minigame, mode and map as a tile that plays it alone, where the room plays
+them in turn. The link in the room's top left corner goes there, and each
+game's page has the same link back.
+
 **The wardrobe** (`client/wardrobe.mjs`) is those keys as a panel, on the
 right of the couch (a sheet along the bottom on a phone): your look drawn big,
 the marshmallows you have to spend beside its title,

@@ -26,7 +26,10 @@
 //   GET rooms/<room>   that room's {room, url, hash, hash_url, game,
 //                      game_sha256, map, map_sha256, players, max_players}, or 404 {why}
 //   GET cert-hash[?room=<room>]   the relays' certificate hash (that room's), text
-//   GET ./             {rooms, max_rooms, players}
+//   GET ./             {rooms, max_rooms, players, open}: open is a row a room
+//                      that is up, {room, game, game_sha256, map, map_sha256,
+//                      players, max_players}, so a page can say how many are
+//                      playing each of its games and maps (client/games.html)
 // Every refusal says why: a site off fetch_from, a wasm too big, one that
 // imports more than its memory or lacks an export the referee calls, a map
 // for a game that takes none, too big, or one map_load refuses, the caps
@@ -391,7 +394,11 @@ export function startKitRooms(config, { log = (m) => console.error(`[kit-rooms] 
         return send(req, res, 200, await join(q));
       }
       if (req.method !== 'GET') throw new Refusal(405, 'GET or POST');
-      if (path === '') return send(req, res, 200, { rooms: live().length, max_rooms: c.max_rooms, players: live().reduce((n, m) => n + m.players, 0) });
+      if (path === '') {
+        // open: each room that is up, by what it runs, for a page that shows who is playing what (the shelf, client/games.html)
+        const open = live().filter((m) => m.ready).map((m) => ({ room: m.id, game: m.game, game_sha256: m.sha, map: m.map || null, map_sha256: m.mapSha || null, players: m.players, max_players: c.max_players }));
+        return send(req, res, 200, { rooms: live().length, max_rooms: c.max_rooms, players: live().reduce((n, m) => n + m.players, 0), open });
+      }
       if (path === 'cert-hash') {
         const id = u.searchParams.get('room');
         const m = id ? rooms.get(id) : null;

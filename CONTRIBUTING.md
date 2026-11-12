@@ -135,7 +135,11 @@ it into the lists that name every minigame:
 node tools/new-mg.mjs <key> <prefix> "<NAME>"     # e.g. node tools/new-mg.mjs marbles mb "MARBLE RUN"
 npm run build && node --test test/mg-<key>.test.mjs test/party.test.mjs
 node net/play.mjs --party --mg <id> --bots 7      # play it: open the URL it prints
+node tools/shelf.mjs --only mg-<key>              # its picture for the shelf (client/games.html), once it looks like itself
 ```
+
+The shelf lists a minigame the day it is in the list, under its name and its
+module's `hint`, in a tile of its own colour until it has a picture.
 
 Rather not install anything? The studio works on a minigame in the browser:
 `client/studio.html` (on the game's site, or `node tools/serve.mjs` here).

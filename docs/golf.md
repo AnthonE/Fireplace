@@ -4,7 +4,10 @@
 ball ever hit stays in play. Golf is where the engine started (`src/` built
 plain, `build/game.wasm`), and in Fireplace it is a hole on the playlist. Its
 own page, `client/index.html`, plays it alone, with a netcode graph and
-replays; Fireplace mounts the lean frontend, `client/golf-game.mjs`. Both
+replays; Fireplace mounts the lean frontend, `client/golf-game.mjs`, and
+`client/golf.html` mounts it alone on the page host the other games share
+(`client/host.mjs`), which with no relay is a local room: you and seven bred
+golfers (below), what the shelf's golf tile opens. All three
 draw with `client/render.mjs`: the course as a cartoon's under a summer sky
 (`client/lowpoly.mjs`, the arena's and Dogfight's look too), the golfers as
 the arena's cartoon figures with the launcher on a shoulder
