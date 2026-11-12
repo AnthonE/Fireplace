@@ -5,8 +5,8 @@
 // extra empty room once it has sat idle for idle_s. Each room writes its status
 // (relay --status) to status_dir/<port>.json and who is signed in (relay
 // --online) to <port>.online.json, and the pool writes the game's server list
-// (elo-shardlist-v1: id, name, addr, max_players, status_url, online_url) to
-// `list`, rows in port order. A page host serves all three: status_url is
+// (elo-shardlist-v1: id, name, addr, max_players, status_url, online_url, and
+// game, the config's) to `list`, rows in port order. A page host serves all three: status_url is
 // status_base + <port>.json, online_url status_base + <port>.online.json.
 //
 // A room whose relay ends is dropped and replaced by the rule above; a room
@@ -143,7 +143,8 @@ export function startPool(config, { log = (m) => console.error(`[rooms] ${m}`) }
       .sort((a, b) => a.port - b.port)
       .map((r) => ({
         // named by its port, so a room keeps its name while others come and go
-        id: `${c.game}-${r.port}`, name: `Room ${r.port - c.ports[0] + 1}`, addr: `${c.host}:${r.port}`, max_players: c.max_players,
+        // game: whose rooms these are, for a page that lists more than one game's (the shelf, client/games.html)
+        id: `${c.game}-${r.port}`, game: c.game, name: `Room ${r.port - c.ports[0] + 1}`, addr: `${c.host}:${r.port}`, max_players: c.max_players,
         ...(c.status_base ? { status_url: `${c.status_base}${r.port}.json`, online_url: `${c.status_base}${r.port}.online.json` } : {}),
       }));
     const why = failures >= MAX_FAILURES ? `stopped starting rooms after ${failures} failures: ${lastWhy}` : null;
