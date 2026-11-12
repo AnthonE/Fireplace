@@ -18,11 +18,11 @@ Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
 on Fireplace's playlist between party and golf.
 
-The shelf (`client/games.html`) lists all of it, 81 tiles: the five games,
-the 49 minigames, the arena's eighteen modes and four maps, Dogfight's four
+The shelf (`client/games.html`) lists all of it, 85 tiles: the five games,
+the 53 minigames, the arena's eighteen modes and four maps, Dogfight's four
 modes and its map, each one click from a local room with AI players and each
-with a picture shot from its own page (`tools/shelf.mjs`: 79 WebP files, 320
-x 200 and the five games' 640 x 400, 866 KB in all, about 12 minutes to shoot
+with a picture shot from its own page (`tools/shelf.mjs`: 83 WebP files, 320
+x 200 and the five games' 640 x 400, 905 KB in all, about 12 minutes to shoot
 on SwiftShader; a mode only a map plays shares the map's). Where a pool
 reports rooms a tile counts who is playing and its click takes a seat
 ([hosting.md](hosting.md#what-the-shelf-reads)). Left: a pool's room started
