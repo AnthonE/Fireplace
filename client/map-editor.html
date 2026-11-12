@@ -17,9 +17,10 @@
   header nav.kit-tabs a[aria-current] { color: var(--hot); border-color: var(--hot); background: #3b3220; }
   #wrap { grid-area: map; position: relative; min-width: 0; min-height: 0; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  #wrap.m2d #view3d, #wrap.m3d #view { display: none; }
+  #wrap.m2d #view3d, #wrap.m2d #over3d, #wrap.m3d #view { display: none; }
   #wrap.split #view { width: 50%; }
-  #wrap.split #view3d { left: 50%; width: 50%; border-left: 1px solid var(--line); }
+  #wrap.split #view3d, #wrap.split #over3d { left: 50%; width: 50%; border-left: 1px solid var(--line); }
+  #over3d { pointer-events: none; }
   #modes { display: flex; gap: 0; }
   #modes button { border-radius: 0; }
   #modes button:first-child { border-radius: 4px 0 0 4px; }
@@ -58,6 +59,16 @@
   ol.steps b { color: var(--ink); font-weight: 600; }
   ul.facts { margin: 4px 0; padding-left: 18px; color: var(--dim); }
   ul.facts li { margin: 1px 0; }
+  ul.course { list-style: none; margin: 4px 0; padding: 0; }
+  ul.course li { margin: 2px 0; padding-left: 16px; position: relative; color: var(--dim); }
+  ul.course li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); }
+  ul.course li.warn { color: var(--hot); }
+  ul.course li.warn::before { content: "!"; color: var(--hot); }
+  ul.course li.bad { color: var(--bad); }
+  ul.course li.bad::before { content: "✗"; color: var(--bad); }
+  ul.course li.go { cursor: pointer; }
+  ul.course li.go:hover { color: var(--ink); }
+  .dirs button { padding: 2px 6px; }
   @media (max-width: 760px) {
     body { grid-template: "top" auto "map" 1fr "foot" auto "side" 40vh / minmax(0, 1fr); }
     header .grow, header .sep { display: none; }
@@ -72,7 +83,9 @@
     <option value="canyon">Box Canyon</option>
     <option value="skyways">Skyways</option>
     <option value="crossroads">Crossroads (from Roblox)</option>
+    <option value="obby">Sky Steps (an obby)</option>
     <option value="new">a new map</option>
+    <option value="new-obby">a new obby</option>
     <option value="folder">a folder…</option>
     <option value="roblox">a Roblox place…</option>
     <option value="vox">a MagicaVoxel model…</option>
@@ -96,11 +109,12 @@
     <select id="weapon" title="a new pad's weapon"></select>
   </span>
   <span class="sep"></span>
-  <label>snap <select id="snap"><option>0.1</option><option selected>0.5</option><option>1</option><option>2</option></select> m</label>
+  <label title="the grid everything placed, moved and sized lands on, in both views">snap <select id="snap"><option value="0">off</option><option>0.1</option><option selected>0.25</option><option>0.5</option><option>1</option><option>2</option></select> m</label>
+  <label title="a drag moves the picked box's whole structure, and Ctrl+D copies it whole; Alt does the other for one drag"><input id="whole" type="checkbox"> whole structure</label>
   <button id="undo" title="Ctrl+Z">undo</button>
   <button id="redo" title="Ctrl+Shift+Z">redo</button>
 </header>
-<div id="wrap"><canvas id="view"></canvas><canvas id="view3d" title="drag to turn, right-drag or Shift-drag to move, wheel to zoom"></canvas></div>
+<div id="wrap"><canvas id="view"></canvas><canvas id="view3d"></canvas><canvas id="over3d"></canvas></div>
 <aside id="side"></aside>
 <footer id="foot">loading…</footer>
 <script type="module" src="./map-editor.mjs"></script>
