@@ -92,6 +92,37 @@ export const STORE_ID = (id) => id.toUpperCase();
 const PROGRESS = { cheese: ['wins', 3], bag: ['mallows', 25], campfire: ['mallows', 100], regular: ['games', 25], champ: ['wins', 10], bonfire: ['mallows', 250], fixture: ['games', 100] };
 const sentence = (s) => (s[0] + s.slice(1).toLowerCase()).replace(/\bdogfight\b/g, 'Dogfight');
 
+// The day's and the week's challenges, as Elo Pros draws them (scry-forge
+// meter/challenges.py): a pool the game declares beside its stats, each a goal
+// over one of them added up across the period's games (a sum), or reached in
+// one game (crowd, the one max here). The house picks three of each kind a
+// period, by a hash anyone can recompute, and says what one pays; nothing
+// here names an amount. They are what a daily pot of the game's coin is
+// split by (docs/coin.md), so a day's goal is once or twice round the
+// playlist, never a rare feat. Not best_streak: the relay reports it as it stands, so a
+// goal on it would be met by last month's run. Ids are append-only, as the
+// achievements' are: Elo Pros keeps progress by id.
+export const CHALLENGES = [
+  { id: 'games_5', name: 'Stay a while', desc: 'Play 5 games today', stat: 'games', goal: 5, every: 'day' },
+  { id: 'games_10', name: 'Make an evening of it', desc: 'Play 10 games today', stat: 'games', goal: 10, every: 'day' },
+  { id: 'mallows_3', name: 'Something toasted', desc: 'Win 3 marshmallows today', stat: 'mallows', goal: 3, every: 'day' },
+  { id: 'mallows_6', name: 'A handful', desc: 'Win 6 marshmallows today', stat: 'mallows', goal: 6, every: 'day' },
+  { id: 'win_1', name: 'Golden today', desc: 'Win a game today', stat: 'wins', goal: 1, every: 'day' },
+  { id: 'party_3', name: 'Three rounds of rounds', desc: 'Play 3 games of Party today', stat: 'played.party', goal: 3, every: 'day' },
+  { id: 'arena_2', name: 'Twice round the arena', desc: 'Play 2 arena matches today', stat: 'played.arena', goal: 2, every: 'day' },
+  { id: 'dogfight_2', name: 'Wheels up', desc: 'Fly 2 Dogfights today', stat: 'played.dogfight', goal: 2, every: 'day' },
+  { id: 'golf_2', name: 'Two holes', desc: 'Play 2 holes of golf today', stat: 'played.golf', goal: 2, every: 'day' },
+  { id: 'crowd_4', name: 'Company', desc: 'Play a game with 4 or more in it today', stat: 'crowd', goal: 4, every: 'day' },
+  { id: 'week_games_40', name: 'Part of the furniture', desc: 'Play 40 games this week', stat: 'games', goal: 40, every: 'week' },
+  { id: 'week_mallows_30', name: 'A week of them', desc: 'Win 30 marshmallows this week', stat: 'mallows', goal: 30, every: 'week' },
+  { id: 'week_wins_5', name: 'Five golden', desc: 'Win 5 games this week', stat: 'wins', goal: 5, every: 'week' },
+  { id: 'week_party_wins_2', name: 'Life of the party', desc: 'Win 2 games of Party this week', stat: 'won.party', goal: 2, every: 'week' },
+  { id: 'week_arena_wins_2', name: 'Arena regular', desc: 'Win 2 arena matches this week', stat: 'won.arena', goal: 2, every: 'week' },
+  { id: 'week_dogfight_win', name: 'Top of the sky', desc: 'Win a Dogfight this week', stat: 'won.dogfight', goal: 1, every: 'week' },
+  { id: 'week_golf_win', name: 'Low score', desc: 'Win a hole of golf this week', stat: 'won.golf', goal: 1, every: 'week' },
+  { id: 'week_crowd_8', name: 'A full room', desc: 'Play a game with 8 or more in it this week', stat: 'crowd', goal: 8, every: 'week' },
+];
+
 // elo.json's stats block (tools/elo.mjs writes it from this list).
 export function eloStats() {
   const perGame = (k, what) => GAME_KEYS.map((g, i) => ({ id: `${k}.${g}`, name: `${what} ${sentence(L.GAMES[i])}`.slice(0, 48), agg: 'sum' }));
@@ -113,6 +144,7 @@ export function eloStats() {
       ...(PROGRESS[a.id] ? { progress: { stat: PROGRESS[a.id][0], max: PROGRESS[a.id][1] } } : {}),
     })),
     boards: [{ id: 'mallows', name: 'Marshmallows', sort: 'desc', keep: 'best' }],
+    challenges: CHALLENGES,
   };
 }
 

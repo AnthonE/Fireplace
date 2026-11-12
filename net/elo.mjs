@@ -82,13 +82,16 @@ export function matchOf({ seed, roomStart, result, wallet }) {
 // The same result for each signed-in wallet's achievements: [{ wallet, r }],
 // r what client/achievements.mjs record() counts ({ key, game, place, got,
 // field }), keyed as the match is so a game counts once. A wallet seen on two
-// seats keeps its better one. Ethereum wallets only: Elo Pros keeps game
-// stats for those.
+// seats keeps its better one. A wallet of either chain, in normWallet's
+// spelling: Elo Pros keeps a Solana wallet's stats as its own, or as the
+// Ethereum wallet's it is linked to (scry-forge meter/walletid.py player),
+// and the day's challenges and the coin's pot count from them (docs/coin.md).
+const WALLET = /^(0x[0-9a-f]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/;
 export function walletResults({ seed, roomStart, result, wallet }) {
   const best = new Map();
   result.places.forEach(([slot, place], i) => {
     const w = wallet(slot);
-    if (!w || !/^0x[0-9a-f]{40}$/.test(w) || best.get(w)?.place <= place) return;
+    if (!w || !WALLET.test(w) || best.get(w)?.place <= place) return;
     best.set(w, { place, got: result.got?.[i] ?? 0 });
   });
   const key = `fp-${(seed >>> 0).toString(16)}-${roomStart >>> 0}-${result.count}`;

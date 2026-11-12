@@ -95,15 +95,16 @@ test('a result as a rated match: signed-in players only, at their places, one se
     ['golf', 'arena', 'bumper', 'party', 'dogfight']);
 });
 
-test("a result for each signed-in wallet's achievements: Ethereum wallets, a wallet's better seat, keyed as the match", () => {
+test("a result for each signed-in wallet's achievements: a wallet of either chain, its better seat, keyed as the match", () => {
   const W1 = '0x' + '11'.repeat(20), W2 = '0x' + '22'.repeat(20), SOL = '4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T';
-  const seat = { 0: W1, 1: W2, 2: null, 3: SOL, 4: W1 };
-  const result = { game: L.G_PARTY, count: 3, places: [[0, 2], [1, 1], [2, 3], [3, 4], [4, 5]], got: [2, 3, 1, 0, 0] };
+  const seat = { 0: W1, 1: W2, 2: null, 3: SOL, 4: W1, 5: 'acct_0123456789abcdef0123' };
+  const result = { game: L.G_PARTY, count: 3, places: [[0, 2], [1, 1], [2, 3], [3, 4], [4, 5], [5, 6]], got: [2, 3, 1, 0, 0, 0] };
   const rs = Elo.walletResults({ seed: 0xdeadbeef, roomStart: 1200, result, wallet: (p) => seat[p] ?? null });
   assert.deepEqual(rs, [
-    { wallet: W1, r: { key: 'fp-deadbeef-1200-3', game: L.G_PARTY, place: 2, got: 2, field: 5 } },
-    { wallet: W2, r: { key: 'fp-deadbeef-1200-3', game: L.G_PARTY, place: 1, got: 3, field: 5 } },
-  ], 'the guest and the Solana wallet left out, W1 at its better seat with that seat\'s marshmallows');
+    { wallet: W1, r: { key: 'fp-deadbeef-1200-3', game: L.G_PARTY, place: 2, got: 2, field: 6 } },
+    { wallet: W2, r: { key: 'fp-deadbeef-1200-3', game: L.G_PARTY, place: 1, got: 3, field: 6 } },
+    { wallet: SOL, r: { key: 'fp-deadbeef-1200-3', game: L.G_PARTY, place: 4, got: 0, field: 6 } },
+  ], 'the guest and what is no wallet left out, the Solana wallet as it is spelled, W1 at its better seat with that seat\'s marshmallows');
   assert.equal(rs[0].r.key, Elo.matchOf({ seed: 0xdeadbeef, roomStart: 1200, result, wallet: (p) => seat[p] ?? null }).id);
   assert.deepEqual(Elo.walletResults({ seed: 1, roomStart: 0, result: { ...result, places: [[2, 1]], got: [3] }, wallet: (p) => seat[p] ?? null }), []);
 });
