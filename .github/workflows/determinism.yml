@@ -321,6 +321,8 @@ jobs:
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 46
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 47
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 48
+      - name: Chat online (a line from one session to every other with its slot, a flood dropped, a spectator kept quiet, a room with none; a Chrome page's own keys and a line over its ball; every hash checked)
+        run: node net/run-chat.mjs --chrome 1 --bots 6 --seconds 40 --res 320x200
       - name: 256 players in one room (the bot host's golfers, impaired, the 257th refused)
         run: node net/run-n1.mjs --chrome 0 --seconds 60
       - name: Spectators through a tree of relays (two edges on the root, a third two deep, 100 verifying spectators each, a player turned away at an edge)

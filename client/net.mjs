@@ -16,6 +16,7 @@ import { createImpair } from '../net/impair.js';
 import { writeClock } from './clock.mjs';
 import { sampler } from './input.mjs';
 import { writeName } from './looks.mjs';
+import { cleanLine } from '../net/chat.mjs';
 
 const epoch = () => performance.timeOrigin + performance.now();
 
@@ -23,9 +24,12 @@ let leave = () => {};
 let leaving = false;
 // a sign-in the page's wallet signed, to the relay (net/elo.mjs)
 let signin = (_m) => {};
+// a line of chat the page's player typed (client/chat.mjs), once the relay has said this session may speak
+let say = (_text) => {};
 self.onmessage = (e) => {
   if (e.data.leave) { leaving = true; leave(); return; }
   if (e.data.signedMessage) { signin(e.data.signedMessage); return; }
+  if (e.data.say !== undefined) { say(e.data.say); return; }
   connect(e.data);
 };
 
@@ -65,8 +69,9 @@ const SILENT_MS = 1500;
 // the arena's while it or Dogfight is the game on (FP_GAME in the confirmed world), else golf's
 // looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK), and for its avatars (W.HELLO_AVATARS: CL_AVATARS)
 // names: ask for the signed-in players' names (W.HELLO_NAMES), into CL_NAMES, and their badges (W.HELLO_BADGES), into CL_BADGES
+// chat: ask for the room's chat (W.HELLO_CHAT); the page hears each message as { chat: { kind, slot, text } } and sends a line with { say }
 // signin: ask the relay for a sign-in nonce (W.HELLO_SIGNIN); the page hears it, and the answer, as { signinNonce } and { signed }
-async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false, names = false, signin: wantSignin = false }) {
+async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false, names = false, chat = false, signin: wantSignin = false }) {
   const imp = createImpair({ ...impair, seed: (Math.random() * 2 ** 32) >>> 0 });
   const i32 = new Int32Array(memory.buffer);
   const u32 = new Uint32Array(memory.buffer);
@@ -85,7 +90,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   const sw = bidi.writable.getWriter();
   const tHello = epoch();
   const resume = back && !watch ? back.slot : -1;
-  await sw.write(W.encodeHello({ maxDatagram: wt.datagrams.maxDatagramSize, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names }));
+  await sw.write(W.encodeHello({ maxDatagram: wt.datagrams.maxDatagramSize, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names, chat }));
   const sr = W.bufferedReader(bidi.readable.getReader());
   const head = await sr.read(4);
   if (head[0] === W.T_REJECT) throw new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected');
@@ -123,6 +128,9 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   };
   sendLook();
   signin = ({ message, signature }) => { sw.write(W.encodeSignin(message, signature)).catch(() => {}); };
+  // no line goes until this relay says the session may speak: one from before chat would read the text as messages
+  let maySay = false;
+  say = (text) => { const line = cleanLine(text); if (maySay && line) sw.write(W.encodeChat(line)).catch(() => {}); };
   // closing the control stream is how the relay hears we left
   let left = false;
   leave = async () => {
@@ -172,6 +180,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
       if (m.type === W.T_NAMES) for (const [p, n] of m.names) if (p < L.NPLAYER) writeName(u8, p, n);
       if (m.type === W.T_AVATAR) for (const [p, w] of m.avatars) if (p < L.NPLAYER) u32[(L.CL_AVATARS >> 2) + p] = w;
       if (m.type === W.T_BADGE) for (const [p, w] of m.badges) if (p < L.NPLAYER) u32[(L.CL_BADGES >> 2) + p] = w;
+      if (m.type === W.T_CHAT) { if (m.kind !== W.CHAT.LINE) maySay = m.kind === W.CHAT.OPEN; self.postMessage({ chat: { kind: m.kind, slot: m.slot, text: m.text } }); }
       if (m.type === W.T_SIGNIN) self.postMessage({ signinNonce: m.nonce });
       if (m.type === W.T_SIGNED) self.postMessage({ signed: { status: m.status, address: m.address } });
       if (m.type === W.T_KEY) {

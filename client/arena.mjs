@@ -32,7 +32,7 @@ async function main() {
       await new Promise((ok) => setTimeout(ok, 50));
     }
   }
-  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool() }), capture: game.capture, ready: true, shot };
+  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool() }), capture: game.capture, chat: h.chat, ready: true, shot };
   note.remove();
   const wardrobe = pageWardrobe(h, { canvas, q, watch: !!fixed }); // your look while the mouse is free (client/wardrobe.mjs), none on a fixed camera
   const loop = (now) => { requestAnimationFrame(loop); game.frame(now); wardrobe?.frame(now); };

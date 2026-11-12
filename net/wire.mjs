@@ -38,7 +38,7 @@
 // Handshake on a client-opened bidirectional stream, which stays open for the
 // whole session; the client ending it means it has left (a native client uses
 // a TCP connection to the relay's native port as the stream):
-//   hello   (24 B): 0x10 | proto | u16 client max datagram | u8[8] sha-256(game.wasm) prefix | u32 room | u32 nonce | u8 flags (1: watch, 2: resume, 4: looks, 8: sign-in, 16: avatars, 32: names, 64: badges) | u8 slot | 2 B 0
+//   hello   (24 B): 0x10 | proto | u16 client max datagram | u8[8] sha-256(game.wasm) prefix | u32 room | u32 nonce | u8 flags (1: watch, 2: resume, 4: looks, 8: sign-in, 16: avatars, 32: names, 64: badges, 128: chat) | u8 slot | 2 B 0
 //   welcome (32 B): 0x11 | slot | u16 server max datagram | u32 join_tick | u32 seed | u32 server_tick | u32 tick_us | u8 send_every | u8 nb | u16 np | u32 room_start | u32 token
 //   watching (32 B): 0x17, then as a welcome with slot 0: a spectator's
 //   reject  (4 B):  0x1f | reason (1 wasm mismatch, 2 room full, 3 protocol, 4 spectators only, 5 nothing to watch yet) | 0 | 0
@@ -56,6 +56,7 @@
 //   sync (16 B): 0x12 | reason (SYNC.*) | 0 | 0 | u32 have (the client's next server tick) | 8 B 0
 //   ping (16 B): 0x15 | 0 | 0 | 0 | u32 nonce | 8 B 0
 //   look (16 B): 0x18 | 0 | 0 | 0 | u32 the player's look word (client/looks.mjs) | 8 B 0
+//   chat (16 B + text): 0x1e | 0 | u16 0 | u16 text bytes | 10 B 0, then a line of chat, UTF-8 (net/chat.mjs)
 // Server to client, from the referee's keyframes and the relay's record:
 //   key  (16 B + extra + packed): 0x14 | reason (SYNC.*) | 0 | 0 | u32 tick | u32 raw bytes | u32 packed bytes,
 //        then for a desync u32 interval | u32 0 | 128 x u64 the referee's slice digests of it,
@@ -69,6 +70,14 @@
 //        sim and never in it (no record, replay or hash holds one); a slot that
 //        leaves goes back to 0, the house look. A client that never sets the
 //        flag (tiny-client, an edge relay) never sees the message.
+//   chat (16 B + text): 0x1e | kind (CHAT.*) | u16 slot | u16 text bytes | 10 B 0, then the text, UTF-8
+//        Only to a session whose hello set flag 128. After its welcome, one
+//        with no text says where it stands: OPEN (it may send lines), LISTEN
+//        (a spectator: it hears the room and may not speak) or OFF (a room
+//        started with --no-chat). Then a LINE for each line a player's slot
+//        said, the speaker's own included, as the relay cleaned it. A client
+//        sends none until it has been told OPEN: a relay from before chat
+//        would read the text as messages. Drawing only, as a look is.
 //
 // Native clients (net/relay.ts --native-port, TCP and UDP on one number): the
 // stream above is the TCP connection; datagrams are UDP to the same port, the
@@ -96,6 +105,7 @@ export const T_SIGNED = 0x1a;
 export const T_AVATAR = 0x1b;
 export const T_NAMES = 0x1c;
 export const T_BADGE = 0x1d;
+export const T_CHAT = 0x1e;
 export const T_REJECT = 0x1f;
 export const REJECT = { WASM: 1, FULL: 2, PROTO: 3, WATCH_ONLY: 4, EMPTY: 5 };
 export const HELLO_WATCH = 1;
@@ -105,6 +115,12 @@ export const HELLO_SIGNIN = 8;
 export const HELLO_AVATARS = 16;
 export const HELLO_NAMES = 32;
 export const HELLO_BADGES = 64;
+export const HELLO_CHAT = 128;
+// What a chat message from the relay is: a line a slot said, or where this session stands.
+export const CHAT = { LINE: 0, OPEN: 1, LISTEN: 2, OFF: 3 };
+// The most text a chat message may carry on the wire. A client cuts its line
+// to net/chat.mjs's CHAT_MAX first; a session that sends more than this is ended.
+export const CHAT_WIRE_MAX = 480;
 // A badge word's bits, what the relay read off a wallet's Solana items: append-only.
 export const BADGE_PILL = 1;
 // why a keyframe is sent: a join, or a resync for an old hole, a client far behind, or a hash mismatch
@@ -417,7 +433,7 @@ export function stampTrailer(buf, { inAck, slack, late, flags = 0 }) {
   return buf;
 }
 
-export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watch = false, resume = -1, looks = false, signin = false, avatars = false, names = false, badges = false }) {
+export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watch = false, resume = -1, looks = false, signin = false, avatars = false, names = false, badges = false, chat = false }) {
   const buf = new Uint8Array(24);
   const dv = new DataView(buf.buffer);
   dv.setUint8(0, T_HELLO);
@@ -426,7 +442,7 @@ export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watc
   buf.set(wasmPrefix.subarray(0, 8), 4);
   dv.setUint32(12, room, true);
   dv.setUint32(16, nonce >>> 0, true);
-  buf[20] = (watch ? HELLO_WATCH : 0) | (resume >= 0 ? HELLO_RESUME : 0) | (looks ? HELLO_LOOKS : 0) | (signin ? HELLO_SIGNIN : 0) | (avatars ? HELLO_AVATARS : 0) | (names ? HELLO_NAMES : 0) | (badges ? HELLO_BADGES : 0);
+  buf[20] = (watch ? HELLO_WATCH : 0) | (resume >= 0 ? HELLO_RESUME : 0) | (looks ? HELLO_LOOKS : 0) | (signin ? HELLO_SIGNIN : 0) | (avatars ? HELLO_AVATARS : 0) | (names ? HELLO_NAMES : 0) | (badges ? HELLO_BADGES : 0) | (chat ? HELLO_CHAT : 0);
   buf[21] = resume >= 0 ? resume : 0;
   return buf;
 }
@@ -434,7 +450,7 @@ export function encodeHello({ maxDatagram, wasmPrefix, room = 0, nonce = 0, watc
 export function decodeHello(buf) {
   if (buf.length < 24 || buf[0] !== T_HELLO) return null;
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  return { proto: dv.getUint8(1), maxDatagram: dv.getUint16(2, true), wasmPrefix: buf.slice(4, 12), room: dv.getUint32(12, true), nonce: dv.getUint32(16, true), watch: !!(buf[20] & HELLO_WATCH), resume: buf[20] & HELLO_RESUME ? buf[21] : -1, looks: !!(buf[20] & HELLO_LOOKS), signin: !!(buf[20] & HELLO_SIGNIN), avatars: !!(buf[20] & HELLO_AVATARS), names: !!(buf[20] & HELLO_NAMES), badges: !!(buf[20] & HELLO_BADGES) };
+  return { proto: dv.getUint8(1), maxDatagram: dv.getUint16(2, true), wasmPrefix: buf.slice(4, 12), room: dv.getUint32(12, true), nonce: dv.getUint32(16, true), watch: !!(buf[20] & HELLO_WATCH), resume: buf[20] & HELLO_RESUME ? buf[21] : -1, looks: !!(buf[20] & HELLO_LOOKS), signin: !!(buf[20] & HELLO_SIGNIN), avatars: !!(buf[20] & HELLO_AVATARS), names: !!(buf[20] & HELLO_NAMES), badges: !!(buf[20] & HELLO_BADGES), chat: !!(buf[20] & HELLO_CHAT) };
 }
 
 export function encodeWelcome({ slot, maxDatagram, joinTick, seed, serverTick, roomStart = 0, token = 0, watch = false }) {
@@ -467,7 +483,7 @@ export function decodeWelcome(buf) {
   };
 }
 
-// The client's 16-byte stream messages: sync, ping and look.
+// The client's 16-byte stream messages: sync, ping and look (a sign-in and a line of chat carry a body after theirs).
 export function encodeSync(reason, have) {
   const buf = new Uint8Array(16);
   const dv = new DataView(buf.buffer);
@@ -490,6 +506,22 @@ export function encodeLook(look) {
   const dv = new DataView(buf.buffer);
   dv.setUint8(0, T_LOOK);
   dv.setUint32(4, look >>> 0, true);
+  return buf;
+}
+
+// A line of chat: a client's to the relay (slot and kind 0), or the relay's
+// to a client, from `slot`; with another kind (CHAT.*) and no text, where the
+// session stands. The text is cut to CHAT_WIRE_MAX bytes here, through a
+// character if it must: net/chat.mjs cuts a line properly first.
+export function encodeChat(text, slot = 0, kind = CHAT.LINE) {
+  const t = new TextEncoder().encode(text).subarray(0, CHAT_WIRE_MAX);
+  const buf = new Uint8Array(16 + t.length);
+  const dv = new DataView(buf.buffer);
+  dv.setUint8(0, T_CHAT);
+  dv.setUint8(1, kind);
+  dv.setUint16(2, slot, true);
+  dv.setUint16(4, t.length, true);
+  buf.set(t, 16);
   return buf;
 }
 
@@ -520,6 +552,7 @@ export function decodeClient(buf) {
   if (buf[0] === T_SYNC) return { type: T_SYNC, reason: buf[1], have: dv.getUint32(4, true) };
   if (buf[0] === T_PING) return { type: T_PING, nonce: dv.getUint32(4, true) };
   if (buf[0] === T_LOOK) return { type: T_LOOK, look: dv.getUint32(4, true) };
+  if (buf[0] === T_CHAT) return { type: T_CHAT, bytes: dv.getUint16(4, true) };
   return null;
 }
 
@@ -611,7 +644,7 @@ export function encodeKeyHead({ reason, tick, raw, packed, interval = 0, digests
 // The server's stream messages after the welcome, read whole:
 // { type, from, n, body } for a fill; { type, reason, tick, raw, interval, digests, packed } for a key; { type, nonce, serverTick } for a pong;
 // { type, looks: [[slot, look], ...] } for looks, { type, avatars: [[slot, word], ...] } for avatars, { type, badges: [[slot, word], ...] } for badges; { type, nonce } for a sign-in's
-// nonce; { type, status, address } for a sign-in's answer.
+// nonce; { type, status, address } for a sign-in's answer; { type, kind, slot, text } for chat.
 export async function readControl(sr) {
   const head = await sr.read(16);
   if (head.length < 16) return null;
@@ -636,6 +669,7 @@ export async function readControl(sr) {
   if (head[0] === T_BADGE) return { type: T_BADGE, badges: decodeLooks(await sr.read(8 * dv.getUint16(2, true))) };
   if (head[0] === T_SIGNIN) return { type: T_SIGNIN, nonce: new TextDecoder().decode(head.subarray(4, 16)).replace(/\0+$/, '') };
   if (head[0] === T_SIGNED) return { type: T_SIGNED, status: head[1], address: new TextDecoder().decode(await sr.read(head[2])) };
+  if (head[0] === T_CHAT) return { type: T_CHAT, kind: head[1], slot: dv.getUint16(2, true), text: new TextDecoder().decode(await sr.read(dv.getUint16(4, true))) };
   if (head[0] === T_NAMES) return { type: T_NAMES, names: decodeNames(await sr.read((4 + NAME_MAX) * dv.getUint16(2, true))) };
   throw new Error(`unknown control message 0x${head[0].toString(16)}`);
 }

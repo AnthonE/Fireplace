@@ -59,6 +59,15 @@ If Elo Pros can't be read, that game counts from nothing (it opens fewer
 achievements, never a wrong one) and the wallet is read again at its next.
 `node net/run-elo.mjs` is the gate for both, against a stand-in for Elo Pros.
 
+**Chat.** A room carries text chat unless its relay is started with
+`--no-chat` (through `relay_args`): a line a player sends goes to everyone in
+the room who asked for chat, cut to 120 bytes, with control characters
+stripped and the words in `net/chat-words.mjs` masked, at most one a second
+from a slot after a burst of three. That file is the whole filter, a short
+list to add to; the page imports it too. Spectators hear a room and may not
+speak. Nothing is logged or kept: a line is in no record or replay. A viewer
+can turn chat off for themselves, or mute a slot, in the page.
+
 **Someone else's game.** The referee runs the room's wasm, so a pool can host
 a game we did not write. The relay gives that wasm its shared memory and
 nothing else, so it cannot open a file or a socket. It refuses at start

@@ -1,7 +1,7 @@
 // What a page's games share: the sim's wasm and one shared memory, the net
 // worker (the session, the clocks, the input words) and the sim worker (the
 // confirmed world), the main thread's own instance for the prediction, the
-// sound, and one GPU device for every renderer the page has. A game's
+// sound, the chat, and one GPU device for every renderer the page has. A game's
 // frontend (client/<game>-game.mjs) mounts on a host and draws from it; a
 // page with one game (party.html, arena.html) mounts one and keeps it, and
 // Fireplace mounts each game as the room moves into it.
@@ -25,6 +25,7 @@ import { forcedSeed } from '../src/arena-view.mjs';
 import { savedLook, wearable, guestLook } from './looks.mjs';
 import { guestAvatar } from './avatar.mjs';
 import { loadTally, gotSet } from './achievements.mjs';
+import { createChat } from './chat.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
 
@@ -82,6 +83,10 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   h.avatar = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) && myAvatar ? myAvatar : h.u32[(L.CL_AVATARS >> 2) + p] >>> 0);
   // a slot's badges as the relay sent them, what it read off the wallet's items (net/wire.mjs BADGE_*)
   h.badges = (p) => (p < 0 || p >= L.NPLAYER ? 0 : h.u32[(L.CL_BADGES >> 2) + p] >>> 0);
+  // chat (client/chat.mjs): the log and the input, the same on every page. A relay's room has it once the relay
+  // says so; a local room or a replay never does. A frontend that draws bubbles asks h.chat.bubbles() each frame.
+  h.chat = createChat({ q, label: h.label, me: () => h.get(L.CL_SLOT), live: (p) => h.view.player(p).live,
+    send: (text) => { if (h.net && h.local === false && !q.get('replay')) h.net.postMessage({ say: text }); } });
   // a replay keeps no looks (the relay never records them): with ?guests=1 every
   // seat is dressed as a local room's AI players are, from its slot (the film's "guests")
   if (q.get('replay') && q.get('guests') === '1') {
@@ -115,7 +120,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
         if (m.error && relay?.pool && !h.welcome) { local(m.error.split('\n')[0]); return; }
         if (m.error) h.error = m.error.split('\n')[0];
         // a new session (a failover's included) is signed in to nothing yet
-        if (m.welcome) { h.welcome = m.welcome; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); }
+        if (m.welcome) { h.welcome = m.welcome; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); h.chat.reset(); }
+        if (m.chat) h.chat.heard(m.chat);
         if (m.replay) h.replay = m.replay;
         if (m.signinNonce) h.signin.nonce = m.signinNonce;
         if (m.signed) Object.assign(h.signin, m.signed);
@@ -131,7 +137,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
       else if (relay) {
         const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
-        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, names: true, signin: fireplace }, [ch.port1]);
+        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, names: true, chat: true, signin: fireplace }, [ch.port1]);
       } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace, kind }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
       h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     };

@@ -54,7 +54,7 @@ player for 2 s takes them as gone.
 
 | message | bytes | layout |
 | --- | --- | --- |
-| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm), or with a map from outside the build SHA-256(game.wasm then the packed map) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 avatars, 32 names, 64 badges) · u8 slot · 2 B 0 |
+| hello, client to relay | 24 | `0x10` · u8 proto (4) · u16 your max datagram · u8[8] the first 8 bytes of SHA-256(game.wasm), or with a map from outside the build SHA-256(game.wasm then the packed map) · u32 room · u32 nonce · u8 flags (1 watch, 2 resume, 4 looks, 8 sign-in, 16 avatars, 32 names, 64 badges, 128 chat) · u8 slot · 2 B 0 |
 | welcome | 32 | `0x11` · u8 slot · u16 server max datagram · u32 join_tick · u32 seed · u32 server_tick · u32 tick_us · u8 send_every · u8 nb · u16 np · u32 room_start · u32 token |
 | watching | 32 | `0x17`, then as a welcome with slot 0: you're a spectator |
 | reject | 4 | `0x1f` · u8 reason · 2 B 0 |
@@ -87,6 +87,8 @@ After the welcome, every stream message opens with 16 bytes:
 | avatars | `0x1b` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 avatar word) |
 | names | `0x1c` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · 16 B name, 0 after its last character) |
 | badges | `0x1d` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 badge word) |
+| chat, client to relay | `0x1e` · 3 B 0 · u16 text bytes · 10 B 0, then a line, UTF-8 |
+| chat | `0x1e` · u8 kind · u16 slot · u16 text bytes · 10 B 0, then the text, UTF-8 |
 
 Looks are optional. A client that sets hello flag 4 gets every slot's look
 after its welcome, then the ones that changed, and may send its own; a client
@@ -137,6 +139,33 @@ when the slot signs in, from `GET /api/items/sol/of/<wallet>` on Elo Pros
 free cosmetic for ten minutes of hosted play. A slot with none, or that
 empties, is 0. So is any answer but the item itself, a read that failed
 included: sign-in never waits for this read and never turns on it.
+
+Chat is optional too, and beside the sim like a look: no tick, keyframe,
+record, replay or hash carries a line. A client that sets hello flag 128
+gets one chat message after its welcome with no text, whose kind says where
+it stands:
+1. open: it may send lines
+2. listen: a spectator, who hears the room and may not speak (nobody in the
+   room can see who a spectator is)
+3. off: the room has no chat (`relay.ts --no-chat`)
+
+After that, kind 0 is a line: `slot` said `text`. Every session that asked
+gets it, the speaker's own included, so each sees what the room saw. Send no
+line until you have been told open: a relay from before chat would read the
+text as messages, and one that never says is one of those. The relay is the
+gate (`net/chat.mjs`), since anyone can write a client:
+- **Cleaned:** control and format characters go (C0, C1, the bidi overrides,
+  zero-width marks), each run of them or of white space becoming one space;
+  the line is cut to 120 bytes of UTF-8 on a character's boundary; the words
+  in `net/chat-words.mjs` are masked with `*`. A line with nothing left is
+  not sent on.
+- **Rate:** a slot may send three lines at once, then one a second. The rest
+  are dropped with no answer.
+- **Size:** a message with more than 480 bytes of text ends the session.
+
+An edge relay does not ask its upstream for chat, so it tells its spectators
+off. The flags byte is full with this one; the next flag is the first of the
+two zero bytes that end the hello.
 
 Sync reasons, which are also a key's reason:
 - 0: join

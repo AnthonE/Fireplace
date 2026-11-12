@@ -22,7 +22,7 @@ async function main() {
   const h = await createHost({ wasm: built || '../build/party/game.wasm', q, watch: q.get('watch') === '1', kind: built ? 'party' : '' });
   const game = await mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.8), sens: Number(q.get('sens') || 3),
     hud: Number(q.get('hud')) || 0, present: q.get('present') !== '0', showGraph: q.get('net') === '1' });
-  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: game.state, capture: game.capture };
+  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: game.state, capture: game.capture, chat: h.chat };
   note.remove();
   // your look, while the mouse is free (client/wardrobe.mjs); not in the studio's frame, where a build is tried
   const wardrobe = pageWardrobe(h, { canvas, q, watch: !!built });

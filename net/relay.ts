@@ -52,6 +52,12 @@
 // and each signed-in wallet's achievements (client/achievements.mjs) to its
 // game stats there.
 //                  [--elo https://elopros.com] [--signin-domains host[,host...]] [--elo-key file --elo-key-id fireplace/<id>]
+// Chat (net/chat.mjs): a line a player's session sends on its stream goes on,
+// cleaned and with its slot, to every session whose hello asked (W.HELLO_CHAT),
+// beside the ticks and never in one; a slot's lines past one a second (a burst
+// of three) are dropped. Spectators hear the room and may not speak; an edge's
+// hear none, since it asks its upstream for none. --no-chat gives a room none.
+//                  [--no-chat]
 // Clients are Chrome (net/run-m0.mjs hosts the bots there): Deno's WebTransport
 // client always binds an IPv6 socket, which hosts without IPv6 refuse. Native
 // clients (the bot host, tiny-client) come in on --native-port instead: the same session over a
@@ -63,6 +69,7 @@ import { encodeReplay } from './replay.mjs';
 import { simRefusal } from './sim-check.mjs';
 import * as Elo from './elo.mjs';
 import * as A from '../client/achievements.mjs';
+import { cleanLine, chatBucket } from './chat.mjs';
 
 const argv = Deno.args;
 const opt = (k: string, d: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
@@ -105,6 +112,7 @@ const TAP_MASK = Number(opt('tap-mask', String(W.JUMP_BIT))) >>> 0;
 const HOLD_MASK = Number(opt('hold-mask', String(W.MOVE_BITS))) >>> 0;
 const HOLD_TICKS = 30;
 const REFEREE_LAG_S = Number(opt('referee-lag', '10'));
+const chatOn = !argv.includes('--no-chat');
 
 const cert = await Deno.readTextFile('certs/cert.pem');
 const key = await Deno.readTextFile('certs/key.pem');
@@ -151,6 +159,8 @@ type Slot = {
   avatars?: boolean; // and for its avatars (W.HELLO_AVATARS)
   names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
   badges?: boolean; // and for their badges (W.HELLO_BADGES)
+  chat?: boolean; // and for the room's chat (W.HELLO_CHAT), in a room that has it
+  bucket?: ReturnType<typeof chatBucket>; // its own lines' rate limit
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
   wallet?: string; // the wallet signed in on this slot
   since?: number; // when it signed in, unix seconds
@@ -210,6 +220,21 @@ const badgeDirty = new Set<number>();
 const badgeTable = () => [...badges.keys()].filter((p) => badges[p]).map((p) => [p, badges[p]] as [number, number]);
 const sendBadges = (s: Slot, pairs: [number, number][]) => { if (s.badges && pairs.length) s.ctl.write(W.encodeLooks(pairs, W.T_BADGE)).catch(() => {}); };
 const setBadge = (p: number, w: number) => { if (badges[p] !== w >>> 0) { badges[p] = w >>> 0; badgeDirty.add(p); } };
+// Chat: a line from a player's session, cleaned (net/chat.mjs: control
+// characters out, cut to 120 bytes, the listed words masked), to every session
+// that asked for chat, the speaker's own included, so each sees what the room
+// saw. Drawing only, as a look is: no tick, record, replay or hash holds a
+// line. A line past the slot's bucket is dropped with no answer; a spectator's
+// is too, since nobody in the room can see who a spectator is.
+function say(s: Slot, body: Uint8Array) {
+  if (!s.chat || s.watch || gone(s)) return;
+  if (!(s.bucket ||= chatBucket()).take(performance.now())) { stats.chat.dropped++; return; }
+  const text = cleanLine(new TextDecoder().decode(body));
+  if (!text) return;
+  stats.chat.lines++;
+  const buf = W.encodeChat(text, s.slot);
+  for (const o of everyone()) if (o.chat) { stats.chat.sent++; o.ctl.write(buf).catch(() => {}); }
+}
 // Never waited for: the sign-in has its answer already, and a read that fails
 // is no badge.
 async function readBadges(s: Slot, wallet: string) {
@@ -286,6 +311,8 @@ const stats = {
   resumed: 0, takeover: null as null | Record<string, number>,
   elo: { signins: 0, signed: 0, refused: 0, unchecked: 0, results: 0, unrated: 0, reported: 0, failed: 0, matches: [] as string[],
     achievements: { reports: 0, players: 0, unlocked: 0, failed: 0, seeded: 0, short: 0 } },
+  // chat: lines sent on, lines dropped by a slot's rate limit, messages written
+  chat: { lines: 0, dropped: 0, sent: 0 },
 };
 
 // The referee: closed ticks go to it in batches; interval hashes and packed keyframes come back.
@@ -766,7 +793,7 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges, chat: hello!.chat && chatOn && !edge });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
@@ -783,6 +810,8 @@ async function admit(d: Door) {
   sendAvatars(s, avatarTable());
   sendBadges(s, badgeTable());
   sendNames(s, nameTable());
+  // where it stands with chat: a client sends no line until it is told it may (an edge hears none from its upstream to pass on)
+  if (hello!.chat) d.sw.write(W.encodeChat('', 0, !chatOn || edge ? W.CHAT.OFF : watch ? W.CHAT.LISTEN : W.CHAT.OPEN)).catch(() => {});
   if (hello!.signin && !watch) {
     if (signinDomains.length) { s.nonce = Elo.newNonce(); d.sw.write(W.encodeSigninNonce(s.nonce)).catch(() => {}); }
     else d.sw.write(W.encodeSigned(Elo.SIGNIN.OFF)).catch(() => {});
@@ -816,6 +845,14 @@ async function admit(d: Door) {
         if (body.length < n) break;
         const { message, signature } = W.decodeSigninBody(buf, body);
         signIn(s, message, signature);
+      }
+      if (m?.type === W.T_CHAT) {
+        // the text is read whatever comes of it, so the stream stays in step
+        const n = m.bytes ?? 0;
+        if (n > W.CHAT_WIRE_MAX) break;
+        const body = await d.sr.read(n);
+        if (body.length < n) break;
+        say(s, body);
       }
       if (m?.type === W.T_PING) { stats.pongs++; s.ctl.write(W.encodePong(m.nonce, serverNow())).catch(() => {}); }
       if (m?.type === W.T_SYNC && performance.now() - s.lastSync > 1000) sendKey(s, m.reason);
@@ -925,7 +962,7 @@ function summary() {
     watchers: { sessions: stats.watchSessions, max: stats.watchMax, compared: stats.watchCompared, agreed: stats.watchAgreed,
       downKBpsEach: stats.watchSeconds ? Number((stats.watchBytes / stats.watchSeconds / 1000).toFixed(2)) : 0 },
     upstream: upstreams.length ? { ...upStats, recordStart, rttMs: Number(up.bestRtt.toFixed(2)) } : null,
-    resumed: stats.resumed, takeover: stats.takeover, elo: stats.elo,
+    resumed: stats.resumed, takeover: stats.takeover, elo: stats.elo, chat: { on: chatOn, ...stats.chat },
     upKBpsPerSession: slotSecs ? Number((stats.recvBytes / slotSecs / 1000).toFixed(2)) : 0,
     serverMaxDatagram: { min: Math.min(...stats.serverMaxDatagram), max: Math.max(...stats.serverMaxDatagram) },
     clientMaxDatagram: { min: Math.min(...stats.clientMaxDatagram), max: Math.max(...stats.clientMaxDatagram) },

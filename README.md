@@ -113,7 +113,10 @@ wardrobe panel picks your ball, hat and body, the room's theme, and lists your
 achievements; while the room is in view the keys do the same: T the theme, B,
 H and P your ball, hat and body, L your achievements. In Party, 1 to 4 wave, cheer, dance and spin.
 `?watch=1` spectates, `?bot=1` sits an AI guest at your controls, F goes
-fullscreen. Each game also runs alone, with its own page:
+fullscreen. In an online room `/` opens the chat in every game (Enter sends,
+Esc closes); a line shows in the log, and in the arena and Party over its
+speaker's head. Click a name to mute it, or type `/off` for no chat at all.
+Each game also runs alone, with its own page:
 
 ```sh
 node net/play.mjs --party [--mg k]       # client/party.html, the rotation or minigame k

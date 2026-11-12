@@ -40,6 +40,17 @@ const FLAKES = 4000;
 
 // sprite kinds: solid 0 a ball, 1 a rider's body, 2 an orb, 6 the arrow over you, 7 a rocket, 8 a rider's head, 9 a crumb,
 // 10 a spinning coin, 11 a bomb, 12 a box (client/rider.mjs); glowing 3 a flash, 4 a ring, 5 a spark
+// Where world point q lands on the screen, as the shader's project() puts it:
+// [x, y, metres ahead of the eye]. s: { cam, yaw, pitch }, as frame()'s. For
+// what the HUD pins to a ball (a line of chat over it).
+export function project(s, W, H, q) {
+  const focal = Math.min(W, H * 1.6) * 0.62;
+  const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw), cp = Math.cos(s.pitch), sp = Math.sin(s.pitch);
+  const r = [q[0] - s.cam[0], q[1] - s.cam[1], q[2] - s.cam[2]];
+  const z = r[0] * cp * cy + r[1] * sp + r[2] * cp * sy;
+  const k = focal / Math.max(z, 0.01);
+  return [W / 2 + (-r[0] * sy + r[2] * cy) * k, H / 2 - (-r[0] * sp * cy + r[1] * cp - r[2] * sp * sy) * k, z];
+}
 export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11, BLOCK };
 export const SHAPE = { BOX: 0, CYL: 1, HEX: 2, SPHERE: 3 };
 // The looks, and what their two parameters a and b do (0 takes the default):

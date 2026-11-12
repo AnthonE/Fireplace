@@ -87,6 +87,13 @@ writing a client of your own, and [hosting.md](hosting.md) runs rooms.
   each of the client's prefixed with a token from the welcome. Native and
   browser players share rooms; the bot host and `net/tiny-client.mjs` come in
   this way.
+- Chat (`net/chat.mjs`, `client/chat.mjs`) is beside all of it, as looks and
+  names are: a line goes up a session's stream, and the relay cleans it,
+  rate-limits its slot and sends it on with the slot to the sessions whose
+  hello asked. No tick, record, replay or hash holds a line, and the sim's
+  build doesn't change by a byte for it. The page has one log and one input
+  for every game, opened with `/`; the arena and Party also stand a line over
+  its speaker's head for 5 s, in the HUD. `node net/run-chat.mjs` is its gate.
 
 ## 256 players in one room
 

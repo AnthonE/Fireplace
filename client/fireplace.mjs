@@ -424,7 +424,7 @@ async function main() {
   }
 
   window.__qa = {
-    hashes: host.hashes, keys: host.keys, desyncs: host.desyncs,
+    hashes: host.hashes, keys: host.keys, desyncs: host.desyncs, chat: host.chat,
     state: () => {
       const g = view.dv.getUint32(L.FP_GAME, true);
       const slot = get(L.CL_SLOT);
