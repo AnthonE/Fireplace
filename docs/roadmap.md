@@ -223,10 +223,13 @@ crediting who made what (every theme is one). Next, in order:
    `/api/face/{wallet}` once the page knows a wallet (below).
 2. Skins. Built: looks (`client/looks.mjs`), a ball, a hat and a body each
    player picks, which the relay carries beside the sim to everyone in the
-   room (hello flag 4), fourteen balls, eight hats and five bodies (the round
-   rider, three blocky, a robot: `client/rider.mjs`, the arena's fighters the
+   room (hello flag 4), twenty balls, fourteen hats and six bodies (the round
+   rider, three blocky, two robots: `client/rider.mjs`, the arena's fighters the
    same figure), ten of them earned with the page's achievements
-   (`client/achievements.mjs`), and four emotes in the word's top byte.
+   (`client/achievements.mjs`), thirteen bought with marshmallows, 5 to 150
+   each, out of a purse the browser keeps (`client/purse.mjs`: the tally's
+   lifetime marshmallows less what was spent), and four emotes in the word's
+   top byte.
    Built too: the Elo Pros avatar, a word any game can draw (a 32-colour
    palette and the figure's six parts at 5 bits each, a face bit), set on a
    player's profile and served on `/api/face/{wallet}`, which the relay reads
@@ -237,7 +240,17 @@ crediting who made what (every theme is one). Next, in order:
    `title: "fireplace"`, and the relay reading
    `/api/items/of/{wallet}?title=fireplace` once a slot has a wallet (below)
    and refusing an owned look a slot doesn't hold. A theme is free, a look is
-   free or earned, an item is owned.
+   free, earned or bought, an item is owned.
+   Next for the purse: sync purchases to the wallet. Today a bought look is
+   one browser's (localStorage), while a signed-in player's marshmallows are
+   already a stat on Elo Pros, so a second browser shows the same total and
+   an empty purse, and the relay, which cannot see a purse, passes on any
+   look word a client sends. The step: the page reports a purchase with its
+   sign-in, Elo Pros keeps what was spent and bought beside the `mallows`
+   stat (the key-value store per wallet, below), the relay reads both as the
+   slot signs in, hands the page its purse and refuses a priced look the
+   wallet has not bought, as it will an item. A guest's purse stays in the
+   browser.
 3. ~~The playlist as a list.~~ Built: `FP_SETS` in `src/layout.mjs`, the
    `fp` macros and `client/fireplace.mjs`'s `PAGES` read it, so a whole new
    game joins Fireplace as one entry (and its page row) once the kits below

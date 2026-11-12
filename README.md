@@ -94,7 +94,8 @@ of golf. The top three of each game get 3, 2 and
 
 Each player picks a ball, a hat and a body on the couch, which everyone in
 the room sees, and earns achievements across the games, some of which open
-looks. The room itself can be reskinned: a theme is one JSON file of
+looks; the marshmallows a player wins buy others (a top hat, a halo, a disco
+ball) in the wardrobe. The room itself can be reskinned: a theme is one JSON file of
 colours, ornaments and weather (`client/themes/`), and two ship with it,
 Grandma's and Summer Rain.
 
@@ -109,7 +110,8 @@ node net/play.mjs --fireplace --bots 0   # just people
 ```
 
 Click (or Enter) to sit down; then each game's own controls. On the couch the
-wardrobe panel picks your ball, hat and body, the room's theme, and lists your
+wardrobe panel picks your ball, hat and body (and buys the priced ones with
+your marshmallows), the room's theme, and lists your
 achievements; while the room is in view the keys do the same: T the theme, B,
 H and P your ball, hat and body, L your achievements. In Party, 1 to 4 wave, cheer, dance and spin.
 `?watch=1` spectates, `?bot=1` sits an AI guest at your controls, F goes
