@@ -17,6 +17,7 @@ const TYPES = {
   '.wasm': 'application/wasm',
   '.json': 'application/json',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.qgl': 'application/octet-stream',
   '.qgr': 'application/octet-stream',
 };

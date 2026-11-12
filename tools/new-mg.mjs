@@ -345,6 +345,7 @@ if (isMain(import.meta.url)) {
     console.log(`\n${name} is minigame ${id} (MG_${key.toUpperCase()}). Next:`);
     console.log(`  npm run build && node --test test/mg-${key}.test.mjs test/party.test.mjs`);
     console.log(`  node net/play.mjs --party --mg ${id} --bots 7     # play it with bots: open the URL it prints`);
+    console.log(`  node tools/shelf.mjs --only mg-${key}              # once it looks like itself: its picture on the shelf (client/games.html lists it already)`);
     console.log(rust
       ? `  then make it yours: rust/mg/${key}/src/lib.rs (the rules; node tools/rust.mjs after each change, docs/rust.md), client/mg/${key}.mjs (the look, the bots). CONTRIBUTING.md has the bar.`
       : '  then make it yours: src/mg/' + key + '.wat (the rules), client/mg/' + key + '.mjs (the look, the bots). CONTRIBUTING.md has the bar.');

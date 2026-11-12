@@ -89,7 +89,7 @@ export async function relayFor(q, opts = {}) {
 }
 
 // The room pool's server list beside this page (rows in port order), or [].
-const roomList = () => fetch(new URL('../rooms/servers.json', import.meta.url), { cache: 'no-store' })
+export const roomList = () => fetch(new URL('../rooms/servers.json', import.meta.url), { cache: 'no-store' })
   .then((r) => (r.ok ? r.json() : {})).then((d) => (Array.isArray(d.servers) ? d.servers : [])).catch(() => []);
 
 // The first room with a seat, as the relay's address, so friends who open the
@@ -102,6 +102,15 @@ export async function seatIn(rows) {
     if (!st || !(st.players >= (st.max_players ?? r.max_players ?? Infinity))) return `https://${r.addr}/`;
   }
   return ok.length ? `https://${ok[0].addr}/` : null;
+}
+
+// The kit pool's open rooms (net/kit-rooms.mjs GET ./, its `open`), for the
+// shelf's counts (client/games.mjs); [] with no pool to ask, or none reached.
+export async function poolRooms(q) {
+  const base = poolBase(q);
+  if (!base) return [];
+  const d = await fetch(base, { cache: 'no-store', signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return Array.isArray(d?.open) ? d.open : [];
 }
 
 // Can this page offer to go online: no relay of its own, and a pool to ask?
