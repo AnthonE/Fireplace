@@ -5,7 +5,7 @@
 // frontend (client/<game>-game.mjs) mounts on a host and draws from it; a
 // page with one game (party.html, arena.html) mounts one and keeps it, and
 // Fireplace mounts each game as the room moves into it.
-//   q: the page's query (?url=, ?hash=, ?impair=, ?threads=, ?music=0, ?replay=<url>: a
+//   q: the page's query (?url=, ?hash=, ?ws=1 the relay's WebSocket door whatever the browser has, ?impair=, ?threads=, ?music=0, ?replay=<url>: a
 //      replay file (net/replay.mjs) in the net worker's place, as a spectator)
 // With no relay to join (client/kit.mjs relayFor: ?local=1, or none set and no
 // room from the kit's pool, ?room= an invite's) the room is local
@@ -20,7 +20,7 @@ import { loadMap } from '../harness/core.mjs';
 import { createSound } from './sound.mjs';
 import { slotLabel } from './looks.mjs';
 import { parseImpair } from '../net/impair.js';
-import { relayFor, room, mapUrl } from './kit.mjs';
+import { relayFor, wsForced, room, mapUrl } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { savedLook, wearable, guestLook } from './looks.mjs';
 import { guestAvatar } from './avatar.mjs';
@@ -67,6 +67,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     device: null,
     renderers: new Map(), // a frontend's renderer, kept for when it mounts again
     connected: false,
+    transport: '', // how the session reaches its relay, once it does: 'webtransport', or 'websocket' (a browser without the first, or ?ws=1)
     // the relay's sign-in (net/elo.mjs): the nonce it handed this session, and its answer to the last one
     signin: { nonce: '', status: 0, address: '' },
   };
@@ -122,6 +123,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
         // a new session (a failover's included) is signed in to nothing yet
         if (m.welcome) { h.welcome = m.welcome; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); h.chat.reset(); }
         if (m.chat) h.chat.heard(m.chat);
+        if (m.transport) h.transport = m.transport;
         if (m.replay) h.replay = m.replay;
         if (m.signinNonce) h.signin.nonce = m.signinNonce;
         if (m.signed) Object.assign(h.signin, m.signed);
@@ -136,8 +138,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       for (const w of [h.net, h.sim]) w.onerror = (e) => { h.error = String(e.message || e); e.preventDefault?.(); };
       if (replay) h.net.postMessage({ replay: new URL(replay, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
       else if (relay) {
-        const certHash = Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0));
-        h.net.postMessage({ url: relay.url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, names: true, chat: true, signin: fireplace }, [ch.port1]);
+        const certHash = relay.hash ? Uint8Array.from(atob(relay.hash), (c) => c.charCodeAt(0)) : null;
+        h.net.postMessage({ url: relay.url, ws: relay.ws, forceWs: wsForced(q), certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch, arena, fireplace, looks: true, names: true, chat: true, signin: fireplace }, [ch.port1]);
       } else h.net.postMessage({ local: localRoom(q, wasm, { arena, fireplace, kind }), memory, prefix, simPort: ch.port1, watch, arena, fireplace }, [ch.port1]);
       h.sim.postMessage({ module, memory, netPort: ch.port2, threads }, [ch.port2]);
     };

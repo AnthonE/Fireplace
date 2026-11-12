@@ -84,6 +84,13 @@
 // server's exactly as above, the client's each prefixed with the welcome's u32
 // token (0 for WebTransport sessions), which is how the relay finds the session
 // and the address to send bundles to.
+//
+// WebSocket clients (net/relay.ts --ws-port), a browser without WebTransport:
+// one binary message a unit, its first byte saying which, the rest the bytes:
+//   0x00 bytes of the stream, in order, cut wherever the sender likes
+//   0x01 one datagram, whole
+// both ways, with no token. The socket is ordered and reliable, so a datagram
+// is never lost, only late: a lost packet holds up everything behind it.
 
 import * as L from '../src/layout.mjs';
 
@@ -108,6 +115,15 @@ export const T_BADGE = 0x1d;
 export const T_CHAT = 0x1e;
 export const T_REJECT = 0x1f;
 export const REJECT = { WASM: 1, FULL: 2, PROTO: 3, WATCH_ONLY: 4, EMPTY: 5 };
+// A WebSocket message's first byte: what the rest of it is.
+export const WS_STREAM = 0;
+export const WS_DATAGRAM = 1;
+export function wsFrame(tag, bytes) {
+  const f = new Uint8Array(1 + bytes.length);
+  f[0] = tag;
+  f.set(bytes, 1);
+  return f;
+}
 export const HELLO_WATCH = 1;
 export const HELLO_RESUME = 2;
 export const HELLO_LOOKS = 4;

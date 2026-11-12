@@ -9,6 +9,8 @@
 //   relay.hash_url  or an https URL that serves that hash, for a relay whose 13-day
 //                   certificate rotates (the host must allow this page's origin, CORS)
 //   relay.pool      the room pool, POOL unless set; "" for none (?pool= for this visit, 0 for none)
+//   relay.ws        the relay's WebSocket door (net/relay.ts --ws-port), for a browser without
+//                   WebTransport, if it is not at the relay's own host and port: see wsDoor
 // A page on a map from outside the build (?map=, the arena's and flight's)
 // goes online on it when the site publishes it (build/maps/<name>.qgmap,
 // tools/site.mjs): the pool fetches the same bytes and starts the room on them.
@@ -55,6 +57,27 @@ function poolBase(q) {
   return base;
 }
 
+// A relay's WebSocket door, for a browser with no WebTransport (net/relay.ts
+// --ws-port): where it is for each relay in `url` (comma-separated, as the
+// relays are), in order: ?ws=<a ws:// or wss:// address>, for this visit;
+// relay.ws in kit.json; else the relay's own host and port, on TCP, wss from
+// an https page and ws from an http one. {host} and {port} in an address
+// stand for the relay's own, so one line serves a pool's rooms behind a
+// proxy that ends the TLS (wss://game.example.com/ws/{port}). '' with ?ws=0:
+// never the WebSocket. ?ws=1, or an address there, uses it even where the
+// browser has WebTransport (wsForced).
+export function wsDoor(url, q, { secure = location.protocol === 'https:', ws = kit.relay?.ws || '' } = {}) {
+  const asked = q.get('ws') || '';
+  if (asked === '0') return '';
+  const at = /^wss?:\/\//.test(asked) ? asked : ws;
+  return url.split(',').map((u) => {
+    const { hostname, port } = new URL(u);
+    const p = port || '443';
+    return at ? at.replaceAll('{host}', hostname).replaceAll('{port}', p) : `${secure ? 'wss' : 'ws'}://${hostname}:${p}/`;
+  }).join(',');
+}
+export const wsForced = (q) => /^(1|wss?:\/\/)/.test(q.get('ws') || '');
+
 // Where this page's room is, in order: ?local=1 none; ?url= (with ?hash=, or
 // the kit's hash); the kit's relay; with certs/hash.txt beside the page, the
 // first room with a seat in the room pool's list beside it (rooms/servers.json,
@@ -64,8 +87,13 @@ function poolBase(q) {
 // opts.bytes) on its map (?map=, its bytes opts.map). None of those, or a
 // pool that can't give the room: null, and the page plays a local room with
 // AI players, room.why saying why. A relay named with no hash to pin is an
-// error.
+// error, unless the page will use its WebSocket door, which pins none. The
+// answer names that door too (ws: wsDoor's).
 export async function relayFor(q, opts = {}) {
+  const r = await relayOf(q, opts);
+  return r && { ...r, ws: wsDoor(r.url, q) };
+}
+async function relayOf(q, opts) {
   if (q.get('local') === '1') return null;
   const r = kit.relay || {};
   const kitHash = async () => (isHash(r.hash) ? r.hash : r.hash_url ? text(r.hash_url) : '');
@@ -74,6 +102,7 @@ export async function relayFor(q, opts = {}) {
   if (url) {
     if (!hash) hash = await kitHash();
     if (!isHash(hash)) hash = await certs();
+    if (!isHash(hash) && (wsForced(q) || (typeof WebTransport === 'undefined' && q.get('ws') !== '0'))) return { url, hash: '' };
     if (!isHash(hash)) throw new Error(`no certificate hash for ${url}: set relay.hash in client/kit.json, or ?hash=`);
     return { url, hash };
   }

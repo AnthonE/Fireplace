@@ -66,7 +66,7 @@ writing a client of your own, and [hosting.md](hosting.md) runs rooms.
   confirmed tick runs, writing nothing else. With nothing remote in the way it
   matches what the confirmed world later does, bit for bit.
 - `client/` is the browser game on three threads over one shared memory. The
-  net worker owns WebTransport and two clocks (`client/clock.mjs`): the
+  net worker owns the session (WebTransport, or the WebSocket door below) and two clocks (`client/clock.mjs`): the
   predicted one, the server's tick plus an input lead sized from the relay's
   jitter, on which it samples one input word a tick; and the playout clock,
   2 ticks plus the p95 jitter of first arrivals behind the earliest, run up to
@@ -87,6 +87,26 @@ writing a client of your own, and [hosting.md](hosting.md) runs rooms.
   each of the client's prefixed with a token from the welcome. Native and
   browser players share rooms; the bot host and `net/tiny-client.mjs` come in
   this way.
+- And a third door, `--ws-port`, for a browser without WebTransport: the
+  same session over one WebSocket, each binary message the stream's bytes or
+  a datagram by its first byte ([wire.md](wire.md#transports)). The relay's
+  session code never knew which door a session came through (a stream to
+  read and write, somewhere to write datagrams), so nothing above the door
+  changed. TCP is the difference: no datagram is lost or out of order, so a
+  client's acks never show a hole and the relay sends that session no
+  repair, and a lost packet holds up what follows it (head-of-line
+  blocking), which a datagram's loss never did. After such a stall the
+  bundles land together and late; the playout clock re-centres as it does
+  after any stall, and input words that land late are repeated from the last
+  one, as a late datagram's are. Nothing is unbounded behind a client that
+  stops reading: past 256 KiB unsent the relay drops that session's
+  datagrams (never its stream), and 2 s without an input ends it. A page
+  uses it when the browser has no WebTransport, or with `?ws=1`
+  (`client/transport.mjs`). `node net/run-arena.mjs --ws` is the gate:
+  headless Chrome forced onto the WebSocket beside 16 AI fighters on the
+  native door for 40 s, 663 of 663 interval hashes equal, the page's 39
+  among them, no repair sent to the WebSocket session (16 to the native
+  ones) and no datagram dropped.
 - Chat (`net/chat.mjs`, `client/chat.mjs`) is beside all of it, as looks and
   names are: a line goes up a session's stream, and the relay cleans it,
   rate-limits its slot and sends it on with the slot to the sessions whose

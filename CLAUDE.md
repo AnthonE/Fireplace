@@ -186,7 +186,9 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
-- The room is a relay's (`client/net.mjs`): one named, or on a copy's
+- The room is a relay's (`client/net.mjs`; `client/transport.mjs` opens its
+  WebTransport, or where the browser has none, or with `?ws=1`, the relay's
+  WebSocket door, `--ws-port`, found by `client/kit.mjs` `wsDoor`): one named, or on a copy's
   GitHub Pages site, once someone presses play online with friends or opens
   an invite (`?room=`), one the kit's room pool starts on that copy's wasm
   (`net/kit-rooms.mjs`, `relay.pool`). Otherwise (`client/kit.mjs`:

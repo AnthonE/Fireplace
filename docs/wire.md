@@ -15,7 +15,7 @@ Two working clients to read beside this page:
 | | |
 | --- | --- |
 | [`net/tiny-client.mjs`](../net/tiny-client.mjs) | the smallest whole client, 129 lines of JavaScript: joins, steps, plays, reports |
-| [`client/net.mjs`](../client/net.mjs) and [`client/sim.mjs`](../client/sim.mjs) | the browser's: steered lead, playout clock, prediction, failover |
+| [`client/net.mjs`](../client/net.mjs) and [`client/sim.mjs`](../client/sim.mjs) | the browser's: steered lead, playout clock, prediction, failover ([`client/transport.mjs`](../client/transport.mjs) opens its WebTransport or WebSocket) |
 
 `net/wire.mjs` is the reference encoder and decoder for everything below.
 Everything is little-endian.
@@ -47,8 +47,27 @@ with the welcome's u32 `token`; that is how the relay finds the session, and it
 sends bundles back to the address the datagram came from. The relay's
 datagrams carry no token.
 
-Closing the stream is how you leave. A relay that hears no datagram from a
-player for 2 s takes them as gone.
+**WebSocket:** for a browser without WebTransport, on the relay's
+`--ws-port` (off unless given; by custom the relay's own number, on TCP).
+One socket carries both: every message is binary, and its first byte says
+what the rest is.
+
+| first byte | the rest |
+| --- | --- |
+| `0x00` | bytes of the stream, in order, cut wherever the sender likes |
+| `0x01` | one datagram, whole |
+
+Both ways, with no token, and the messages inside are the ones on this page,
+unchanged. `ws://` unless the relay was given a certificate (`--ws-cert`,
+`--ws-key`) or sits behind a proxy that ends the TLS. The socket is ordered
+and reliable, so a datagram is never lost, only late: a lost packet holds up
+everything behind it, then it all lands at once. Acks, repairs and resyncs
+work as they do on datagrams and have nothing to do: an ack shows no hole, so
+no repair is sent. Each tick still comes twice (a bundle carries the newest
+four, every second tick), the second copy skipped.
+
+Closing the stream (the WebSocket itself, there) is how you leave. A relay
+that hears no datagram from a player for 2 s takes them as gone.
 
 ## The handshake (the stream)
 

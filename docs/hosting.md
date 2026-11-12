@@ -59,6 +59,49 @@ If Elo Pros can't be read, that game counts from nothing (it opens fewer
 achievements, never a wrong one) and the wallet is read again at its next.
 `node net/run-elo.mjs` is the gate for both, against a stand-in for Elo Pros.
 
+**The WebSocket door.** Not every browser has WebTransport; one without it
+can still play through a relay started with `--ws-port`
+(off unless given): the same session over one WebSocket, on TCP
+([wire.md](wire.md#transports)). It is a fallback: ordered delivery means a
+lost packet holds up everything behind it. `"ws": true` in a pool's config
+(`net/rooms.mjs`, `net/kit-rooms.mjs`) opens each room's door on the room's
+own port number, TCP beside the relay's UDP, so open both in the firewall. A
+page looks for the door there: the relay's host and port, `wss://` from an
+https page.
+
+That is the catch. WebTransport pins our 13-day self-signed certificate by
+its hash (`serverCertificateHashes`), and WebSocket has nothing like it: a
+page on https will only open a `wss://` door whose certificate the browser
+already trusts. Either give the relay a real one for its host, through
+`relay_args` (`--ws-cert fullchain.pem --ws-key privkey.pem`: the door is
+then `wss://`, and the relay reads the files once, at start, so a renewed
+certificate reaches a room when the room is next started), or leave the door
+plain and put a proxy that ends the TLS in front, and tell the page where
+with `relay.ws` in `client/kit.json`, `{port}` standing for the room's (a
+sketch for Fireplace's rooms: the door has run here as `ws://` from Chrome,
+and as `wss://` on the relay's own certificate from Node, never behind a
+proxy):
+
+```nginx
+location ~ ^/ws/(6129[0-7])$ {
+  proxy_pass http://127.0.0.1:$1;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_read_timeout 1h;
+}
+```
+
+```json
+"relay": { "ws": "wss://game.elopros.com/ws/{port}" }
+```
+
+A page on plain http (a dev server, `node net/play.mjs`, which opens the
+door) uses `ws://` and needs none of this; `?ws=1` makes a browser that has
+WebTransport use the door anyway, and `?ws=0` never. The kit pool's answer
+names no door: a copy's page looks at the room's host and port like any
+other, so its rooms need the certificate or the proxy too.
+
 **Chat.** A room carries text chat unless its relay is started with
 `--no-chat` (through `relay_args`): a line a player sends goes to everyone in
 the room who asked for chat, cut to 120 bytes, with control characters

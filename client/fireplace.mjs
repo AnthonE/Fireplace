@@ -431,7 +431,7 @@ async function main() {
       return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), mg: g === L.G_PARTY ? L.MINIGAMES[view.dv.getUint32(L.PG_GAME, true)]?.name ?? null : null, state: view.hole().state, scene, zoom, games: gamesSeen,
         mallows: slot >= 0 ? view.dv.getUint16(L.FP_MALLOWS + 2 * slot, true) : 0, card, me: frontend?.state?.().me ?? null,
         look, achievements: Object.keys(tally.got), opened,
-        pool: { ...pool, local: !!host.local },
+        pool: { ...pool, local: !!host.local }, transport: host.transport,
         // the room's looks as the relay last sent them (this slot's own included, once it has gone round)
         relayLooks: [...Array(L.NPLAYER).keys()].filter((p) => host.u32[(L.CL_LOOKS >> 2) + p]).map((p) => [p, host.u32[(L.CL_LOOKS >> 2) + p]]) };
     },
