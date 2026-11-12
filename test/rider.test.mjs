@@ -80,7 +80,8 @@ test('the arena draws its fighters as the cartoon figure, with every body\'s ski
   assert.match(src, /\$\{BLOCK_RAY_WGSL\}/, 'the viewmodel is boxes');
   assert.match(src, /\$\{FIGURE_WGSL\}/);
   assert.match(src, /fn kitOf\(s: SOut\) -> Kit/);
-  assert.match(src, /figureRay\(u\.cam\.xyz, normalize\(ray\), fwd, 1\.0 \/ u\.cam\.w, s\.feet, s\.pose, kitOf\(s\)\)/);
+  // (the eye brought toward its feet by the figure's size, u.aim.w: 1 unless the map has a body of its own)
+  assert.match(src, /figureRay\(s\.feet \+ \(u\.cam\.xyz - s\.feet\) \/ u\.aim\.w, normalize\(ray\), fwd, 1\.0 \/ \(u\.cam\.w \* u\.aim\.w\), s\.feet, s\.pose, kitOf\(s\)\)/);
   assert.match(src, /kind = 15u;/);
   assert.match(readFileSync('client/arena-game.mjs', 'utf8'), /looks: looksOf\(host\)/);
 });
