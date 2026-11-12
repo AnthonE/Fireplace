@@ -132,6 +132,11 @@ shell whose own command line contains the name: it kills that shell.
   imports nothing from Node, because the map editor
   (`client/map-editor.html`) runs it in the page to check a map as it is
   drawn; `tools/map.mjs` and `tools/png.mjs` give it the disk and zlib.
+  The editor's own building half (`client/map-build.mjs`: the 3D view's
+  camera, ray and drag maths, a box's part read and written, the course's
+  check, the starter obby) has no page in it either, and
+  `test/map-build.test.mjs` runs it; what the editor draws over the 3D view
+  is its own canvas, never the arena's renderer.
   The arena's and flight's builds also take a map at run time: `packMap`,
   then the `map_load` export before init (`loadMap` in harness/core.mjs),
   which checks everything in it and sets `MAP_HOSTED` so init leaves MAP to

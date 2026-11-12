@@ -89,6 +89,7 @@ function adopt(spec, images, folder, dir = null) {
   // from here on the images are what this page writes
   spec.terrain = Object.assign(t, { height: 'height.png', scale: 0.00390625, base: 0, surface: 'surface.png' });
   Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, dup: null, rev: ++revs, report: null, brief: null });
+  asked++;
   undo.length = 0; redo.length = 0;
   paintTerrain();
   fit();
@@ -309,13 +310,17 @@ function loadDraft() {
 }
 
 // ---- opening and saving
+// (a map fetched is dropped if another was asked for or taken meanwhile: the
+// page's own first map, still on its way, must not land on one just opened)
+let asked = 0;
 async function openBuiltIn(name) {
-  const base = `../maps/${name}/`;
+  const base = `../maps/${name}/`, mine = ++asked;
   const spec = await (await fetch(base + 'map.json')).json();
   const t = spec.terrain || {};
   const png = async (f) => decode(await (await fetch(base + f)).arrayBuffer(), inflate);
   const imgs = { height: await png(t.height || 'height.png') };
   if (t.surface) imgs.surface = await png(t.surface);
+  if (mine !== asked) return;
   adopt(spec, imgs, ['canyon', 'skyways', 'crossroads', 'obby', 'lifts'].includes(name) ? `my-${name}` : name);
   say(`opened ${spec.name || name}; saving writes a new folder, so the original stays as it is`);
 }
@@ -553,14 +558,23 @@ function frame() {
     const mark = PART_MARK[x.part.kind] || '#ff00ff';
     if (x.part.ghost) { ctx.fillStyle = mark + '38'; ctx.fillRect(x0, y0, w, h); ctx.setLineDash([5, 3]); }
     ctx.strokeStyle = mark; ctx.lineWidth = 2; ctx.strokeRect(x0 + 1, y0 + 1, w - 2, h - 2); ctx.setLineDash([]);
-    if (x.part.kind === 'conveyor' && Array.isArray(x.part.velocity)) {
-      const v = beltWorld(x.part.velocity, st.spec.structures[x.s].turn), n = Math.hypot(v[0], v[1]);
-      if (n > 0) arrow2((x0 + x1) / 2, (y0 + y1) / 2, v[0] / n, v[1] / n, Math.max(10, Math.min(60, (Math.abs(v[0]) * w + Math.abs(v[1]) * h) / n * 0.7)), mark);
-    }
     const text = partLabel(x.part);
     ctx.font = 'bold 9px ui-monospace, monospace';
     const tw = ctx.measureText(text).width + 6;
-    const cx = (x0 + x1) / 2, cy = h >= 13 ? (y0 + y1) / 2 : y0 - 7;
+    // its name in its middle, or over a box too low for it; a floor much
+    // bigger than its name (lava under a course) has it in its corner, clear of what stands on it
+    const big = w > 6 * tw && h > 90;
+    const cx = big ? Math.max(x0, 0) + tw / 2 + 5 : (x0 + x1) / 2, cy = big ? Math.max(y0, 0) + 11 : h >= 13 ? (y0 + y1) / 2 : y0 - 7;
+    if (x.part.kind === 'conveyor' && Array.isArray(x.part.velocity)) {
+      // its arrow, the way it carries: beside its name where the box has the room, else under it
+      const v = beltWorld(x.part.velocity, st.spec.structures[x.s].turn), n = Math.hypot(v[0], v[1]);
+      if (n > 0) {
+        const ux = v[0] / n, uy = v[1] / n, across = Math.abs(uy) * w + Math.abs(ux) * h, off = across >= 34 ? 11 : 0;
+        let px = -uy, py = ux;
+        if (py < 0 || (py === 0 && px < 0)) { px = -px; py = -py; }
+        arrow2((x0 + x1) / 2 + px * off, (y0 + y1) / 2 + py * off, ux, uy, Math.max(10, Math.min(60, (Math.abs(ux) * w + Math.abs(uy) * h) * 0.7)), mark);
+      }
+    }
     if (w * 3 >= tw && h >= 4 && z >= 1.5 && free(named, cx, cy, tw, 12)) {
       ctx.fillStyle = mark; ctx.fillRect(cx - tw / 2, cy - 6, tw, 12);
       ctx.fillStyle = '#10131c'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, cx, cy + 0.5); ctx.textBaseline = 'alphabetic';
@@ -979,6 +993,7 @@ function overlay() {
 // ---- the pointer in the 3D view
 let drag3 = null, hover3 = null, hover3Queued = false, lastView = '2d';
 canvas3.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas3.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }); // the middle button turns the camera, not the page's scroll
 canvas3.addEventListener('pointerdown', (e) => {
   if (!st.spec) return;
   canvas3.setPointerCapture(e.pointerId);
@@ -1103,7 +1118,8 @@ const end3 = (e) => {
   if (!k) return;
   drag3 = null;
   if (k.edit && k.moved) { endStep(); changed(); renderSide(); }
-  else if (k.click && !k.moved && e.type === 'pointerup') click3(k.px, k.py);
+  // (a press on the pick that never moved is a click too: another box of a structure that moves whole is picked by it)
+  else if ((k.click || k.edit === 'move') && !k.moved && e.type === 'pointerup') click3(k.px, k.py);
   draw();
 };
 canvas3.addEventListener('pointerup', end3);

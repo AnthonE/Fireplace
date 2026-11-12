@@ -702,15 +702,19 @@ gzipped, almost all of it the height image.
 
 A map is a directory under `maps/`: `map.json`, `height.png` and, if you
 like, `surface.png`. The map editor draws one in the browser
-(`node tools/serve.mjs`, then `/client/map-editor.html`): the ground from
-above, raised, lowered, flattened, smoothed and painted with a brush; boxes
-dragged out and sized; spawns, pads, teleporters, the flags, the skull, the
-hills and flight's race gates placed and dragged. It runs the build's own
+(`node tools/serve.mjs`, then `/client/map-editor.html`), with no JSON
+written by hand: the ground from above, raised, lowered, flattened, smoothed
+and painted with a brush; boxes dragged out and sized, or built in the 3D
+view the way parts are placed in a building tool
+([Building in 3D](#building-in-3d)); what a box does and how the map plays
+set in its panel; spawns, pads, teleporters, the flags, the skull, the hills
+and flight's race gates placed and dragged. It runs the build's own
 compiler (`tools/map-compile.mjs`, the part of `tools/map.mjs` with no Node
 in it) on every change and shows what it refuses, and saves the three files
 into a folder (Chrome writes them in place; elsewhere it downloads them).
 **play it here** opens the arena on the map as it stands, in a new tab, you
-and AI fighters, with nothing built (below). To play a saved one online:
+and AI fighters, with nothing built (below). **open… > a new obby** starts
+from a small course rather than an empty square. To play a saved one online:
 
 ```sh
 node tools/map.mjs maps/mymap            # checks it and says what it holds
@@ -762,10 +766,118 @@ eight AI fighters, a Fiesta, Capture the Flag and King of the Hill on an
 arena map and a Dogfight (and its Ring Race, with gates) on a map with a
 ceiling. Both maps here take about 6 s together.
 
+### Building in 3D
+
 The editor shows the map in 3D beside the 2D view (**2D / 3D / both**):
 the arena's own renderer (`client/map-view.mjs`) on what is being edited,
-from a camera that orbits the 2D view's middle; drag turns it, right-drag
-moves it, the wheel zooms. Picking is the 2D view's.
+from a camera that orbits a point over the 2D view's middle. It is a place
+to build, not only to look. The pointer's ray, through the camera the
+renderer draws with, is met with the map's boxes (a mover's where the frame
+has them) and the ground, and the nearest wins. The gestures are chosen so
+that building and looking don't fight: a press on what is already picked
+edits it, any other press looks around.
+
+| In the 3D view | |
+| --- | --- |
+| click | picks the box under the pointer (or a spawn, a pad, a flag, the skull, a hill, a teleporter's end); it is outlined in both views |
+| drag the picked box | moves it across the ground, at the height it was taken by; **Shift** moves it up and down instead, **Alt** takes its whole structure, **Ctrl** carries off a copy |
+| drag a dot | a face of the picked box (a dot stands off each one): sizes it |
+| drag the arrow over it | raises and lowers it |
+| drag a picked spawn, pad, flag... | puts it on what is under the pointer: a box's top, or the ground |
+| drag anything else | turns the camera; the middle button always turns |
+| right-drag, or Shift-drag off the pick | pans; the wheel zooms |
+| double-click, **C**, **look at it** | flies the camera to the box |
+| **Delete**, **Ctrl+D**, **Ctrl+Z**, **Ctrl+Shift+Z** | removes it, copies it, undoes, redoes |
+| arrow keys, **Page Up**, **Page Down** | nudge it a grid step (Shift: four), the arrows along the axes nearest the camera's |
+
+![The map editor on a new obby: the 2D view, and the 3D view beside it with the bounce pad picked, its dots and arrow on it, the parts named, and its part in the panel](e1-editor-obby.png)
+
+Everything placed, moved and sized lands on a grid, a quarter of a metre
+unless **snap** says otherwise (0.1 to 2 m, or off: a millimetre). A move
+puts the box's low corner on it and keeps its size; a face dragged stops a
+grid step short of the face opposite.
+
+With the **box** tool (B) a click drops a box where the pointer is, against
+whatever is under it: on the ground, on a box's top, or out from the side
+of one, the size of the last box touched; an outline shows where it will
+land. It goes into the picked structure, else the one it landed on, else
+one of its own. **spawn**, **pad** and **hill** click one down the same
+way, on the box's top when there is one. A course is many blocks alike:
+**Ctrl+D** puts a copy beside the box, and pressed again once the copy has
+been dragged somewhere, puts the next as far on again, so a row of stepping
+stones is Ctrl+D, a drag, and Ctrl+D for each one more. A copied checkpoint
+takes the next free stage.
+
+A drag moves the box, since that is the unit a course is built of (a
+Roblox place comes over as 64 structures of some 28 boxes each, cut where
+the budget fell); **whole structure** in the header makes a drag and Ctrl+D
+take the structure instead, as Alt does for one drag, and a prefab's boxes
+always move together. The 2D view drags the same way. A structure that
+moves is shown moving; while a box of it is picked, it is held where it is
+built.
+
+What the editor adds to the picture (the pick's outline, dots and arrow,
+its size, the parts' marks, a ghost's volume, a belt's arrow) is a 2D
+canvas of its own over the renderer's, drawn through the same camera
+(`orbitEye` in `client/map-build.mjs`): the renderer is the game's and
+draws nothing of the editor's.
+
+### Parts and rules in the editor
+
+A picked box's panel has **What it does**: nothing, or one of the
+[part](#parts-boxes-that-do-something) kinds with that kind's own numbers:
+a bounce's speed (and how high that throws a fighter here), ice's grip, a
+ladder's speed, a conveyor's direction (four arrows, or degrees: 0 east,
+90 south) and speed, a checkpoint's stage, the next free one by default.
+**ghost** makes it a zone with no box. A new box's plain metal takes the
+kind's look as `tools/obby.mjs` paints them (what kills glows red-orange
+`light#ff4a1c`, a bounce pad yellow, ice pale blue, a checkpoint green, the
+finish white); a material or a colour chosen by hand is never changed.
+
+Parts are drawn as what they are in both views: outlined in the kind's
+colour and named (`kill`, `bounce 22`, `belt 3 m/s`, `stage 4`, `finish`),
+a conveyor with an arrow the way it carries, and a ghost, which has no box
+and so is nothing to the renderer, as a dashed see-through volume.
+
+**How it plays**, in the map's panel, sets `mode` (the rotation, or one of
+the keys the compiler takes; obby is explained there), `movement` (the
+arena's, or a walk, a jump and a gravity of the map's own) and `body` (the
+arena's, or a width and a height), each with a **Roblox character** button
+(walk 4.48, jump 2.016, gravity 54.936; 0.56 by 1.4), and `void`. With a
+mode that has no sides the editor asks no spawn on each half, as the
+compiler doesn't, and leaves the flags, the skull and the hills the map
+never placed off the picture.
+
+For a map with a checkpoint or a finish, or whose mode is obby, **Ready to
+play?** lists the course: the start, each stage in order, the finish. It
+says what is missing or wrong where it is: a stage number no checkpoint
+has, two checkpoints of one stage, no finish, a mode that isn't obby (so
+the checkpoints do nothing), and a checkpoint or a spawn nobody could stand
+on: a box in the body's room, a part that kills under or against whoever
+stands there, a zone with nothing under it, a place under the void. A line
+about a box flies to it.
+
+**open… > a new obby** is a course to start from (`starterObby` in
+`client/map-build.mjs`): a start with six spawns, four stages each ended
+by a checkpoint (stepping stones 2.4 m apart, two bars that kill across a
+walkway, 12 m of ice, a bounce pad up to a ledge 3.5 m over it), a ladder
+6 m up a tower to the finish, lava under all of it, on Sky Steps' movement.
+It compiles as it is, and eight AI fighters all finish it, the first in
+about 13 s.
+
+The editor's maths has no page in it (`client/map-build.mjs`: the camera,
+the ray against boxes and the ground, the plane and the lines a drag slides
+along, the grid, a part read and written, the course's check, the
+starter), and `test/map-build.test.mjs` (15 tests) holds it: the camera
+against the renderer's own `project()`, a ray's faces, a box moved, sized
+and dropped on the grid and through a turned structure, a mover's row as
+the compiler packs it, every kind's look and numbers taken by the compiler
+and a hand-set colour kept, the course's check on each fault above with
+Sky Steps and the starter clean, a Roblox obby keeping its parts, body and
+mode, and the starter run by eight AI fighters on the debug build. The
+Pages gate (`net/run-pages.mjs`) opens the starter from the built site,
+picks a stone by clicking it in the 3D view, drags it, and has the
+compiler take the result.
 
 ### Moving boxes
 

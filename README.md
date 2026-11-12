@@ -137,8 +137,13 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
 ## Maps and games of your own
 
 - **Maps.** `node tools/serve.mjs`, then `client/map-editor.html`: draw a map
-  for the arena or Dogfight beside a 3D view of it in the arena's own
-  renderer, and play it from the page. A Roblox place (`.rbxl`, `.rbxlx`) or
+  for the arena or Dogfight, and build it in a 3D view in the arena's own
+  renderer: click a box to pick it, drag it across the ground, raise it,
+  size it by its faces, copy it, and say what it does (kill, bounce, ice,
+  conveyor, ladder, checkpoint, finish) without writing JSON. The panel
+  sets the map's mode, movement, body and void and lists an obby's course;
+  **a new obby** starts from one that plays; **play it** opens it in the
+  arena ([docs/arena.md](docs/arena.md#building-in-3d)). A Roblox place (`.rbxl`, `.rbxlx`) or
   a MagicaVoxel model (`.vox`) becomes a map by one command or by dropping
   the file on the editor ([docs/roblox.md](docs/roblox.md),
   [docs/vox.md](docs/vox.md)); `maps/crossroads/` is one of Roblox's own
