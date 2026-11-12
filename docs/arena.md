@@ -28,9 +28,11 @@ node net/play.mjs --arena --bots 0   # just people
 
 Click to play. The mouse aims, WASD runs, Space jumps, left click fires
 (hold it for the automatics), right click zooms the guns that have a scope,
-1/2, X or the wheel swap your two guns, Q melee, G throws a frag, R reloads,
+1/2 or X swap your two guns, Q melee, G throws a frag, R reloads,
 E picks up the gun on the pad you stand on, Tab shows the scores, F goes
-fullscreen, N the net graph. While the mouse is free (before the first
+fullscreen, N the net graph. The wheel takes the camera back out of your
+fighter's eyes to behind it, as far as 12 m, and in again; C switches
+between the two (third person, below). While the mouse is free (before the first
 click, or after Esc), the wardrobe (`client/wardrobe.mjs`, as on Fireplace's
 couch) picks your ball, hat and body, and PLAY takes the controls again; on a
 phone it waits folded under a YOUR LOOK button. `?bot=1` hands your slot to an
@@ -109,6 +111,47 @@ and a kill feed with medals).
 `client/arena-bot.mjs` is the AI fighter: the nearest enemy it can see over
 the ground, a settling aim with a human's wobble, the gun for the range,
 strafing, frags, melee up close, and pads when nobody is in sight.
+
+**Third person.** A notch of the wheel back puts the camera 2 m behind your
+fighter, each one more a quarter further to 12 m, and forward brings it in
+the same way to the eyes; C (VIEW on a phone) goes between first person and
+the last distance. `client/chase.mjs` is the camera, every part of it a
+function of what it is given: a boom from the eye back along the aim,
+leaning 0.25 m right and 0.12 m up a metre, less by the aim's cosine, which
+through the renderer's sheared lens holds the figure a quarter of the focal
+length left of the screen's centre and an eighth under it at every zoom and
+pitch, so what you aim at shows past its shoulder. The boom stops 0.3 m
+short of the first of the map's boxes on it (a box that moves where it is on
+the tick drawn) and 0.4 m over the ground, in at once and out again eased,
+so the camera never sees through the world. With under a metre of room,
+through a scope, or along an aim steeper than 50° down or 40° up (the
+shear smears a figure seen from over its head, and under an aim far up the
+boom is in the ground) the camera is the eye again, and dead it is the
+death camera as before. From behind, the renderer draws your own figure as
+it draws anyone's, your look and avatar and what a carrier carries, from
+the prediction's record put where the camera has you, and no gun in your
+hands.
+
+![From behind on Box Canyon, the reticle on the teleporter](a6-behind.png)
+
+The sim still fires from the eye along the yaw and pitch, so the reticle is
+not the camera's centre: it sits where that ray lands (`aimPoint`, the
+sim's `$a_ray` in JS: the ground in half-metre steps and a bisection, the
+boxes, every other fighter's body and head, out to the gun's reach) as the
+camera sees the point, in whole pixels, and the hit marker with it. A wall
+2 m ahead puts it by the figure's head; a hill across the field, a few
+pixels off the centre. `test/chase.test.mjs` (11 tests) holds the camera to
+this: zoom 0 is the eye; the figure's place on the screen; the pull-in
+against a wall, a roof, a slope and a lift where it is that tick; from all
+32 spawns of Box Canyon, 16 ways round, 5 pitches and 3 zooms, the camera
+outside every box, over the ground and with nothing between it and the eye;
+and a sniper rifle fired in the sim from ten stands and aims, each tracer
+ending within 0.12 m of the reticle's point, then at a fighter 30 m off,
+both ending on its body. The choice is kept in the browser (the page works without
+`localStorage`); `?view=3` (and `?dist=` metres back) or `?view=1` holds
+one for a visit; a map with a movement of its own (Crossroads) is seen
+from behind until you choose. A spectator's camera and `?cam=` are as they
+were.
 
 **Results.** `test/arena.test.mjs` (18 tests): the map on five seeds; an
 assault-rifle fight through shields to a kill and the respawn on its tick;
