@@ -97,7 +97,7 @@ export function createChat({ q = new URLSearchParams(), send = () => {}, label =
   let status = ''; // '' until the relay says: 'open' (may speak), 'listen' (a spectator), 'off' (a room with none)
   let off = saved(); // the viewer's own switch
   let typing = false;
-  const lines = []; // { slot (-1: the page's own word), text, born, node }
+  const lines = []; // { slot (-1: the page's own word), born, node }
   const muted = new Set();
   const said = new Map(); // slot -> { lines, at }: what stands over its head
   const bucket = chatBucket(CHAT_PER_S * 0.8, CHAT_BURST); // a little under the relay's, so it never has to drop ours
