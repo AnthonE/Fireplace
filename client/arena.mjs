@@ -3,6 +3,7 @@
 //   ?bot=1 hands the controls to an AI fighter (client/arena-bot.mjs)
 //   ?watch=1 spectates; ?cam=x,y,z,yaw,pitch (degrees) holds a spectator's camera
 //   there, for looking over a map; ?url=, ?hash=, ?impair=, ?sens=, ?res= as golf's
+//   ?view=3 starts behind your fighter (?dist= metres back), ?view=1 in its eyes (client/chase.mjs), whatever the browser kept
 //   ?map=<name> a map the site publishes (build/maps/<name>.qgmap), ?map=<url> any packed map;
 //   the line along the bottom offers to take it online (client/online.mjs)
 import { createHost, fitSize } from './host.mjs';
