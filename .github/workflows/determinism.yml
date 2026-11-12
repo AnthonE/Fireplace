@@ -160,6 +160,22 @@ jobs:
         run: |
           node tools/genparty.mjs --mg 48 --bots 16 --ticks 20000 --out logs/minigolf.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/minigolf.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: RELAY RACE (red against blue, batons run end to end and handed on), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 49 --bots 16 --ticks 20000 --out logs/relay.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/relay.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: RUSH HOUR (a road of traffic crossed again and again), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 50 --bots 16 --ticks 20000 --out logs/traffic.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/traffic.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: LONG JUMP (a run down a runway and a leap to an island), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 51 --bots 16 --ticks 20000 --out logs/jump.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/jump.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
+      - name: ROUND UP (red against blue, a flock driven into pens), sixteen AI balls
+        run: |
+          node tools/genparty.mjs --mg 52 --bots 16 --ticks 20000 --out logs/herd.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/herd.qgl --wasm build/party/game.wasm --runtimes node,deno,chromium
       - name: Every map in maps/ compiles, builds into the debug sim and plays with AI fighters
         run: node tools/map-check.mjs --all
       - if: failure()
@@ -323,6 +339,12 @@ jobs:
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 46
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 47
           node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 48
+      - name: The seventh wave online (RELAY RACE, RUSH HOUR, LONG JUMP and ROUND UP each forced, 64 AI balls, every hash checked)
+        run: |
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 49
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 50
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 51
+          node net/run-party.mjs --chrome 0 --bots 64 --seconds 60 --mg 52
       - name: Chat online (a line from one session to every other with its slot, a flood dropped, a spectator kept quiet, a room with none; a Chrome page's own keys and a line over its ball; every hash checked)
         run: node net/run-chat.mjs --chrome 1 --bots 6 --seconds 40 --res 320x200
       - name: The arena through the WebSocket door (headless Chrome forced onto it with ?ws=1 beside 16 AI fighters on the native door, no datagram dropped, no repair asked for, every hash checked)
