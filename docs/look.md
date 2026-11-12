@@ -17,7 +17,8 @@ node tools/board.mjs mark couch wrong "the fire outshines the TV"
 `tools/party-shot.mjs`, a room theme from the couch by
 `tools/theme-shots.mjs`, or the arena or Dogfight by `tools/arena-shot.mjs`:
 in a local room on a fixed seed and a held hour (`track`, `rim`, `sky`,
-`dusk`, `night`, `ships`: a camera held over Box Canyon, or a bot's own), or
+`dusk`, `night`, `ships`: a camera held over Box Canyon, or a bot's own;
+`behind`, `close`, `far`: the arena's camera behind a bot, `--map` on another map), or
 on the arena renderer's demo page with no sim (`faces`, `figures`). All run
 Chromium on SwiftShader with `?present=0`,
 so a box with no graphics card draws the real frame (a second or more each).

@@ -16,6 +16,8 @@ import { parseImpair } from '../net/impair.js';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
 import { fitSize } from './host.mjs';
+import { createChat } from './chat.mjs';
+import { wsDoor, wsForced } from './kit.mjs';
 
 const q = new URLSearchParams(location.search);
 const canvas = document.getElementById('screen');
@@ -41,7 +43,8 @@ async function main() {
   const prefix = await wasmPrefix(bytes);
   const url = q.get('url') || `https://${location.hostname}:4433/`;
   const hash = REPLAY ? '' : q.get('hash') || (await (await fetch('../certs/hash.txt')).text()).trim();
-  const certHash = Uint8Array.from(atob(hash), (c) => c.charCodeAt(0));
+  // (the relay's WebSocket door pins no certificate: a page that will use it may have no hash)
+  const certHash = (() => { try { return Uint8Array.from(atob(hash), (c) => c.charCodeAt(0)); } catch { return null; } })();
   const memory = new WebAssembly.Memory({ initial: L.PAGES, maximum: L.PAGES, shared: true });
   const u8 = new Uint8Array(memory.buffer);
   const i32 = new Int32Array(memory.buffer);
@@ -70,10 +73,13 @@ async function main() {
   // a replay's: its span, the relay's hashes, and each interval the sim stepped, checked against them
   let replay = null;
   const checked = new Map();
+  // chat (client/chat.mjs), as every page has it: the log alone here, no bubbles
+  const chat = createChat({ q, me: () => get(L.CL_SLOT), live: (p) => view.player(p).live, send: (text) => { if (!REPLAY) net.postMessage({ say: text }); } });
   net.onmessage = (e) => {
     const m = e.data;
     if (m.error) error = m.error.split('\n')[0];
-    if (m.welcome) welcome = m.welcome;
+    if (m.welcome) { welcome = m.welcome; chat.reset(); }
+    if (m.chat) chat.heard(m.chat);
     if (m.seen) netSeen = m.seen;
     if (m.replay) replay = { ...m.replay, truth: new Map(m.replay.hashes), speed: 1, paused: false };
     if (m.state) Object.assign(replay, m.state);
@@ -93,7 +99,7 @@ async function main() {
   // an exception a worker's own timer throws reaches only its error event
   for (const w of [net, sim]) w.onerror = (e) => { error = String(e.message || e); e.preventDefault?.(); };
   if (REPLAY) net.postMessage({ replay: new URL(REPLAY, location.href).href, memory, prefix, simPort: ch.port1 }, [ch.port1]);
-  else net.postMessage({ url, certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch: WATCH }, [ch.port1]);
+  else net.postMessage({ url, ws: wsDoor(url, q), forceWs: wsForced(q), certHash, memory, prefix, simPort: ch.port1, impair: parseImpair(q.get('impair')), watch: WATCH, chat: true }, [ch.port1]);
   sim.postMessage({ module, memory, netPort: ch.port2, threads: THREADS }, [ch.port2]);
   addEventListener('pagehide', () => net.postMessage({ leave: true }));
 
@@ -197,7 +203,7 @@ async function main() {
   let moved = { at: 0 }, sampled = { tick: -1 };
   let me = null, pme = null;
   window.__qg = {
-    hashes, keys, desyncs, syncs, fills, latency, net: () => netSeen,
+    hashes, keys, desyncs, syncs, fills, latency, net: () => netSeen, chat,
     state: () => ({
       slot: get(L.CL_SLOT), watching: WATCH ? watched : null, clState: get(L.CL_STATE), keys: get(L.CL_KEYS), repairs: get(L.CL_REPAIRS), hole: view.hole(), me, predicted: pme, nballs: view.nballs, error, welcome,
       lead: f32[L.CL_LEAD >> 2], delay: f32[L.CL_DELAY >> 2], jitter: f32[L.CL_JITTER >> 2], queued: get(L.CL_QUEUED), next: get(L.CL_NEXT),

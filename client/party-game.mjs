@@ -40,7 +40,7 @@
 //     (banners), the feed and the bottom rows; a minigame's lines go on rows 2 to 6, right-aligned by custom.
 import * as L from '../src/layout.mjs';
 import { partyWord, SIDES } from '../src/party-view.mjs';
-import { createRenderer, Scene, COLS, SPRITE, DECAL } from './party-render.mjs';
+import { createRenderer, Scene, COLS, SPRITE, DECAL, project } from './party-render.mjs';
 import { MG } from './mg/index.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
@@ -51,6 +51,7 @@ import { riderSprites } from './looks.mjs';
 import { rider, emoteOf, withEmote, EMOTE_KEYS } from './rider.mjs';
 import { createJuice } from './juice.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
+import { bubbleAt } from './chat.mjs';
 
 const TURN = 16384;
 const TICK = 0.008;
@@ -184,6 +185,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
   let last = null;
   let held0 = null; // PK_SCORE: where the camera waits while your ball is down
   let cut = 0; // the title card's camera: 1 the fly-round, 0 behind your ball
+  let said = 0; // lines of chat drawn over balls in the last frame
 
   const name = (p, slot) => (p === slot ? 'YOU' : h.label(p));
   const pushFeed = (t, color) => { feed.push({ text: t, color, born: performance.now() }); if (feed.length > 5) feed.shift(); };
@@ -470,6 +472,23 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       rects.push([hx(47 * 4 - 11), hy(y - 1), hx(47 * 4 - 4), hy(y + 6), c[0], c[1], c[2], 1]);
     }
     hudText(text, { g, mod, slot, st, now, fps, f: tgt, item, rects, big, hx, hy, t });
+    // what the room is saying (client/chat.mjs): each line over its speaker's rider, clear of what it holds and your arrow,
+    // while the round plays and the board is down
+    said = 0;
+    if (st === 2 && g.state === L.H_PLAY && !held.has('Tab')) {
+      for (const b of h.chat?.bubbles() ?? []) {
+        const o = view.partier(b.slot);
+        if (!o.live || o.out) continue;
+        const own = mine && b.slot === slot;
+        const at = own ? tgtPos : [0, 1, 2].map((k) => o.pos[k] + o.vel[k] * dt);
+        const [px, py, z] = project({ cam, yaw: camYaw, pitch: camPitch }, W, H, [at[0], at[1] + 2 * (own ? mine : o).radius + 2.5, at[2]]);
+        const box = z > 0.3 && px >= 0 && px < W ? bubbleAt(px, py, b.lines, { hudX: renderer.hudX, hs: HS, cols: COLS, rows: renderer.rows }) : null;
+        if (!box) continue;
+        rects.push([...box.rect, 0.04, 0.05, 0.09, 0.7]);
+        b.lines.forEach((l, k) => put(text, COLS, box.col + ((box.w - l.length) >> 1), box.row + k, l, C.WHITE));
+        said++;
+      }
+    }
     netGraph.sample(now, hashes, keys);
     const graph = showGraph && st > 0 ? netGraph.build((x, y, s2, c) => put(text, COLS, x, y, s2, c), C) : null;
     const xz = [fr.centre[0], fr.centre[2]];
@@ -634,7 +653,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     capture: (scale = W > 640 ? 1 : 2) => (last ? capturePng(renderer, u8, last, scale) : null),
     state: () => {
       const g = view.party();
-      return { slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, error: h.error, welcome: h.welcome, round: g, game: g.game, name: g.name, feed: feed.map((f) => f.text), fps };
+      return { slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, error: h.error, welcome: h.welcome, round: g, game: g.game, name: g.name, feed: feed.map((f) => f.text), fps, said };
     },
     get locked() { return locked; },
   };

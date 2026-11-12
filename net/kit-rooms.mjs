@@ -26,7 +26,10 @@
 //   GET rooms/<room>   that room's {room, url, hash, hash_url, game,
 //                      game_sha256, map, map_sha256, players, max_players}, or 404 {why}
 //   GET cert-hash[?room=<room>]   the relays' certificate hash (that room's), text
-//   GET ./             {rooms, max_rooms, players}
+//   GET ./             {rooms, max_rooms, players, open}: open is a row a room
+//                      that is up, {room, game, game_sha256, map, map_sha256,
+//                      players, max_players}, so a page can say how many are
+//                      playing each of its games and maps (client/games.html)
 // Every refusal says why: a site off fetch_from, a wasm too big, one that
 // imports more than its memory or lacks an export the referee calls, a map
 // for a game that takes none, too big, or one map_load refuses, the caps
@@ -58,7 +61,7 @@ export const MAP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 const DEFAULTS = {
   listen: '127.0.0.1:61280', public_base: 'https://game.elopros.com/kit/',
-  host: 'game.elopros.com', bind: '0.0.0.0', ports: [61300, 61315], native_offset: 0,
+  host: 'game.elopros.com', bind: '0.0.0.0', ports: [61300, 61315], native_offset: 0, ws: false,
   max_rooms: 8, per_site_rooms: 2, max_players: 8, idle_s: 120, hold_s: 20,
   max_wasm_bytes: 2 * 1024 * 1024, max_map_bytes: MAP_STAGE_MAX, fetch_timeout_s: 10,
   fetch_from: ['https://*.github.io', 'https://*.scryward.online'], allow_origins: ['https://*.github.io', 'https://*.scryward.online'],
@@ -235,7 +238,7 @@ export function startKitRooms(config, { log = (m) => console.error(`[kit-rooms] 
     let id;
     do id = randomBytes(5).toString('hex'); while (rooms.has(id));
     const m = { id, port, sha, game, map: map?.name || '', mapSha, site, hash: certHash(), holds: [], lastPlayers: 0, players: 0, emptySince: Date.now(), hadPlayers: false, ready: false, ended: null };
-    m.r = startRoom({ wasm, map: mapFile, game, bind: c.bind, native_offset: c.native_offset, max_players: c.max_players, status_dir: c.status_dir, relay_args: c.relay_args }, port, (code, why) => {
+    m.r = startRoom({ wasm, map: mapFile, game, bind: c.bind, native_offset: c.native_offset, ws: c.ws, max_players: c.max_players, status_dir: c.status_dir, relay_args: c.relay_args }, port, (code, why) => {
       rooms.delete(id);
       m.ended = why || `the relay ended (exit ${code})`;
       if (!live().some((o) => o.sha === sha)) rmSync(wasm, { force: true });
@@ -391,7 +394,11 @@ export function startKitRooms(config, { log = (m) => console.error(`[kit-rooms] 
         return send(req, res, 200, await join(q));
       }
       if (req.method !== 'GET') throw new Refusal(405, 'GET or POST');
-      if (path === '') return send(req, res, 200, { rooms: live().length, max_rooms: c.max_rooms, players: live().reduce((n, m) => n + m.players, 0) });
+      if (path === '') {
+        // open: each room that is up, by what it runs, for a page that shows who is playing what (the shelf, client/games.html)
+        const open = live().filter((m) => m.ready).map((m) => ({ room: m.id, game: m.game, game_sha256: m.sha, map: m.map || null, map_sha256: m.mapSha || null, players: m.players, max_players: c.max_players }));
+        return send(req, res, 200, { rooms: live().length, max_rooms: c.max_rooms, players: live().reduce((n, m) => n + m.players, 0), open });
+      }
       if (path === 'cert-hash') {
         const id = u.searchParams.get('room');
         const m = id ? rooms.get(id) : null;

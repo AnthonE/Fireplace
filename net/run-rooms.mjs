@@ -9,7 +9,7 @@
 //     caps each at max_players, writes each room's status and the game's
 //     server list, and stops the extra rooms once they have sat empty.
 // Bots join through each room's native door (net/bot-host.mjs).
-//   node net/run-rooms.mjs
+//   node net/run-rooms.mjs [--base 4650: its ports are the 23 past this] [--native 100: a room's native door, past its port]
 import net from 'node:net';
 import dgram from 'node:dgram';
 import { Readable } from 'node:stream';
@@ -17,10 +17,12 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import * as W from './wire.mjs';
-import { setup, botHost, readJson, sleep } from './gate.mjs';
+import { setup, botHost, readJson, sleep, opt } from './gate.mjs';
 import { startPool } from './rooms.mjs';
 
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
+// the relays started alone on B + 1 to B + 3, the pool's rooms from P, the refused pool's from B + 20
+const B = Number(opt('base', 4650)), NATIVE = Number(opt('native', 100)), P = B + 10;
 const failed = [];
 // every relay this gate starts goes when it does, whatever way it ends
 const kids = new Set();
@@ -55,19 +57,19 @@ function runRelay(args, ms) {
 
 const sneaky = await write('sneaky.wasm', wasmOf(`(module ${MEM} (import "env" "fetch" (func (param i32))) (func (export "init") (param i32)) (func (export "step"))
   (func (export "snapshot") (param i32)) (func (export "regrid")))`));
-let r = await runRelay(['--port', '4651', '--wasm', sneaky, '--referee-threads', '1'], 10000);
+let r = await runRelay(['--port', String(B + 1), '--wasm', sneaky, '--referee-threads', '1'], 10000);
 check('a wasm importing more than its memory is refused at start', r.code === 2 && r.err.includes('env.fetch'), `exit ${r.code}: ${r.err.trim()}`);
 const partial = await write('partial.wasm', wasmOf(`(module ${MEM} (func (export "init") (param i32)) (func (export "step")))`));
-r = await runRelay(['--port', '4652', '--wasm', partial, '--referee-threads', '1'], 10000);
+r = await runRelay(['--port', String(B + 2), '--wasm', partial, '--referee-threads', '1'], 10000);
 check('a wasm missing an export the referee calls is refused, by name', r.code === 2 && r.err.includes('snapshot') && r.err.includes('regrid'), `exit ${r.code}: ${r.err.trim()}`);
 
 // A sim whose step never returns, and one player in the room keeping it open
 // (a hello with its prefix, then empty words every 16 ms; no sim of its own).
 const stuck = await write('stuck.wasm', wasmOf(SIM('(loop (br 0))')));
 {
-  const relay = runRelay(['--port', '4653', '--native-port', '4753', '--wasm', stuck, '--referee-threads', '1', '--referee-lag', '2'], 20000);
+  const relay = runRelay(['--port', String(B + 3), '--native-port', String(B + 3 + NATIVE), '--wasm', stuck, '--referee-threads', '1', '--referee-lag', '2'], 20000);
   await sleep(1500);
-  const tcp = net.connect({ host: '127.0.0.1', port: 4753, noDelay: true });
+  const tcp = net.connect({ host: '127.0.0.1', port: B + 3 + NATIVE, noDelay: true });
   await new Promise((ok, no) => { tcp.once('connect', ok); tcp.once('error', no); });
   const sr = W.bufferedReader(Readable.toWeb(tcp).getReader());
   const { readFileSync } = await import('node:fs');
@@ -81,7 +83,7 @@ const stuck = await write('stuck.wasm', wasmOf(SIM('(loop (br 0))')));
     const from = Math.max(w.joinTick, now - 16);
     const m = W.encodeInput({ seq: seq++, firstTick: from, ackTick: 0, ackBits: 0n, words: new Array(now - from).fill(0) });
     const d = new Uint8Array(4 + m.length); new DataView(d.buffer).setUint32(0, w.token, true); d.set(m, 4);
-    udp.send(d, 4753, '127.0.0.1');
+    udp.send(d, B + 3 + NATIVE, '127.0.0.1');
   }, 16);
   r = await relay;
   clearInterval(words); udp.close(); tcp.destroy();
@@ -94,7 +96,7 @@ const until = async (what, ms) => { const end = Date.now() + ms; while (Date.now
 {
   // a pool given a wasm the relay refuses tries a few times, then stops and says why
   const badList = `${dir}/refused.json`;
-  const bad = startPool({ game: 'sneaky', wasm: sneaky, ports: [4670, 4672], max_rooms: 2, status_dir: `${dir}/refused`, list: badList,
+  const bad = startPool({ game: 'sneaky', wasm: sneaky, ports: [B + 20, B + 22], max_rooms: 2, status_dir: `${dir}/refused`, list: badList,
     relay_args: ['--referee-threads', '1'] }, { log: () => {} });
   const gaveUp = await until(() => /stopped starting rooms after 3 failures: the relay refused/.test(readJson(badList)?.why || ''), 30000);
   check('a pool whose wasm is refused stops after three tries and says why', gaveUp && readJson(badList).servers.length === 0, JSON.stringify(readJson(badList)));
@@ -103,7 +105,7 @@ const until = async (what, ms) => { const end = Date.now() + ms; while (Date.now
 const statusDir = `${dir}/status`;
 const list = `${dir}/servers.json`;
 const pool = startPool({
-  game: 'golf', wasm: 'build/game.wasm', host: 'play.example.com', ports: [4660, 4663], native_offset: 100,
+  game: 'golf', wasm: 'build/game.wasm', host: 'play.example.com', ports: [P, P + 3], native_offset: NATIVE,
   max_players: 2, min_free: 1, max_rooms: 3, idle_s: 4, status_dir: statusDir,
   status_base: 'https://play.example.com/golf/rooms/', list,
 }, { log: () => {} });
@@ -112,20 +114,21 @@ const servers = () => readJson(list)?.servers || [];
 
 check('the pool opens one free room', await until(() => servers().length === 1, 15000), JSON.stringify(readJson(list)));
 const first = servers()[0] || {};
-check('a row names the room the way a store reads it', first.addr === 'play.example.com:4660' && first.max_players === 2 && first.name === 'Room 1'
-  && first.status_url === 'https://play.example.com/golf/rooms/4660.json'
-  && first.online_url === 'https://play.example.com/golf/rooms/4660.online.json', JSON.stringify(first));
+check('a row names the room the way a store reads it, and whose game it is', first.addr === `play.example.com:${P}` && first.max_players === 2 && first.name === 'Room 1'
+  && first.id === `golf-${P}` && first.game === 'golf'
+  && first.status_url === `https://play.example.com/golf/rooms/${P}.json`
+  && first.online_url === `https://play.example.com/golf/rooms/${P}.online.json`, JSON.stringify(first));
 
 // three bots at the first room: two get in, one is turned away
-const bots = botHost(`${dir}/bots.json`, ['--relay', '127.0.0.1:4760', '--bots', '3', '--seconds', '10']);
-check('the first room fills to its cap', await until(() => readJson(`${statusDir}/4660.json`)?.players === 2, 15000), JSON.stringify(readJson(`${statusDir}/4660.json`)));
-const st = readJson(`${statusDir}/4660.json`) || {};
+const bots = botHost(`${dir}/bots.json`, ['--relay', `127.0.0.1:${P + NATIVE}`, '--bots', '3', '--seconds', '10']);
+check('the first room fills to its cap', await until(() => readJson(`${statusDir}/${P}.json`)?.players === 2, 15000), JSON.stringify(readJson(`${statusDir}/${P}.json`)));
+const st = readJson(`${statusDir}/${P}.json`) || {};
 check('its status says what a store shows', st.max_players === 2 && st.tick_hz === 125 && st.tick > 0 && st.game === 'golf', JSON.stringify(st));
-const roster = readJson(`${statusDir}/4660.online.json`) || {};
+const roster = readJson(`${statusDir}/${P}.online.json`) || {};
 check('its roster is the shape a store counts as play, empty while nobody signs in', Array.isArray(roster.online) && roster.online.length === 0
   && Math.abs(roster.at - Date.now() / 1000) < 10, JSON.stringify(roster));
-check('the players\' worlds match the referee\'s', await until(() => (readJson(`${statusDir}/4660.json`)?.hashes_checked || 0) >= 4, 15000)
-  && readJson(`${statusDir}/4660.json`)?.hashes_differed === 0, JSON.stringify(readJson(`${statusDir}/4660.json`)));
+check('the players\' worlds match the referee\'s', await until(() => (readJson(`${statusDir}/${P}.json`)?.hashes_checked || 0) >= 4, 15000)
+  && readJson(`${statusDir}/${P}.json`)?.hashes_differed === 0, JSON.stringify(readJson(`${statusDir}/${P}.json`)));
 check('a full room opens another', await until(() => servers().length === 2, 10000), JSON.stringify(servers()));
 await bots.done;
 const b = readJson(`${dir}/bots.json`) || {};
@@ -133,8 +136,8 @@ check('two bots got in and the third was refused, not squeezed in', b.joined ===
 
 check('the empty extra room stops after idle_s', await until(() => servers().length === 1, 30000), JSON.stringify(servers()));
 await pool.close();
-check('a closed pool lists no rooms, and leaves no status behind', servers().length === 0 && !existsSync(`${statusDir}/4660.json`)
-  && !existsSync(`${statusDir}/4660.online.json`));
+check('a closed pool lists no rooms, and leaves no status behind', servers().length === 0 && !existsSync(`${statusDir}/${P}.json`)
+  && !existsSync(`${statusDir}/${P}.online.json`));
 
 console.log(failed.length ? `\nFAILED: ${failed.length}` : '\nPASS');
 process.exit(failed.length ? 1 : 0);

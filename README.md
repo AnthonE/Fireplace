@@ -80,7 +80,7 @@ of golf. The top three of each game get 3, 2 and
 | | |
 | --- | --- |
 | [**Party**](docs/party.md) | Every player a ball, and a different minigame every round, 49 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring, Swiss Roll (a wheel of Swiss cheese, bump the others into its holes: once a game of its own, bumper balls), Whack a Mole, Balloon Bash, Egg Raid, Bowling, Fall Ball, Tug o' War and Mini Golf. |
-| [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and seventeen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, Battle Royale (one life, loot from crates, a zone closing in stages), and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault; and Crossroads, Roblox's own level with its classic sword, rocket launcher and superball, walking and jumping as Roblox does. |
+| [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and eighteen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, Battle Royale (one life, loot from crates, a zone closing in stages), and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault; Crossroads, Roblox's own level with its classic sword, rocket launcher and superball, walking and jumping as Roblox does; and Obby, an obstacle course of kill bricks, ice, conveyors, bounce pads, ladders and moving platforms with a checkpoint after each stage (Sky Steps, `--map obby`). |
 | [**Dogfight**](docs/flight.md) | The arena with wings: every fighter a ship over Skyways, a valley with a river canyon, spires, arches and ring gates. Lasers, a homing charge shot, bombs, boost, brake and barrel rolls, in a free-for-all, red against blue, the juggernaut or Ring Race, three laps through the gates. |
 | [**Golf**](docs/golf.md) | One course for everyone, rockets and grenades for clubs: a blast just behind your ball drives it 200 m, and every ball ever hit stays in play. |
 
@@ -94,13 +94,17 @@ of golf. The top three of each game get 3, 2 and
 
 Each player picks a ball, a hat and a body on the couch, which everyone in
 the room sees, and earns achievements across the games, some of which open
-looks. The room itself can be reskinned: a theme is one JSON file of
+looks; the marshmallows a player wins buy others (a top hat, a halo, a disco
+ball) in the wardrobe. The room itself can be reskinned: a theme is one JSON file of
 colours, ornaments and weather (`client/themes/`), and two ship with it,
 Grandma's and Summer Rain.
 
 ## Play it
 
-You need Node 22 and the newest Chrome (WebGPU, WebTransport).
+You need Node 22 and a browser with WebGPU: the newest Chrome, which plays
+over WebTransport. A browser without WebTransport comes in through the
+relay's WebSocket door instead (TCP, so a lost packet holds up what follows;
+`?ws=1` tries it in Chrome, which is all it has been run in).
 
 ```sh
 npm ci && sh tools/install-deno.sh       # once: wabt, binaryen, Deno 2.9.7 into .tools/
@@ -109,11 +113,15 @@ node net/play.mjs --fireplace --bots 0   # just people
 ```
 
 Click (or Enter) to sit down; then each game's own controls. On the couch the
-wardrobe panel picks your ball, hat and body, the room's theme, and lists your
+wardrobe panel picks your ball, hat and body (and buys the priced ones with
+your marshmallows), the room's theme, and lists your
 achievements; while the room is in view the keys do the same: T the theme, B,
 H and P your ball, hat and body, L your achievements. In Party, 1 to 4 wave, cheer, dance and spin.
 `?watch=1` spectates, `?bot=1` sits an AI guest at your controls, F goes
-fullscreen. Each game also runs alone, with its own page:
+fullscreen. In an online room `/` opens the chat in every game (Enter sends,
+Esc closes); a line shows in the log, and in the arena and Party over its
+speaker's head. Click a name to mute it, or type `/off` for no chat at all.
+Each game also runs alone, with its own page:
 
 ```sh
 node net/play.mjs --party [--mg k]       # client/party.html, the rotation or minigame k
@@ -123,11 +131,29 @@ node net/play.mjs --fireplace --start 3  # Fireplace from the playlist's entry 3
 node net/play.mjs                        # golf, client/index.html
 ```
 
+**The shelf**, `client/games.html`, is everything the site can play, a tile
+each with a picture: Fireplace, Party and each of its 49 minigames, the arena
+and each of its eighteen modes and four maps, Dogfight and its four modes,
+golf. A click plays the tile in a local room with AI players; the box finds
+one by name. Where a room pool reports rooms, a tile says how many are
+playing and its click takes a seat among them
+([docs/hosting.md](docs/hosting.md#what-the-shelf-reads)). Every page has the
+way back to it in its top left corner while the mouse is free.
+
+```sh
+node tools/serve.mjs 8080                # then http://127.0.0.1:8080/client/games.html
+node tools/shelf.mjs --lines             # packs maps/ into build/maps/, which the shelf lists (the site's build does it too)
+node tools/shelf.mjs [--only arena-5]    # shoots the tiles' pictures again, client/shelf/*.webp
+```
+
 With no relay, a page plays a local room: you and AI players (`?bots=`, 7 by
 default), nothing on the network. That is what a copy's GitHub Pages site
 plays until someone presses **play online with friends** or opens an invite
 (`?room=`), which take it to a room from the kit's room pool;
 `node tools/serve.mjs` and `client/fireplace.html?local=1` show it here.
+Golf's local room is `client/golf.html`, golf's frontend on the page host
+the other games share; `client/index.html` stays the relay's page, with the
+netcode graph and replays.
 
 Every room is saved as a replay when it ends (`replays/`), a few kilobytes a
 minute, and plays back in the page with `?replay=../replays/<file>`.
@@ -135,12 +161,22 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
 ## Maps and games of your own
 
 - **Maps.** `node tools/serve.mjs`, then `client/map-editor.html`: draw a map
-  for the arena or Dogfight beside a 3D view of it in the arena's own
-  renderer, and play it from the page. A Roblox place (`.rbxl`, `.rbxlx`) or
+  for the arena or Dogfight, and build it in a 3D view in the arena's own
+  renderer: click a box to pick it, drag it across the ground, raise it,
+  size it by its faces, copy it, and say what it does (kill, bounce, ice,
+  conveyor, ladder, checkpoint, finish) without writing JSON. The panel
+  sets the map's mode, movement, body and void and lists an obby's course;
+  **a new obby** starts from one that plays; **play it** opens it in the
+  arena ([docs/arena.md](docs/arena.md#building-in-3d)). A Roblox place (`.rbxl`, `.rbxlx`) or
   a MagicaVoxel model (`.vox`) becomes a map by one command or by dropping
   the file on the editor ([docs/roblox.md](docs/roblox.md),
   [docs/vox.md](docs/vox.md)); `maps/crossroads/` is one of Roblox's own
   open-source places.
+- **Parts.** A box may do something to whoever touches it: kill, bounce,
+  slide like ice, carry like a conveyor, be climbed like a ladder, or be an
+  obby's checkpoint or finish. A Roblox obby's kill bricks, trusses,
+  conveyors and stages come over as these, and its characters' size with
+  them ([docs/arena.md](docs/arena.md#parts-boxes-that-do-something)).
 - **Moving boxes.** A structure may move to and fro, and fighters ride it and
   are pushed by it; a Roblox lift or platform that its script tweens comes
   over moving (`maps/lifts/`, [docs/arena.md](docs/arena.md#moving-boxes)).
@@ -167,7 +203,8 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
   one 32-bit word per player per tick. Every machine steps the same bits, so
   bandwidth follows players, never balls or bullets: about 9 KB/s down per
   player with 256 in the room.
-- **A referee checks everyone.** The relay (Deno, WebTransport) runs the same
+- **A referee checks everyone.** The relay (Deno; WebTransport, with a
+  WebSocket door for browsers without it) runs the same
   wasm as the clients, hashes the world every 128 ticks, and resyncs anyone
   who differs. Late joiners start from a keyframe; spectators fan out through
   trees of relays; a standby relay takes a room over if its relay dies.
@@ -193,11 +230,11 @@ protocol, for writing a client in any language, and
 | | |
 | --- | --- |
 | `src/` | the sim: the engine and golf (`game.wat` and friends), the arena (`arena.wat`, its team modes in `am/`), flight (`flight.wat`), Party (`bumper.wat`'s ball, `party.wat`, a minigame a file in `mg/`), the playlist (`fireplace.wat`), and `layout.mjs`, the one memory map everything reads |
-| `client/` | the browser: `fireplace.html` and the room, each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, the map editor (`map-editor.html`), and the studio (`studio.html`), where a Party minigame is edited, built, checked and played in the page |
+| `client/` | the browser: `fireplace.html` and the room, the shelf (`games.html`, its pictures in `shelf/`), each game's frontend (`<game>-game.mjs`) and WebGPU renderer, the AI guests, sound, themes, looks and achievements, the map editor (`map-editor.html`), and the studio (`studio.html`), where a Party minigame is edited, built, checked and played in the page |
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
-| `tools/` | the assembler, the map compiler, a Roblox place's and a MagicaVoxel model's converters (`roblox.mjs`, `vox.mjs`), match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
-| `maps/` | Box Canyon, Skyways, Crossroads (a Roblox place) and Lifts (moving boxes): two images and a JSON file each, and Crossroads its licence |
+| `tools/` | the assembler, the map compiler, a Roblox place's and a MagicaVoxel model's converters (`roblox.mjs`, `vox.mjs`), match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the shelf's pictures (`shelf.mjs`), the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
+| `maps/` | Box Canyon, Skyways, Crossroads (a Roblox place), Lifts (moving boxes) and Sky Steps (an obby): two images and a JSON file each, and Crossroads its licence |
 | `rust/` | Party minigames in Rust (Sumo Ring) and the engine's bindings for them |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, hosting, the roadmap, and maps from [Roblox](docs/roblox.md) and [MagicaVoxel](docs/vox.md), minigames in [Rust](docs/rust.md) |

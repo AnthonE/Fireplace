@@ -2,6 +2,9 @@
 // Play: the relay and the page server, until Ctrl-C. Open the printed URL in
 // two tabs (or more) of the newest Chrome; each tab is a player. Each room's
 // replay lands in replays/ when it ends, and plays at ?replay=../replays/<file>.
+// The relay's WebSocket door is open too, on its own port's number over TCP:
+// a browser without WebTransport comes in by it, and &ws=1 on the URL makes
+// Chrome do the same.
 //   node net/play.mjs [--seed 7] [--port 4433] [--web 8080] [--host 127.0.0.1] [--arena [--bots 7] [--mode k] [--map m]] [--flight [--bots 7] [--mode k] [--map m]] [--party [--mg k] [--bots 15]] [--fireplace [--bots 15] [--start k]]
 // --arena runs the room on the arena's sim (build/arena/game.wasm), the
 // deathmatch, with --bots AI fighters in it (net/bot-host.mjs --arena); its
@@ -10,7 +13,7 @@
 // Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill).
 // --flight runs it on flight's sim (build/flight/game.wasm): Dogfight, every
 // fighter a ship over Skyways, with --bots AI pilots (net/bot-host.mjs
-// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 17 Ring Race).
+// --flight); --mode k as the arena's (0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 18 Ring Race).
 // --party runs it on Party's sim (build/party/game.wasm): a minigame a round,
 // with --bots AI balls in it (net/bot-host.mjs --party); --mg k plays only
 // minigame k (src/layout.mjs MINIGAMES), through the room's seed.
@@ -68,7 +71,7 @@ if (map) {
   console.log(`${m.name}: ${m.boxes.length} boxes, ${m.spawns.length} spawns, packed to ${file}`);
 }
 const hash = readFileSync('certs/hash.txt', 'utf8').trim();
-const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', port, '--host', host, '--replays', 'replays', ...(seed ? ['--seed', seed] : []), ...mapArgs, ...(arena ? ['--wasm', 'build/arena/game.wasm'] : flight ? ['--wasm', 'build/flight/game.wasm'] : party ? ['--wasm', 'build/party/game.wasm'] : fireplace ? ['--wasm', 'build/fireplace/game.wasm'] : [])], { stdio: 'inherit' });
+const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', port, '--ws-port', port, '--host', host, '--replays', 'replays', ...(seed ? ['--seed', seed] : []), ...mapArgs, ...(arena ? ['--wasm', 'build/arena/game.wasm'] : flight ? ['--wasm', 'build/flight/game.wasm'] : party ? ['--wasm', 'build/party/game.wasm'] : fireplace ? ['--wasm', 'build/fireplace/game.wasm'] : [])], { stdio: 'inherit' });
 relay.on('exit', (code) => { console.error(`relay exited (${code})`); process.exit(1); });
 let bots = null;
 process.on('SIGINT', () => { relay.kill(); bots?.kill(); process.exit(0); });
@@ -125,3 +128,4 @@ if (fireplace) {
   console.log(`replays: each room's lands in replays/ when it ends; play one at http://${page}:${web}/client/?replay=../replays/<file>`);
   console.log('a rocket blast just behind your ball drives it far and high; farther back is a softer shot; it rolls into the cup');
 }
+console.log(`a browser without WebTransport joins by the relay's WebSocket door, ws://${host === '0.0.0.0' ? '<this machine>' : host}:${port}/; add &ws=1 to the URL to use it in Chrome too`);

@@ -69,6 +69,14 @@
       "path": "maps/canyon"
     },
     {
+      "id": "map-obby",
+      "kind": "map",
+      "name": "Sky Steps",
+      "by": "AnthonE",
+      "about": "An obstacle course over lava: stones, bars, ice, a belt, a bounce pad, a ladder and a ferry, a checkpoint after each.",
+      "path": "maps/obby"
+    },
+    {
       "id": "map-skyways",
       "kind": "map",
       "name": "Skyways",

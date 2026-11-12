@@ -52,10 +52,24 @@
 // and each signed-in wallet's achievements (client/achievements.mjs) to its
 // game stats there.
 //                  [--elo https://elopros.com] [--signin-domains host[,host...]] [--elo-key file --elo-key-id fireplace/<id>]
+// Chat (net/chat.mjs): a line a player's session sends on its stream goes on,
+// cleaned and with its slot, to every session whose hello asked (W.HELLO_CHAT),
+// beside the ticks and never in one; a slot's lines past one a second (a burst
+// of three) are dropped. Spectators hear the room and may not speak; an edge's
+// hear none, since it asks its upstream for none. --no-chat gives a room none.
+//                  [--no-chat]
 // Clients are Chrome (net/run-m0.mjs hosts the bots there): Deno's WebTransport
 // client always binds an IPv6 socket, which hosts without IPv6 refuse. Native
 // clients (the bot host, tiny-client) come in on --native-port instead: the same session over a
 // TCP connection for the stream and UDP for the datagrams (net/wire.mjs).
+// A browser without WebTransport comes in on --ws-port (off unless given): the
+// same session over one WebSocket, each binary message the stream's bytes or
+// a datagram by its first byte. It is plain ws:// unless --ws-cert and
+// --ws-key name a certificate a browser trusts (a pinned hash is WebTransport's
+// alone), or a proxy in front ends the TLS. TCP delivers in order, so no
+// datagram is ever lost and no repair is asked for; a lost packet holds up
+// what follows it instead.
+//                  [--ws-port 4433 [--ws-cert fullchain.pem --ws-key privkey.pem]]
 import * as W from './wire.mjs';
 import * as L from '../src/layout.mjs';
 import { recordLog } from './inbox.mjs';
@@ -63,6 +77,7 @@ import { encodeReplay } from './replay.mjs';
 import { simRefusal } from './sim-check.mjs';
 import * as Elo from './elo.mjs';
 import * as A from '../client/achievements.mjs';
+import { cleanLine, chatBucket } from './chat.mjs';
 
 const argv = Deno.args;
 const opt = (k: string, d: string) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
@@ -105,6 +120,10 @@ const TAP_MASK = Number(opt('tap-mask', String(W.JUMP_BIT))) >>> 0;
 const HOLD_MASK = Number(opt('hold-mask', String(W.MOVE_BITS))) >>> 0;
 const HOLD_TICKS = 30;
 const REFEREE_LAG_S = Number(opt('referee-lag', '10'));
+const chatOn = !argv.includes('--no-chat');
+const wsPort = Number(opt('ws-port', '0')); // 0: no WebSocket door
+const wsCert = opt('ws-cert', ''), wsKey = opt('ws-key', '');
+if (!wsCert !== !wsKey) { console.error('relay: --ws-cert and --ws-key go together'); Deno.exit(2); }
 
 const cert = await Deno.readTextFile('certs/cert.pem');
 const key = await Deno.readTextFile('certs/key.pem');
@@ -145,12 +164,15 @@ type Slot = {
   // ticks from fromTick on reach this client by bundle or repair (before it, by its last fill)
   fromTick: number; repairTick: Int32Array; repairAt: Float64Array;
   keys: number; syncing: boolean; lastSync: number; lastDesync: number; lastReport: number; reports: Map<number, bigint>;
-  token: number; // a native session's, 0 for WebTransport
+  token: number; // a native session's, 0 for WebTransport and WebSocket
+  door: DoorName; // how it came in
   watch: boolean; // a spectator: no slot (slot -1), no words
   looks?: boolean; // its hello asked for the room's looks (W.HELLO_LOOKS)
   avatars?: boolean; // and for its avatars (W.HELLO_AVATARS)
   names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
   badges?: boolean; // and for their badges (W.HELLO_BADGES)
+  chat?: boolean; // and for the room's chat (W.HELLO_CHAT), in a room that has it
+  bucket?: ReturnType<typeof chatBucket>; // its own lines' rate limit
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
   wallet?: string; // the wallet signed in on this slot
   since?: number; // when it signed in, unix seconds
@@ -159,11 +181,13 @@ type Slot = {
   leave?: (why: string) => void;
 };
 // How a session reaches its client: its stream (read and write) and its datagrams.
+type DoorName = 'webtransport' | 'native' | 'websocket';
 type Door = {
   sr: ReturnType<typeof W.bufferedReader>; sw: WritableStreamDefaultWriter<Uint8Array>;
   datagrams: { write(b: Uint8Array): Promise<unknown> }; close: () => void;
   maxDatagram: number; // 0: whatever the client's hello says, up to W.MAX_DATAGRAM
   token: number;
+  door: DoorName;
 };
 
 const E = performance.now();
@@ -210,6 +234,21 @@ const badgeDirty = new Set<number>();
 const badgeTable = () => [...badges.keys()].filter((p) => badges[p]).map((p) => [p, badges[p]] as [number, number]);
 const sendBadges = (s: Slot, pairs: [number, number][]) => { if (s.badges && pairs.length) s.ctl.write(W.encodeLooks(pairs, W.T_BADGE)).catch(() => {}); };
 const setBadge = (p: number, w: number) => { if (badges[p] !== w >>> 0) { badges[p] = w >>> 0; badgeDirty.add(p); } };
+// Chat: a line from a player's session, cleaned (net/chat.mjs: control
+// characters out, cut to 120 bytes, the listed words masked), to every session
+// that asked for chat, the speaker's own included, so each sees what the room
+// saw. Drawing only, as a look is: no tick, record, replay or hash holds a
+// line. A line past the slot's bucket is dropped with no answer; a spectator's
+// is too, since nobody in the room can see who a spectator is.
+function say(s: Slot, body: Uint8Array) {
+  if (!s.chat || s.watch || gone(s)) return;
+  if (!(s.bucket ||= chatBucket()).take(performance.now())) { stats.chat.dropped++; return; }
+  const text = cleanLine(new TextDecoder().decode(body));
+  if (!text) return;
+  stats.chat.lines++;
+  const buf = W.encodeChat(text, s.slot);
+  for (const o of everyone()) if (o.chat) { stats.chat.sent++; o.ctl.write(buf).catch(() => {}); }
+}
 // Never waited for: the sign-in has its answer already, and a read that fails
 // is no badge.
 async function readBadges(s: Slot, wallet: string) {
@@ -286,6 +325,10 @@ const stats = {
   resumed: 0, takeover: null as null | Record<string, number>,
   elo: { signins: 0, signed: 0, refused: 0, unchecked: 0, results: 0, unrated: 0, reported: 0, failed: 0, matches: [] as string[],
     achievements: { reports: 0, players: 0, unlocked: 0, failed: 0, seeded: 0, short: 0 } },
+  // chat: lines sent on, lines dropped by a slot's rate limit, messages written
+  chat: { lines: 0, dropped: 0, sent: 0 },
+  // by door: sessions let in, repair datagrams sent them; the WebSocket's datagrams dropped behind a backlog
+  doors: { webtransport: { sessions: 0, repairs: 0 }, native: { sessions: 0, repairs: 0 }, websocket: { sessions: 0, repairs: 0, dropped: 0 } },
 };
 
 // The referee: closed ticks go to it in batches; interval hashes and packed keyframes come back.
@@ -553,6 +596,7 @@ function repair(s: Slot, ackTick: number, ackBits: bigint, now: number) {
     for (const t of ticks) { s.repairTick[t & (W.RING - 1)] = t; s.repairAt[t & (W.RING - 1)] = now; }
     s.writer.write(buf).catch(() => {});
     stats.repairs++;
+    stats.doors[s.door].repairs++;
     stats.repairTicks += ticks.size;
   }
 }
@@ -766,14 +810,16 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, door: d.door, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges, chat: hello!.chat && chatOn && !edge });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
     watchers.add(s);
     stats.watchSessions++;
     stats.watchMax = Math.max(stats.watchMax, watchers.size);
+    stats.doors[d.door].sessions++;
   } else {
+    stats.doors[d.door].sessions++;
     slots[p] = s;
     stats.sessions++;
   }
@@ -783,6 +829,8 @@ async function admit(d: Door) {
   sendAvatars(s, avatarTable());
   sendBadges(s, badgeTable());
   sendNames(s, nameTable());
+  // where it stands with chat: a client sends no line until it is told it may (an edge hears none from its upstream to pass on)
+  if (hello!.chat) d.sw.write(W.encodeChat('', 0, !chatOn || edge ? W.CHAT.OFF : watch ? W.CHAT.LISTEN : W.CHAT.OPEN)).catch(() => {});
   if (hello!.signin && !watch) {
     if (signinDomains.length) { s.nonce = Elo.newNonce(); d.sw.write(W.encodeSigninNonce(s.nonce)).catch(() => {}); }
     else d.sw.write(W.encodeSigned(Elo.SIGNIN.OFF)).catch(() => {});
@@ -817,6 +865,14 @@ async function admit(d: Door) {
         const { message, signature } = W.decodeSigninBody(buf, body);
         signIn(s, message, signature);
       }
+      if (m?.type === W.T_CHAT) {
+        // the text is read whatever comes of it, so the stream stays in step
+        const n = m.bytes ?? 0;
+        if (n > W.CHAT_WIRE_MAX) break;
+        const body = await d.sr.read(n);
+        if (body.length < n) break;
+        say(s, body);
+      }
       if (m?.type === W.T_PING) { stats.pongs++; s.ctl.write(W.encodePong(m.nonce, serverNow())).catch(() => {}); }
       if (m?.type === W.T_SYNC && performance.now() - s.lastSync > 1000) sendKey(s, m.reason);
       if (m?.type === W.T_LOOK && !watch && !gone(s)) setLook(p, m.look ?? 0);
@@ -832,7 +888,7 @@ function newSlot(slot: number, joinTick: number, o: Partial<Slot>): Slot {
     last: 0, missing: 0, late: 0, lastSlack: 0, periodSlack: Infinity, contig: joinTick - 1, lastRecv: performance.now(), pendingLate: 0, close: () => {},
     words: new Uint32Array(W.RING), wordTick: new Int32Array(W.RING).fill(-1), arrival: new Float64Array(W.RING),
     fromTick: Infinity, repairTick: new Int32Array(W.RING).fill(-1), repairAt: new Float64Array(W.RING),
-    keys: 0, syncing: false, lastSync: -1e9, lastDesync: -1e9, lastReport: -1, reports: new Map(), token: 0, watch: false, ...o,
+    keys: 0, syncing: false, lastSync: -1e9, lastDesync: -1e9, lastReport: -1, reports: new Map(), token: 0, door: 'native', watch: false, ...o,
   };
 }
 const nowhere = { write: () => Promise.resolve() } as unknown as WritableStreamDefaultWriter<Uint8Array>;
@@ -849,7 +905,7 @@ async function session(incoming: Deno.QuicIncoming) {
   try { (wt.datagrams as unknown as { incomingHighWaterMark: number }).incomingHighWaterMark = 256; } catch { /* optional */ }
   const joined = await admit({
     sr: W.bufferedReader(stream.readable.getReader()), sw: stream.writable.getWriter(), datagrams: wt.datagrams.writable.getWriter(),
-    close: () => wt.close(), maxDatagram: wt.datagrams.maxDatagramSize, token: 0,
+    close: () => wt.close(), maxDatagram: wt.datagrams.maxDatagramSize, token: 0, door: 'webtransport',
   });
   if (!joined) return;
   const { s, leave } = joined;
@@ -881,7 +937,7 @@ async function nativeSession(conn: Deno.TcpConn) {
   const joined = await admit({
     sr: W.bufferedReader(conn.readable.getReader()), sw: conn.writable.getWriter(),
     datagrams: { write: (b: Uint8Array) => (route.addr && udp ? udp.send(b, route.addr) : Promise.resolve(0)) },
-    close: () => { try { conn.close(); } catch { /* gone */ } }, maxDatagram: 0, token,
+    close: () => { try { conn.close(); } catch { /* gone */ } }, maxDatagram: 0, token, door: 'native',
   }).catch(() => null);
   if (!joined) { natives.delete(token); try { conn.close(); } catch { /* gone */ } return; }
   route.s = joined.s;
@@ -897,6 +953,42 @@ async function nativeDatagrams(sock: Deno.DatagramConn) {
     n.addr = addr as Deno.NetAddr;
     onInput(n.s, buf.subarray(4), performance.now());
   }
+}
+
+// The WebSocket door: one socket a session, a binary message the stream's
+// bytes or one datagram by its first byte (net/wire.mjs WS_*). The stream's
+// messages are never dropped; a datagram is, once WS_BACKLOG bytes wait unsent
+// behind a client that has stopped reading, as a datagram would be lost: the
+// room's clock never waits for one session's socket.
+const WS_BACKLOG = 256 * 1024;
+function wsSession(ws: WebSocket) {
+  ws.binaryType = 'arraybuffer';
+  // the stream's bytes as they come, for the reader admit() reads the hello and the requests through
+  const chunks: Uint8Array[] = [];
+  let wake: (() => void) | null = null, ended = false;
+  const reader = {
+    async read() {
+      while (!chunks.length && !ended) await new Promise<void>((ok) => { wake = ok; });
+      return chunks.length ? { value: chunks.shift()!, done: false } : { value: undefined, done: true };
+    },
+  } as unknown as ReadableStreamDefaultReader<Uint8Array>;
+  const end = () => { ended = true; wake?.(); };
+  let s: Slot | null = null;
+  ws.onmessage = (e: MessageEvent) => {
+    if (!(e.data instanceof ArrayBuffer) || !e.data.byteLength) return;
+    const b = new Uint8Array(e.data);
+    if (b[0] === W.WS_STREAM) { chunks.push(b.subarray(1)); wake?.(); } else if (b[0] === W.WS_DATAGRAM && s && !gone(s)) onInput(s, b.subarray(1), performance.now());
+  };
+  ws.onclose = end;
+  ws.onerror = end;
+  const send = (tag: number, b: Uint8Array) => { if (ws.readyState === WebSocket.OPEN) ws.send(W.wsFrame(tag, b)); return Promise.resolve(); };
+  const close = () => { try { ws.close(); } catch { /* gone */ } };
+  admit({
+    sr: W.bufferedReader(reader),
+    sw: { write: (b: Uint8Array) => send(W.WS_STREAM, b), close: () => { close(); return Promise.resolve(); } } as unknown as WritableStreamDefaultWriter<Uint8Array>,
+    datagrams: { write: (b: Uint8Array) => { if (ws.bufferedAmount > WS_BACKLOG) { stats.doors.websocket.dropped++; return Promise.resolve(); } return send(W.WS_DATAGRAM, b); } },
+    close, maxDatagram: 0, token: 0, door: 'websocket',
+  }).then((joined) => { if (joined) s = joined.s; else close(); }, close);
 }
 
 function summary() {
@@ -925,7 +1017,7 @@ function summary() {
     watchers: { sessions: stats.watchSessions, max: stats.watchMax, compared: stats.watchCompared, agreed: stats.watchAgreed,
       downKBpsEach: stats.watchSeconds ? Number((stats.watchBytes / stats.watchSeconds / 1000).toFixed(2)) : 0 },
     upstream: upstreams.length ? { ...upStats, recordStart, rttMs: Number(up.bestRtt.toFixed(2)) } : null,
-    resumed: stats.resumed, takeover: stats.takeover, elo: stats.elo,
+    resumed: stats.resumed, takeover: stats.takeover, elo: stats.elo, chat: { on: chatOn, ...stats.chat }, doors: stats.doors,
     upKBpsPerSession: slotSecs ? Number((stats.recvBytes / slotSecs / 1000).toFixed(2)) : 0,
     serverMaxDatagram: { min: Math.min(...stats.serverMaxDatagram), max: Math.max(...stats.serverMaxDatagram) },
     clientMaxDatagram: { min: Math.min(...stats.clientMaxDatagram), max: Math.max(...stats.clientMaxDatagram) },
@@ -1177,9 +1269,18 @@ if (nativePort) {
   const tcp = Deno.listen({ hostname, port: nativePort, transport: 'tcp' });
   (async () => { for await (const conn of tcp) nativeSession(conn).catch(() => {}); })();
 }
+if (wsPort) {
+  const tls = wsCert ? { cert: await Deno.readTextFile(wsCert), key: await Deno.readTextFile(wsKey) } : {};
+  Deno.serve({ hostname, port: wsPort, ...tls, onListen: () => {} }, (req: Request) => {
+    if (req.headers.get('upgrade')?.toLowerCase() !== 'websocket') return new Response('a relay\'s WebSocket door: docs/wire.md\n', { status: 426, headers: { upgrade: 'websocket' } });
+    const { socket, response } = Deno.upgradeWebSocket(req);
+    wsSession(socket);
+    return response;
+  });
+}
 if (edge) followUpstream();
 else pump();
-if (!quiet) console.error(`relay listening on https://${hostname}:${port}/ (${cc})${nativePort ? `, native clients on ${hostname}:${nativePort} (TCP and UDP)` : ''}, tick ${W.TICK_MS} ms`);
+if (!quiet) console.error(`relay listening on https://${hostname}:${port}/ (${cc})${nativePort ? `, native clients on ${hostname}:${nativePort} (TCP and UDP)` : ''}${wsPort ? `, WebSocket clients on ${wsCert ? 'wss' : 'ws'}://${hostname}:${wsPort}/` : ''}, tick ${W.TICK_MS} ms`);
 
 async function finish(code = 0) {
   await saveReplay();

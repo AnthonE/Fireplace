@@ -13,9 +13,9 @@ node net/rooms.mjs net/rooms.example.json   # Fireplace's rooms on game.elopros.
 Each room writes its status to `status_dir/<port>.json` every 2 s
 (`relay.ts --status`): `players`, `max_players`, `spectators`, the sim `tick`
 and `tick_hz`, written whole so a reader never sees half a file. The pool
-writes the game's server list to `list`, one row per room (`id`, `name`,
-`addr`, `max_players`, `status_url`), the shape the Elo Pros launcher and store
-read. A page host serves both over https, the status at `status_base`:
+writes the game's server list to `list`, one row per room (`id`, `game`,
+`name`, `addr`, `max_players`, `status_url`), the shape the Elo Pros launcher
+and store read. A page host serves both over https, the status at `status_base`:
 
 ```nginx
 location /fireplace/rooms/ { alias /srv/fireplace/traces/rooms/; add_header Cache-Control no-store; }
@@ -58,6 +58,58 @@ achievements. Ethereum wallets only, which is what Elo Pros keeps stats for.
 If Elo Pros can't be read, that game counts from nothing (it opens fewer
 achievements, never a wrong one) and the wallet is read again at its next.
 `node net/run-elo.mjs` is the gate for both, against a stand-in for Elo Pros.
+
+**The WebSocket door.** Not every browser has WebTransport; one without it
+can still play through a relay started with `--ws-port`
+(off unless given): the same session over one WebSocket, on TCP
+([wire.md](wire.md#transports)). It is a fallback: ordered delivery means a
+lost packet holds up everything behind it. `"ws": true` in a pool's config
+(`net/rooms.mjs`, `net/kit-rooms.mjs`) opens each room's door on the room's
+own port number, TCP beside the relay's UDP, so open both in the firewall. A
+page looks for the door there: the relay's host and port, `wss://` from an
+https page.
+
+That is the catch. WebTransport pins our 13-day self-signed certificate by
+its hash (`serverCertificateHashes`), and WebSocket has nothing like it: a
+page on https will only open a `wss://` door whose certificate the browser
+already trusts. Either give the relay a real one for its host, through
+`relay_args` (`--ws-cert fullchain.pem --ws-key privkey.pem`: the door is
+then `wss://`, and the relay reads the files once, at start, so a renewed
+certificate reaches a room when the room is next started), or leave the door
+plain and put a proxy that ends the TLS in front, and tell the page where
+with `relay.ws` in `client/kit.json`, `{port}` standing for the room's (a
+sketch for Fireplace's rooms: the door has run here as `ws://` from Chrome,
+and as `wss://` on the relay's own certificate from Node, never behind a
+proxy):
+
+```nginx
+location ~ ^/ws/(6129[0-7])$ {
+  proxy_pass http://127.0.0.1:$1;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_read_timeout 1h;
+}
+```
+
+```json
+"relay": { "ws": "wss://game.elopros.com/ws/{port}" }
+```
+
+A page on plain http (a dev server, `node net/play.mjs`, which opens the
+door) uses `ws://` and needs none of this; `?ws=1` makes a browser that has
+WebTransport use the door anyway, and `?ws=0` never. The kit pool's answer
+names no door: a copy's page looks at the room's host and port like any
+other, so its rooms need the certificate or the proxy too.
+
+**Chat.** A room carries text chat unless its relay is started with
+`--no-chat` (through `relay_args`): a line a player sends goes to everyone in
+the room who asked for chat, cut to 120 bytes, with control characters
+stripped and the words in `net/chat-words.mjs` masked, at most one a second
+from a slot after a burst of three. That file is the whole filter, a short
+list to add to; the page imports it too. Spectators hear a room and may not
+speak. Nothing is logged or kept: a line is in no record or replay. A viewer
+can turn chat off for themselves, or mute a slot, in the page.
 
 **Someone else's game.** The referee runs the room's wasm, so a pool can host
 a game we did not write. The relay gives that wasm its shared memory and
@@ -166,5 +218,40 @@ room 115 MB resident, 5% of a core empty and 16% with 4 in, so the example's
 step slower; the referee watchdog ends a room whose sim falls 10 s behind.
 `node net/run-kit-rooms.mjs` is the gate: a fake Pages host, the pool, a
 page going online at the button, a second meeting it by invite, bots at the
-door, the arena's page doing the same on a map the site publishes, the
-refusals and the caps.
+door, the shelf counting them on Fireplace's tile and a page opened from that
+tile landing in the room, the arena's page doing the same on a map the site
+publishes (its two players counted on the map's tile), the refusals and the
+caps.
+
+## What the shelf reads
+
+The shelf (`client/games.html`) shows how many are playing on a tile, and
+makes the tile's click a seat among them, from what the two pools already
+serve; it asks nothing of a relay. With neither, every tile is a local room
+with AI players.
+
+- **The list beside the page**, `rooms/servers.json` with each row's
+  `status_url`. A row's `game` (the pool's `game`; added for this, and read
+  from the status or the row's `id` where a list has none) puts its room on
+  that game's tile: `players` summed over the game's rooms, the link the
+  fullest room with a seat, `<page>?url=https://<addr>/`, which the page pins
+  with `certs/hash.txt` as it does its own relay. Rooms all full: the count
+  shows and the tile plays its local room. A pool plays its game's rotation
+  on the build's own map, so its rooms count on the game's tile (and on its
+  built-in map's), never on a mode's or a minigame's.
+- **The kit pool**, `GET <pool>`: beside `rooms`, `max_rooms` and `players`
+  it now answers `open`, a row for each room that is up, `{room, game,
+  game_sha256, map, map_sha256, players, max_players}` (no address, which
+  `rooms/<room>` gives to who asks for it). A room counts on this site's
+  shelf only where both hashes are the site's own (`build/<game>/manifest.json`
+  and `build/maps/index.json`, which `tools/site.mjs` writes with each map's
+  sha256), so another copy's rooms are nobody else's tiles. The link is the
+  invite, `<page>?room=<id>` with `&map=` for a map's room. A map's room
+  counts on the map's tile, and on the tile of the mode the map plays
+  (Sky Steps and Obby are one room).
+
+The shelf reads both when it opens and every 20 s while it is in view: one
+fetch of the list and one per room's status, or one `GET` of the pool, and
+the five manifests once if the pool has any room. A mode's or a minigame's
+tile is a seed (`?mode=`, `?mg=`) a pool's room is not started with, so those
+tiles are local rooms until a pool takes a seed with the ask.

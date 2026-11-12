@@ -22,7 +22,30 @@ const CSS = `
   display: flex; align-items: center; justify-content: center; touch-action: none; }
 .tc-b.big { width: 88px; height: 88px; font-size: 15px; }
 .tc-b.on { background: rgba(255, 255, 255, 0.35); }
+.tc-b[hidden] { display: none; }
 `;
+
+function css() {
+  if (document.getElementById('tc-css')) return;
+  const st = document.createElement('style');
+  st.id = 'tc-css';
+  st.textContent = CSS;
+  document.head.appendChild(st);
+}
+
+// One round button of the page's own, over the controls and whatever else is
+// up (chat's, client/chat.mjs): tap() on a press, style its place and size.
+export function touchButton(label, tap, style = {}) {
+  css();
+  const b = document.createElement('div');
+  b.className = 'tc-b';
+  b.textContent = label;
+  Object.assign(b.style, { zIndex: 31, ...style });
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); tap(); });
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.body.appendChild(b);
+  return b;
+}
 
 // held, writeKeys: the frontend's keys; look(dx, dy): its look, in screen
 // pixels dragged; buttons: [{ label, code (held while down), hold(on), tap() }];
@@ -31,12 +54,7 @@ const CSS = `
 const capture = (el, e) => { try { el.setPointerCapture(e.pointerId); } catch { /* not a pointer it knows */ } };
 
 export function touchControls({ held, writeKeys, look, buttons = [], wake = () => {} }) {
-  if (!document.getElementById('tc-css')) {
-    const st = document.createElement('style');
-    st.id = 'tc-css';
-    st.textContent = CSS;
-    document.head.appendChild(st);
-  }
+  css();
   const root = document.createElement('div');
   root.className = 'tc';
   const stick = document.createElement('div');
@@ -92,7 +110,7 @@ export function touchControls({ held, writeKeys, look, buttons = [], wake = () =
   root.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // the first, big, in the corner; the rest round it, nearest first (right and bottom, px)
-  const AT = [[18, 18], [118, 24], [28, 118], [112, 112], [202, 30], [40, 202], [196, 118], [124, 196]];
+  const AT = [[18, 18], [118, 24], [28, 118], [112, 112], [202, 30], [40, 202], [196, 118], [124, 196], [208, 204]];
   buttons.slice(0, AT.length).forEach((b, i) => {
     const el = document.createElement('div');
     el.className = `tc-b${i === 0 ? ' big' : ''}`;

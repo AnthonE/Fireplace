@@ -28,8 +28,9 @@ import { loadTheme, themeList, savedTheme, saveTheme, FALLBACK, DEFAULT } from '
 import { Guest } from './fireplace-bot.mjs';
 import { GOLFER } from './brain.mjs';
 import { readClock } from './clock.mjs';
-import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName } from './looks.mjs';
-import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult, gotSet } from './achievements.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName, lookId } from './looks.mjs';
+import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult } from './achievements.mjs';
+import { balance, buy, openSet, emptyPurse, loadPurse, freshPurse, savePurse } from './purse.mjs';
 import { filmClock, filmSound, scoreTrack, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 import { touchWanted } from './touch.mjs';
@@ -91,15 +92,25 @@ async function main() {
   const tvTex = canvases.map((c) => c && room.tvTexture(c.width, c.height));
   const guest = BOT ? new Guest(0, (Math.random() * 1e9) | 0, Number(q.get('skill') || 0.8), GOLFER) : null;
 
-  // ---- your look and your achievements, kept in this browser; a guest at the controls or a spectator keeps neither
+  // ---- your look, your achievements and your purse, kept in this browser; a guest at the controls or a spectator keeps none
   const KEEP = !BOT && !WATCH;
   let tally = KEEP ? loadTally() : emptyTally();
-  let got = gotSet(tally);
+  // what the marshmallows bought (client/purse.mjs); got is all this browser holds, the achievements and those
+  let purse = KEEP ? loadPurse() : emptyPurse();
+  let got = openSet(tally, purse);
   let look = q.has('look') ? Number(q.get('look')) >>> 0 : KEEP ? wearable(savedLook(), got) : 0;
   set(L.CL_LOOK, look);
   let lookAt = -1e9, listAt = -1e9, listPage = 0; // when B, H or P, and L, last put their card on the TV; the list's page
   let heldKey = '', opened = []; // the game held now, and what its end opened
   const wear = (w) => { look = w; set(L.CL_LOOK, w); saveLook(w); lookAt = performance.now(); listAt = -1e9; };
+  // the wardrobe's BUY: a priced look out of the purse, as storage holds it now
+  const spend = (x) => {
+    purse = freshPurse(purse);
+    const r = buy(tally, purse, lookId(x), x.price);
+    if (r.ok) { purse = r.purse; savePurse(purse); }
+    got = openSet(tally, purse);
+    return r;
+  };
   // the looks an achievement opens
   const opens = (id) => [...BALLS, ...HATS, ...BODIES].filter((x) => x.unlock === id).map(lookName);
   // what this slot did in the game just held, counted once
@@ -112,7 +123,7 @@ async function main() {
     if (next.tally === tally) return;
     tally = next.tally;
     saveTally(tally);
-    got = gotSet(tally);
+    got = openSet(tally, purse);
     opened = next.opened;
   }
 
@@ -162,7 +173,8 @@ async function main() {
   }
   // the couch's keys as a panel, on a phone the only way to them (client/wardrobe.mjs)
   const wardrobe = KEEP && !FILM ? createWardrobe({
-    look: () => look, wear, got: () => got, tally: () => tally, slot: () => get(L.CL_SLOT), avatar: () => host.avatar(get(L.CL_SLOT)),
+    look: () => look, wear, got: () => got, tally: () => tally, balance: () => balance(tally, purse), buy: spend,
+    slot: () => get(L.CL_SLOT), avatar: () => host.avatar(get(L.CL_SLOT)),
     theme: () => room.theme, turn: (dir) => nextTheme(dir), sit: sitDown, fullscreen,
   }) : null;
 
@@ -285,10 +297,12 @@ async function main() {
     const next = `NEXT: ${gameName(nextGame(), view.dv.getUint32(L.FP_NEXT, true))}${left ? `  IN ${left}` : ''}`;
     text(next, 320, 340, next.length * 20 <= 620 ? 5 : 4, '#ffffff', 'center');
   }
-  // your look, as B, H and P left it, and the next one to earn
+  // your look, as B, H and P left it, the purse, and the next one to earn
   function lookCard(t) {
     const { ball, hat, body } = unpackLook(look);
     text('YOUR LOOK', 320, 26, 5, '#ffcf6a', 'center');
+    const left = balance(tally, purse);
+    if (wardrobe && left) text(`${left} MARSHMALLOW${left === 1 ? '' : 'S'} TO SPEND IN THE WARDROBE`, 320, 56, 3, '#c9b89a', 'center');
     drawLook(g2, 170, 246, 50, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
     text('BALL', 330, 80, 3, '#8ea0b8');
     text(BALLS[ball].name, 330, 98, 5, '#ffffff');
@@ -301,7 +315,7 @@ async function main() {
     text('P FOR ANOTHER', 330, 286, 3, '#c9b89a');
     text('EVERYONE IN THE ROOM SEES IT', 320, 310, 3, '#8ea0b8', 'center');
     text('IN A GAME, 1 TO 4: WAVE, CHEER, DANCE, SPIN', 320, 331, 3, '#8ea0b8', 'center');
-    const shut = [...BALLS, ...HATS, ...BODIES].find((x) => !isOpen(x, got));
+    const shut = [...BALLS, ...HATS, ...BODIES].find((x) => x.unlock && !isOpen(x, got));
     if (shut) {
       const s = `EARN ${lookName(shut)}: ${ACHIEVEMENTS.find((a) => a.id === shut.unlock).about}`;
       text(s, 320, 352, s.length * 12 <= 620 ? 3 : 2, '#7fdf7f', 'center');
@@ -424,14 +438,14 @@ async function main() {
   }
 
   window.__qa = {
-    hashes: host.hashes, keys: host.keys, desyncs: host.desyncs,
+    hashes: host.hashes, keys: host.keys, desyncs: host.desyncs, chat: host.chat,
     state: () => {
       const g = view.dv.getUint32(L.FP_GAME, true);
       const slot = get(L.CL_SLOT);
       return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), mg: g === L.G_PARTY ? L.MINIGAMES[view.dv.getUint32(L.PG_GAME, true)]?.name ?? null : null, state: view.hole().state, scene, zoom, games: gamesSeen,
         mallows: slot >= 0 ? view.dv.getUint16(L.FP_MALLOWS + 2 * slot, true) : 0, card, me: frontend?.state?.().me ?? null,
-        look, achievements: Object.keys(tally.got), opened,
-        pool: { ...pool, local: !!host.local },
+        look, achievements: Object.keys(tally.got), opened, purse: { balance: balance(tally, purse), owned: Object.keys(purse.owned) },
+        pool: { ...pool, local: !!host.local }, transport: host.transport,
         // the room's looks as the relay last sent them (this slot's own included, once it has gone round)
         relayLooks: [...Array(L.NPLAYER).keys()].filter((p) => host.u32[(L.CL_LOOKS >> 2) + p]).map((p) => [p, host.u32[(L.CL_LOOKS >> 2) + p]]) };
     },

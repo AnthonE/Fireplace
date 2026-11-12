@@ -95,6 +95,7 @@
   (local $speed f32) (local $drop f32) (local $h f32) (local $sp f32) (local $scale f32)
 #if ARENA
   (local $t f32) (local $lo f32) (local $floor f32) (local $ceil f32) (local $went i32) (local $rx f32) (local $rz f32) (local $gait i32) (local $fast i32)
+  (local $pt i32) (local $pk i32) (local $lad i32) (local $ovx f32) (local $ovz f32) (local $hi f32) (local $bx f32) (local $bz f32)
 #endif
 #if FLIGHT
   ;; a ship (src/flight.wat)
@@ -151,6 +152,21 @@
   (local.set $vx (!at f32 @(PLAYERS + P_VX) (local.get $pb)))
   (local.set $vy (!at f32 @(PLAYERS + P_VY) (local.get $pb)))
   (local.set $vz (!at f32 @(PLAYERS + P_VZ) (local.get $pb)))
+#if ARENA
+  ;; the map's parts (layout.mjs MAP_PARTS), on a map that has any: the one
+  ;; the body stood on as this tick began (a mover's where it was then) and a
+  ;; ladder beside it. A map without them takes none of this.
+  (if (i32.load (i32.const @MAP_NPART))
+    (then
+      (if (i32.and (local.get $fl) (i32.const @PF_GROUND))
+        (then (local.set $pt (call $a_part (local.get $px) (local.get $py) (local.get $pz) (i32.const @PK_FLOOR) (i32.const 1)
+                                           (i32.sub (i32.load offset=@HDR_TICK (local.get $d)) (i32.const 1))))))
+      (if (local.get $pt) (then (local.set $pk (i32.load8_u offset=@PT_KIND (local.get $pt)))))
+      (local.set $lad (call $a_part (local.get $px) (local.get $py) (local.get $pz) (i32.const @(1 << PK_LADDER)) (i32.const 2)
+                                    (i32.sub (i32.load offset=@HDR_TICK (local.get $d)) (i32.const 1))))
+      (local.set $ovx (local.get $vx))
+      (local.set $ovz (local.get $vz))))
+#endif
   (if (i32.and (local.get $fl) (i32.const @PF_GROUND))
     (then
       (local.set $speed (f32.sqrt (f32.add (f32.mul (local.get $vx) (local.get $vx)) (f32.mul (local.get $vz) (local.get $vz)))))
@@ -204,6 +220,27 @@
       (local.set $vz) (local.set $vx)
       (local.set $vy (f32.sub (local.get $vy) (f32.const @GP_DT)))))
 #endif
+#if ARENA
+  ;; ice underfoot: the speed across changes only its grip's share of what it would have
+  (if (i32.eq (local.get $pk) (i32.const @PK_ICE))
+    (then
+      (local.set $vx (!madd (f32.sub (local.get $vx) (local.get $ovx)) (f32.load offset=@PT_A (local.get $pt)) (local.get $ovx)))
+      (local.set $vz (!madd (f32.sub (local.get $vz) (local.get $ovz)) (f32.load offset=@PT_A (local.get $pt)) (local.get $ovz)))))
+  ;; a bounce pad throws the body up, whatever its legs were doing
+  (if (i32.eq (local.get $pk) (i32.const @PK_BOUNCE))
+    (then
+      (local.set $vy (f32.load offset=@PT_A (local.get $pt)))
+      (local.set $fl (i32.and (local.get $fl) (i32.const @(255 ^ PF_GROUND))))))
+  ;; a ladder beside it: forward climbs, back comes down, neither hangs on,
+  ;; and it doesn't fall; the jump key lets go. From the ground only forward
+  ;; takes hold, and the downed don't climb.
+  (if (i32.and (i32.and (i32.ne (local.get $lad) (i32.const 0)) (i32.eqz (i32.and (local.get $in) (i32.const 0x10000000))))
+               (i32.and (i32.ne (i32.and (local.get $fl) (i32.const @PF_DOWN)) (i32.const @PF_DOWN))
+                        (i32.or (i32.eqz (i32.and (local.get $fl) (i32.const @PF_GROUND))) (f32.gt (local.get $fwd) (f32.const 0)))))
+    (then
+      (local.set $vy (f32.mul (local.get $fwd) (f32.load offset=@PT_A (local.get $lad))))
+      (if (f32.gt (local.get $vy) (f32.const 0)) (then (local.set $fl (i32.and (local.get $fl) (i32.const @(255 ^ PF_GROUND))))))))
+#endif
   (local.set $sp (!dot3 (local.get $vx) (local.get $vy) (local.get $vz) (local.get $vx) (local.get $vy) (local.get $vz)))
   (if (f32.gt (local.get $sp) (f32.const @PVMAX2))
     (then
@@ -219,30 +256,62 @@
   (if (local.get $went)
     (then
       (local.set $lo (f32.add (local.get $py) (select (f32.const @STEP) (f32.const 0) (i32.and (local.get $fl) (i32.const @PF_GROUND)))))
-      (local.set $px (call $hull_axis (i32.const 0) (local.get $px) (local.get $rx) (local.get $pz) (local.get $lo) (f32.add (local.get $lo) (f32.const @P_TOP)) (i32.load offset=@HDR_TICK (local.get $d))))
-      (local.set $pz (call $hull_axis (i32.const 8) (local.get $pz) (local.get $rz) (local.get $px) (local.get $lo) (f32.add (local.get $lo) (f32.const @P_TOP)) (i32.load offset=@HDR_TICK (local.get $d))))))
+      (local.set $px (call $hull_axis (i32.const 0) (local.get $px) (local.get $rx) (local.get $pz) (local.get $lo) (f32.add (local.get $lo) (!body top)) (i32.load offset=@HDR_TICK (local.get $d))))
+      (local.set $pz (call $hull_axis (i32.const 8) (local.get $pz) (local.get $rz) (local.get $px) (local.get $lo) (f32.add (local.get $lo) (!body top)) (i32.load offset=@HDR_TICK (local.get $d))))))
+  ;; a conveyor underfoot carries it too, at its own speed
+  (if (i32.eq (local.get $pk) (i32.const @PK_CONVEY))
+    (then
+      (local.set $lo (f32.add (local.get $py) (f32.const @STEP)))
+      (local.set $px (call $hull_axis (i32.const 0) (local.get $px) (!madd (f32.load offset=@PT_A (local.get $pt)) (f32.const @DT) (local.get $px)) (local.get $pz)
+                                      (local.get $lo) (f32.add (local.get $lo) (!body top)) (i32.load offset=@HDR_TICK (local.get $d))))
+      (local.set $pz (call $hull_axis (i32.const 8) (local.get $pz) (!madd (f32.load offset=@PT_B (local.get $pt)) (f32.const @DT) (local.get $pz)) (local.get $px)
+                                      (local.get $lo) (f32.add (local.get $lo) (!body top)) (i32.load offset=@HDR_TICK (local.get $d))))))
   ;; through the map's boxes an axis at a time: x, z, then up or down. On the
   ;; ground the body's band starts a step up, so it walks onto what is lower
   ;; and is kept from stepping where its head wouldn't fit.
   (local.set $lo (f32.add (local.get $py) (select (f32.const @STEP) (f32.const 0) (i32.and (local.get $fl) (i32.const @PF_GROUND)))))
+  ;; the band's top: the arena's own body keeps a step of headroom over it; a
+  ;; map's own body (MAP_OWNBODY: a place built round a Roblox character,
+  ;; its doorways no higher than they need be) asks only its own height, and
+  ;; is put back below if a step up leaves its head no room
+  (local.set $hi (f32.add (local.get $lo) (!body top)))
+  (if (i32.load (i32.const @MAP_OWNBODY))
+    (then
+      (local.set $hi (f32.add (local.get $py) (!body top)))
+      (local.set $bx (local.get $px))
+      (local.set $bz (local.get $pz))))
   (local.set $t (!madd (local.get $vx) (f32.const @DT) (local.get $px)))
-  (local.set $px (call $hull_axis (i32.const 0) (local.get $px) (local.get $t) (local.get $pz) (local.get $lo) (f32.add (local.get $lo) (f32.const @P_TOP)) (i32.load offset=@HDR_TICK (local.get $d))))
+  (local.set $px (call $hull_axis (i32.const 0) (local.get $px) (local.get $t) (local.get $pz) (local.get $lo) (local.get $hi) (i32.load offset=@HDR_TICK (local.get $d))))
   (if (f32.ne (local.get $px) (local.get $t)) (then (local.set $vx (f32.const 0))))
   (if (f32.lt (local.get $px) (f32.load (i32.const @MAP_BOUNDS))) (then (local.set $px (f32.load (i32.const @MAP_BOUNDS))) (local.set $vx (f32.max (local.get $vx) (f32.const 0)))))
   (if (f32.gt (local.get $px) (f32.load (i32.const @(MAP_BOUNDS + 4)))) (then (local.set $px (f32.load (i32.const @(MAP_BOUNDS + 4)))) (local.set $vx (f32.min (local.get $vx) (f32.const 0)))))
   (local.set $t (!madd (local.get $vz) (f32.const @DT) (local.get $pz)))
-  (local.set $pz (call $hull_axis (i32.const 8) (local.get $pz) (local.get $t) (local.get $px) (local.get $lo) (f32.add (local.get $lo) (f32.const @P_TOP)) (i32.load offset=@HDR_TICK (local.get $d))))
+  (local.set $pz (call $hull_axis (i32.const 8) (local.get $pz) (local.get $t) (local.get $px) (local.get $lo) (local.get $hi) (i32.load offset=@HDR_TICK (local.get $d))))
   (if (f32.ne (local.get $pz) (local.get $t)) (then (local.set $vz (f32.const 0))))
   (if (f32.lt (local.get $pz) (f32.load (i32.const @(MAP_BOUNDS + 8)))) (then (local.set $pz (f32.load (i32.const @(MAP_BOUNDS + 8)))) (local.set $vz (f32.max (local.get $vz) (f32.const 0)))))
   (if (f32.gt (local.get $pz) (f32.load (i32.const @(MAP_BOUNDS + 12)))) (then (local.set $pz (f32.load (i32.const @(MAP_BOUNDS + 12)))) (local.set $vz (f32.min (local.get $vz) (f32.const 0)))))
   ;; what it can land on (a box top it was over, or a step up from the ground) and hit its head on
   (call $hull_y (local.get $px) (local.get $pz)
                 (f32.add (local.get $py) (select (f32.const @STEP) (f32.const 0.01) (i32.and (local.get $fl) (i32.const @PF_GROUND))))
-                (f32.sub (f32.add (local.get $py) (f32.const @P_TOP)) (f32.const 0.01)) (i32.load offset=@HDR_TICK (local.get $d)))
+                (f32.sub (f32.add (local.get $py) (!body top)) (f32.const 0.01)) (i32.load offset=@HDR_TICK (local.get $d)))
   (local.set $ceil) (local.set $floor)
+  ;; a map's own body: a step up to where its head has no room isn't taken
+  (if (i32.load (i32.const @MAP_OWNBODY))
+    (then
+      (if (i32.and (f32.gt (local.get $floor) (f32.add (local.get $py) (f32.const 0.01)))
+                   (f32.gt (f32.add (local.get $floor) (!body top)) (local.get $ceil)))
+        (then
+          (local.set $px (local.get $bx))
+          (local.set $pz (local.get $bz))
+          (local.set $vx (f32.const 0))
+          (local.set $vz (f32.const 0))
+          (call $hull_y (local.get $px) (local.get $pz)
+                        (f32.add (local.get $py) (select (f32.const @STEP) (f32.const 0.01) (i32.and (local.get $fl) (i32.const @PF_GROUND))))
+                        (f32.sub (f32.add (local.get $py) (!body top)) (f32.const 0.01)) (i32.load offset=@HDR_TICK (local.get $d)))
+          (local.set $ceil) (local.set $floor)))))
   (local.set $py (!madd (local.get $vy) (f32.const @DT) (local.get $py)))
-  (if (f32.gt (f32.add (local.get $py) (f32.const @P_TOP)) (local.get $ceil))
-    (then (local.set $py (f32.sub (local.get $ceil) (f32.const @P_TOP))) (local.set $vy (f32.min (local.get $vy) (f32.const 0)))))
+  (if (f32.gt (f32.add (local.get $py) (!body top)) (local.get $ceil))
+    (then (local.set $py (f32.sub (local.get $ceil) (!body top))) (local.set $vy (f32.min (local.get $vy) (f32.const 0)))))
 #else
   (local.set $px (!madd (local.get $vx) (f32.const @DT) (local.get $px)))
   (local.set $py (!madd (local.get $vy) (f32.const @DT) (local.get $py)))

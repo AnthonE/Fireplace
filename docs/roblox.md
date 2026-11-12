@@ -47,11 +47,19 @@ line). `tools/rbx-map.mjs` makes the map:
 | sky under the place | a pit, and `"void"`: a fighter below 3 m under the lowest ground dies by falling |
 | unanchored parts | kept: a classic place's bricks are held by joints, not anchors (`--anchored` leaves them out) |
 | StarterPlayer's CharacterWalkSpeed and jump (its JumpPower when CharacterUseJumpPower says so, else its JumpHeight), the Workspace's Gravity; in a place from before StarterPlayer, the Humanoid's own 16, JumpPower 50 and 196.2 | the map's `movement`: a Humanoid's walk, jump and fall in metres, steering in the air as on the ground ([arena.md](arena.md), "A map's own movement") |
+| a part whose script plainly kills what touches it (`Health = 0`, `TakeDamage`, `BreakJoints` on a `Touched`), or named as obby kits name theirs (Kill, Lava, KillBrick, Spikes...) | a `kill` [part](arena.md#parts-boxes-that-do-something): touching it kills; one nothing collides with, or nobody sees, is a kill zone with no box |
+| a TrussPart | a `ladder`, climbed at the walk speed |
+| an anchored part with a Velocity of its own, or a script that sets its Velocity along its `CFrame.lookVector` or to a `Vector3.new` | a `conveyor` carrying what stands on it that way |
+| a part whose script throws what touches it straight up (`Velocity = Vector3.new(0, n, 0)` on a `Touched`) | a `bounce` pad at that speed |
+| a part of Ice | `ice` |
+| spawn locations that change your team when touched (a team a stage), in the Teams' order; or the numbered parts of a folder or model named Checkpoints or Stages | an obby's stages: the first is the start (the map's only spawn), the rest `checkpoint` parts in order |
+| a part named Finish, End, Win or Goal (or, with stages and none, the last stage) | the `finish`, and the map's `mode`: every match is the arena's [Obby](arena.md#obby) |
+| a character's size: 2 studs across and 5 tall | the map's `body`: 0.56 m by 1.4 m, so a doorway built for one is one here ([arena.md](arena.md#a-maps-own-body)) |
 | Roblox's classic gear in the StarterPack (LinkedSword, LinkedRocketLauncher, LinkedSuperball) | the map's `mode`: every match is the arena's [Crossroads](arena.md#crossroads) |
 | a part a script tweens (the script in it, or in its model), or one a physical mover drives (BodyPosition, AlignPosition, PrismaticConstraint...) | a structure of its own, never fused; a tween that repeats for ever and reverses (a lift's, a moving platform's: its Position plus a Vector3, or its CFrame times a CFrame) is its `move` as in the place ([arena.md](arena.md), "Moving boxes"), no faster than 25 m/s; the rest stand still, listed in the brief |
 
 Left out, and counted: parts no one collides with (CanCollide off), invisible
-ones (walls and triggers), characters, tools, vehicles, anything outside the
+ones (walls and triggers) unless they kill or are a stage or the finish, characters, tools, vehicles, anything outside the
 Workspace (a game that keeps its maps in storage names them in the report,
 and `--from ServerStorage.Maps.Castle` takes one), and every script: the
 arena's own modes are the game.
@@ -193,10 +201,15 @@ What porting a game takes beyond the brief:
   arch in the terrain is filled; build one as parts.
 - Fireplace's ground has four surfaces (grass, rock, sand, metal), so the
   terrain's colours are those four.
-- The fighter's body is the arena's, 1.8 m tall and 1 m across: 6.4 by 3.6
-  studs, where a classic character is 5 by 2. A gap narrower than 3.6 studs
-  or a ceiling lower than 6.4 that a Roblox character passes, it can't.
-  Steps are the arena's half metre.
+- The fighter's body is a classic character's, 2 studs across and 5 tall
+  (the map's `body`), so it passes what one passes; a shot hits it within
+  0.9 of that. Steps are the arena's half metre (1.8 studs). The figure
+  drawn is the arena's, at that size.
+- What a part does is read only where it is plain: a script on the part (or
+  on its model or folder) that kills, throws or carries on a touch, a
+  truss, a Velocity, Ice, and the names obby kits use. A kill brick wired up
+  some other way (a tag, a script elsewhere that walks the Workspace) comes
+  over as a plain box; give it `"kill"` in the map editor.
 - Unions saved before Roblox kept their parts in the file (no `ChildData`)
   are their bounds.
 - Nothing of the game comes over but its movement and, for the classic
@@ -219,6 +232,7 @@ Only bring a place that is yours, or that its owner has licensed for reuse
 | `tools/roblox.mjs` | the command line: a file in, `maps/<name>/` out, compiled by `tools/map.mjs`; `--brief` writes `port/<name>/` |
 | `client/map-view.mjs` | the editor's 3D view: the arena's renderer on the map being edited |
 | `client/map-editor.mjs` | the editor's **a Roblox place…**, drop, and the brief's download |
+| `tools/rbx-map.mjs` `partKinds`, `stagesOf` | what a place's bricks do, and an obby's stages |
 | `test/roblox.test.mjs` | the reader on Studio's own baseplate (binary and XML agree) and unions, LZ4, terrain, each rule above on a place written in the test, the fit, the void in the sim, and the movement and mode a place gets |
 
 Box colours are drawing only: the low byte of a box's material word is its

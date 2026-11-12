@@ -25,7 +25,7 @@ npm test                             # node --test test/*.test.mjs, about 25 min
 node --test test/party.test.mjs      # one file
 node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.wasm   # Node, Deno, Chrome x JIT tiers x 1/2/4 threads
 node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
-node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
+node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-chat.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
@@ -33,9 +33,12 @@ node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the ki
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
 node tools/roblox.mjs place.rbxl [maps/<name>] [--brief]   # a Roblox place (.rbxl/.rbxlx) as a map, --brief its scripts and port.md (docs/roblox.md); the editor opens one too
+node tools/obby.mjs                         # writes maps/obby/ (Sky Steps, the Obby mode's course: every kind of part); node net/play.mjs --arena --map obby plays it
 node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs/vox.md), through the same back half (tools/scene-map.mjs); the editor opens one too
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
+node tools/serve.mjs                        # then /client/games.html: the shelf, every game, minigame, mode and map a tile that plays it
+node tools/shelf.mjs [--only id,id] [--lines]   # the shelf's pictures (client/shelf/<id>.webp, each tile's own page shot with no GPU) and index.json; packs maps/ into build/maps/
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
 node tools/arena-shot.mjs [--views track,ships] [--scenes figures,faces [--env night]]   # the arena's and Dogfight's views of it alone (a local room on a fixed seed), or the arena renderer's demo page with no sim, into traces/
 ```
@@ -105,8 +108,9 @@ shell whose own command line contains the name: it kills that shell.
   and the team modes Team Slayer, Capture the Flag, Oddball, King of the
   Hill, Headhunter, Territories, VIP, Assault, and the kit modes without
   sides Lucky Blocks, Evade, Escape and Battle Royale (`M_ROYALE`, 16:
-  crates and a zone in `AO`, the dead out for the match), and Crossroads,
-  which only a map naming it plays) are picked per match at run time, not built: `AH_MODE` to `AH_END`
+  crates and a zone in `AO`, the dead out for the match), and Crossroads
+  and Obby (`M_OBBY`, 17: a course over the map's parts, checkpoints and a
+  finish), which only a map naming one plays) are picked per match at run time, not built: `AH_MODE` to `AH_END`
   at `REGION + 0x48..0x74` (the team modes' scores, target and winner
   included), a side in `P_FL` (`PF_ZOMBIE`, `PF_JUGG`, `PF_BLUE`, and
   `PF_CARRY` for a flag's, the skull's or the bomb's carrier, `PF_FAST` for
@@ -130,6 +134,11 @@ shell whose own command line contains the name: it kills that shell.
   imports nothing from Node, because the map editor
   (`client/map-editor.html`) runs it in the page to check a map as it is
   drawn; `tools/map.mjs` and `tools/png.mjs` give it the disk and zlib.
+  The editor's own building half (`client/map-build.mjs`: the 3D view's
+  camera, ray and drag maths, a box's part read and written, the course's
+  check, the starter obby) has no page in it either, and
+  `test/map-build.test.mjs` runs it; what the editor draws over the 3D view
+  is its own canvas, never the arena's renderer.
   The arena's and flight's builds also take a map at run time: `packMap`,
   then the `map_load` export before init (`loadMap` in harness/core.mjs),
   which checks everything in it and sets `MAP_HOSTED` so init leaves MAP to
@@ -139,6 +148,13 @@ shell whose own command line contains the name: it kills that shell.
   built-in half. A map's rules (`MAP_RULES`: map.json `movement`, a Roblox
   place's Humanoid that `$move` runs through `$a_gait`, and `mode`, played
   every match) are 0 for a map without them, so `$move` takes its old path.
+  After the rules sit the map's parts (`MAP_PARTS`: a box's eighth element
+  in map.json, a row each: `PK_KILL`, bounce, ice, conveyor, ladder, an
+  obby's checkpoint and finish; the kinds that move a body run in `$move` on
+  either bank, killing is confirmed-only) and the fighter's body
+  (`MAP_BODY`, map.json `body`): arena code reads the body through
+  `(!body r)`, `(!body top)`..., never `P_R` or `P_TOP`, and a map with
+  neither parts nor a body of its own must step the bits it always has.
 - Flight (`src/flight.wat`) is the arena build with `#if FLIGHT` where a
   ship differs: `$move` hands its tick to `$f_move`, charge shots and bombs
   fly in `$f_proj`, `$a_spawn` ends in `$f_spawn`, no pads, the match picks
@@ -148,8 +164,8 @@ shell whose own command line contains the name: it kills that shell.
   (`$a_arm`, pickups) must stay off a ship. A ship's position is its
   centre. It builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
   drawn by `tools/skyways.mjs`; `--flight-map` gives it another);
-  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 17: `MODES.length`, its news past every kit
-  mode's MX codes (120 and 121), which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
+  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 18: `MODES.length`, its news past every kit
+  mode's MX codes (128 and 129), which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
   arena's build never sees it: its clock is `FLIGHT_TICKS`, its course the
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
   meeting (`$f_collide`) touch two records, so they are confirmed-only.
@@ -186,7 +202,9 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
-- The room is a relay's (`client/net.mjs`): one named, or on a copy's
+- The room is a relay's (`client/net.mjs`; `client/transport.mjs` opens its
+  WebTransport, or where the browser has none, or with `?ws=1`, the relay's
+  WebSocket door, `--ws-port`, found by `client/kit.mjs` `wsDoor`): one named, or on a copy's
   GitHub Pages site, once someone presses play online with friends or opens
   an invite (`?room=`), one the kit's room pool starts on that copy's wasm
   (`net/kit-rooms.mjs`, `relay.pool`). Otherwise (`client/kit.mjs`:
@@ -195,6 +213,18 @@ shell whose own command line contains the name: it kills that shell.
   players after. Both sample the input slots through `client/input.mjs`.
   `coi.js` makes a page cross-origin isolated where the host can't send the
   headers.
+- The shelf (`client/games.html`, `client/games.mjs`) draws the catalogue
+  `client/shelf.mjs` builds, which touches no page and no network
+  (`test/shelf.test.mjs`): its tiles come from `FP_SETS`, `PLAYLIST`,
+  `MINIGAMES`, `MODES`, `ARENA_MODES`, `FLIGHT_MODES` and the maps
+  `tools/site.mjs` packs (`build/maps/index.json`), so a new minigame, mode
+  or map is on it by being in its list, and a whole new game by a row in its
+  `PAGES`. A tile's link is its page's own query for a local room
+  (`?local=1`, `&mg=`, `&mode=`, `&map=`): a page that changes one changes
+  the catalogue with it. `client/golf.html` is golf on the host (a local room
+  with bred golfers; `index.html` stays the relay's page), and
+  `client/shelf-link.mjs` each page's link back. Counts come from the pools
+  (docs/hosting.md, "What the shelf reads"), never from a relay.
 - The studio (`client/studio.html`, its worker `client/studio-worker.mjs`)
   builds party in the page: `tools/asm-core.mjs` (the assembler's
   preprocessor, checks and prefixer, the file reader passed in) and
@@ -229,6 +259,22 @@ shell whose own command line contains the name: it kills that shell.
   checks). Achievements (`client/achievements.mjs`)
   test results read from the confirmed world while a game's end is held, and
   are kept in the browser, like the look.
+- A look may have a `price` in marshmallows in place of an `unlock`: the
+  purse (`client/purse.mjs`: what the tally has won less what was spent) is
+  the browser's, like the tally; the relay cannot see it.
+- The arena's third-person camera is `client/chase.mjs` (pure: the boom
+  against the map, the reticle's point as `$a_ray` finds it, with the map's
+  body), drawing only: the sim fires from the eye whatever the camera does.
+  The frontend takes the eye, the hit shape and the figure's size from
+  `view.map().body`, never a constant.
+- Chat (`client/chat.mjs`, one log and one input the host makes for every
+  page; `/` opens it) is drawing only too: the relay carries a line beside
+  the ticks (hello flag 128, `T_CHAT`), cleaned and rate-limited by
+  `net/chat.mjs`, whose word list is `net/chat-words.mjs`. While the input is
+  open it stops keys and the locked mouse before a frontend's listeners; a
+  frontend that draws bubbles asks `host.chat.bubbles()` (the arena's
+  markers, Party's HUD). A key a frontend takes must stay off `/`
+  (`test/chat.test.mjs` checks).
 - `elo.json` is Fireplace's manifest for its Elo Pros store row (jobs, mods);
   CONTRIBUTING.md is the outside contributor's guide, pay included.
 

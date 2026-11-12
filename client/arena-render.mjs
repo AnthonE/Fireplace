@@ -76,6 +76,7 @@ struct U {
   hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px), the focal length unzoomed (px) (client/lowpoly.mjs)
   storm: vec4f,   // a battle royale's wall: centre x, z, radius, 1 on (0 none)
   snext: vec4f,   // its next circle: centre x, z, radius, 1 shown
+  aim: vec4f,     // the reticle off the screen's centre x, y (px); 1 with my own figure drawn (third person, client/chase.mjs); a figure's size, 1 the arena's own 1.8 m (a map's own body: src/arena-view.mjs map().body)
   zones: array<vec4f, ${2 * MAX_ZONE}>, // two a zone, a disc painted on the ground: centre x, z, radius, the height it's at | its colour, how hard it pulses (0..1)
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -336,16 +337,16 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   if (i < ${L.NPLAYER}u) {
     let b = i * ${L.PSIZE}u;
     let fl = players[(b + ${L.P_FL}u) / 4u] & 255u;
-    if ((fl & ${L.PF_LIVE}u) == 0u || (fl & ${L.PF_DEAD}u) != 0u || i == u32(u.misc.x)) { return o; }
+    if ((fl & ${L.PF_LIVE}u) == 0u || (fl & ${L.PF_DEAD}u) != 0u || (i == u32(u.misc.x) && u.aim.z < 0.5)) { return o; }
     let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
-    center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92, pf(b, ${L.P_PZ}u)) + vel * dt;
+    center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92 * u.aim.w, pf(b, ${L.P_PZ}u)) + vel * dt;
     // a camera standing in one (a spectator's, riding the eyes it watches) doesn't see it from inside
     if (distance(center.xz, u.cam.xz) < 0.7 && abs(center.y - u.cam.y) < 1.4) { return o; }
-    half = vec2f(1.05, 1.0);
+    half = vec2f(1.05, 1.0) * u.aim.w;
     // its figure: heading and aim from its input word (src/arena-view.mjs), legs stepping as fast as it goes, its look's body
     let w = players[(b + ${L.P_IN}u) / 4u];
     let speed = length(vel.xz);
-    o.feet = center - vec3f(0.0, 0.92, 0.0);
+    o.feet = center - vec3f(0.0, 0.92 * u.aim.w, 0.0);
     o.pose = vec4f(f32(w & 0x7ffu) / 2048.0 * 6.2832, (f32((w >> ${L.AW_PITCH}u) & 0x3ffu) - 512.0) / 1024.0 * 3.1416, u.view.w * (3.0 + speed * 0.9), min(speed / 6.0, 1.0));
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + i] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body] + 16u * fl));
@@ -417,7 +418,8 @@ struct HOut { @builtin(position) pos: vec4f, @location(0) @interpolate(flat) fee
   // mine comes from the prediction's bank as the eye does, a step ahead of the confirmed world's
   let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
   o.feet = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u), pf(b, ${L.P_PZ}u)) + vel * u.screen.w;
-  if (i == u32(u.misc.x)) { o.feet = vec3f(u.cam.x, o.feet.y, u.cam.z); }
+  // (in third person its record is where it is drawn already)
+  if (i == u32(u.misc.x) && u.aim.z < 0.5) { o.feet = vec3f(u.cam.x, o.feet.y, u.cam.z); }
   // as long as the sun is low, up to four of the figure's heights
   let reach = min(length(SUN.xz) / max(SUN.y, 0.05), 4.0);
   let pr = project(o.feet - normalize(vec3f(SUN.x, 0.0, SUN.z)) * (0.1 + 0.9 * reach));
@@ -456,8 +458,11 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (s.kind == 15u) {
     let fwd = vec3f(u.view.x, 0.0, u.view.y);
     let ray = fwd + vec3f(-u.view.y, 0.0, u.view.x) * ((s.pos.x - u.screen.x * 0.5) / u.cam.w) + vec3f(0.0, (u.view.z - s.pos.y) / u.cam.w, 0.0);
-    let b = figureRay(u.cam.xyz, normalize(ray), fwd, 1.0 / u.cam.w, s.feet, s.pose, kitOf(s));
+    // a map's own body is the same figure at its size: the eye brought toward its feet by that much, and what it hits taken back out
+    var b = figureRay(s.feet + (u.cam.xyz - s.feet) / u.aim.w, normalize(ray), fwd, 1.0 / (u.cam.w * u.aim.w), s.feet, s.pose, kitOf(s));
     if (!b.hit) { discard; }
+    b.p = s.feet + (b.p - s.feet) * u.aim.w;
+    b.z = b.z * u.aim.w;
     // in a box's shadow or a cliff's as the ground under it is
     var k = sunlit(b.p + b.n * 0.02);
     if (k > 0.0) { k = hillLit(b.p + vec3f(0.0, 0.3, 0.0), u.misc.z); }
@@ -715,7 +720,8 @@ ${VIEWMODEL_WGSL}
   let hs = u.hudv.x;
   let c = vec2f(u.screen.x, u.screen.y) * 0.5;
   let d = q.xy - c - vec2f(0.5);
-  let dh = d / hs; // in HUD px
+  // from the reticle, in HUD px: the screen's centre, or in third person where the eye's own ray lands
+  let dh = (d - u.aim.xy) / hs;
   // the scope: black past a circle, a fine cross through it
   if (u.fx.y > 0.5) {
     let r = length(d);
@@ -793,7 +799,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
 
-  const ubuf = device.createBuffer({ size: 4 * (48 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 4 * (52 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, its look word, its avatar
   const projBuf = storage(L.NPROJ * L.JSIZE);
@@ -858,7 +864,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
   });
 
-  const uf = new Float32Array(48 + 8 * MAX_ZONE);
+  const uf = new Float32Array(52 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);
   const spriteData = new Float32Array(MAX_SPRITE * 12);
   const beamData = new Float32Array(MAX_BEAM * 12);
@@ -896,7 +902,9 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     //      zone (null, or { x, z, r, y, h, color: [r,g,b], pulse }: a disc painted on the terrain and box tops within h of y, any height
     //      without y; or a list of up to MAX_ZONE of them, all in the first one's band),
     //      storm (null, or a battle royale's zone { x, z, r, next: { x, z, r } | null }: client/am/royale.mjs),
-    //      env (the hour: 'day', 'dusk' or 'night', client/lowpoly.mjs ENVS; day without one) }
+    //      env (the hour: 'day', 'dusk' or 'night', client/lowpoly.mjs ENVS; day without one),
+    //      own (third person, client/chase.mjs: my own record as it is drawn, PSIZE bytes written over my slot's so my
+    //      figure is drawn too; without one it never is), aim ([x, y] px: the reticle off the screen's centre), size (a figure's, 1 the arena's own: a map's body) }
     frame(u8, s, target) {
       // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
       if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
@@ -913,10 +921,12 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       if (s.viewmodel?.length) device.queue.writeBuffer(vmBuf, 0, s.viewmodel.subarray(0, MAX_VM * 12));
       const st = s.storm, sn = st?.next;
       uf.set([st ? st.x : 0, st ? st.z : 0, st ? st.r : 0, st ? 1 : 0, sn ? sn.x : 0, sn ? sn.z : 0, sn ? sn.r : 0, sn ? 1 : 0], 40);
-      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 48 + 8 * k));
+      uf.set([s.aim?.[0] ?? 0, s.aim?.[1] ?? 0, s.own ? 1 : 0, s.size ?? 1], 48);
+      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 52 + 8 * k));
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);
+      if (s.own) device.queue.writeBuffer(playerBuf, s.slot * L.PSIZE, s.own);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE, s.tints ?? NO_TINTS);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 4, s.looks ?? NO_LOOKS);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 8, s.avatars ?? NO_AVATARS);

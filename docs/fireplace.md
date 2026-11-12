@@ -10,7 +10,8 @@ room, and the TV shows the marshmallows and what's on next; then it closes in
 again. The room plays the playlist through: party (three minigames), the
 arena (one three-minute match of any of its sixteen modes, drawn for it), party again, a three-minute Dogfight (a free-for-all,
 red against blue, the juggernaut or Ring Race, drawn for it), a hole of golf, and round
-again; the top three of each game get 3, 2 and 1 marshmallows. Join any time,
+again; the top three of each game get 3, 2 and 1 marshmallows, which the
+wardrobe spends on looks. Join any time,
 into whatever is on (or the next round of it); leave any time.
 
 ```sh
@@ -25,16 +26,26 @@ is in view, T changes its theme (`?theme=<id>` picks one), B, H and P your
 ball, hat and body, and L lists your achievements (`?look=<word>` wears a look
 for one visit). In party, 1 to 4 wave, cheer, dance and spin.
 
+**The shelf** (`client/games.html`) is the other way in: every game,
+minigame, mode and map as a tile that plays it alone, where the room plays
+them in turn. The link in the room's top left corner goes there, and each
+game's page has the same link back.
+
 **The wardrobe** (`client/wardrobe.mjs`) is those keys as a panel, on the
 right of the couch (a sheet along the bottom on a phone): your look drawn big,
+the marshmallows you have to spend beside its title,
 every ball, hat and body as a tile (a shut one dimmed and locked, saying which
-achievement opens it), the room's theme with a button each way, the
-achievements folded under a button, and SIT DOWN AND PLAY. It shows while the
+achievement opens it; a priced one with its price, dimmed if the purse falls
+short, saying how many more it takes), the room's theme with a button each way, the
+achievements folded under a button, and SIT DOWN AND PLAY. A click on a priced
+tile tries it on, in the panel's picture only; BUY beside its price buys it
+and puts it on, and a second click on the tile takes it off again. It shows while the
 room is in view and the pointer is free, so on the couch and between games
 once Esc lets the mouse go; × folds it to a YOUR LOOK button, remembered in
 this browser. A guest at the controls, a spectator and a film get none. The
 arena's, party's and Dogfight's own pages show it too (`pageWardrobe`), while
-the mouse is free, with PLAY in place of sitting down.
+the mouse is free, with PLAY in place of sitting down, and the same purse:
+they hand out no marshmallows, but what the room's games won buys there too.
 
 **How it fits on the engine.** `build/fireplace/game.wasm` is golf, the arena,
 party and flight's Dogfight in one module: `tools/asm.mjs` expands each
@@ -142,11 +153,15 @@ node --test test/themes.test.mjs
 ```
 
 **Looks.** A look is a ball, a hat and a body a player picks, and everyone in
-the room sees it: fourteen balls (the house colours, beach, candy, zebra,
+the room sees it: twenty balls (the house colours, beach, candy, zebra,
 melon, pumpkin, snowball, eight ball, gold, marshmallow, Swiss cheese, ember,
-s'more, platinum), eight hats (a cap, a beanie, a headband, a helmet, none, a
-pumpkin head, a crown, a flight helmet) and five bodies (the round
-rider, blocky with yellow, peach or cocoa skin, a robot), listed in
+s'more, platinum, and for marshmallows bumblebee, soccer ball, ladybird,
+checkers, peppermint, disco ball), fourteen hats (a cap, a beanie, a headband,
+a helmet, none, a pumpkin head, a crown, a flight helmet, and for marshmallows
+a party hat, headphones, a top hat, antlers, a propeller cap, a halo) and six
+bodies (the round
+rider, blocky with yellow, peach or cocoa skin, a robot, and for marshmallows
+a gold robot), listed in
 `client/looks.mjs`. A look is drawing only. The page writes its word
 (the ball in the low byte, the hat in the next, the body in the third, an
 emote in the top) to `CL_LOOK`, the net worker
@@ -157,18 +172,51 @@ goes back to 0, the house look. No tick, record, replay or hash carries a
 look, so the sims build to the same sha256 with or without them, and
 `tiny-client` and an edge relay, which never ask, never see one. Party
 draws the ball's pattern (beach panels, bands, ribs, a solid, metal,
-an eight ball's spot) and the hat on the rider's head, a few lines each in
-their shaders' ball and head cases; golf and the arena tint the golfer and the
-fighter the ball's colour (a team mode's sides still win). Look 0 draws exactly
+an eight ball's spot, twelve spots, checks, a swirl, a disco ball's mirror
+tiles) and the hat on the rider's head, a few lines each in
+their shaders' ball and head cases. A hat from the top hat on stands off the
+head, so it is boxes over it (`standing` in `client/rider.mjs`) on the round
+rider as on the blocky one, with only its foot painted on the round head: a
+halo's ring is lit from inside, and a propeller turns as the ball rolls.
+Golf and the arena tint the golfer and the
+fighter the ball's colour (a team mode's sides still win) and take the body's
+skin and face; their figures wear their own hair, not the look's hat. Look 0 draws exactly
 as the riders always have: the seat's colours, alpha 1, the slot for a seed.
 Musical Pads and Paint Party mark what is whose by the seat's colour, so their
 balls keep it there (`seatColors`); the hat still shows. The page keeps your
 pick in this browser, and a browser that never picked wears the house colours
 on a blocky rider (`FIRST_LOOK`); every page with a host wears it, not only
 Fireplace's. AI players in a local room wear a look of their own, open ones
-on blocky bodies (`guestLook`). `client/party-render-demo.html?scene=wardrobe`
-shows every ball and hat, `?scene=blocky` every body, `?scene=outfits` every
+on blocky bodies (`guestLook`), never an earned or a bought one. `client/party-render-demo.html?scene=wardrobe`
+shows every ball and hat, `?scene=shop` the priced ones close, `?scene=blocky` every body, `?scene=outfits` every
 hat on one, `?scene=emotes` the emotes.
+
+**Marshmallows buy looks.** A look in `client/looks.mjs` is free, earned
+(`unlock`, an achievement's id) or bought (`price`, in marshmallows), never
+two of those. Thirteen are priced, from 5 to 150: the bumblebee ball 5, the
+soccer ball and the party hat 10, the ladybird and the headphones 15,
+checkers 20, the top hat 25, antlers 30, peppermint 35, the propeller cap
+45, the halo 75, the disco ball 100 and the gold robot 150, 535 for the
+lot. A game hands out 6 between its top three and one ends every few
+minutes, so a first buy is one or two good games and the gold robot fifty
+wins. The purse (`client/purse.mjs`) is pure functions over two records this
+browser keeps: the achievements' tally, whose `mallows` is every marshmallow
+this player ever won and only grows (the achievements and Elo Pros' board
+read it), and the purse itself (`fireplace.purse` in localStorage: what was
+spent, and each look bought, by its list and key). The balance is the one
+less the other, so buying never lowers the total; a price past the balance
+buys nothing; what is owned costs nothing again. A browser with no storage
+keeps a purse for the visit. What this browser holds, the achievements it
+opened and the looks it bought, is one set (`openSet`), and a look outside
+it is refused the way an earned one always was: the wardrobe's tile is shut,
+B, H and P skip it, and a saved word comes back with it taken off
+(`wearable`, in `client/host.mjs` and here). That is the page's side only.
+The relay carries a look word as a number and cannot see a browser's purse,
+so a client that sends a priced look's number wears it (`?look=<word>` does
+as much for a visit); it stays so until purchases live with the wallet on
+Elo Pros ([roadmap.md](roadmap.md)). A signed-in player's tally is on Elo
+Pros too, but the purse is this browser's alone: a second browser has the
+same marshmallows on the board and its own, empty, purse.
 
 **Bodies.** A blocky rider (`client/rider.mjs`) is six boxes and its hat's
 standing on the ball and walking it along: legs that step as it rolls, arms
@@ -286,7 +334,11 @@ end of that playlist for three slots, twice each as a page sees a hold, which
 counts each game a slot was in once, with its marshmallows and wins.
 `test/looks.test.mjs` and `test/achievements.test.mjs` hold the rest: the house
 look as the riders were, every pattern and style the lists use present in
-party's shader, earned looks naming real achievements, and each achievement's test.
+party's shader, earned looks naming real achievements, the lists' old numbers
+unmoved, a priced look never earned as well, a standing hat's boxes on either
+body, and each achievement's test. `test/purse.test.mjs` (8 tests) is the
+purse: earning, spending, no overspending, the lifetime total the same after
+a buy, every priced look shut until bought, and storage missing or refused.
 The determinism matrix replays CI's log, 155,000 ticks of twelve guests,
 the playlist with the minigames and the modes as they stood before the
 arena's, Dogfight's and golf's cut went from 3 and 2.5 min to 90 s:

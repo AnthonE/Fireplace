@@ -11,9 +11,26 @@ not measured yet, it says so.
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
 Territories, VIP, Assault) and Party's 49 minigames (bumper balls, once a
 game of its own, among them as Swiss Roll). Fireplace plays them in turn.
+Two more arena modes play only on a map that names them, each gated online
+on its own map: Crossroads, and Obby, an obstacle course over the map's
+parts ([arena.md](arena.md#obby)).
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
 on Fireplace's playlist between party and golf.
+
+The shelf (`client/games.html`) lists all of it, 81 tiles: the five games,
+the 49 minigames, the arena's eighteen modes and four maps, Dogfight's four
+modes and its map, each one click from a local room with AI players and each
+with a picture shot from its own page (`tools/shelf.mjs`: 79 WebP files, 320
+x 200 and the five games' 640 x 400, 866 KB in all, about 12 minutes to shoot
+on SwiftShader; a mode only a map plays shares the map's). Where a pool
+reports rooms a tile counts who is playing and its click takes a seat
+([hosting.md](hosting.md#what-the-shelf-reads)). Left: a pool's room started
+on a seed, so a mode's or a minigame's tile has rooms of its own and not only
+its game's; the count from Elo Pros' presence (`online.json`) where no pool
+is asked; a tile's picture shot again in CI when its game changes; the
+site's front door, which still opens the living room, choosing between the
+room and the shelf.
 
 What a page downloads: every file it fetched in its first 15 s in headless
 Chrome (its modules, workers, themes and wasm), each gzipped:
@@ -53,7 +70,9 @@ each) took 72 to 93 minutes apiece, all four at once.
 - No secrets: every machine holds the whole world.
 - Physics: spheres, Quake-style bodies against a heightfield and up to 2048
   boxes (512 until Roblox places needed more: [docs/roblox.md](roblox.md)),
-  and whatever a minigame's ground and push hooks describe.
+  256 of which may be parts that kill, throw, slide, carry or are climbed
+  ([arena.md](arena.md#parts-boxes-that-do-something)), and whatever a
+  minigame's ground and push hooks describe.
 - 125 Hz. A lower rate (60 Hz halves CPU and bandwidth) means a per-sim tick
   length the relay reads at the hello; do it only for a game that measures
   over budget.
@@ -66,7 +85,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
 | Party (the ball) | 49 | 60 | with teams: a relay race, capture the flag on balls |
-| Arena (the fighter) | 17 | 24 | Slayer at run time, Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Arena (the fighter) | 18 | 24 | Slayer at run time, Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a tower obby (Obby is built: a course is a map now, so a tower is one to draw), a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |
@@ -223,10 +242,13 @@ crediting who made what (every theme is one). Next, in order:
    `/api/face/{wallet}` once the page knows a wallet (below).
 2. Skins. Built: looks (`client/looks.mjs`), a ball, a hat and a body each
    player picks, which the relay carries beside the sim to everyone in the
-   room (hello flag 4), fourteen balls, eight hats and five bodies (the round
-   rider, three blocky, a robot: `client/rider.mjs`, the arena's fighters the
+   room (hello flag 4), twenty balls, fourteen hats and six bodies (the round
+   rider, three blocky, two robots: `client/rider.mjs`, the arena's fighters the
    same figure), ten of them earned with the page's achievements
-   (`client/achievements.mjs`), and four emotes in the word's top byte.
+   (`client/achievements.mjs`), thirteen bought with marshmallows, 5 to 150
+   each, out of a purse the browser keeps (`client/purse.mjs`: the tally's
+   lifetime marshmallows less what was spent), and four emotes in the word's
+   top byte.
    Built too: the Elo Pros avatar, a word any game can draw (a 32-colour
    palette and the figure's six parts at 5 bits each, a face bit), set on a
    player's profile and served on `/api/face/{wallet}`, which the relay reads
@@ -237,7 +259,17 @@ crediting who made what (every theme is one). Next, in order:
    `title: "fireplace"`, and the relay reading
    `/api/items/of/{wallet}?title=fireplace` once a slot has a wallet (below)
    and refusing an owned look a slot doesn't hold. A theme is free, a look is
-   free or earned, an item is owned.
+   free, earned or bought, an item is owned.
+   Next for the purse: sync purchases to the wallet. Today a bought look is
+   one browser's (localStorage), while a signed-in player's marshmallows are
+   already a stat on Elo Pros, so a second browser shows the same total and
+   an empty purse, and the relay, which cannot see a purse, passes on any
+   look word a client sends. The step: the page reports a purchase with its
+   sign-in, Elo Pros keeps what was spent and bought beside the `mallows`
+   stat (the key-value store per wallet, below), the relay reads both as the
+   slot signs in, hands the page its purse and refuses a priced look the
+   wallet has not bought, as it will an item. A guest's purse stays in the
+   browser.
 3. ~~The playlist as a list.~~ Built: `FP_SETS` in `src/layout.mjs`, the
    `fp` macros and `client/fireplace.mjs`'s `PAGES` read it, so a whole new
    game joins Fireplace as one entry (and its page row) once the kits below

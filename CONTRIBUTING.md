@@ -135,7 +135,11 @@ it into the lists that name every minigame:
 node tools/new-mg.mjs <key> <prefix> "<NAME>"     # e.g. node tools/new-mg.mjs marbles mb "MARBLE RUN"
 npm run build && node --test test/mg-<key>.test.mjs test/party.test.mjs
 node net/play.mjs --party --mg <id> --bots 7      # play it: open the URL it prints
+node tools/shelf.mjs --only mg-<key>              # its picture for the shelf (client/games.html), once it looks like itself
 ```
+
+The shelf lists a minigame the day it is in the list, under its name and its
+module's `hint`, in a tile of its own colour until it has a picture.
 
 Rather not install anything? The studio works on a minigame in the browser:
 `client/studio.html` (on the game's site, or `node tools/serve.mjs` here).
@@ -199,26 +203,38 @@ never in it, so a look can't desync a room either. Each is one entry in
 `client/looks.mjs`:
 
 - a ball: a `key`, a `name` (capitals, as the TV's font has them), one of
-  the patterns (`BEACH`, `STRIPES`, `RIBS`, `SOLID`, `METAL`, `EIGHT`) and
+  the patterns (`BEACH`, `STRIPES`, `RIBS`, `SOLID`, `METAL`, `EIGHT`,
+  `DOTS`, `CHECKER`, `SWIRL`, `DISCO`) and
   its two colours `a` and `b` (0 to 1 each);
 - a hat: a `key`, a `name`, one of the styles (`CAP`, `BEANIE`, `BAND`,
-  `HELMET`, `NONE`, `PUMPKIN`, `CROWN`) and its `color`;
+  `HELMET`, `NONE`, `PUMPKIN`, `CROWN`, `TOPHAT`, `CONE`, `HALO`, `ANTLERS`,
+  `PHONES`, `PROP`) and its `color`;
 - a body: a `key`, a `name`, `blocky: true`, its `skin` (the arms and head)
   and its `face` (1 a smile, 4 a robot's; `client/rider.mjs` `PART`).
 
 Add it at the end of its list: a look's number is its place in the list, and
 that number is what goes over the network. `unlock: '<achievement id>'` makes
 it earned rather than free (`client/achievements.mjs` has the ids).
+`price: <marshmallows>` makes it bought instead: the wardrobe shows the price
+and takes it from the player's purse (`client/purse.mjs`). A look has one or
+neither, never both. Price it against the ones there, 5 to 150: the top
+three of a game win 3, 2 and 1, so 10 is a couple of good games and 100 is
+thirty-odd wins.
 
 ```sh
-node tools/serve.mjs     # then /client/party-render-demo.html?scene=wardrobe: every ball and hat, rolling; ?scene=blocky, ?scene=outfits: the bodies
-node --test test/looks.test.mjs test/rider.test.mjs
+node tools/serve.mjs     # then /client/party-render-demo.html?scene=wardrobe: every ball and hat, rolling; ?scene=shop: the priced ones, close; ?scene=blocky, ?scene=outfits: the bodies
+node tools/party-shot.mjs --scenes wardrobe,shop,outfits   # the same as PNGs in traces/, with no GPU
+node --test test/looks.test.mjs test/rider.test.mjs test/purse.test.mjs
 ```
 
 A new pattern or hat style is code: a case in the ball's or the head's
 shader, in `client/party-render.mjs` (`lookBall`, `lookHat`), and the test
 checks it has it. On a blocky body
-a hat is boxes, in `rider()` in `client/rider.mjs`.
+a hat is boxes, in `rider()` in `client/rider.mjs`; a hat that stands off the
+head (a top hat, antlers) is boxes on the round rider too (`standing`, there),
+with only its foot painted in `lookHat`. The TV's cards and the wardrobe's
+tiles draw a look flat, in `drawLook` in `client/looks.mjs`: give the new
+pattern or style a few rectangles there.
 
 ## A map
 
@@ -231,7 +247,8 @@ npm ci && npm run build      # once
 node tools/serve.mjs         # then open http://127.0.0.1:8080/client/map-editor.html
 ```
 
-Start from Box Canyon, Skyways or an empty square. Raise, lower, flatten
+Start from Box Canyon, Skyways, an empty square or **a new obby** (a small
+obstacle course that plays as it is). Raise, lower, flatten
 and smooth the ground and paint it grass, rock, sand or metal; drag out
 boxes for walls, floors and roofs; place spawns, weapon pads, teleporters,
 the two flags, the skull, King of the Hill's hills and, for Dogfight, the
@@ -241,13 +258,19 @@ panel checks the map with the build's own compiler as you
 go and says what it would refuse; the header says whether it is
 **playable**, and **▶ play it** opens it in the arena, you against AI
 fighters, in a new tab. **3D** (or **both**) shows it as the game
-draws it: drag to turn, right-drag to move, the wheel to zoom. Save writes the three files: in Chrome,
+draws it, and is where a course is built: click a box to pick it, drag it
+to move it (Shift up and down, Ctrl a copy), drag the dots on its faces to
+size it, Ctrl+D for another; drag anything else to turn, right-drag to
+move, the wheel to zoom. A picked box's panel says **what it does**: kill,
+bounce, ice, conveyor, ladder, an obby's checkpoint or finish; the map's
+says **how it plays**: its mode (obby for an obstacle course), movement,
+body and void ([docs/arena.md](docs/arena.md#building-in-3d)). Save writes the three files: in Chrome,
 pick a new folder in `maps/`; elsewhere they download and you put them
 there. Then play it with bots:
 
 ```sh
 node net/play.mjs --arena --map <folder>                # open the URL it prints
-node net/play.mjs --flight --mode 17 --map <folder>     # Dogfight's Ring Race, on a map with gates
+node net/play.mjs --flight --mode 18 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
 
 A Roblox place makes a map too: in the editor, **open… > a Roblox place…**

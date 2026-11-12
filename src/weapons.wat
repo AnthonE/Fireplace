@@ -39,7 +39,11 @@
   (local.set $fy (local.get $sp))
   (local.set $fz (f32.mul (local.get $cp) (local.get $s)))
   (local.set $ex (!at f32 @(PLAYERS + P_PX) (local.get $pb)))
+#if ARENA
+  (local.set $ey (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (!body eye)))
+#else
   (local.set $ey (f32.add (!at f32 @(PLAYERS + P_PY) (local.get $pb)) (f32.const @P_EYE)))
+#endif
   (local.set $ez (!at f32 @(PLAYERS + P_PZ) (local.get $pb)))
   (local.set $v (select (f32.const @GREN_V) (f32.const @ROCKET_V) (local.get $wpn)))
   (!put f32 @(PROJ + J_PX) (local.get $jb) (!madd (local.get $fx) (f32.const 0.5) (local.get $ex)))
@@ -95,7 +99,11 @@
 ;; P_R from the feet to P_TOP) is within r of the point, or -1.
 (func $hit_player (param $x f32) (param $y f32) (param $z f32) (param $r f32) (param $skip i32) (result i32)
   (local $p i32) (local $pb i32) (local $dx f32) (local $dz f32) (local $py f32) (local $rr f32)
+#if ARENA
+  (local.set $rr (f32.add (!body r) (local.get $r)))
+#else
   (local.set $rr (f32.add (f32.const @P_R) (local.get $r)))
+#endif
   (local.set $rr (f32.mul (local.get $rr) (local.get $rr)))
   (!for $p (i32.const 0) (i32.const @NPLAYER)
     (local.set $pb (i32.shl (local.get $p) (i32.const 6)))
@@ -106,7 +114,11 @@
         (local.set $dz (f32.sub (!at f32 @(PLAYERS + P_PZ) (local.get $pb)) (local.get $z)))
         (if (i32.and (f32.lt (f32.add (f32.mul (local.get $dx) (local.get $dx)) (f32.mul (local.get $dz) (local.get $dz))) (local.get $rr))
                      (i32.and (f32.gt (local.get $y) (f32.sub (local.get $py) (local.get $r)))
+#if ARENA
+                              (f32.lt (local.get $y) (f32.add (f32.add (local.get $py) (!body top)) (local.get $r)))))
+#else
                               (f32.lt (local.get $y) (f32.add (f32.add (local.get $py) (f32.const @P_TOP)) (local.get $r)))))
+#endif
           (then (return (local.get $p)))))))
   (i32.const -1))
 

@@ -114,7 +114,7 @@ View.prototype.pads = function pads() {
 // for a reader the sim may have been laying it under.
 View.prototype.map = function map(fresh = false) {
   const d = this.dv;
-  const key = `${d.getUint32(L.HDR_SEED, true)}:${d.getUint32(L.MAP_NBOX, true)}:${d.getUint32(L.MAP_NGROUP, true)}`;
+  const key = `${d.getUint32(L.HDR_SEED, true)}:${d.getUint32(L.MAP_NBOX, true)}:${d.getUint32(L.MAP_NGROUP, true)}:${d.getUint32(L.MAP_NPART, true)}`;
   if (!fresh && this._map?.key === key) return this._map;
   const f = (a) => d.getFloat32(a, true);
   const box = (a) => [0, 1, 2, 3, 4, 5].map((k) => f(a + 4 * k));
@@ -146,9 +146,28 @@ View.prototype.map = function map(fresh = false) {
   const r = L.MAP_RULES, gait = d.getUint32(r + L.RU_FLAGS, true) & L.RU_GAIT;
   const movement = gait ? { walk: f(r + L.RU_WALK), zwalk: f(r + L.RU_ZWALK), accel: f(r + L.RU_ACCEL), jump: f(r + L.RU_JUMP), zjump: f(r + L.RU_ZJUMP), grav: f(r + L.RU_GRAV) } : null;
   const mode = d.getUint32(r + L.RU_MODE, true) - 1;
-  this._map = { key, bounds: [0, 1, 2, 3].map((k) => f(L.MAP_BOUNDS + 4 * k)), groups, boxes, teleporters, spawns, flags, ball, hills, movement, mode };
+  // the map's parts (MAP_PARTS: boxes that do something to who touches them), each where it is built, its group if
+  // it moves with one (-1: it stands still), and the fighter's body here (the arena's own unless the map has one)
+  const parts = [];
+  for (let k = 0; k < Math.min(L.NPART, d.getUint32(L.MAP_NPART, true)); k++) {
+    const a = L.MAP_PART + L.PART_SIZE * k, w = d.getUint32(a + L.PT_KIND, true);
+    parts.push({ box: box(a), kind: w & 255, stage: w >>> 8, group: d.getUint32(a + L.PT_GROUP, true) - 1, a: f(a + L.PT_A), b: f(a + L.PT_B), c: f(a + L.PT_C) });
+  }
+  const own = d.getUint32(L.MAP_OWNBODY, true) !== 0;
+  // (hit: what a shot hits of it, for the reticle's mirror of $a_ray: client/chase.mjs)
+  const bd = own ? [0, 1, 2, 3, 4, 5, 6, 7].map((k) => f(L.MAP_BODY + 4 * k)) : L.BODY.map(Number);
+  const body = { r: bd[0], top: bd[1], eye: bd[2], own, hit: { head: bd[4], headr2: bd[5], hitr2: bd[6], hittop: bd[7] } };
+  this._map = { key, bounds: [0, 1, 2, 3].map((k) => f(L.MAP_BOUNDS + 4 * k)), groups, boxes, teleporters, spawns, flags, ball, hills, movement, mode, parts, body };
   return this._map;
 };
+
+// Where the map's part p is at tick t (its box, moved with its group if it rides one): for drawing and steering.
+export function partAt(map, p, t) {
+  const mv = p.group >= 0 && map.groups[p.group]?.move;
+  if (!mv) return p.box;
+  const [ox, oy, oz] = moverAt(mv, t);
+  return [p.box[0] + ox, p.box[1] + oy, p.box[2] + oz, p.box[3] + ox, p.box[4] + oy, p.box[5] + oz];
+}
 
 // Where a moving group is at tick t, from where it is built: the sim's $mv in
 // f32 (a JS double rounded once is the f32 answer for each of these steps).
@@ -168,7 +187,7 @@ export function moverAt(mv, t) {
 // Where a fighter put down at (x, z) stands: on the highest box top under its
 // footprint no higher than `top`, else the ground (the sim's $stand, for drawing and steering).
 View.prototype.stand = function stand(x, z, top = -1000) {
-  const r = Number(L.PHYS.P_R);
+  const r = this.map().body.r;
   let y = this.height(x, z);
   for (const b of this.map().boxes) {
     const [x0, , z0, x1, y1, z1] = b.box;

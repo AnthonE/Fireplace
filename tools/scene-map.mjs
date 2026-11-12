@@ -153,7 +153,7 @@ export function sceneToMap(scene, o) {
   const notes = scene.notes.slice();
 
   // ---- the ground: big flat blocks with nothing under them, and the terrain
-  const isFlat = (ob) => ob.pos.length === 1 && !ob.neg.length && ob.pos[0].upright && !ob.spawn && ob.pos[0].area >= o.groundArea;
+  const isFlat = (ob) => ob.pos.length === 1 && !ob.neg.length && ob.pos[0].upright && !ob.spawn && !ob.part && ob.pos[0].area >= o.groundArea;
   const ground = new Set();
   for (const f of objs.filter(isFlat)) {
     const b = f.pos[0].box, e = 0.05;
@@ -244,8 +244,19 @@ export function sceneToMap(scene, o) {
       while (list.length > 48 && c < 8) { c *= 2; r = Math.min(0.5, r * 2); list = rasterize(ob, c, r); }
       count.cut++;
     }
-    const keep = !!ob.spawn || !!ob.mover; // what a spawn stands on, and what moves, is never fused or dropped
-    for (const b of list) if (inCut(b) && b[3] - b[0] > 1e-3 && b[4] - b[1] > 1e-3 && b[5] - b[2] > 1e-3) boxes.push({ b: b.map(tidy), key: ob.key, colour: ob.colour, look: ob.look, model: ob.model, keep, mover: ob.mover || null });
+    const keep = !!ob.spawn || !!ob.mover || !!ob.part; // what a spawn stands on, what moves and what does something is never fused or dropped
+    // a part (map.json's eighth element: a brick that kills, a ladder, a checkpoint) cut into columns is joined back into as few boxes as line up: each is a row of the map's parts
+    if (ob.part && list.length > 1) list = fit(list.map((b) => ({ b: b.map(tidy), key: 'part', colour: [0, 0, 0] })), Infinity).boxes.map((x) => x.b);
+    for (const b of list) if (inCut(b) && b[3] - b[0] > 1e-3 && b[4] - b[1] > 1e-3 && b[5] - b[2] > 1e-3) boxes.push({ b: b.map(tidy), key: ob.key, colour: ob.colour, look: ob.look, model: ob.model, keep, mover: ob.mover || null, part: ob.part || null });
+  }
+  // the map holds NPART parts: past that the smallest are plain boxes (a ghost, which is nothing but its part, goes)
+  const withPart = boxes.filter((x) => x.part);
+  if (withPart.length > L.NPART) {
+    const vol = (x) => (x.b[3] - x.b[0]) * (x.b[4] - x.b[1]) * (x.b[5] - x.b[2]);
+    const over = new Set(withPart.sort((p, q) => vol(q) - vol(p)).slice(L.NPART));
+    boxes = boxes.filter((x) => !(over.has(x) && x.part.ghost));
+    for (const x of over) x.part = null;
+    notes.push(`${withPart.length} boxes do something (kill, carry, climb...); the map holds ${L.NPART} such parts, so the ${over.size} smallest are plain boxes`);
   }
   const raw = boxes.length;
   const kept = boxes.filter((x) => x.keep);
@@ -325,7 +336,8 @@ export function sceneToMap(scene, o) {
   const flagAt = flags ? flags.map((f) => f.at) : defaultEnds(bounds);
   const halfOf = (x, z) => { const d = flagAt.map(([fx, fz]) => (x - fx) ** 2 + (z - fz) ** 2); return d[0] < d[1] ? 0 : d[0] > d[1] ? 1 : 2; };
   let added = 0;
-  for (const k of [0, 1]) {
+  // (not for a course that starts at one end: scene.oneEnd, an obby, whose map names a mode without sides)
+  for (const k of scene.oneEnd && spawns.length ? [] : [0, 1]) {
     if (spawns.some((p) => halfOf(p[0], p[1]) === k)) continue;
     const [fx, fz] = flagAt[k];
     for (const [dx, dz] of [[0, 0], [4, 0], [-4, 0], [0, 4], [0, -4]]) {
@@ -358,7 +370,7 @@ export function sceneToMap(scene, o) {
   split(still, Math.min(L.NGROUP - own.size, Math.max(1, Math.ceil(still.length / 8))));
   const used = new Map();
   const named = (top) => { used.set(top, (used.get(top) || 0) + 1); return used.get(top) > 1 ? `${top} ${used.get(top)}` : top; };
-  const boxesOf = (list) => list.map((x) => [...x.w, x.look === 'plain' ? hex(x.colour) : `${x.look}${hex(x.colour)}`]);
+  const boxesOf = (list) => list.map((x) => [...x.w, x.look === 'plain' ? hex(x.colour) : `${x.look}${hex(x.colour)}`, ...(x.part ? [x.part] : [])]);
   const structures = leaves.filter((l) => l.length).map((list) => {
     const names = new Map();
     for (const x of list) if (x.model) names.set(x.model, (names.get(x.model) || 0) + 1);

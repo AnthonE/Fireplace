@@ -8,9 +8,13 @@
 // Dogfight views are these. --scenes shoots the arena renderer's own demo
 // page instead (client/arena-render-demo.mjs: fighters held still up close,
 // no sim) into traces/arena-demo-<scene>.png. Frame times mean nothing on a
-// software GPU.
-//   node tools/arena-shot.mjs [--views track,rim,ships] [--scenes figures,teams,effects [--env dusk]] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
+// software GPU. --map shoots the arena's views on another map of maps/
+// (packed into build/maps/ as net/play.mjs packs one, laid at run time),
+// into traces/arena-look-<view>-<map>.png: `behind`, `close` and `far` there are
+// the third-person camera's (client/chase.mjs), a bot at the controls.
+//   node tools/arena-shot.mjs [--views track,rim,ships] [--scenes figures,teams,effects [--env dusk]] [--map crossroads] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { serve } from './serve.mjs';
 
@@ -27,6 +31,9 @@ const VIEWS = {
   night: ['arena', 'arena.html', 'local=1&env=night&cam=440,24,500,20,-6', '__qa'],
   watch: ['arena', 'arena.html', 'local=1&env=day&watch=1', '__qa'],
   eyes: ['arena', 'arena.html', 'local=1&env=day&bot=1', '__qa'],
+  behind: ['arena', 'arena.html', 'local=1&env=day&bot=1&view=3', '__qa'],
+  close: ['arena', 'arena.html', 'local=1&env=day&bot=1&view=3&dist=2.5', '__qa'],
+  far: ['arena', 'arena.html', 'local=1&env=day&bot=1&view=3&dist=12', '__qa'],
   ships: ['flight', 'flight.html', 'local=1&env=day&bot=1', '__qf'],
   'ships-dusk': ['flight', 'flight.html', 'local=1&env=dusk&bot=1', '__qf'],
 };
@@ -39,6 +46,16 @@ const res = opt('res', '960x600');
 const [W, H] = res.split('x').map(Number);
 const wait = Number(opt('wait', 5));
 const LOCAL_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// --map: its packed file for the pages' ?map= (the map tools read the disk, so they load only when asked)
+let mapName = '', mapQuery = '';
+if (opt('map', '')) {
+  const { compileMap, mapDir } = await import('./map.mjs');
+  const { packMap } = await import('./map-compile.mjs');
+  mapName = basename(mapDir(opt('map')));
+  mkdirSync('build/maps', { recursive: true });
+  writeFileSync(`build/maps/${mapName}.qgmap`, packMap(compileMap(mapDir(opt('map')))));
+  mapQuery = `&map=../build/maps/${mapName}.qgmap`;
+}
 
 const require = createRequire(import.meta.url);
 const { chromium } = (() => { for (const n of ['playwright', 'playwright-core']) { try { return require(n); } catch { /* next */ } } throw new Error('playwright not found'); })();
@@ -70,12 +87,12 @@ try {
     const page = await browser.newPage({ viewport: { width: W, height: H } });
     page.on('pageerror', (e) => { failed = true; process.stderr.write(`[chrome ${name}] ${e.message}\n`); });
     const t0 = Date.now();
-    await page.goto(`http://127.0.0.1:${port}/client/${srcOf(name, res)}`);
+    await page.goto(`http://127.0.0.1:${port}/client/${srcOf(name, res)}${game === 'arena' ? mapQuery : ''}`);
     await page.waitForFunction((h) => window[h], hook, { timeout: 180000 });
     const err = await page.evaluate((h) => window[h].error, hook);
     if (err) throw new Error(err);
     const png = await page.evaluate(([h, after]) => window[h].shot('', after), [hook, wait]);
-    const f = `traces/${game}-look-${name}${opt('tag', '') ? `-${opt('tag')}` : ''}.png`;
+    const f = `traces/${game}-look-${name}${game === 'arena' && mapName ? `-${mapName}` : ''}${opt('tag', '') ? `-${opt('tag')}` : ''}.png`;
     writeFileSync(f, Buffer.from(png, 'base64'));
     console.log(`${f}  ${((Date.now() - t0) / 1000).toFixed(1)} s`);
     await page.close();

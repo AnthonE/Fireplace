@@ -20,6 +20,7 @@
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK, BLOCK_WGSL } from './rider.mjs';
+import { TRIM } from './looks.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 
 export const COLS = 80;
@@ -40,6 +41,17 @@ const FLAKES = 4000;
 
 // sprite kinds: solid 0 a ball, 1 a rider's body, 2 an orb, 6 the arrow over you, 7 a rocket, 8 a rider's head, 9 a crumb,
 // 10 a spinning coin, 11 a bomb, 12 a box (client/rider.mjs); glowing 3 a flash, 4 a ring, 5 a spark
+// Where world point q lands on the screen, as the shader's project() puts it:
+// [x, y, metres ahead of the eye]. s: { cam, yaw, pitch }, as frame()'s. For
+// what the HUD pins to a ball (a line of chat over it).
+export function project(s, W, H, q) {
+  const focal = Math.min(W, H * 1.6) * 0.62;
+  const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw), cp = Math.cos(s.pitch), sp = Math.sin(s.pitch);
+  const r = [q[0] - s.cam[0], q[1] - s.cam[1], q[2] - s.cam[2]];
+  const z = r[0] * cp * cy + r[1] * sp + r[2] * cp * sy;
+  const k = focal / Math.max(z, 0.01);
+  return [W / 2 + (-r[0] * sy + r[2] * cy) * k, H / 2 - (-r[0] * sp * cy + r[1] * cp - r[2] * sp * sy) * k, z];
+}
 export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11, BLOCK };
 export const SHAPE = { BOX: 0, CYL: 1, HEX: 2, SPHERE: 3 };
 // The looks, and what their two parameters a and b do (0 takes the default):
@@ -1009,6 +1021,25 @@ fn lookBall(pattern: u32, m: vec3f, a: vec3f, b: vec3f) -> vec3f {
         if (glyphBit(56u, q)) { o = vec3f(0.02); }
       }
     }
+    case 6u: { // spots: twelve, where an icosahedron's corners are, as a football's dark patches lie
+      let q = abs(m);
+      if (max(max(dot(q, vec3f(0.0, 0.5257, 0.8507)), dot(q, vec3f(0.5257, 0.8507, 0.0))), dot(q, vec3f(0.8507, 0.0, 0.5257))) > 0.925) { o = b; }
+    }
+    case 7u: { // checks: twelve round it, six from pole to pole
+      if (((u32(floor(lon * 12.0)) + u32(floor((asin(clamp(m.y, -1.0, 1.0)) / 3.1416 + 0.5) * 5.999))) & 1u) == 1u) { o = b; }
+    }
+    case 8u: { // a swirl: five arms from pole to pole, two fifths of a turn on the way
+      o = mix(a, b, smoothstep(0.5, 0.56, abs(fract(lon * 5.0 + acos(clamp(m.y, -1.0, 1.0)) / 1.5708) * 2.0 - 1.0)));
+    }
+    case 9u: { // a disco ball: mirror tiles in rings, each its own grey, some in b, a few lit
+      let lat = asin(clamp(m.y, -1.0, 1.0)) / 3.1416 + 0.5;
+      let t = vec2f(lon * 24.0, lat * 12.0);
+      let h = fract(sin(dot(floor(t), vec2f(12.9898, 78.233))) * 43758.5453);
+      o = select(a, b, h > 0.62) * (0.4 + 0.8 * h);
+      if (h > 0.9) { o = vec3f(2.2); }
+      let e = fract(t);
+      if (min(e.x, e.y) < 0.09) { o = a * 0.12; }
+    }
     default: {}
   }
   return o;
@@ -1032,6 +1063,21 @@ fn lookHat(style: u32, n: vec3f, f: vec3f, side: vec3f, c: vec3f, skin: vec3f) -
       o = c * (0.75 + 0.25 * abs(sin(a * 6.2832 * 4.0)));
       if (n.y > 0.92) { o = vec3f(0.12, 0.3, 0.06); }
       if (dot(n, f) > 0.7 && n.y < -0.12 && n.y > -0.4 && abs(dot(n, side)) < 0.45) { o = vec3f(1.6, 0.9, 0.25); }
+    }
+    // From here a hat stands off the head, in boxes over it (client/rider.mjs standing): only its foot is painted
+    case 7u: { if (n.y > 0.7) { o = c; } } // a top hat: the crown of the head, under its brim
+    case 8u: { if (n.y > 0.8) { o = c; } } // a party hat's
+    case 9u: {} // a halo touches nothing
+    case 10u: { if (n.y > 0.25 && abs(dot(n, f)) < 0.09) { o = c * 0.6; } } // antlers: the band they stand on, ear to ear
+    case 11u: { // headphones: the band over the top, and the head under each cup
+      if (n.y > 0.1 && abs(dot(n, f)) < 0.11) { o = c * 0.35; }
+      if (abs(dot(n, side)) > 0.9) { o = c; }
+    }
+    case 12u: { // a propeller cap: six panels in three colours
+      if (n.y > 0.42) {
+        let seg = u32(floor(a * 6.0)) % 3u;
+        o = select(select(lin(vec3f(${TRIM.YELLOW.map((v) => v.toFixed(3)).join(', ')})), lin(vec3f(${TRIM.BLUE.map((v) => v.toFixed(3)).join(', ')})), seg == 1u), c, seg == 0u);
+      }
     }
     default: {}
   }
@@ -1080,7 +1126,7 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
         if (abs(m.y) > 0.9) { alb = vec3f(0.85); }
       } else {
         alb = lookBall(look - 2u, m, c, lin(unrgb(s.info.z)));
-        if (look == 6u) { shine = 2.0; } // metal
+        if (look == 6u || look == 11u) { shine = 2.0; } // metal, and a disco ball's mirrors
       }
       let sh = shadowAt(surf, n);
       let ao = mix(0.55, 1.0, smoothstep(-0.9, 0.2, n.y));

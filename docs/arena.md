@@ -28,9 +28,11 @@ node net/play.mjs --arena --bots 0   # just people
 
 Click to play. The mouse aims, WASD runs, Space jumps, left click fires
 (hold it for the automatics), right click zooms the guns that have a scope,
-1/2, X or the wheel swap your two guns, Q melee, G throws a frag, R reloads,
+1/2 or X swap your two guns, Q melee, G throws a frag, R reloads,
 E picks up the gun on the pad you stand on, Tab shows the scores, F goes
-fullscreen, N the net graph. While the mouse is free (before the first
+fullscreen, N the net graph. The wheel takes the camera back out of your
+fighter's eyes to behind it, as far as 12 m, and in again; C switches
+between the two (third person, below). While the mouse is free (before the first
 click, or after Esc), the wardrobe (`client/wardrobe.mjs`, as on Fireplace's
 couch) picks your ball, hat and body, and PLAY takes the controls again; on a
 phone it waits folded under a YOUR LOOK button. `?bot=1` hands your slot to an
@@ -110,6 +112,47 @@ and a kill feed with medals).
 the ground, a settling aim with a human's wobble, the gun for the range,
 strafing, frags, melee up close, and pads when nobody is in sight.
 
+**Third person.** A notch of the wheel back puts the camera 2 m behind your
+fighter, each one more a quarter further to 12 m, and forward brings it in
+the same way to the eyes; C (VIEW on a phone) goes between first person and
+the last distance. `client/chase.mjs` is the camera, every part of it a
+function of what it is given: a boom from the eye back along the aim,
+leaning 0.25 m right and 0.12 m up a metre, less by the aim's cosine, which
+through the renderer's sheared lens holds the figure a quarter of the focal
+length left of the screen's centre and an eighth under it at every zoom and
+pitch, so what you aim at shows past its shoulder. The boom stops 0.3 m
+short of the first of the map's boxes on it (a box that moves where it is on
+the tick drawn) and 0.4 m over the ground, in at once and out again eased,
+so the camera never sees through the world. With under a metre of room,
+through a scope, or along an aim steeper than 50° down or 40° up (the
+shear smears a figure seen from over its head, and under an aim far up the
+boom is in the ground) the camera is the eye again, and dead it is the
+death camera as before. From behind, the renderer draws your own figure as
+it draws anyone's, your look and avatar and what a carrier carries, from
+the prediction's record put where the camera has you, and no gun in your
+hands.
+
+![From behind on Box Canyon, the reticle on the teleporter](a6-behind.png)
+
+The sim still fires from the eye along the yaw and pitch, so the reticle is
+not the camera's centre: it sits where that ray lands (`aimPoint`, the
+sim's `$a_ray` in JS: the ground in half-metre steps and a bisection, the
+boxes, every other fighter's body and head, out to the gun's reach) as the
+camera sees the point, in whole pixels, and the hit marker with it. A wall
+2 m ahead puts it by the figure's head; a hill across the field, a few
+pixels off the centre. `test/chase.test.mjs` (11 tests) holds the camera to
+this: zoom 0 is the eye; the figure's place on the screen; the pull-in
+against a wall, a roof, a slope and a lift where it is that tick; from all
+32 spawns of Box Canyon, 16 ways round, 5 pitches and 3 zooms, the camera
+outside every box, over the ground and with nothing between it and the eye;
+and a sniper rifle fired in the sim from ten stands and aims, each tracer
+ending within 0.12 m of the reticle's point, then at a fighter 30 m off,
+both ending on its body. The choice is kept in the browser (the page works without
+`localStorage`); `?view=3` (and `?dist=` metres back) or `?view=1` holds
+one for a visit; a map with a movement of its own (Crossroads) is seen
+from behind until you choose. A spectator's camera and `?cam=` are as they
+were.
+
 **Results.** `test/arena.test.mjs` (18 tests): the map on five seeds; an
 assault-rifle fight through shields to a kill and the respawn on its tick;
 shields and health coming back; the magnum's four-shot and the sniper's
@@ -148,13 +191,13 @@ of a room plays `ARENA_MODES[k % 16]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
 Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, Escape, Battle
 Royale, and round again: a free-for-all, then two [team modes](#teams), and
-the four kit modes without sides last. A seventeenth, [Crossroads](#crossroads), is in no
-rotation: a map that names it plays it every match. So a room
+the four kit modes without sides last. Two more, [Crossroads](#crossroads) and [Obby](#obby), are in no
+rotation: a map that names one plays it every match. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it ([fireplace.md](fireplace.md)). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads, 16 Battle Royale) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads, 16 Battle Royale, 17 [Obby](#obby)) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
@@ -423,6 +466,58 @@ Online on its own map, laid at run time with its movement (`net/run-arena.mjs
 --map crossroads`, a CI step): 64 AI fighters for 60 s, every hash the
 referee checked equal, 524 KOs, 0.15 ms a step.
 
+### Obby
+
+An obstacle course (mode 17), on the kit with no sides and never in the
+rotation: a map that names it plays it (`"mode": "obby"`, which needs a
+`finish` part), or a forced seed. Nobody is armed and nobody can hurt
+anybody. The course is the map's [parts](#parts-boxes-that-do-something);
+the mode reads two of them:
+
+- a **checkpoint** touched whose stage is past yours is your stage (any
+  later one counts: a shortcut found is a shortcut earned), and where you
+  come back, a second after a death, on its top; before the first, at the
+  map's spawn;
+- the **finish** ends your run, timed from the start of play. The first
+  home cuts the clock to 45 s, so a room doesn't wait out a straggler; the
+  match is over at the clock (5 minutes) or when everyone in it is home.
+
+As play begins everyone is put back at the start, wherever the countdown
+took them. Places: the finishers by their time, then the rest by stage, then
+the fewer deaths. Such a map needs no spawn on each half, and
+`tools/map-check.mjs` plays it as itself alone.
+
+`maps/obby/` is **Sky Steps** (`node tools/obby.mjs` writes it): seven
+stages in a line over a floor of lava, one for each kind of part: stepping
+stones 2.4 m apart, two bars that kill across a walkway, 12 m of ice half as
+wide, a belt running back at half a walk, a bounce pad up to a ledge 3.5 m
+over it, a ladder 6 m up a tower, and a platform ferrying 12 m to the
+finish. Its fighters walk 6 m/s, stop when the keys do and jump 2 m under
+55 m/s² ([a map's own movement](#a-maps-own-movement)), so a jump is 3.2 m
+of air.
+
+```sh
+node net/play.mjs --arena --map obby
+```
+
+The AI fighter doesn't fight here: the mode's client module drives it
+(`drive` in `client/am/obby.mjs`): at the next checkpoint, forward; a jump
+at an edge with somewhere still to land inside 0.9 of a jump's reach, taken
+at speed, with a step back from the brink for the run-up; over a low thing
+that kills, and a halt before a tall one; nothing that moves is jumped from
+or onto, it is waited for and walked. Eight of them all finish Sky Steps
+in 30 to 45 s, the first in about 25, match after match.
+
+`test/arena-obby.test.mjs` (9 tests): the mode on the kit and out of the
+rotation; everyone at the start with empty hands as play begins; stages
+taken, skipped to and never lost; a death back on its checkpoint or the
+start; the finish's time, the clock cut once, the end with everyone home,
+the places; a rifle butt doing nothing; a forced seed on Box Canyon, which
+has no course, running to the clock; the client module's lines and marker;
+8 AI fighters on the debug build through two matches. Online on the course
+(`net/run-arena.mjs --map obby`, a CI step): 64 AI fighters for 60 s, 3,635 interval hashes checked by
+the referee, all equal, 0.06 ms a step.
+
 ## Teams
 
 Red against blue, in eight more modes on the same build: Team Slayer, Capture
@@ -651,15 +746,19 @@ gzipped, almost all of it the height image.
 
 A map is a directory under `maps/`: `map.json`, `height.png` and, if you
 like, `surface.png`. The map editor draws one in the browser
-(`node tools/serve.mjs`, then `/client/map-editor.html`): the ground from
-above, raised, lowered, flattened, smoothed and painted with a brush; boxes
-dragged out and sized; spawns, pads, teleporters, the flags, the skull, the
-hills and flight's race gates placed and dragged. It runs the build's own
+(`node tools/serve.mjs`, then `/client/map-editor.html`), with no JSON
+written by hand: the ground from above, raised, lowered, flattened, smoothed
+and painted with a brush; boxes dragged out and sized, or built in the 3D
+view the way parts are placed in a building tool
+([Building in 3D](#building-in-3d)); what a box does and how the map plays
+set in its panel; spawns, pads, teleporters, the flags, the skull, the hills
+and flight's race gates placed and dragged. It runs the build's own
 compiler (`tools/map-compile.mjs`, the part of `tools/map.mjs` with no Node
 in it) on every change and shows what it refuses, and saves the three files
 into a folder (Chrome writes them in place; elsewhere it downloads them).
 **play it here** opens the arena on the map as it stands, in a new tab, you
-and AI fighters, with nothing built (below). To play a saved one online:
+and AI fighters, with nothing built (below). **open… > a new obby** starts
+from a small course rather than an empty square. To play a saved one online:
 
 ```sh
 node tools/map.mjs maps/mymap            # checks it and says what it holds
@@ -688,9 +787,11 @@ QG_MAP=mymap npm run build                # or build it in, as the build's own: 
   Hill's, `[{ at, radius }]` (`at` as a spawn's: `[x, z]` or `[x, z, top]`);
   `void`, a height in metres below which a fighter dies by falling (left
   out, none); `movement`, how its fighters walk, jump and fall
-  ([A map's own movement](#a-maps-own-movement)); `mode`, the mode every
-  match on it plays (a key: `crossroads`, `lucky`, `ctf`...; left out, the
-  rotation). A structure may `move` ([Moving boxes](#moving-boxes)). Left out, the flags stand an eighth in from each end of the
+  ([A map's own movement](#a-maps-own-movement)); `body`, how big a fighter
+  is on it ([A map's own body](#a-maps-own-body)); `mode`, the mode every
+  match on it plays (a key: `crossroads`, `obby`, `lucky`, `ctf`...; left out, the
+  rotation). A box may have an eighth element, which makes it a
+  [part](#parts-boxes-that-do-something): `"kill"`, `{ "kind": "bounce" }`... A structure may `move` ([Moving boxes](#moving-boxes)). Left out, the flags stand an eighth in from each end of the
   bounds' longer side, the skull in the middle, and three hills in the
   middle and halfway to each flag. Materials: `metal`, `rock`, `dark`,
   `red`, `blue`, `light`, `plain`, or a colour of the box's own over one of
@@ -709,10 +810,118 @@ eight AI fighters, a Fiesta, Capture the Flag and King of the Hill on an
 arena map and a Dogfight (and its Ring Race, with gates) on a map with a
 ceiling. Both maps here take about 6 s together.
 
+### Building in 3D
+
 The editor shows the map in 3D beside the 2D view (**2D / 3D / both**):
 the arena's own renderer (`client/map-view.mjs`) on what is being edited,
-from a camera that orbits the 2D view's middle; drag turns it, right-drag
-moves it, the wheel zooms. Picking is the 2D view's.
+from a camera that orbits a point over the 2D view's middle. It is a place
+to build, not only to look. The pointer's ray, through the camera the
+renderer draws with, is met with the map's boxes (a mover's where the frame
+has them) and the ground, and the nearest wins. The gestures are chosen so
+that building and looking don't fight: a press on what is already picked
+edits it, any other press looks around.
+
+| In the 3D view | |
+| --- | --- |
+| click | picks the box under the pointer (or a spawn, a pad, a flag, the skull, a hill, a teleporter's end); it is outlined in both views |
+| drag the picked box | moves it across the ground, at the height it was taken by; **Shift** moves it up and down instead, **Alt** takes its whole structure, **Ctrl** carries off a copy |
+| drag a dot | a face of the picked box (a dot stands off each one): sizes it |
+| drag the arrow over it | raises and lowers it |
+| drag a picked spawn, pad, flag... | puts it on what is under the pointer: a box's top, or the ground |
+| drag anything else | turns the camera; the middle button always turns |
+| right-drag, or Shift-drag off the pick | pans; the wheel zooms |
+| double-click, **C**, **look at it** | flies the camera to the box |
+| **Delete**, **Ctrl+D**, **Ctrl+Z**, **Ctrl+Shift+Z** | removes it, copies it, undoes, redoes |
+| arrow keys, **Page Up**, **Page Down** | nudge it a grid step (Shift: four), the arrows along the axes nearest the camera's |
+
+![The map editor on a new obby: the 2D view, and the 3D view beside it with the bounce pad picked, its dots and arrow on it, the parts named, and its part in the panel](e1-editor-obby.png)
+
+Everything placed, moved and sized lands on a grid, a quarter of a metre
+unless **snap** says otherwise (0.1 to 2 m, or off: a millimetre). A move
+puts the box's low corner on it and keeps its size; a face dragged stops a
+grid step short of the face opposite.
+
+With the **box** tool (B) a click drops a box where the pointer is, against
+whatever is under it: on the ground, on a box's top, or out from the side
+of one, the size of the last box touched; an outline shows where it will
+land. It goes into the picked structure, else the one it landed on, else
+one of its own. **spawn**, **pad** and **hill** click one down the same
+way, on the box's top when there is one. A course is many blocks alike:
+**Ctrl+D** puts a copy beside the box, and pressed again once the copy has
+been dragged somewhere, puts the next as far on again, so a row of stepping
+stones is Ctrl+D, a drag, and Ctrl+D for each one more. A copied checkpoint
+takes the next free stage.
+
+A drag moves the box, since that is the unit a course is built of (a
+Roblox place comes over as 64 structures of some 28 boxes each, cut where
+the budget fell); **whole structure** in the header makes a drag and Ctrl+D
+take the structure instead, as Alt does for one drag, and a prefab's boxes
+always move together. The 2D view drags the same way. A structure that
+moves is shown moving; while a box of it is picked, it is held where it is
+built.
+
+What the editor adds to the picture (the pick's outline, dots and arrow,
+its size, the parts' marks, a ghost's volume, a belt's arrow) is a 2D
+canvas of its own over the renderer's, drawn through the same camera
+(`orbitEye` in `client/map-build.mjs`): the renderer is the game's and
+draws nothing of the editor's.
+
+### Parts and rules in the editor
+
+A picked box's panel has **What it does**: nothing, or one of the
+[part](#parts-boxes-that-do-something) kinds with that kind's own numbers:
+a bounce's speed (and how high that throws a fighter here), ice's grip, a
+ladder's speed, a conveyor's direction (four arrows, or degrees: 0 east,
+90 south) and speed, a checkpoint's stage, the next free one by default.
+**ghost** makes it a zone with no box. A new box's plain metal takes the
+kind's look as `tools/obby.mjs` paints them (what kills glows red-orange
+`light#ff4a1c`, a bounce pad yellow, ice pale blue, a checkpoint green, the
+finish white); a material or a colour chosen by hand is never changed.
+
+Parts are drawn as what they are in both views: outlined in the kind's
+colour and named (`kill`, `bounce 22`, `belt 3 m/s`, `stage 4`, `finish`),
+a conveyor with an arrow the way it carries, and a ghost, which has no box
+and so is nothing to the renderer, as a dashed see-through volume.
+
+**How it plays**, in the map's panel, sets `mode` (the rotation, or one of
+the keys the compiler takes; obby is explained there), `movement` (the
+arena's, or a walk, a jump and a gravity of the map's own) and `body` (the
+arena's, or a width and a height), each with a **Roblox character** button
+(walk 4.48, jump 2.016, gravity 54.936; 0.56 by 1.4), and `void`. With a
+mode that has no sides the editor asks no spawn on each half, as the
+compiler doesn't, and leaves the flags, the skull and the hills the map
+never placed off the picture.
+
+For a map with a checkpoint or a finish, or whose mode is obby, **Ready to
+play?** lists the course: the start, each stage in order, the finish. It
+says what is missing or wrong where it is: a stage number no checkpoint
+has, two checkpoints of one stage, no finish, a mode that isn't obby (so
+the checkpoints do nothing), and a checkpoint or a spawn nobody could stand
+on: a box in the body's room, a part that kills under or against whoever
+stands there, a zone with nothing under it, a place under the void. A line
+about a box flies to it.
+
+**open… > a new obby** is a course to start from (`starterObby` in
+`client/map-build.mjs`): a start with six spawns, four stages each ended
+by a checkpoint (stepping stones 2.4 m apart, two bars that kill across a
+walkway, 12 m of ice, a bounce pad up to a ledge 3.5 m over it), a ladder
+6 m up a tower to the finish, lava under all of it, on Sky Steps' movement.
+It compiles as it is, and eight AI fighters all finish it, the first in
+about 13 s.
+
+The editor's maths has no page in it (`client/map-build.mjs`: the camera,
+the ray against boxes and the ground, the plane and the lines a drag slides
+along, the grid, a part read and written, the course's check, the
+starter), and `test/map-build.test.mjs` (15 tests) holds it: the camera
+against the renderer's own `project()`, a ray's faces, a box moved, sized
+and dropped on the grid and through a turned structure, a mover's row as
+the compiler packs it, every kind's look and numbers taken by the compiler
+and a hand-set colour kept, the course's check on each fault above with
+Sky Steps and the starter clean, a Roblox obby keeping its parts, body and
+mode, and the starter run by eight AI fighters on the debug build. The
+Pages gate (`net/run-pages.mjs`) opens the starter from the built site,
+picks a stone by clicking it in the 3D view, drags it, and has the
+compiler take the result.
 
 ### Moving boxes
 
@@ -763,6 +972,72 @@ one plank, a tower at each end with a lift. Online, 7 AI fighters and
 Chrome for 40 s on it (`net/run-arena.mjs --map lifts`): 305 interval
 hashes checked by the referee, all equal; 64 AI fighters for 60 s (a CI
 step): 3,702, all equal.
+
+### Parts: boxes that do something
+
+A box's eighth element makes it a part: something that acts on the fighter
+touching it, in every mode, as an obby's bricks do in Roblox.
+
+```json
+[483, 30, 486, 483.4, 30.4, 490, "light#ff4a1c", "kill"],
+[526, 29.5, 486, 529, 30, 490, "light#ffd23f", { "kind": "bounce", "speed": 22 }]
+```
+
+| Kind | Its numbers | What it does |
+| --- | --- | --- |
+| `kill` | | touching it anywhere kills (the feed says LAVA) |
+| `bounce` | `speed`, m/s up (14) | standing on it throws you up at that speed |
+| `ice` | `grip`, 0 to 1 (0.06) | standing on it, your speed across changes only that share of what it would: slow away, slow to stop |
+| `conveyor` | `velocity` `[vx, vz]`, m/s | standing on it carries you, through the boxes as your own steps go; turned with its structure |
+| `ladder` | `speed`, m/s (4.5) | beside it with your feet under its top: forward climbs, back comes down, neither hangs on, the jump key lets go; from the ground only forward takes hold |
+| `checkpoint` | `stage`, 1 to 250 | [Obby](#obby): reaching it is your stage, and where you come back |
+| `finish` | | Obby: the end of the course |
+
+`"ghost": true` is a part with no box: it does what it does and nothing
+stops on it (a kill zone, a finish line across a doorway). A part in a
+structure that moves goes with it. At most 256 parts a map.
+
+They are rows of their own after the map's rules (`MAP_PARTS` in
+`src/layout.mjs`: the box where it is built, the kind, its group if it rides
+one, three numbers), 48 B each, and a solid one is also a box among the
+boxes. `$move` reads the kinds that move a body, on either bank, since they
+write only its own record: the part it stood on as the tick began (a
+mover's where it was then) and a ladder beside it. Killing is the confirmed
+world's, in `$arena` beside the void. A body touches a part within 3 cm,
+because a body stops a hair off a box's face. A map with no parts loads
+`MAP_NPART` once a tick and takes none of it: Box Canyon, Lifts, Crossroads,
+Evade and Battle Royale on Box Canyon and a Dogfight gave the same interval
+hashes before and after, over 4,000 to 12,000 ticks each of AI fighters.
+
+`test/arena-parts.test.mjs` (12 tests): the rows as compiled, a ghost with
+no box, a map without parts keeping its bytes; what the compiler and
+map_load refuse; a kill brick from the side, on top and as a zone; a bounce
+to the height its speed gives; ice against a floor; a conveyor's 4 m in a
+second and its wall; a ladder climbed, hung on, come down and let go; a
+kill brick and a bounce pad on movers; the prediction bit for bit over ice,
+a belt, a pad and a ladder (900 ticks, over 900 comparisons); the body
+below.
+
+### A map's own body
+
+`"body": { "width": 0.56, "height": 1.4 }` (and `eye`, 0.2 under the top
+unless given) makes the fighter that size on this map: a classic Roblox
+character at 0.28 m a stud, which `tools/roblox.mjs` writes for every place.
+The arena's own is 1 m across and 1.8 tall with its eye at 1.6. The sim
+reads the body from `MAP_BODY` (eight f32s: half the width, the height, the
+eye, how far a mover pushes it clear, and what a shot hits: the head's
+centre and radius, the trunk's radius and top), which init fills with the
+arena's own numbers when the map has none, so no build's constants changed.
+A map's own body also asks only its own height of headroom when it walks:
+the arena's body keeps a step (0.5 m) of room over its head, so it needs
+2.3 m to walk under a ceiling, where a 1.4 m body with its own asks 1.4 and
+is put back if a step up would leave its head no room. A gap 0.8 m wide and
+a slab 1.5 m off the floor pass the Roblox body and stop the arena's
+(`test/arena-parts.test.mjs`). The page draws the same figure at the body's
+size (the renderer's `size`, its height over 1.8 m), puts the camera at its
+eye and aims the third-person reticle at what a shot hits of it; the AI
+fighter aims from that eye too. `maps/crossroads/` has it: 8 AI fighters
+there still make 38 KOs in 12,000 ticks.
 
 ### A map's own movement
 
