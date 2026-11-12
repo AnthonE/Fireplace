@@ -502,7 +502,7 @@ node net/play.mjs --arena --map obby
 
 The AI fighter doesn't fight here: the mode's client module drives it
 (`drive` in `client/am/obby.mjs`): at the next checkpoint, forward; a jump
-at an edge with somewhere still to land inside 0.85 of a jump's reach, taken
+at an edge with somewhere still to land inside 0.9 of a jump's reach, taken
 at speed, with a step back from the brink for the run-up; over a low thing
 that kills, and a halt before a tall one; nothing that moves is jumped from
 or onto, it is waited for and walked. Eight of them all finish Sky Steps

@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newArena, arenaBytes } from './helpers.mjs';
 import { View, arenaWord, forcedSeed } from '../src/arena-view.mjs';
-import { packMap, MAP_MODES } from '../tools/map-compile.mjs';
+import { packMap, compileSpec, MAP_MODES } from '../tools/map-compile.mjs';
 import { compileMap, mapDir } from '../tools/map.mjs';
 import { playArena } from '../tools/genarena.mjs';
 import { obby } from '../tools/obby.mjs';
@@ -214,4 +214,14 @@ test('Obby with 8 AI fighters on Sky Steps: every one runs the whole course, mat
   assert.ok(seen.firstHome > 2500 && seen.firstHome < 6000, `the first home in ${(seen.firstHome / 125).toFixed(1)} s`);
   assert.ok(r.matches >= 2, `${r.matches} matches played through`);
   assert.equal(r.mode.mode, L.M_OBBY, 'the map plays it every match');
+});
+
+test('Obby with a Roblox character\'s body: 8 AI fighters still run Sky Steps, ladder and all', async () => {
+  const flat = { height: { width: 68, height: 24, channels: 1, depth: 8, data: new Uint8Array(68 * 24).fill(40) } };
+  const small = compileSpec({ ...obby(), body: { width: 0.56, height: 1.4 } }, flat);
+  let home = 0;
+  await playArena({ bytes: arenaBytes(true), seed: 7, bots: 8, ticks: 9000, map: packMap(small), onTick: (t, view) => {
+    if (view.hole().hole === 0) { let n = 0; for (let p = 0; p < 8; p++) if (doneOf(view, p)) n++; home = Math.max(home, n); }
+  } });
+  assert.equal(home, 8, 'all eight home in the first match');
 });

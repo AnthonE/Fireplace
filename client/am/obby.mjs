@@ -135,16 +135,20 @@ export default {
     if (!next) return { move: 0 };
     const tick = view.tick, at = mid(partAt(map, next, tick));
     const dx0 = at[0] - me.pos[0], dz0 = at[2] - me.pos[2], d = Math.hypot(dx0, dz0) || 1;
-    const dx = dx0 / d, dz = dz0 / d;
-    bot.turnTo(Math.atan2(dz, dx) * TURN / (2 * Math.PI), 512, 0.5);
+    // straight at it, unless an edge sent it another way for a while (bot.oy, below) and it is still on the ground this side
+    const steer = bot.oy && t < bot.oy.until && bot.oy.slot === undefined ? bot.oy : null;
+    const aim = steer ? steer.ang : Math.atan2(dz0, dx0);
+    const dx = Math.cos(aim), dz = Math.sin(aim);
+    bot.turnTo(aim * TURN / (2 * Math.PI), 512, 0.5);
     bot.pitch = 512;
-    const off = Math.abs(((Math.atan2(dz, dx) * TURN / (2 * Math.PI) - bot.yaw + TURN * 1.5) % TURN) - TURN / 2);
+    const off = Math.abs(((aim * TURN / (2 * Math.PI) - bot.yaw + TURN * 1.5) % TURN) - TURN / 2);
     if (off > TURN / 12) return { move: 0 };
-    if (!me.ground) return { move: FWD };
+    if (!me.ground) { if (steer) bot.oy.until = Math.min(bot.oy.until, t + 40); return { move: FWD }; }
     // how far a jump carries: the map's own walk and gravity, or the arena's
     const mv = map.movement;
     const air = mv ? 2 * mv.jump / (mv.grav * L.TICK_HZ) : 2 * Number(L.PHYS.JUMP) / (Number(L.PHYS.GP_DT) * L.TICK_HZ);
-    const reach = 0.85 * (mv ? mv.walk : Number(L.PHYS.RUN)) * air;
+    // (0.9 of it: the halt a stride short of an edge is where a thin body must find its landing from)
+    const reach = 0.9 * (mv ? mv.walk : Number(L.PHYS.RUN)) * air;
     const speed = me.vel[0] * dx + me.vel[2] * dz, fast = speed > 0.7 * (mv ? mv.walk : Number(L.PHYS.RUN));
     // something that kills in the way: over a low one, wait out a tall one
     const kill = killAhead(map, me.pos, dx, dz, 1.6, tick, body);
@@ -153,17 +157,31 @@ export default {
       if (kill.s <= 1.0) return { move: FWD, jump: 1 };
       return { move: FWD };
     }
-    // the floor a stride on: there, walk
-    const under = (s) => floorAt(map, me.pos[0] + dx * s, me.pos[2] + dz * s, me.pos[1] + 0.6, tick, body.r);
-    const ok = (s) => { const [y, deadly] = under(s); return y > me.pos[1] - 2.5 && !deadly; };
-    if (ok(0.9) || d < 0.9) return { move: FWD };
+    // a ladder at hand with more of it overhead: forward climbs it (a wall is no floor to the test below)
+    for (const p of map.parts) {
+      if (p.kind !== L.PK_LADDER) continue;
+      const b = partAt(map, p, tick), r = body.r + 0.4;
+      if (me.pos[0] - r < b[3] && me.pos[0] + r > b[0] && me.pos[2] - r < b[5] && me.pos[2] + r > b[2] && b[4] > me.pos[1] + 0.3 && b[1] < me.pos[1] + body.top) return { move: FWD };
+    }
+    // the floor a stride on, every step of the way (a thin body falls into a gap a wide one strides): there, walk
+    const at2 = (ax, az, s) => floorAt(map, me.pos[0] + ax * s, me.pos[2] + az * s, me.pos[1] + 0.6, tick, body.r);
+    const okAt = (ax, az, s) => { const [y, deadly] = at2(ax, az, s); return y > me.pos[1] - 2.5 && !deadly; };
+    const ok = (s) => okAt(dx, dz, s);
+    const clear = (to) => { for (let s = 0.1; s <= to + 1e-6; s += 0.1) if (!ok(s)) return false; return true; };
+    if (clear(0.9) || d < 0.9) return { move: FWD };
     // an edge. Nothing that moves is jumped from or onto: it comes alongside,
     // and is walked. Else somewhere to land inside a jump's reach, taken at
     // speed: short of it, a step back from the brink for the run-up.
-    const brink = !ok(0.5);
-    if (!under(0)[2]) {
-      for (let s = 1.4; s <= reach; s += 0.2) {
-        if (ok(s) && ok(s + 0.4) && !under(s)[2]) return fast ? { move: FWD, jump: 1 } : { move: brink ? BACK : FWD };
+    const brink = !clear(0.5);
+    const landing = (ax, az) => { for (let s = 1.4; s <= reach + 1e-6; s += 0.1) if (okAt(ax, az, s) && okAt(ax, az, s + 0.4) && !at2(ax, az, s)[2]) return true; return false; };
+    if (!at2(dx, dz, 0)[2]) {
+      if (landing(dx, dz)) return fast ? { move: FWD, jump: 1 } : { move: brink ? BACK : FWD };
+      // none straight on (a stone off the line to the checkpoint): the nearest heading that has one, held a while
+      if (!steer) {
+        for (const da of [0.2, -0.2, 0.4, -0.4, 0.6, -0.6, 0.8, -0.8, 1.0, -1.0]) {
+          const a = aim + da;
+          if (landing(Math.cos(a), Math.sin(a))) { bot.oy = { ang: a, until: t + 250 }; break; }
+        }
       }
     }
     return { move: brink ? BACK : 0 };
