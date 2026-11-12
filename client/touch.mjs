@@ -92,7 +92,7 @@ export function touchControls({ held, writeKeys, look, buttons = [], wake = () =
   root.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // the first, big, in the corner; the rest round it, nearest first (right and bottom, px)
-  const AT = [[18, 18], [118, 24], [28, 118], [112, 112], [202, 30], [40, 202], [196, 118], [124, 196]];
+  const AT = [[18, 18], [118, 24], [28, 118], [112, 112], [202, 30], [40, 202], [196, 118], [124, 196], [208, 204]];
   buttons.slice(0, AT.length).forEach((b, i) => {
     const el = document.createElement('div');
     el.className = `tc-b${i === 0 ? ' big' : ''}`;

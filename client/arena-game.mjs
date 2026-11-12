@@ -7,6 +7,10 @@
 // mode (TEAMED) is red against blue: the bodies in their side's colour, a
 // score bar, the board by side, and its own objective, HUD lines, news,
 // columns and waypoints from its kit module (client/am/<key>.mjs, AMC).
+// The view is first person, or third (client/chase.mjs): the camera behind
+// your own fighter, its figure drawn and the gun in your hands not, the
+// reticle where the eye's ray lands. The wheel zooms between them, C (VIEW
+// on a phone) switches; kept in the browser, ?view=3 or ?view=1 for a visit.
 // arena.html mounts it alone; Fireplace mounts it while the room plays the arena.
 //   opts: { canvas, lockTarget, bot, skill, sens, fixed (a spectator's held camera: x, y, z, yaw, pitch in degrees), present, showGraph,
 //           external (the slots are driven from outside, as Fireplace's guest does: the camera follows them) }
@@ -24,6 +28,8 @@ import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 import { gunBoxes, carryBoxes } from './viewmodel.mjs';
+import { chase, aimPoint, steepAim, zoomStep, startView, mapView, viewOf, viewText, CHASE_NEAR } from './chase.mjs';
+import { drawnTick } from './movers.mjs';
 
 const TURN = 16384;
 const ARMS = L.ARMS;
@@ -51,6 +57,7 @@ function standing(m, o, teamWin = 0) {
 // rects), the HUD's bars (12), the score bar (5) and CTF's two waypoints (4),
 // 112 of MAX_RECT. They go after every other rect, so a cut drops dots, not bars.
 const BLIPS = 32;
+const VIEW_KEY = 'fireplace.arena.view'; // the view this browser keeps (client/chase.mjs viewText)
 const MEDALS = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'QUAD KILL', 'HIGH FIVE', 'SIX PACK', 'LUCKY SEVEN'];
 const SPREES = { 5: 'WARMING UP', 10: 'ON FIRE', 15: 'BLAZING', 20: 'INFERNO' };
 
@@ -100,6 +107,15 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const swap = (s) => { if (s !== slotOut) { sound.weapon(); zoomed = false; } slotOut = s; set(L.CL_WEAPON, s); };
   let locked = document.pointerLockElement === lockTarget;
   let touch = null; // the touch controls, on a phone
+  // the view: how far behind your fighter the camera is asked to sit (0 first person) and the last third-person
+  // distance, for the key; ?view= over what this browser kept, a map's own until you choose (client/chase.mjs)
+  let viewAt = startView(host.q?.get('view'), (() => { try { return viewOf(localStorage.getItem(VIEW_KEY)); } catch { return null; } })(), Number(host.q?.get('dist')));
+  const setView = (dist) => {
+    viewAt = { ...viewAt, dist, last: dist || viewAt.last, chosen: true };
+    if (!viewAt.forced) try { localStorage.setItem(VIEW_KEY, viewText(viewAt)); } catch { /* this visit only */ }
+  };
+  const flipView = () => { setView(viewAt.dist ? 0 : viewAt.last); banner = { text: viewAt.dist ? 'THIRD PERSON' : 'FIRST PERSON', until: performance.now() + 1200, color: C.GREY }; };
+  let wheel = 0; // the wheel's travel not yet a notch (px)
   let watched = -1;
   let showGraph = graphOn;
   let bot = null;
@@ -155,7 +171,12 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'mouseup', (e) => { if (e.button === 0) { trigger = false; set(L.CL_AUTO, 0); } });
     on(document, 'contextmenu', (e) => e.preventDefault());
-    on(document, 'wheel', (e) => { if (locked && e.deltaY) swap(slotOut ^ 1); });
+    // the wheel zooms the view, a notch (100 px of travel, three lines) at a time: back out behind you, forward in to your eyes
+    on(document, 'wheel', (e) => {
+      if (!locked || !e.deltaY) return;
+      wheel += e.deltaY * (e.deltaMode === 1 ? 100 / 3 : e.deltaMode === 2 ? 100 : 1);
+      for (; Math.abs(wheel) >= 100; wheel -= Math.sign(wheel) * 100) setView(zoomStep(viewAt.dist, Math.sign(wheel)));
+    });
     on(document, 'keydown', (e) => {
       if (e.code === 'Digit1') swap(0);
       else if (e.code === 'Digit2') swap(1);
@@ -165,6 +186,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       else if (e.code === 'KeyR' && !e.repeat) { press(L.CL_RELOAD); zoomed = false; }
       else if (e.code === 'KeyE' && !e.repeat) press(L.CL_USE);
       else if (e.code === 'KeyN' && !e.repeat) showGraph = !showGraph;
+      else if (e.code === 'KeyC' && !e.repeat) flipView();
       else if (e.code === 'KeyF' && !e.repeat) {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen().then(() => navigator.keyboard?.lock?.()).catch(() => {});
@@ -186,6 +208,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         { label: 'SWAP', tap: () => swap(slotOut ^ 1) },
         { label: 'USE', tap: () => press(L.CL_USE) },
         { label: 'SCOPE', tap: () => { if (zoomOf() > 1) { zoomed = !zoomed; sound.weapon(); } } },
+        { label: 'VIEW', tap: flipView },
       ] });
   }
 
@@ -224,8 +247,11 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const d = Math.hypot(f.pos[0] - cam[0], f.pos[1] - cam[1], f.pos[2] - cam[2]);
     switch (f.kind) {
       case L.FX_SHOT:
-        if (mine) { kick = 1; lastShotAt = now; }
-        else glows.push({ pos: eyeOf(f.owner), size: 0.35, color: [...(COLOR[f.size] || [1, 1, 1]), 1], kind: 3, born: now, life: 60 });
+        if (mine) {
+          kick = 1; lastShotAt = now;
+          // seen from behind, the flash is at my figure's gun, as anyone's
+          if (chasing) glows.push({ pos: muzzle(cam, Math.cos(camYaw), Math.sin(camYaw), Math.cos(camPitch), Math.sin(camPitch)), size: 0.35, color: [...(COLOR[f.size] || [1, 1, 1]), 1], kind: 3, born: now, life: 60 });
+        } else glows.push({ pos: eyeOf(f.owner), size: 0.35, color: [...(COLOR[f.size] || [1, 1, 1]), 1], kind: 3, born: now, life: 60 });
         sound.gun(f.size, mine ? 0 : d);
         break;
       case L.FX_TRACER: {
@@ -331,6 +357,9 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   }
 
   let camYaw = 0, camPitch = 0;
+  // third person: whether this frame is, the distance back eased toward the one asked for, and my own record as it is drawn
+  let chasing = false, viewD = 0, steep = false;
+  const ownRec = new Uint8Array(L.PSIZE), ownDv = new DataView(ownRec.buffer);
   function zoomOf() {
     const f = pme || me;
     if (!f || f.carry) return 1;
@@ -428,6 +457,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       seed = view.dv.getUint32(L.HDR_SEED, true);
       renderer.setTerrain(u8);
       renderer.setMap(view.map(true));
+      // a map with a movement of its own is seen from behind, until the player chooses
+      viewAt = mapView(viewAt, view.map());
     }
     const room = get(L.CL_ROOM);
     const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
@@ -503,6 +534,41 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       camPitch = -0.45;
     }
     if (FIXED) { cam = FIXED.slice(0, 3); camYaw = FIXED[3] / 180 * Math.PI; camPitch = FIXED[4] / 180 * Math.PI; }
+    // third person (client/chase.mjs): my own fighter's, alive, not through a scope or along a steep aim, never a
+    // spectator's. The distance eases toward the one asked for, and comes in at once when the boom meets something
+    // or the scope goes up.
+    const mine = !WATCH && !FIXED && !(spect && tgt) && st === 2 && !!me?.live && !f.dead && !f.down;
+    steep = mine && steepAim(camPitch, steep);
+    const want = mine && !steep && !(zoomed && zoomOf() > 1) ? viewAt.dist : 0;
+    if (want) viewD += (want - viewD) * (1 - Math.exp(-ms / 90));
+    else viewD = mine && !zoomed && viewD > CHASE_NEAR ? viewD * Math.exp(-ms / 60) : 0;
+    const world = { map: view.map(), height: (x, z) => view.height(x, z), tick: drawnTick(u8, dt) };
+    const boom = viewD >= CHASE_NEAR ? chase({ eye: cam, yaw: camYaw, pitch: camPitch, dist: viewD }, world) : null;
+    if (boom) viewD = Math.max(CHASE_NEAR, Math.min(viewD, boom.dist));
+    chasing = !!boom && boom.dist > 0;
+    // where the fighter's eye is, the camera's place in first person: what it hears from and fires from
+    const eye = cam;
+    let aimAt = null;
+    if (chasing) {
+      cam = boom.cam;
+      // the reticle: where a shot from the eye lands (the sim's ray, out to the gun's reach), seen from the camera
+      const arm = ARMS[f.weapon];
+      const range = f.carry ? 2.4 : arm?.type === 0 ? arm.range : arm?.type === 2 ? 5 : 120;
+      const bodies = [];
+      for (let p = 0; p < L.NPLAYER; p++) {
+        if (p === slot || (u8[L.PLAYERS + p * L.PSIZE + L.P_FL] & (L.PF_LIVE | L.PF_DEAD)) !== L.PF_LIVE) continue;
+        const o = view.player(p);
+        bodies.push([o.pos[0] + o.vel[0] * dt, o.pos[1] + o.vel[1] * dt, o.pos[2] + o.vel[2] * dt]);
+      }
+      const hit = aimPoint({ eye, yaw: camYaw, pitch: camPitch, range }, world, bodies);
+      const [px, py, depth] = project({ cam, yaw: camYaw, pitch: camPitch, zoom: 1 }, W, H, hit.pos);
+      // (whole pixels, so its lines stay as sharp as at the centre)
+      if (depth > 0.3) aimAt = [Math.max(-W / 2, Math.min(W / 2, Math.round(px - W / 2))), Math.max(-H / 2, Math.min(H / 2, Math.round(py - H / 2)))];
+      // my own figure: the prediction's record put where the camera has me, less what the shader carries every figure on by
+      const b = L.PLAYERS + (pme ? L.PRED_D : 0) + slot * L.PSIZE;
+      ownRec.set(u8.subarray(b, b + L.PSIZE));
+      for (let k = 0; k < 3; k++) ownDv.setFloat32(L.P_PX + 4 * k, eye[k] - (k === 1 ? 1.6 : 0) - ownDv.getFloat32(L.P_VX + 4 * k, true) * dt, true);
+    }
     // never inside the ground
     cam[1] = Math.max(cam[1], view.height(cam[0], cam[2]) + 0.4);
 
@@ -514,7 +580,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       const best = {};
       for (let k = 0; k < pview.fxCount(); k++) {
         const x = pview.fx(k);
-        if (isMine(x) && newer(x.shot, played[x.kind])) { show(x, slot, cam, now, true, eyeOf); best[x.kind] = newer(x.shot, best[x.kind] ?? played[x.kind]) ? x.shot : best[x.kind]; }
+        if (isMine(x) && newer(x.shot, played[x.kind])) { show(x, slot, eye, now, true, eyeOf); best[x.kind] = newer(x.shot, best[x.kind] ?? played[x.kind]) ? x.shot : best[x.kind]; }
       }
       Object.assign(played, best);
     }
@@ -523,8 +589,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     for (; fxSeen < nfx; fxSeen++) {
       const x = view.fx(fxSeen);
       if (h.tick - x.tick > 60) continue;
-      if (isMine(x)) { if (played[x.kind] !== undefined && !newer(x.shot, played[x.kind])) continue; played[x.kind] = x.shot; show(x, slot, cam, now, true, eyeOf); continue; }
-      show(x, slot, cam, now, false, eyeOf);
+      if (isMine(x)) { if (played[x.kind] !== undefined && !newer(x.shot, played[x.kind])) continue; played[x.kind] = x.shot; show(x, slot, eye, now, true, eyeOf); continue; }
+      show(x, slot, eye, now, false, eyeOf);
     }
     kick *= Math.exp(-ms / 70);
     marker *= Math.exp(-ms / 120);
@@ -538,6 +604,19 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     // the fighter whose eyes the camera has: yours, or the one a spectator watches (none for a fixed camera)
     const shown = FIXED ? -1 : tgt ? watched : slot;
     if (kit && st >= 1) kit.draw(view, { dt, dtPred, now, t: playT, slot, shown, me, pme, cam, view, pview }, out);
+    // from behind, what the kit puts on a carrier (a pennant, the skull, the bomb, a crown) goes on my own figure
+    // too. The module draws it over everyone but the fighter shown, so it is asked again as for nobody's eyes, and
+    // what that adds over my feet is moved from where the confirmed world has me to where my figure is drawn.
+    if (chasing && kit && st >= 1) {
+      const all = { solid: [], glow: [], beams: [], markers: [], zone: null, storm: null };
+      kit.draw(view, { dt, dtPred, now, t: playT, slot, shown: -1, me, pme, cam, view, pview }, all);
+      const at = [0, 1, 2].map((k) => me.pos[k] + me.vel[k] * dt), feet = [eye[0], eye[1] - 1.6, eye[2]];
+      const same = (a, b) => a.kind === b.kind && Math.hypot(a.pos[0] - b.pos[0], a.pos[1] - b.pos[1], a.pos[2] - b.pos[2]) < 0.05;
+      for (const sp of all.solid) {
+        if (Math.hypot(sp.pos[0] - at[0], sp.pos[2] - at[2]) > 0.6 || sp.pos[1] < at[1] + 0.5 || sp.pos[1] > at[1] + 3 || out.solid.some((o) => same(o, sp))) continue;
+        out.solid.push({ ...sp, pos: sp.pos.map((v, k) => v + feet[k] - at[k]) });
+      }
+    }
     // sprites: the objective's, the pads' guns, then what glows
     const solid = out.solid;
     for (const p of view.pads()) {
@@ -572,7 +651,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (playing) {
       const moving = Math.hypot(f.vel[0], f.vel[2]) > 1 && f.ground;
       // a carrier's hands hold what its kit module carries (a flag in the colour of the side it was taken from)
-      if (!WATCH && !f.dead && !f.down) {
+      if (!WATCH && !f.dead && !f.down && !chasing) {
         inHand = f.carry ? carryBoxes(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], handMotion(now, moving))
           : gunBoxes(f.weapon, handMotion(now, moving, f.weapon), now - lastShotAt < 50 && f.weapon !== L.W_SWORD);
       }
@@ -598,7 +677,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       // the hour, the match's own (client/lowpoly.mjs envOf; ?env= holds one)
       env: HOUR || envOf((seed ^ Math.imul(h.hole + 1, 0x85ebca6b)) >>> 0),
       solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone, storm: out.storm,
-      crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, cam) ? 8 : 0), gap: spread / 30 + kick * 3,
+      crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, eye) ? 8 : 0), gap: spread / 30 + kick * 3,
+      own: chasing ? ownRec : null, aim: aimAt,
       tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
     };
     renderer.frame(u8, last, target);
