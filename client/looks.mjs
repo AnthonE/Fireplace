@@ -10,15 +10,19 @@
 // newer client's) is drawn as the house look.
 //
 // A look with `unlock` is earned: it opens when that achievement does
-// (client/achievements.mjs), kept in this browser like the achievements.
+// (client/achievements.mjs), kept in this browser like the achievements. A
+// look with `price` is bought, for that many marshmallows out of the browser's
+// purse (client/purse.mjs), and kept there. A look has one or neither, never
+// both. The relay knows neither: the page wears only what it holds.
 
 import * as L from '../src/layout.mjs';
 import { colorsOf } from './avatar.mjs';
 
 // The ball's patterns, as party's renderer draws them (case 0)
-export const PATTERN = { BEACH: 0, STRIPES: 1, RIBS: 2, SOLID: 3, METAL: 4, EIGHT: 5 };
-// The hat's styles, as the head is drawn (case 8)
-export const STYLE = { CAP: 0, NONE: 1, BEANIE: 2, BAND: 3, HELMET: 4, CROWN: 5, PUMPKIN: 6 };
+export const PATTERN = { BEACH: 0, STRIPES: 1, RIBS: 2, SOLID: 3, METAL: 4, EIGHT: 5, DOTS: 6, CHECKER: 7, SWIRL: 8, DISCO: 9 };
+// The hat's styles, as the head is drawn (case 8); from the top hat on, a hat
+// stands off the head, so it is boxes on the round rider too (client/rider.mjs)
+export const STYLE = { CAP: 0, NONE: 1, BEANIE: 2, BAND: 3, HELMET: 4, CROWN: 5, PUMPKIN: 6, TOPHAT: 7, CONE: 8, HALO: 9, ANTLERS: 10, PHONES: 11, PROP: 12 };
 
 // a: the ball's colour (null: the seat's), b: its second colour (null: the
 // seat's other, as the beach ball's third panel has always been)
@@ -37,6 +41,12 @@ export const BALLS = [
   { key: 'ember', name: 'EMBER', pattern: PATTERN.METAL, a: [1.0, 0.38, 0.1], b: [1.0, 0.38, 0.1], unlock: 'onfire' },
   { key: 'smore', name: "S'MORE", pattern: PATTERN.RIBS, a: [0.98, 0.95, 0.88], b: [0.42, 0.24, 0.12], unlock: 'bonfire' },
   { key: 'platinum', name: 'PLATINUM', pattern: PATTERN.METAL, a: [0.86, 0.88, 0.92], b: [0.86, 0.88, 0.92], unlock: 'house' },
+  { key: 'bee', name: 'BUMBLEBEE', pattern: PATTERN.STRIPES, a: [1.0, 0.8, 0.12], b: [0.08, 0.07, 0.06], price: 5 },
+  { key: 'soccer', name: 'SOCCER BALL', pattern: PATTERN.DOTS, a: [0.96, 0.96, 0.94], b: [0.07, 0.07, 0.09], price: 10 },
+  { key: 'ladybird', name: 'LADYBIRD', pattern: PATTERN.DOTS, a: [0.9, 0.12, 0.1], b: [0.06, 0.05, 0.05], price: 15 },
+  { key: 'checker', name: 'CHECKERS', pattern: PATTERN.CHECKER, a: [0.95, 0.95, 0.92], b: [0.08, 0.08, 0.1], price: 20 },
+  { key: 'mint', name: 'PEPPERMINT', pattern: PATTERN.SWIRL, a: [0.97, 0.96, 0.94], b: [0.88, 0.1, 0.16], price: 35 },
+  { key: 'disco', name: 'DISCO BALL', pattern: PATTERN.DISCO, a: [0.8, 0.84, 0.95], b: [0.55, 0.4, 0.95], price: 100 },
 ];
 
 // color: the hat's (null: the ball's colour, as the cap has always been)
@@ -49,7 +59,17 @@ export const HATS = [
   { key: 'pumpkin', name: 'PUMPKIN HEAD', style: STYLE.PUMPKIN, color: [1.0, 0.56, 0.12], unlock: 'chair' },
   { key: 'crown', name: 'CROWN', style: STYLE.CROWN, color: [1.0, 0.8, 0.22], unlock: 'roll' },
   { key: 'pilot', name: 'FLIGHT HELMET', style: STYLE.HELMET, color: [0.4, 0.46, 0.3], unlock: 'ace' },
+  { key: 'cone', name: 'PARTY HAT', style: STYLE.CONE, color: [0.95, 0.25, 0.6], price: 10 },
+  { key: 'phones', name: 'HEADPHONES', style: STYLE.PHONES, color: [0.15, 0.7, 0.95], price: 15 },
+  { key: 'tophat', name: 'TOP HAT', style: STYLE.TOPHAT, color: [0.1, 0.1, 0.13], price: 25 },
+  { key: 'antlers', name: 'ANTLERS', style: STYLE.ANTLERS, color: [0.62, 0.42, 0.24], price: 30 },
+  { key: 'prop', name: 'PROPELLER CAP', style: STYLE.PROP, color: [0.9, 0.2, 0.18], price: 45 },
+  { key: 'halo', name: 'HALO', style: STYLE.HALO, color: [1.0, 0.86, 0.3], price: 75 },
 ];
+// what a hat wears beside its own colour: a top hat's band, a party hat's
+// stripes and a propeller cap's other panels and blades (rider.mjs's boxes
+// and the cards below; party's shader has its own copies)
+export const TRIM = { BAND: [0.78, 0.1, 0.14], CREAM: [0.98, 0.95, 0.7], BLUE: [0.2, 0.42, 0.92], YELLOW: [1.0, 0.82, 0.2] };
 
 // The rider's body (client/rider.mjs): the round one the riders have always
 // been, or a blocky figure of boxes, its arms in skin (null: peach) and a face
@@ -61,7 +81,11 @@ export const BODIES = [
   { key: 'peach', name: 'BLOCKY PEACH', blocky: true, skin: [1.0, 0.8, 0.66], face: 1 },
   { key: 'cocoa', name: 'BLOCKY COCOA', blocky: true, skin: [0.55, 0.36, 0.24], face: 1 },
   { key: 'robot', name: 'ROBOT', blocky: true, skin: [0.62, 0.66, 0.72], face: 4, metal: true },
+  { key: 'goldbot', name: 'GOLD ROBOT', blocky: true, skin: [1.0, 0.66, 0.08], face: 4, metal: true, price: 150 },
 ];
+
+// a look's id in a purse (client/purse.mjs): its list and its key, which never change
+export const lookId = (x) => `${x.pattern !== undefined ? 'ball' : x.style !== undefined ? 'hat' : 'body'}:${x.key}`;
 
 // what a card calls one: THE EIGHT BALL, THE CANDY BALL, THE CROWN
 export const lookName = (x) => `THE ${x.pattern === undefined || /BALL$/.test(x.name) ? x.name : `${x.name} BALL`}`;
@@ -151,10 +175,11 @@ export const FIRST_LOOK = packLook(0, 0, 1);
 export function savedLook() {
   try { const v = localStorage.getItem(KEY); return v === null ? FIRST_LOOK : Number(v) >>> 0; } catch { return FIRST_LOOK; }
 }
-// An AI player's look in a local room (client/local.mjs): any open ball, hat
-// and blocky body, picked from its slot so it keeps it all game.
+// An AI player's look in a local room (client/local.mjs): any free ball, hat
+// and blocky body (none earned, none bought), picked from its slot so it
+// keeps it all game.
 export function guestLook(p) {
-  const open = (list) => list.map((x, k) => (x.unlock ? -1 : k)).filter((k) => k >= 0);
+  const open = (list) => list.map((x, k) => (x.unlock || x.price ? -1 : k)).filter((k) => k >= 0);
   const h = Math.imul(p + 1, 0x9e3779b1) >>> 0;
   const balls = open(BALLS), hats = open(HATS), bodies = open(BODIES).filter((k) => BODIES[k].blocky);
   return packLook(balls[h % balls.length], hats[(h >>> 8) % hats.length], bodies[(h >>> 16) % bodies.length]);
@@ -162,8 +187,9 @@ export function guestLook(p) {
 export function saveLook(w) {
   try { localStorage.setItem(KEY, String(w >>> 0)); } catch { /* private window: this visit only */ }
 }
-// open: a look with no unlock, or one whose achievement is in `got` (a Set of ids)
-export const isOpen = (look, got) => !look.unlock || got.has(look.unlock);
+// open: a free look, one whose achievement is in `got`, or a priced one whose
+// id is (a Set of what this browser holds: purse.mjs openSet)
+export const isOpen = (look, got) => (look.price ? got.has(lookId(look)) : !look.unlock || got.has(look.unlock));
 // the next open entry after k in list, wrapping
 export function nextOpen(list, k, got) {
   for (let i = 1; i <= list.length; i++) { const j = (k + i) % list.length; if (isOpen(list[j], got)) return j; }
@@ -204,6 +230,33 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0) {
     const px = Math.max(1, Math.round(r * 0.12));
     const EIGHT = [7, 5, 7, 5, 7]; // the font's 8, three pixels a row
     EIGHT.forEach((row, y) => { for (let x = 0; x < 3; x++) if ((row >> (2 - x)) & 1) { g.fillStyle = '#111'; g.fillRect(cx + r * 0.15 - 1.5 * px + x * px, cy - r * 0.1 - 2.5 * px + y * px, px, px); } });
+  } else if (L.pattern === PATTERN.DOTS) {
+    // a spot facing you and five round it, turning
+    g.fillStyle = css(L.b);
+    const spot = (x, y, k) => { g.beginPath(); g.ellipse(cx + x * r, cy + y * r, r * 0.3 * k, r * 0.3, 0, 0, Math.PI * 2); g.fill(); };
+    spot(0, 0, 1);
+    for (let k = 0; k < 5; k++) { const a = (k / 5 + spin * 0.2) * Math.PI * 2; spot(Math.cos(a) * 0.86, Math.sin(a) * 0.86, 0.8); }
+  } else if (L.pattern === PATTERN.CHECKER) {
+    g.fillStyle = css(L.b);
+    const q = r / 2;
+    for (let y = -2; y < 2; y++) for (let x = -3; x < 3; x++) if ((x + y) & 1) g.fillRect(cx + (x + spin * 2) * q, cy + y * q, q + 0.5, q + 0.5);
+  } else if (L.pattern === PATTERN.SWIRL) {
+    // six arms from the middle, bent as they go
+    g.fillStyle = css(L.b);
+    for (let k = 0; k < 6; k += 2) {
+      g.beginPath(); g.moveTo(cx, cy);
+      for (let i = 0; i <= 8; i++) { const d = (i / 8) * r * 1.1, a = ((k + spin * 2) / 6) * Math.PI * 2 + (i / 8) * 1.2; g.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d); }
+      for (let i = 8; i >= 0; i--) { const d = (i / 8) * r * 1.1, a = ((k + 1 + spin * 2) / 6) * Math.PI * 2 + (i / 8) * 1.2; g.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d); }
+      g.fill();
+    }
+  } else if (L.pattern === PATTERN.DISCO) {
+    // mirror tiles, each its own grey, a few catching the light
+    const q = r / 3;
+    for (let y = -3; y < 3; y++) for (let x = -3; x < 3; x++) {
+      const h = (Math.imul(x * 7 + y * 13 + 40, 0x9e3779b1) >>> 24) / 255;
+      g.fillStyle = h > 0.86 ? '#fff' : css(h > 0.6 ? L.b : L.a, 0.55 + 0.6 * h);
+      g.fillRect(cx + x * q + 0.5, cy + y * q + 0.5, q - 1, q - 1);
+    }
   }
   g.restore();
   // a rim, so a dark ball still shows on a dark card
@@ -222,6 +275,33 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0) {
   else if (L.style === STYLE.HELMET) { g.fillRect(hx - hr, hy - hr * 1.05, 2 * hr, hr * 1.1); g.fillRect(hx - hr, hy, hr * 0.35, hr * 0.8); }
   else if (L.style === STYLE.CROWN) for (let k = 0; k < 3; k++) g.fillRect(hx - hr + k * hr * 0.75, hy - hr * 1.5, hr * 0.5, hr * 0.9);
   else if (L.style === STYLE.PUMPKIN) { g.fillStyle = '#3c8a2c'; g.fillRect(hx - hr * 0.12, hy - hr * 1.35, hr * 0.24, hr * 0.45); }
+  else if (L.style === STYLE.TOPHAT) {
+    g.fillRect(hx - hr * 1.15, hy - hr * 0.85, hr * 2.3, hr * 0.22); g.fillRect(hx - hr * 0.75, hy - hr * 1.95, hr * 1.5, hr * 1.15);
+    g.fillStyle = css(TRIM.BAND); g.fillRect(hx - hr * 0.75, hy - hr * 1.1, hr * 1.5, hr * 0.25);
+  } else if (L.style === STYLE.CONE) {
+    const tri = (y0, y1, c) => { const w = (y) => hr * 0.7 * (1 - (y - 0.65) / 1.5); g.fillStyle = c; g.beginPath(); g.moveTo(hx - w(y0), hy - hr * y0); g.lineTo(hx + w(y0), hy - hr * y0); g.lineTo(hx + w(y1), hy - hr * y1); g.lineTo(hx - w(y1), hy - hr * y1); g.fill(); };
+    tri(0.65, 1.15, css(L.hatColor)); tri(1.15, 1.65, css(TRIM.CREAM)); tri(1.65, 2.15, css(L.hatColor));
+    g.fillStyle = css(TRIM.CREAM); g.beginPath(); g.arc(hx, hy - hr * 2.2, hr * 0.2, 0, Math.PI * 2); g.fill();
+  } else if (L.style === STYLE.HALO) {
+    g.save(); g.strokeStyle = css(L.hatColor, 1.15); g.lineWidth = Math.max(1.5, hr * 0.2);
+    g.beginPath(); g.ellipse(hx, hy - hr * 1.5, hr * 0.8, hr * 0.24, 0, 0, Math.PI * 2); g.stroke(); g.restore();
+  } else if (L.style === STYLE.ANTLERS) {
+    g.save(); g.strokeStyle = css(L.hatColor); g.lineWidth = Math.max(1.5, hr * 0.2); g.lineCap = 'round';
+    for (const k of [-1, 1]) {
+      g.beginPath(); g.moveTo(hx + k * hr * 0.35, hy - hr * 0.9); g.lineTo(hx + k * hr * 0.85, hy - hr * 1.9);
+      g.moveTo(hx + k * hr * 0.6, hy - hr * 1.4); g.lineTo(hx + k * hr * 0.3, hy - hr * 1.85);
+      g.moveTo(hx + k * hr * 0.85, hy - hr * 1.9); g.lineTo(hx + k * hr * 1.2, hy - hr * 2.05); g.stroke();
+    }
+    g.restore();
+  } else if (L.style === STYLE.PHONES) {
+    g.save(); g.strokeStyle = css(L.hatColor, 0.35); g.lineWidth = Math.max(1.5, hr * 0.2);
+    g.beginPath(); g.arc(hx, hy, hr * 1.08, Math.PI, Math.PI * 2); g.stroke(); g.restore();
+    g.fillRect(hx - hr * 1.3, hy - hr * 0.35, hr * 0.42, hr * 0.8); g.fillRect(hx + hr * 0.88, hy - hr * 0.35, hr * 0.42, hr * 0.8);
+  } else if (L.style === STYLE.PROP) {
+    g.fillRect(hx - hr, hy - hr, hr * 0.7, hr * 0.65); g.fillStyle = css(TRIM.BLUE); g.fillRect(hx - hr * 0.3, hy - hr, hr * 0.65, hr * 0.65);
+    g.fillStyle = css(TRIM.YELLOW); g.fillRect(hx + hr * 0.35, hy - hr, hr * 0.65, hr * 0.65);
+    g.fillRect(hx - hr * 0.08, hy - hr * 1.4, hr * 0.16, hr * 0.4); g.fillRect(hx - hr * 0.95, hy - hr * 1.55, hr * 1.9, hr * 0.17);
+  }
   g.fillStyle = L.style === STYLE.PUMPKIN ? '#ffd860' : '#111';
   g.fillRect(hx - hr * 0.45, hy - hr * 0.1, hr * 0.22, hr * 0.28);
   g.fillRect(hx + hr * 0.23, hy - hr * 0.1, hr * 0.22, hr * 0.28);
@@ -258,4 +338,15 @@ function drawBlocky(g, cx, top, r, L, t, A) {
   else if (L.style === STYLE.BAND) rect(-0.19, top2 - 0.14, 0.38, 0.07, c);
   else if (L.style === STYLE.HELMET) { rect(-0.21, top2 - 0.06, 0.42, 0.12, c); rect(-0.21, hy - 0.02, 0.05, top2 - hy - 0.04, c); rect(0.16, hy - 0.02, 0.05, top2 - hy - 0.04, c); }
   else if (L.style === STYLE.CROWN) { rect(-0.2, top2 - 0.02, 0.4, 0.09, c); for (const x of [-0.2, -0.04, 0.12]) rect(x, top2 + 0.07, 0.08, 0.08, c); }
+  else if (L.style === STYLE.TOPHAT) { rect(-0.25, top2 - 0.01, 0.5, 0.04, c); rect(-0.16, top2 + 0.03, 0.32, 0.25, c); rect(-0.16, top2 + 0.03, 0.32, 0.055, TRIM.BAND); }
+  else if (L.style === STYLE.CONE) { rect(-0.14, top2, 0.28, 0.09, c); rect(-0.1, top2 + 0.09, 0.2, 0.09, TRIM.CREAM); rect(-0.06, top2 + 0.18, 0.12, 0.09, c); rect(-0.04, top2 + 0.27, 0.08, 0.07, TRIM.CREAM); }
+  else if (L.style === STYLE.HALO) rect(-0.2, top2 + 0.09, 0.4, 0.045, c, 1.15);
+  else if (L.style === STYLE.ANTLERS) {
+    rect(-0.19, top2 - 0.01, 0.38, 0.03, c, 0.6);
+    for (const k of [-1, 1]) { const m = (x, w) => (k < 0 ? -x - w : x); rect(m(0.09, 0.045), top2 + 0.02, 0.045, 0.17, c); rect(m(0.135, 0.11), top2 + 0.12, 0.11, 0.04, c); rect(m(0.205, 0.04), top2 + 0.16, 0.04, 0.1, c); }
+  } else if (L.style === STYLE.PHONES) { rect(-0.2, top2, 0.4, 0.035, c, 0.35); rect(-0.245, hy + 0.08, 0.06, 0.17, c); rect(0.185, hy + 0.08, 0.06, 0.17, c); }
+  else if (L.style === STYLE.PROP) {
+    rect(-0.2, top2 - 0.05, 0.14, 0.11, c); rect(-0.06, top2 - 0.05, 0.12, 0.11, TRIM.BLUE); rect(0.06, top2 - 0.05, 0.14, 0.11, TRIM.YELLOW);
+    rect(-0.015, top2 + 0.06, 0.03, 0.06, TRIM.YELLOW); rect(-0.19, top2 + 0.12, 0.38, 0.03, TRIM.YELLOW);
+  }
 }
