@@ -154,7 +154,9 @@ View.prototype.map = function map(fresh = false) {
     parts.push({ box: box(a), kind: w & 255, stage: w >>> 8, group: d.getUint32(a + L.PT_GROUP, true) - 1, a: f(a + L.PT_A), b: f(a + L.PT_B), c: f(a + L.PT_C) });
   }
   const own = d.getUint32(L.MAP_OWNBODY, true) !== 0;
-  const body = own ? { r: f(L.MAP_BODY + L.BD_R), top: f(L.MAP_BODY + L.BD_TOP), eye: f(L.MAP_BODY + L.BD_EYE), own } : { r: Number(L.BODY[0]), top: Number(L.BODY[1]), eye: Number(L.BODY[2]), own };
+  // (hit: what a shot hits of it, for the reticle's mirror of $a_ray: client/chase.mjs)
+  const bd = own ? [0, 1, 2, 3, 4, 5, 6, 7].map((k) => f(L.MAP_BODY + 4 * k)) : L.BODY.map(Number);
+  const body = { r: bd[0], top: bd[1], eye: bd[2], own, hit: { head: bd[4], headr2: bd[5], hitr2: bd[6], hittop: bd[7] } };
   this._map = { key, bounds: [0, 1, 2, 3].map((k) => f(L.MAP_BOUNDS + 4 * k)), groups, boxes, teleporters, spawns, flags, ball, hills, movement, mode, parts, body };
   return this._map;
 };

@@ -921,7 +921,11 @@ the arena's body keeps a step (0.5 m) of room over its head, so it needs
 2.3 m to walk under a ceiling, where a 1.4 m body with its own asks 1.4 and
 is put back if a step up would leave its head no room. A gap 0.8 m wide and
 a slab 1.5 m off the floor pass the Roblox body and stop the arena's
-(`test/arena-parts.test.mjs`).
+(`test/arena-parts.test.mjs`). The page draws the same figure at the body's
+size (the renderer's `size`, its height over 1.8 m), puts the camera at its
+eye and aims the third-person reticle at what a shot hits of it; the AI
+fighter aims from that eye too. `maps/crossroads/` has it: 8 AI fighters
+there still make 38 KOs in 12,000 ticks.
 
 ### A map's own movement
 

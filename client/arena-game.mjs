@@ -39,7 +39,7 @@ const COLOR = { // per weapon: tracer colour, viewmodel body
 };
 const SHORT = { [L.W_AR]: 'AR', [L.W_BR]: 'BR', [L.W_MAGNUM]: 'MAGNUM', [L.W_SNIPER]: 'SNIPER', [L.W_SHOTGUN]: 'SHOTGUN', [L.W_ROCKET]: 'ROCKET',
   [L.W_PLASMA]: 'PLASMA', [L.W_NEEDLER]: 'SEEKER', [L.W_SWORD]: 'SWORD', [L.KILL_GREN]: 'FRAG', [L.KILL_MELEE]: 'MELEE', [L.KILL_BEHIND]: 'ASSASSINATION',
-  [L.KILL_SUPER]: 'OVERLOAD', [L.KILL_FALL]: 'FALL', [AC.CX_KILL_BALL]: 'SUPERBALL', [AC.RY_KILL_ZONE]: 'ZONE' };
+  [L.KILL_SUPER]: 'OVERLOAD', [L.KILL_FALL]: 'FALL', [AC.CX_KILL_BALL]: 'SUPERBALL', [AC.RY_KILL_ZONE]: 'ZONE', [L.KILL_PART]: 'LAVA' };
 const CROSS = { [L.W_AR]: 0, [L.W_BR]: 1, [L.W_MAGNUM]: 1, [L.W_SNIPER]: 1, [L.W_SHOTGUN]: 2, [L.W_ROCKET]: 3, [L.W_PLASMA]: 4, [L.W_NEEDLER]: 4, [L.W_SWORD]: 5 };
 const RUNGS = L.LADDER.length;
 // How a fighter stands under the match's mode, higher is better: the sim's $a_key, for the board while play goes on.
@@ -278,7 +278,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         // a team mode's lines in the killer's side's colour, but for your own
         const other = md.teamed ? SIDE_C[sideOf(view, f.owner)] : C.WHITE;
         // (the battle royale's zone takes a fighter by its own hand, the cause saying so)
-        const own = f.size === AC.RY_KILL_ZONE ? `${name(f.shot)} [ZONE]` : `${name(f.shot)} DIED`;
+        // (so does a part of the map that kills: lava, a kill brick)
+        const own = f.size === AC.RY_KILL_ZONE ? `${name(f.shot)} [ZONE]` : f.size === L.KILL_PART ? `${name(f.shot)} [LAVA]` : `${name(f.shot)} DIED`;
         if (!infected) say(f.owner === f.shot ? own : `${name(f.owner)} [${cause}] ${name(f.shot)}`, f.owner === slot ? C.GREEN : f.shot === slot ? C.RED : other, now);
         glows.push({ pos: [f.pos[0], f.pos[1] + 1, f.pos[2]], size: 1.4, color: [1, 0.3, 0.2, 0.8], kind: 3, born: now, life: 400 });
         if (f.owner === slot && f.shot !== slot) {
@@ -518,10 +519,12 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     }
     if (pme && (pme.hand !== lastSlot || pme.weapon !== lastWeapon)) { swapAt = now; lastSlot = pme.hand; lastWeapon = pme.weapon; }
     let cam;
-    if (spect && tgt) cam = [tgt.pos[0] + tgt.vel[0] * dt, tgt.pos[1] + tgt.vel[1] * dt + 1.6, tgt.pos[2] + tgt.vel[2] * dt];
-    else if (pme) cam = [0, 1, 2].map((k) => pme.pos[k] + pme.vel[k] * dtPred + corr.off[k] + (k === 1 ? 1.6 : 0));
-    else if (me?.live) cam = [me.pos[0] + me.vel[0] * dt, me.pos[1] + me.vel[1] * dt + 1.6, me.pos[2] + me.vel[2] * dt];
-    else if (tgt) cam = [tgt.pos[0] + tgt.vel[0] * dt, tgt.pos[1] + tgt.vel[1] * dt + 1.6, tgt.pos[2] + tgt.vel[2] * dt];
+    // the eye's height: the arena's own 1.6 m, or the map's body's (src/arena-view.mjs map().body), as the sim fires from
+    const body = view.map().body, EYE = body.eye;
+    if (spect && tgt) cam = [tgt.pos[0] + tgt.vel[0] * dt, tgt.pos[1] + tgt.vel[1] * dt + EYE, tgt.pos[2] + tgt.vel[2] * dt];
+    else if (pme) cam = [0, 1, 2].map((k) => pme.pos[k] + pme.vel[k] * dtPred + corr.off[k] + (k === 1 ? EYE : 0));
+    else if (me?.live) cam = [me.pos[0] + me.vel[0] * dt, me.pos[1] + me.vel[1] * dt + EYE, me.pos[2] + me.vel[2] * dt];
+    else if (tgt) cam = [tgt.pos[0] + tgt.vel[0] * dt, tgt.pos[1] + tgt.vel[1] * dt + EYE, tgt.pos[2] + tgt.vel[2] * dt];
     else cam = [512 - 140, view.height(372, 512) + 14, 512];
     camYaw = me?.live && !WATCH && !(spect && tgt) ? yaw / TURN * 2 * Math.PI : tgt ? tgt.yaw : 0;
     camPitch = me?.live && !WATCH && !(spect && tgt) ? (pitch - 512) / 1024 * Math.PI : tgt ? tgt.pitch : -0.15;
@@ -560,14 +563,14 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         const o = view.player(p);
         bodies.push([o.pos[0] + o.vel[0] * dt, o.pos[1] + o.vel[1] * dt, o.pos[2] + o.vel[2] * dt]);
       }
-      const hit = aimPoint({ eye, yaw: camYaw, pitch: camPitch, range }, world, bodies);
+      const hit = aimPoint({ eye, yaw: camYaw, pitch: camPitch, range }, { ...world, hit: body.hit }, bodies);
       const [px, py, depth] = project({ cam, yaw: camYaw, pitch: camPitch, zoom: 1 }, W, H, hit.pos);
       // (whole pixels, so its lines stay as sharp as at the centre)
       if (depth > 0.3) aimAt = [Math.max(-W / 2, Math.min(W / 2, Math.round(px - W / 2))), Math.max(-H / 2, Math.min(H / 2, Math.round(py - H / 2)))];
       // my own figure: the prediction's record put where the camera has me, less what the shader carries every figure on by
       const b = L.PLAYERS + (pme ? L.PRED_D : 0) + slot * L.PSIZE;
       ownRec.set(u8.subarray(b, b + L.PSIZE));
-      for (let k = 0; k < 3; k++) ownDv.setFloat32(L.P_PX + 4 * k, eye[k] - (k === 1 ? 1.6 : 0) - ownDv.getFloat32(L.P_VX + 4 * k, true) * dt, true);
+      for (let k = 0; k < 3; k++) ownDv.setFloat32(L.P_PX + 4 * k, eye[k] - (k === 1 ? EYE : 0) - ownDv.getFloat32(L.P_VX + 4 * k, true) * dt, true);
     }
     // never inside the ground
     cam[1] = Math.max(cam[1], view.height(cam[0], cam[2]) + 0.4);
@@ -610,7 +613,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (chasing && kit && st >= 1) {
       const all = { solid: [], glow: [], beams: [], markers: [], zone: null, storm: null };
       kit.draw(view, { dt, dtPred, now, t: playT, slot, shown: -1, me, pme, cam, view, pview }, all);
-      const at = [0, 1, 2].map((k) => me.pos[k] + me.vel[k] * dt), feet = [eye[0], eye[1] - 1.6, eye[2]];
+      const at = [0, 1, 2].map((k) => me.pos[k] + me.vel[k] * dt), feet = [eye[0], eye[1] - EYE, eye[2]];
       const same = (a, b) => a.kind === b.kind && Math.hypot(a.pos[0] - b.pos[0], a.pos[1] - b.pos[1], a.pos[2] - b.pos[2]) < 0.05;
       for (const sp of all.solid) {
         if (Math.hypot(sp.pos[0] - at[0], sp.pos[2] - at[2]) > 0.6 || sp.pos[1] < at[1] + 0.5 || sp.pos[1] > at[1] + 3 || out.solid.some((o) => same(o, sp))) continue;
@@ -678,7 +681,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       env: HOUR || envOf((seed ^ Math.imul(h.hole + 1, 0x85ebca6b)) >>> 0),
       solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone, storm: out.storm,
       crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, eye) ? 8 : 0), gap: spread / 30 + kick * 3,
-      own: chasing ? ownRec : null, aim: aimAt,
+      own: chasing ? ownRec : null, aim: aimAt, size: body.top / Number(L.BODY[1]),
       tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
     };
     renderer.frame(u8, last, target);

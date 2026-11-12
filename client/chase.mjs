@@ -90,25 +90,27 @@ export function groundHit(height, o, dir, tmax, clear = 0) {
 
 // How far it goes before a fighter standing with its feet at q: the sim's
 // shapes, a head (a ball of 0.22 m at 1.62 m) and a body (an upright
-// cylinder 0.45 m in radius from the feet to 1.45 m).
-export function bodyHit(q, o, dir, tmax) {
+// cylinder 0.45 m in radius from the feet to 1.45 m), or a map's own (hit:
+// { head, headr2, hitr2, hittop }, layout.mjs BD_*).
+const HIT = { head: 1.62, headr2: 0.0484, hitr2: 0.2025, hittop: 1.45 };
+export function bodyHit(q, o, dir, tmax, hit = HIT) {
   let best = tmax;
   const fx = o[0] - q[0], fz = o[2] - q[2];
-  const fy = o[1] - (q[1] + 1.62);
+  const fy = o[1] - (q[1] + hit.head);
   const hb = fx * dir[0] + fy * dir[1] + fz * dir[2];
-  const hd = hb * hb - (fx * fx + fy * fy + fz * fz - 0.0484);
+  const hd = hb * hb - (fx * fx + fy * fy + fz * fz - hit.headr2);
   if (hd >= 0 && -hb + Math.sqrt(hd) > 0) best = Math.min(best, Math.max(-hb - Math.sqrt(hd), 0));
   const a = dir[0] * dir[0] + dir[2] * dir[2];
   if (a > 1e-8) {
     const b = fx * dir[0] + fz * dir[2];
-    const disc = b * b - a * (fx * fx + fz * fz - 0.2025);
+    const disc = b * b - a * (fx * fx + fz * fz - hit.hitr2);
     if (disc >= 0) {
       const sq = Math.sqrt(disc);
       let lo = (-b - sq) / a, hi = (-b + sq) / a;
       if (dir[1] !== 0) {
-        const ya = (q[1] - o[1]) / dir[1], yb = (q[1] + 1.45 - o[1]) / dir[1];
+        const ya = (q[1] - o[1]) / dir[1], yb = (q[1] + hit.hittop - o[1]) / dir[1];
         lo = Math.max(lo, Math.min(ya, yb)); hi = Math.min(hi, Math.max(ya, yb));
-      } else if (o[1] < q[1] || o[1] > q[1] + 1.45) hi = -1e9;
+      } else if (o[1] < q[1] || o[1] > q[1] + hit.hittop) hi = -1e9;
       lo = Math.max(lo, 0);
       if (lo <= hi) best = Math.min(best, lo);
     }
@@ -154,6 +156,6 @@ export function aimPoint({ eye, yaw, pitch, range }, world, bodies = []) {
   const dir = aimDir(yaw, pitch);
   let t = groundHit(world.height, eye, dir, range);
   t = boxHit(world.map, eye, dir, t, world.tick);
-  for (const q of bodies) t = bodyHit(q, eye, dir, t);
+  for (const q of bodies) t = bodyHit(q, eye, dir, t, world.hit);
   return { pos: eye.map((v, k) => v + dir[k] * t), t, hit: t < range };
 }

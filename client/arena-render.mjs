@@ -76,7 +76,7 @@ struct U {
   hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px), the focal length unzoomed (px) (client/lowpoly.mjs)
   storm: vec4f,   // a battle royale's wall: centre x, z, radius, 1 on (0 none)
   snext: vec4f,   // its next circle: centre x, z, radius, 1 shown
-  aim: vec4f,     // the reticle off the screen's centre x, y (px); 1 with my own figure drawn (third person, client/chase.mjs)
+  aim: vec4f,     // the reticle off the screen's centre x, y (px); 1 with my own figure drawn (third person, client/chase.mjs); a figure's size, 1 the arena's own 1.8 m (a map's own body: src/arena-view.mjs map().body)
   zones: array<vec4f, ${2 * MAX_ZONE}>, // two a zone, a disc painted on the ground: centre x, z, radius, the height it's at | its colour, how hard it pulses (0..1)
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -339,14 +339,14 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     let fl = players[(b + ${L.P_FL}u) / 4u] & 255u;
     if ((fl & ${L.PF_LIVE}u) == 0u || (fl & ${L.PF_DEAD}u) != 0u || (i == u32(u.misc.x) && u.aim.z < 0.5)) { return o; }
     let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
-    center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92, pf(b, ${L.P_PZ}u)) + vel * dt;
+    center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92 * u.aim.w, pf(b, ${L.P_PZ}u)) + vel * dt;
     // a camera standing in one (a spectator's, riding the eyes it watches) doesn't see it from inside
     if (distance(center.xz, u.cam.xz) < 0.7 && abs(center.y - u.cam.y) < 1.4) { return o; }
-    half = vec2f(1.05, 1.0);
+    half = vec2f(1.05, 1.0) * u.aim.w;
     // its figure: heading and aim from its input word (src/arena-view.mjs), legs stepping as fast as it goes, its look's body
     let w = players[(b + ${L.P_IN}u) / 4u];
     let speed = length(vel.xz);
-    o.feet = center - vec3f(0.0, 0.92, 0.0);
+    o.feet = center - vec3f(0.0, 0.92 * u.aim.w, 0.0);
     o.pose = vec4f(f32(w & 0x7ffu) / 2048.0 * 6.2832, (f32((w >> ${L.AW_PITCH}u) & 0x3ffu) - 512.0) / 1024.0 * 3.1416, u.view.w * (3.0 + speed * 0.9), min(speed / 6.0, 1.0));
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + i] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body] + 16u * fl));
@@ -458,8 +458,11 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   if (s.kind == 15u) {
     let fwd = vec3f(u.view.x, 0.0, u.view.y);
     let ray = fwd + vec3f(-u.view.y, 0.0, u.view.x) * ((s.pos.x - u.screen.x * 0.5) / u.cam.w) + vec3f(0.0, (u.view.z - s.pos.y) / u.cam.w, 0.0);
-    let b = figureRay(u.cam.xyz, normalize(ray), fwd, 1.0 / u.cam.w, s.feet, s.pose, kitOf(s));
+    // a map's own body is the same figure at its size: the eye brought toward its feet by that much, and what it hits taken back out
+    var b = figureRay(s.feet + (u.cam.xyz - s.feet) / u.aim.w, normalize(ray), fwd, 1.0 / (u.cam.w * u.aim.w), s.feet, s.pose, kitOf(s));
     if (!b.hit) { discard; }
+    b.p = s.feet + (b.p - s.feet) * u.aim.w;
+    b.z = b.z * u.aim.w;
     // in a box's shadow or a cliff's as the ground under it is
     var k = sunlit(b.p + b.n * 0.02);
     if (k > 0.0) { k = hillLit(b.p + vec3f(0.0, 0.3, 0.0), u.misc.z); }
@@ -901,7 +904,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     //      storm (null, or a battle royale's zone { x, z, r, next: { x, z, r } | null }: client/am/royale.mjs),
     //      env (the hour: 'day', 'dusk' or 'night', client/lowpoly.mjs ENVS; day without one),
     //      own (third person, client/chase.mjs: my own record as it is drawn, PSIZE bytes written over my slot's so my
-    //      figure is drawn too; without one it never is), aim ([x, y] px: the reticle off the screen's centre) }
+    //      figure is drawn too; without one it never is), aim ([x, y] px: the reticle off the screen's centre), size (a figure's, 1 the arena's own: a map's body) }
     frame(u8, s, target) {
       // s.tick: the tick drawn, if not the confirmed world's carried on by s.dt
       if (movers) movers.write(device, boxBuf, s.tick ?? drawnTick(u8, s.dt));
@@ -918,7 +921,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       if (s.viewmodel?.length) device.queue.writeBuffer(vmBuf, 0, s.viewmodel.subarray(0, MAX_VM * 12));
       const st = s.storm, sn = st?.next;
       uf.set([st ? st.x : 0, st ? st.z : 0, st ? st.r : 0, st ? 1 : 0, sn ? sn.x : 0, sn ? sn.z : 0, sn ? sn.r : 0, sn ? 1 : 0], 40);
-      uf.set([s.aim?.[0] ?? 0, s.aim?.[1] ?? 0, s.own ? 1 : 0, 0], 48);
+      uf.set([s.aim?.[0] ?? 0, s.aim?.[1] ?? 0, s.own ? 1 : 0, s.size ?? 1], 48);
       zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 52 + 8 * k));
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);

@@ -74,17 +74,19 @@ export default {
   key: 'obby',
   kills: false,
   frags: false,
+  own: true,
 
-  // rows 2 to 4: your stage of the course's, your time or the clock's cut
+  // rows 0 to 2 (no kills line over them: nobody is counting kills): your
+  // stage of the course's or your time, how many are home, where a fall puts you
   hud(view, ctx) {
     const n = stages(view);
-    if (view.hole().state === L.H_COUNT) { ctx.put(1, 2, 'REACH THE END  MIND WHAT GLOWS RED', ctx.C.WHITE); return; }
+    if (view.hole().state === L.H_COUNT) { ctx.put(1, 0, 'REACH THE END  MIND WHAT GLOWS RED', ctx.C.WHITE); return; }
     if (ctx.slot < 0) return;
     const done = doneOf(view, ctx.slot), st = stageOf(view, ctx.slot);
-    ctx.put(1, 2, done ? `FINISHED IN ${clock(done)}` : n ? `STAGE ${st} OF ${n}` : 'RUN FOR THE FINISH', done ? ctx.C.GREEN : ctx.C.YELLOW);
+    ctx.put(1, 0, done ? `FINISHED IN ${clock(done)}` : n ? `STAGE ${st} OF ${n}` : 'RUN FOR THE FINISH', done ? ctx.C.GREEN : ctx.C.YELLOW);
     const fin = view.dv.getUint32(L.AO + AC.OY_DONE, true);
-    if (fin) ctx.put(1, 3, `${fin} FINISHED`, ctx.C.GREY);
-    if (!done && ctx.me && ctx.me.dead) ctx.put(1, 4, st ? 'BACK TO YOUR CHECKPOINT' : 'BACK TO THE START', ctx.C.RED);
+    if (fin) ctx.put(1, 1, `${fin} FINISHED`, ctx.C.GREY);
+    if (!done && ctx.me && ctx.me.dead) ctx.put(1, 2, st ? 'BACK TO YOUR CHECKPOINT' : 'BACK TO THE START', ctx.C.RED);
   },
 
   news(f, ctx) {
@@ -114,6 +116,9 @@ export default {
   },
 
   cols: [{ head: 'STAGE', get: (o) => String(o.points) }, { head: 'FALLS', get: (o) => String(o.deaths) }],
+
+  // the board's order in play: by stage, then the fewer falls (the sim's places once it's over, finishers first)
+  standing: (o) => o.points * 65536 + (65535 - Math.min(o.deaths, 65535)),
 
   dealt: () => 'NO GUNS  JUST LEGS',
 

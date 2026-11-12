@@ -284,7 +284,7 @@ test('the renderer draws my own figure only when it is given my record, and the 
   const r = readFileSync(new URL('../client/arena-render.mjs', import.meta.url), 'utf8');
   assert.match(r, /\(i == u32\(u\.misc\.x\) && u\.aim\.z < 0\.5\)\) \{ return o; \}/, 'my figure is skipped unless aim.z');
   assert.match(r, /let dh = \(d - u\.aim\.xy\) \/ hs;/, 'the reticle and the hit marker follow aim');
-  assert.match(r, /uf\.set\(\[s\.aim\?\.\[0\] \?\? 0, s\.aim\?\.\[1\] \?\? 0, s\.own \? 1 : 0, 0\], 48\);/);
+  assert.match(r, /uf\.set\(\[s\.aim\?\.\[0\] \?\? 0, s\.aim\?\.\[1\] \?\? 0, s\.own \? 1 : 0, s\.size \?\? 1\], 48\);/, 'and a figure\'s size, 1 unless the map has a body of its own');
   assert.match(r, /if \(s\.own\) device\.queue\.writeBuffer\(playerBuf, s\.slot \* L\.PSIZE, s\.own\);/);
   const g = readFileSync(new URL('../client/arena-game.mjs', import.meta.url), 'utf8');
   assert.match(g, /own: chasing \? ownRec : null, aim: aimAt,/);
