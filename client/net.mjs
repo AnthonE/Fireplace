@@ -1,4 +1,5 @@
-// The net worker: owns the WebTransport session and the clocks. Every tick of
+// The net worker: owns the session (WebTransport, or in a browser without it
+// the relay's WebSocket door) and the clocks. Every tick of
 // the predicted clock (the server's tick plus the input lead) it samples the
 // input slots in shared memory into one word, kept in a ring the prediction
 // reads; every second tick it sends the words the relay hasn't closed, its
@@ -10,12 +11,16 @@
 // ?url= may list several relays: when the session's relay goes away, it tries
 // the next, a few times a second for up to 10 s, asking for its slot back (a
 // resume), which a standby relay that took the room over holds for it.
+// ws: each relay's WebSocket door, in the same order (client/kit.mjs wsDoor),
+// used when the browser has no WebTransport, or always with forceWs (?ws=1).
 import * as W from '../net/wire.mjs';
 import * as L from '../src/layout.mjs';
 import { createImpair } from '../net/impair.js';
 import { writeClock } from './clock.mjs';
 import { sampler } from './input.mjs';
 import { writeName } from './looks.mjs';
+import { cleanLine } from '../net/chat.mjs';
+import { openWebTransport, openWebSocket } from './transport.mjs';
 
 const epoch = () => performance.timeOrigin + performance.now();
 
@@ -23,19 +28,23 @@ let leave = () => {};
 let leaving = false;
 // a sign-in the page's wallet signed, to the relay (net/elo.mjs)
 let signin = (_m) => {};
+// a line of chat the page's player typed (client/chat.mjs), once the relay has said this session may speak
+let say = (_text) => {};
 self.onmessage = (e) => {
   if (e.data.leave) { leaving = true; leave(); return; }
   if (e.data.signedMessage) { signin(e.data.signedMessage); return; }
+  if (e.data.say !== undefined) { say(e.data.say); return; }
   connect(e.data);
 };
 
 const FAILOVER_MS = 10000;
 async function connect(args) {
   const urls = args.url.split(',');
+  const doors = (args.ws || '').split(',');
   let k = 0, back = null, lostAt = -1;
   for (;;) {
     try {
-      back = await run({ ...args, url: urls[k], back, failover: urls.length > 1 });
+      back = await run({ ...args, url: urls[k], ws: doors[k] || '', back, failover: urls.length > 1 });
       lostAt = epoch();
     } catch (err) {
       // a relay that's down, or not holding the room yet, mid-failover: the next
@@ -65,8 +74,9 @@ const SILENT_MS = 1500;
 // the arena's while it or Dogfight is the game on (FP_GAME in the confirmed world), else golf's
 // looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK), and for its avatars (W.HELLO_AVATARS: CL_AVATARS)
 // names: ask for the signed-in players' names (W.HELLO_NAMES), into CL_NAMES, and their badges (W.HELLO_BADGES), into CL_BADGES
+// chat: ask for the room's chat (W.HELLO_CHAT); the page hears each message as { chat: { kind, slot, text } } and sends a line with { say }
 // signin: ask the relay for a sign-in nonce (W.HELLO_SIGNIN); the page hears it, and the answer, as { signinNonce } and { signed }
-async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false, names = false, signin: wantSignin = false }) {
+async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, simPort, impair = {}, watch = false, back = null, failover = false, arena = false, fireplace = false, looks = false, names = false, chat = false, signin: wantSignin = false }) {
   const imp = createImpair({ ...impair, seed: (Math.random() * 2 ** 32) >>> 0 });
   const i32 = new Int32Array(memory.buffer);
   const u32 = new Uint32Array(memory.buffer);
@@ -76,17 +86,14 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   const rd = (a) => Atomics.load(i32, a >> 2);
   Atomics.store(i32, L.CL_SLOT >> 2, -1);
 
-  const wt = new WebTransport(url, { serverCertificateHashes: [{ algorithm: 'sha-256', value: certHash }], congestionControl: 'low-latency' });
-  await wt.ready;
-  try { wt.datagrams.outgoingMaxAge = 2 * W.TICK_MS; } catch { /* optional */ }
-  // a busy moment on this worker must not drop bundles queued for it
-  try { wt.datagrams.incomingHighWaterMark = 256; } catch { /* optional */ }
-  const bidi = await wt.createBidirectionalStream();
-  const sw = bidi.writable.getWriter();
+  const quic = typeof WebTransport !== 'undefined';
+  if (!quic && !ws) throw new Error('this browser has no WebTransport, and no WebSocket door is named for the relay');
+  const t = ws && (forceWs || !quic) ? await openWebSocket(ws) : await openWebTransport(url, certHash);
+  self.postMessage({ transport: t.kind });
+  const { sw, sr } = t;
   const tHello = epoch();
   const resume = back && !watch ? back.slot : -1;
-  await sw.write(W.encodeHello({ maxDatagram: wt.datagrams.maxDatagramSize, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names }));
-  const sr = W.bufferedReader(bidi.readable.getReader());
+  await sw.write(W.encodeHello({ maxDatagram: t.maxDatagram, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names, chat }));
   const head = await sr.read(4);
   if (head[0] === W.T_REJECT) throw new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected');
   const wb = new Uint8Array(32);
@@ -123,13 +130,16 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   };
   sendLook();
   signin = ({ message, signature }) => { sw.write(W.encodeSignin(message, signature)).catch(() => {}); };
+  // no line goes until this relay says the session may speak: one from before chat would read the text as messages
+  let maySay = false;
+  say = (text) => { const line = cleanLine(text); if (maySay && line) sw.write(W.encodeChat(line)).catch(() => {}); };
   // closing the control stream is how the relay hears we left
   let left = false;
   leave = async () => {
     if (left) return;
     left = true;
     try { await sw.close(); } catch { /* gone */ }
-    try { wt.close(); } catch { /* gone */ }
+    try { t.close(); } catch { /* gone */ }
   };
 
   // Five pings at join, the countdown's clock sync: the fastest sets the server tick.
@@ -147,7 +157,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   };
 
   // what this worker has seen, for the runs
-  const seen = { pongs: 0, keys: 0, fills: 0, bundles: 0, repairs: 0, rtt: bestRtt, ctlError: '', holes: [], gaps: [] };
+  const seen = { transport: t.kind, pongs: 0, keys: 0, fills: 0, bundles: 0, repairs: 0, rtt: bestRtt, ctlError: '', holes: [], gaps: [] };
   const repairedAt = new Map(); // tick -> repair datagrams that carried it, the last 512 ticks
   const seenTimer = setInterval(() => self.postMessage({ seen: { ...seen, rtt: bestRtt, lead } }), 1000);
   // The control stream: keyframes (unpacked here), the fills after them, pongs.
@@ -172,6 +182,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
       if (m.type === W.T_NAMES) for (const [p, n] of m.names) if (p < L.NPLAYER) writeName(u8, p, n);
       if (m.type === W.T_AVATAR) for (const [p, w] of m.avatars) if (p < L.NPLAYER) u32[(L.CL_AVATARS >> 2) + p] = w;
       if (m.type === W.T_BADGE) for (const [p, w] of m.badges) if (p < L.NPLAYER) u32[(L.CL_BADGES >> 2) + p] = w;
+      if (m.type === W.T_CHAT) { if (m.kind !== W.CHAT.LINE) maySay = m.kind === W.CHAT.OPEN; self.postMessage({ chat: { kind: m.kind, slot: m.slot, text: m.text } }); }
       if (m.type === W.T_SIGNIN) self.postMessage({ signinNonce: m.nonce });
       if (m.type === W.T_SIGNED) self.postMessage({ signed: { status: m.status, address: m.address } });
       if (m.type === W.T_KEY) {
@@ -197,7 +208,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
   // the input slots sampled into one word a tick (client/input.mjs)
   const sample = sampler({ memory, roomStart: welcome.roomStart, arena, fireplace });
   let inAck = 0, lastBundleT = -1, seq = 0;
-  const dw = wt.datagrams.writable.getWriter();
+  const dw = t.dw;
   const send = () => {
     const first = Math.max(inAck, lastBundleT, welcome.joinTick - 1) + 1;
     const from = Math.max(first, nextTick - W.MAX_INPUTS);
@@ -226,7 +237,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
     // how late this 4 ms timer runs: a starved worker samples, sends and acks late
     if (now - lastTimer > 50) seen.gaps.push(Math.round(now - lastTimer));
     lastTimer = now;
-    if (failover && now - heardAt > SILENT_MS) { try { wt.close(); } catch { /* gone */ } }
+    if (failover && now - heardAt > SILENT_MS) { try { t.close(); } catch { /* gone */ } }
     sendLook();
     if (welcome.watch) {
       const t = Math.floor(serverTick(now));
@@ -268,7 +279,7 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
     f32[L.CL_JITTER >> 2] = jitter;
   };
 
-  for await (const buf of readable(wt.datagrams.readable)) imp.recv(() => onDatagram(buf));
+  for await (const buf of t.datagrams) imp.recv(() => onDatagram(buf));
   clearInterval(timer);
   clearInterval(seenTimer);
   return { slot: welcome.slot, room: welcome.roomStart };
@@ -315,15 +326,4 @@ async function run({ url, certHash, memory, prefix, simPort, impair = {}, watch 
     publishPred(now);
     f32[L.CL_PING >> 2] = b.slack;
   }
-}
-
-async function* readable(stream) {
-  const r = stream.getReader();
-  try {
-    for (;;) {
-      const { value, done } = await r.read();
-      if (done) return;
-      yield value;
-    }
-  } catch { /* session closed */ }
 }

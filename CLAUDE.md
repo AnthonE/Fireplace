@@ -25,7 +25,7 @@ npm test                             # node --test test/*.test.mjs, about 25 min
 node --test test/party.test.mjs      # one file
 node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.wasm   # Node, Deno, Chrome x JIT tiers x 1/2/4 threads
 node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
-node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
+node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-chat.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
@@ -195,7 +195,9 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
-- The room is a relay's (`client/net.mjs`): one named, or on a copy's
+- The room is a relay's (`client/net.mjs`; `client/transport.mjs` opens its
+  WebTransport, or where the browser has none, or with `?ws=1`, the relay's
+  WebSocket door, `--ws-port`, found by `client/kit.mjs` `wsDoor`): one named, or on a copy's
   GitHub Pages site, once someone presses play online with friends or opens
   an invite (`?room=`), one the kit's room pool starts on that copy's wasm
   (`net/kit-rooms.mjs`, `relay.pool`). Otherwise (`client/kit.mjs`:
@@ -238,6 +240,14 @@ shell whose own command line contains the name: it kills that shell.
   checks). Achievements (`client/achievements.mjs`)
   test results read from the confirmed world while a game's end is held, and
   are kept in the browser, like the look.
+- Chat (`client/chat.mjs`, one log and one input the host makes for every
+  page; `/` opens it) is drawing only too: the relay carries a line beside
+  the ticks (hello flag 128, `T_CHAT`), cleaned and rate-limited by
+  `net/chat.mjs`, whose word list is `net/chat-words.mjs`. While the input is
+  open it stops keys and the locked mouse before a frontend's listeners; a
+  frontend that draws bubbles asks `host.chat.bubbles()` (the arena's
+  markers, Party's HUD). A key a frontend takes must stay off `/`
+  (`test/chat.test.mjs` checks).
 - `elo.json` is Fireplace's manifest for its Elo Pros store row (jobs, mods);
   CONTRIBUTING.md is the outside contributor's guide, pay included.
 

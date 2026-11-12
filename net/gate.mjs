@@ -1,10 +1,12 @@
 // What the network gates (net/run-*.mjs) share: building, the relays, the bot
-// host, Chrome, a player at the door, and grading
+// host, Chrome, a player at the door, one that chats, and grading
 // interval hashes against a referee's.
 import { spawn, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import net from 'node:net';
+import dgram from 'node:dgram';
+import { Readable } from 'node:stream';
 import { serve } from '../tools/serve.mjs';
 import * as W from './wire.mjs';
 import { GOLFER } from '../client/brain.mjs';
@@ -100,6 +102,41 @@ export async function knock(port) {
     c.on('error', () => ok({ error: true }));
     setTimeout(() => { c.destroy(); ok({ timeout: true }); }, 5000);
   });
+}
+
+// A session at a relay's native door that asks for chat and plays nothing: a
+// player standing where it spawned, or with watch a spectator. Its datagrams
+// carry no words, only enough to be heard from, so the relay keeps it.
+// { slot, status (W.CHAT.*, -1 until the relay says), heard: [{ slot, text }],
+// say(text), close() }, or { reject }.
+export async function chatter(port, prefix, { watch = false } = {}) {
+  const tcp = net.connect({ host: '127.0.0.1', port, noDelay: true });
+  await new Promise((ok, no) => { tcp.once('connect', ok); tcp.once('error', no); });
+  const sr = W.bufferedReader(Readable.toWeb(tcp).getReader());
+  tcp.write(W.encodeHello({ maxDatagram: 1400, wasmPrefix: prefix, watch, chat: true }));
+  const w = W.decodeWelcome(await sr.read(32));
+  if (!w || w.reject) { tcp.destroy(); return { reject: w?.reject ?? -1 }; }
+  const udp = dgram.createSocket('udp4');
+  let seq = 0;
+  const beat = setInterval(() => {
+    const m = W.encodeInput({ seq: seq++, firstTick: 0, ackTick: 0, ackBits: 0n, words: [] });
+    const d = new Uint8Array(4 + m.length);
+    new DataView(d.buffer).setUint32(0, w.token, true);
+    d.set(m, 4);
+    udp.send(d, port, '127.0.0.1');
+  }, 100);
+  const c = {
+    slot: w.slot, status: -1, heard: [],
+    say: (text) => tcp.write(W.encodeChat(text)),
+    close() { clearInterval(beat); udp.close(); tcp.end(); },
+  };
+  (async () => {
+    for (let m; (m = await W.readControl(sr));) {
+      if (m.type !== W.T_CHAT) continue;
+      if (m.kind === W.CHAT.LINE) c.heard.push({ slot: m.slot, text: m.text }); else c.status = m.kind;
+    }
+  })().catch(() => {});
+  return c;
 }
 
 // Grades interval hashes ([sim tick, hash], the hash as hex or a number) against

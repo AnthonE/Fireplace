@@ -236,3 +236,40 @@ test('looks: a hello asks for them, a client sends its own, the relay sends pair
   assert.deepEqual(await W.readControl(sr), { type: W.T_PONG, nonce: 5, serverTick: 6 });
   assert.deepEqual(await W.readControl(sr), { type: W.T_LOOK, looks: [[7, 0]] });
 });
+
+test('chat: a hello asks for it, a line goes up with its text, the relay sends lines with their slot and says where a session stands', async () => {
+  const prefix = new Uint8Array(8);
+  assert.equal(W.HELLO_CHAT, 128);
+  assert.equal(W.T_CHAT, 0x1e);
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, chat: true })).chat, true);
+  // an old hello asks for none, and chat's flag is no other's
+  const plain = W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, looks: true, signin: true, avatars: true, names: true, badges: true, resume: 3 }));
+  assert.equal(plain.chat, false);
+  const only = W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, chat: true }));
+  assert.deepEqual([only.watch, only.resume, only.looks, only.signin, only.avatars, only.names, only.badges], [false, -1, false, false, false, false, false]);
+  // a client's line: a 16-byte head the relay reads like any other, naming the bytes of text behind it
+  const said = 'héllo, 世界 😀';
+  const up = W.encodeChat(said);
+  const n = new TextEncoder().encode(said).length;
+  assert.equal(up.length, 16 + n);
+  assert.deepEqual(W.decodeClient(up.subarray(0, 16)), { type: W.T_CHAT, bytes: n });
+  assert.equal(new TextDecoder().decode(up.subarray(16)), said);
+  // never more text than CHAT_WIRE_MAX, whatever it is handed
+  assert.equal(W.encodeChat('x'.repeat(5000)).length, 16 + W.CHAT_WIRE_MAX);
+  assert.deepEqual(W.decodeClient(W.encodeChat('x'.repeat(5000))), { type: W.T_CHAT, bytes: W.CHAT_WIRE_MAX });
+  // the relay's: where the session stands, then lines with their slots, among the stream's other messages, in pieces
+  const parts = [W.encodeChat('', 0, W.CHAT.OPEN), W.encodeChat(said, 255), W.encodePong(5, 6), W.encodeChat('', 0, W.CHAT.OFF), W.encodeLooks([[7, 1]]), W.encodeChat('bye', 3), W.encodeChat('', 0, W.CHAT.LISTEN)];
+  const all = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+  parts.reduce((o, p) => (all.set(p, o), o + p.length), 0);
+  let off = 0;
+  const sr = W.bufferedReader({ read: async () => (off >= all.length ? { done: true } : { value: all.slice(off, (off += 5)), done: false }) });
+  assert.deepEqual(await W.readControl(sr), { type: W.T_CHAT, kind: W.CHAT.OPEN, slot: 0, text: '' });
+  assert.deepEqual(await W.readControl(sr), { type: W.T_CHAT, kind: W.CHAT.LINE, slot: 255, text: said });
+  assert.deepEqual(await W.readControl(sr), { type: W.T_PONG, nonce: 5, serverTick: 6 });
+  assert.deepEqual(await W.readControl(sr), { type: W.T_CHAT, kind: W.CHAT.OFF, slot: 0, text: '' });
+  assert.deepEqual(await W.readControl(sr), { type: W.T_LOOK, looks: [[7, 1]] });
+  assert.deepEqual(await W.readControl(sr), { type: W.T_CHAT, kind: W.CHAT.LINE, slot: 3, text: 'bye' });
+  assert.deepEqual(await W.readControl(sr), { type: W.T_CHAT, kind: W.CHAT.LISTEN, slot: 0, text: '' });
+  assert.equal(await W.readControl(sr), null);
+  assert.deepEqual(W.CHAT, { LINE: 0, OPEN: 1, LISTEN: 2, OFF: 3 });
+});

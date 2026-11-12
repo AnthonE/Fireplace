@@ -101,7 +101,10 @@ Grandma's and Summer Rain.
 
 ## Play it
 
-You need Node 22 and the newest Chrome (WebGPU, WebTransport).
+You need Node 22 and a browser with WebGPU: the newest Chrome, which plays
+over WebTransport. A browser without WebTransport comes in through the
+relay's WebSocket door instead (TCP, so a lost packet holds up what follows;
+`?ws=1` tries it in Chrome, which is all it has been run in).
 
 ```sh
 npm ci && sh tools/install-deno.sh       # once: wabt, binaryen, Deno 2.9.7 into .tools/
@@ -115,7 +118,10 @@ your marshmallows), the room's theme, and lists your
 achievements; while the room is in view the keys do the same: T the theme, B,
 H and P your ball, hat and body, L your achievements. In Party, 1 to 4 wave, cheer, dance and spin.
 `?watch=1` spectates, `?bot=1` sits an AI guest at your controls, F goes
-fullscreen. Each game also runs alone, with its own page:
+fullscreen. In an online room `/` opens the chat in every game (Enter sends,
+Esc closes); a line shows in the log, and in the arena and Party over its
+speaker's head. Click a name to mute it, or type `/off` for no chat at all.
+Each game also runs alone, with its own page:
 
 ```sh
 node net/play.mjs --party [--mg k]       # client/party.html, the rotation or minigame k
@@ -174,7 +180,8 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
   one 32-bit word per player per tick. Every machine steps the same bits, so
   bandwidth follows players, never balls or bullets: about 9 KB/s down per
   player with 256 in the room.
-- **A referee checks everyone.** The relay (Deno, WebTransport) runs the same
+- **A referee checks everyone.** The relay (Deno; WebTransport, with a
+  WebSocket door for browsers without it) runs the same
   wasm as the clients, hashes the world every 128 ticks, and resyncs anyone
   who differs. Late joiners start from a keyframe; spectators fan out through
   trees of relays; a standby relay takes a room over if its relay dies.

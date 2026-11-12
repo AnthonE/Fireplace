@@ -18,8 +18,11 @@
 // is stopped once it is empty and a fresh one takes its place.
 //   node net/rooms.mjs rooms.json
 // rooms.json (net/rooms.example.json):
-//   { game, wasm, host, bind, ports: [first, last], native_offset, max_players,
+//   { game, wasm, host, bind, ports: [first, last], native_offset, ws, max_players,
 //     min_free, max_rooms, idle_s, status_dir, status_base, list, relay_args }
+// ws: true opens each room's WebSocket door (relay --ws-port) on the room's
+// own number over TCP, where a page looks for it; its certificate, if the
+// relay is to end the TLS itself, goes through relay_args (--ws-cert, --ws-key).
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { isMain } from '../tools/main.mjs';
@@ -30,7 +33,7 @@ const MAX_FAILURES = 3;
 
 const DEFAULTS = {
   game: 'golf', wasm: 'build/game.wasm', host: '127.0.0.1', bind: '127.0.0.1',
-  ports: [4433, 4440], native_offset: 0, max_players: 16, min_free: 1, max_rooms: 4,
+  ports: [4433, 4440], native_offset: 0, ws: false, max_players: 16, min_free: 1, max_rooms: 4,
   idle_s: 300, status_dir: 'traces/rooms', status_base: '', list: 'traces/rooms/servers.json', relay_args: [],
 };
 
@@ -41,13 +44,14 @@ const writeWhole = (path, text) => { writeFileSync(`${path}.tmp`, text); renameS
 // One room: a relay (net/relay.ts) on port for c.wasm (on c.map, a packed
 // map, when given), its status in
 // c.status_dir/<port>.json and its roster in <port>.online.json, its native door at port + c.native_offset (none
-// at 0). onEnd(code, why) once it has ended and its status is gone: why is
+// at 0), its WebSocket door on port itself (TCP) with c.ws. onEnd(code, why) once it has ended and its status is gone: why is
 // what made it a failure (a refusal, exit 2; a referee behind, exit 3; a room
 // that died within 10 s of starting, a port in use say), else null. Returns
 // { p, port, cert, started, emptySince, stopping, exited }.
 export function startRoom(c, port, onEnd) {
   const args = ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts',
     '--port', String(port), '--host', c.bind, '--native-port', String(c.native_offset ? port + c.native_offset : 0),
+    ...(c.ws ? ['--ws-port', String(port)] : []),
     '--wasm', c.wasm, '--game', c.game, '--max-players', String(c.max_players),
     '--status', `${c.status_dir}/${port}.json`, '--online', `${c.status_dir}/${port}.online.json`, '--quiet',
     ...(c.map ? ['--map', c.map] : []), ...c.relay_args];

@@ -58,7 +58,7 @@ export const MAP_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 const DEFAULTS = {
   listen: '127.0.0.1:61280', public_base: 'https://game.elopros.com/kit/',
-  host: 'game.elopros.com', bind: '0.0.0.0', ports: [61300, 61315], native_offset: 0,
+  host: 'game.elopros.com', bind: '0.0.0.0', ports: [61300, 61315], native_offset: 0, ws: false,
   max_rooms: 8, per_site_rooms: 2, max_players: 8, idle_s: 120, hold_s: 20,
   max_wasm_bytes: 2 * 1024 * 1024, max_map_bytes: MAP_STAGE_MAX, fetch_timeout_s: 10,
   fetch_from: ['https://*.github.io', 'https://*.scryward.online'], allow_origins: ['https://*.github.io', 'https://*.scryward.online'],
@@ -235,7 +235,7 @@ export function startKitRooms(config, { log = (m) => console.error(`[kit-rooms] 
     let id;
     do id = randomBytes(5).toString('hex'); while (rooms.has(id));
     const m = { id, port, sha, game, map: map?.name || '', mapSha, site, hash: certHash(), holds: [], lastPlayers: 0, players: 0, emptySince: Date.now(), hadPlayers: false, ready: false, ended: null };
-    m.r = startRoom({ wasm, map: mapFile, game, bind: c.bind, native_offset: c.native_offset, max_players: c.max_players, status_dir: c.status_dir, relay_args: c.relay_args }, port, (code, why) => {
+    m.r = startRoom({ wasm, map: mapFile, game, bind: c.bind, native_offset: c.native_offset, ws: c.ws, max_players: c.max_players, status_dir: c.status_dir, relay_args: c.relay_args }, port, (code, why) => {
       rooms.delete(id);
       m.ended = why || `the relay ended (exit ${code})`;
       if (!live().some((o) => o.sha === sha)) rmSync(wasm, { force: true });

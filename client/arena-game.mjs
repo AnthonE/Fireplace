@@ -16,7 +16,7 @@
 //           external (the slots are driven from outside, as Fireplace's guest does: the camera follows them) }
 import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
-import { arenaWord, unpackArena, boxRay } from '../src/arena-view.mjs';
+import { arenaWord, unpackArena, boxRay, sees } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, PALETTE, project } from './arena-render.mjs';
 import { ENVS, envOf } from './lowpoly.mjs';
 import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
@@ -30,6 +30,7 @@ import { touchWanted, touchControls, touchScale } from './touch.mjs';
 import { gunBoxes, carryBoxes } from './viewmodel.mjs';
 import { chase, aimPoint, steepAim, zoomStep, startView, mapView, viewOf, viewText, CHASE_NEAR } from './chase.mjs';
 import { drawnTick } from './movers.mjs';
+import { bubbleAt } from './chat.mjs';
 
 const TURN = 16384;
 const ARMS = L.ARMS;
@@ -233,6 +234,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   let medal = { text: '', until: 0 };
   let marker = 0, hurt = 0, kick = 0, lastShotAt = -1e9, meleeAt = -1e9, swapAt = -1e9, lastSlot = 0, lastWeapon = 0;
   let dealt = false;
+  let said = 0; // lines of chat drawn over fighters in the last frame
   const HOUR = ENVS[host.q?.get('env')] ? host.q.get('env') : '';
   let fxSeen = 0, seed = -1, keysSeen = -1, spawnedAt = -1, lastKill = -1e9, multi = 0, spree = 0, matchSeen = -1;
   const played = {}; // kind -> newest of my shot numbers played
@@ -620,6 +622,13 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         out.solid.push({ ...sp, pos: sp.pos.map((v, k) => v + feet[k] - at[k]) });
       }
     }
+    // what the room is saying (client/chat.mjs): a waypoint over each speaker the camera can see within 50 m, its line for a label
+    for (const b of host.chat?.bubbles() ?? []) {
+      const o = b.slot === shown ? null : view.fighter(b.slot);
+      if (!o?.live || o.dead) continue;
+      const head = [o.pos[0] + o.vel[0] * dt, o.pos[1] + view.map().body.top + 0.35, o.pos[2] + o.vel[2] * dt]; // (over its head, whatever the map makes its height)
+      if (Math.hypot(head[0] - cam[0], head[1] - cam[1], head[2] - cam[2]) < 50 && sees(view, cam, head)) out.markers.push({ pos: head, kind: 'say', lines: b.lines });
+    }
     // sprites: the objective's, the pads' guns, then what glows
     const solid = out.solid;
     for (const p of view.pads()) {
@@ -666,6 +675,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     // the tracker's dots last: the waypoints' room and the renderer's MAX_RECT are taken from the end
     rects.push(...kitRects, ...blips);
     // the objective's waypoints over everything, through walls, with the camera as it is drawn (not over the board)
+    said = 0;
     if (out.markers.length && st === 2 && !(h.state === L.H_OVER || (held.has('Tab') && h.live))) {
       const mr = markerRects(out.markers, { cam, yaw: camYaw, pitch: camPitch, zoom }, f);
       rects = rects.slice(0, Math.max(0, MAX_RECT - mr.length)).concat(mr);
@@ -699,6 +709,15 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     const placed = [];
     for (const m of markers) {
       const [px, py, depth] = project(cv, W, H, m.pos);
+      // a line of chat: over its speaker's head while that is on the screen, on a dark backing, with no mark or distance
+      if (m.kind === 'say') {
+        const box = depth > 0.3 && px >= 0 && px < W ? bubbleAt(px, py, m.lines, { hudX: renderer.hudX, hudY: renderer.hudY, hs: HS, cols: COLS, rows }) : null;
+        if (!box) continue;
+        out.push([...box.rect, 0.04, 0.05, 0.09, 0.7]);
+        m.lines.forEach((l, k) => put(text, COLS, box.col + ((box.w - l.length) >> 1), box.row + k, l, C.WHITE));
+        said++;
+        continue;
+      }
       let x = (px - renderer.hudX) / HS, y = (py - renderer.hudY) / HS;
       // behind the eye (or level with it): the edge on the side it's on, halfway down
       if (depth < 0.3) { x = px < W / 2 ? x0 : x1; y = 100; }
@@ -911,7 +930,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     capture: (scale = 2) => (last ? capturePng(renderer, u8, last, scale) : null),
     // for the gates: in a team mode, mode carries the scores, me its team and carry, and kit what the kit module shows them
     state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((f) => f.text),
-      team: me?.team ?? -1, kit: AMC[view.mode().mode]?.state?.(view) ?? null }),
+      team: me?.team ?? -1, kit: AMC[view.mode().mode]?.state?.(view) ?? null, said }),
     get locked() { return locked; },
   };
 }

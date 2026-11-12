@@ -11,8 +11,12 @@
 // --map m plays a map from outside the build (a name in maps/ or a
 // directory): packed, laid by the relay's referee, the bot host and the page
 // in their sims (map_load), and named in every hello's hash.
-//   node net/run-arena.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k] [--map m] [--res 320x200: the page's]
-//                          [--port 4433: the relay's, its native door the next]
+// --ws opens the relay's WebSocket door (TCP, on the relay's own number) and
+// forces every page onto it (?ws=1), beside the bots on the native door: the
+// gate then wants each page's session to be a WebSocket's, no datagram
+// dropped behind a backlog, and no repair sent to one, since TCP loses nothing.
+//   node net/run-arena.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k] [--map m] [--res 320x200: the page's] [--ws]
+//                          [--port 4433: the relay's, its native door the next] [--web 0: the page server's, any free one by default]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -32,7 +36,8 @@ const shots = opt('shots', '1') !== '0';
 const mode = opt('mode', '') === '' ? null : Number(opt('mode', ''));
 const seed = mode === null ? 7 : forcedSeed(mode);
 const mapName = opt('map', '');
-const tag = (mode === null ? 'arena' : `arena-${L.MODES[mode].name.toLowerCase().replace(/ /g, '')}`) + (mapName ? `-${mapName.split('/').filter(Boolean).pop()}` : '');
+const ws = argv.includes('--ws');
+const tag = (mode === null ? 'arena' : `arena-${L.MODES[mode].name.toLowerCase().replace(/ /g, '')}`) + (mapName ? `-${mapName.split('/').filter(Boolean).pop()}` : '') + (ws ? '-ws' : '');
 const port = Number(opt('port', 4433));
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 const LOCAL_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -51,7 +56,7 @@ mkdirSync('traces', { recursive: true });
 const summaryPath = `traces/${tag}.relay.json`;
 rmSync(summaryPath, { force: true });
 const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-threaded-gc', 'net/relay.ts', '--port', String(port), '--seed', String(seed),
-  '--native-port', String(port + 1), '--wasm', 'build/arena/game.wasm', ...mapArgs, '--duration', String(seconds + 40), '--summary', summaryPath, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
+  '--native-port', String(port + 1), ...(ws ? ['--ws-port', String(port)] : []), '--wasm', 'build/arena/game.wasm', ...mapArgs, '--duration', String(seconds + 40), '--summary', summaryPath, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
 await new Promise((ok) => setTimeout(ok, 1500));
 const botsPath = `traces/${tag}.bots.json`;
 rmSync(botsPath, { force: true });
@@ -61,13 +66,13 @@ const botsDone = bots ? new Promise((ok) => bots.once('exit', ok)) : null;
 
 const require = createRequire(import.meta.url);
 const { chromium } = (() => { for (const n of ['playwright', 'playwright-core']) { try { return require(n); } catch { /* next */ } } throw new Error('playwright not found'); })();
-const { server, port: webPort } = await serve();
+const { server, port: webPort } = await serve({ port: Number(opt('web', 0)) });
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || (existsSync(LOCAL_CHROMIUM) ? LOCAL_CHROMIUM : undefined),
   args: ['--no-sandbox', '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--autoplay-policy=no-user-gesture-required'],
 });
 const pages = [];
-const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', res: opt('res', '320x200'), ...(mapFile ? { map: `../${mapFile}` } : {}) });
+const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', res: opt('res', '320x200'), ...(mapFile ? { map: `../${mapFile}` } : {}), ...(ws ? { ws: '1' } : {}) });
 const report = { bots: nbots, chrome, seconds, impair: impair || 'none', mode: mode === null ? 'rotation' : L.MODES[mode].name, seed, screenshots: [], kills: [], errors: [] };
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(0);
@@ -93,7 +98,7 @@ try {
   }
   process.stderr.write('\n');
   const end = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.state())));
-  report.chromeState = end.map((s) => ({ slot: s.slot, kills: s.me?.kills, deaths: s.me?.deaths, behind: s.clState !== 2, feed: s.feed, mode: s.mode?.mode, match: s.match?.hole,
+  report.chromeState = end.map((s) => ({ slot: s.slot, transport: s.transport, kills: s.me?.kills, deaths: s.me?.deaths, behind: s.clState !== 2, feed: s.feed, mode: s.mode?.mode, match: s.match?.hole,
     zombie: s.me?.zombie, rung: s.me?.rung, points: s.me?.points, humans: s.mode?.humans, zombies: s.mode?.zombies,
     team: s.team, carry: s.me?.carry, score: s.mode?.score, target: s.mode?.target, teamWin: s.mode?.teamWin, teamN: s.mode?.teamN, kit: s.kit }));
   report.chromeHashes = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.hashes.length)));
@@ -106,7 +111,7 @@ try {
   await new Promise((ok) => setTimeout(ok, 1500));
 }
 const r = existsSync(summaryPath) ? JSON.parse(readFileSync(summaryPath, 'utf8')) : null;
-report.relay = r && { sessions: r.sessions, compared: r.compared, agreed: r.agreed, mismatches: r.mismatches, keys: r.keys, repairs: r.repairs, downKBpsPerSession: r.downKBpsPerSession, upKBpsPerSession: r.upKBpsPerSession, tickBytes: r.tickBytes };
+report.relay = r && { sessions: r.sessions, doors: r.doors, compared: r.compared, agreed: r.agreed, mismatches: r.mismatches, keys: r.keys, repairs: r.repairs, downKBpsPerSession: r.downKBpsPerSession, upKBpsPerSession: r.upKBpsPerSession, tickBytes: r.tickBytes };
 const b = existsSync(botsPath) ? JSON.parse(readFileSync(botsPath, 'utf8')) : null;
 report.botHost = b && { joined: b.joined, rejected: b.rejected, errors: b.errors, cpuPctOfOneCore: b.cpuPctOfOneCore, meanStepMs: b.world.meanStepMs, worstStepMs: b.world.worstStepMs,
   kills: b.world.players.reduce((n, p) => n + p.kills, 0), downKBpsEach: b.sessions.length ? Number((b.sessions.reduce((n, x) => n + x.downKB, 0) / b.sessions.length / seconds).toFixed(1)) : 0,
@@ -131,6 +136,9 @@ const gate = {
   modePlayed: mode === null || ((!nbots || report.botHost?.mode?.mode === mode) && (report.chromeState || []).every((s) => s.mode === mode)),
   sidesDealt: !teamed || ((!two || both(report.sides)) && (report.chromeState || []).every((s) => (s.team === 0 || s.team === 1) && (!two || both(s.teamN)))),
   noErrors: report.errors.length === 0,
+  // --ws: every page came in by the WebSocket door, which dropped no datagram and was sent no repair
+  overWebSocket: !ws || ((report.chromeState || []).every((s) => s.transport === 'websocket') && !!r && r.doors.websocket.sessions === chrome
+    && r.doors.websocket.dropped === 0 && r.doors.websocket.repairs === 0 && r.doors.native.sessions === nbots),
 };
 report.gate = { ...gate, pass: Object.values(gate).every(Boolean) };
 writeFileSync(`traces/${tag}.json`, JSON.stringify(report, null, 2) + '\n');
