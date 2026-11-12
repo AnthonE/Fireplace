@@ -34,7 +34,8 @@ export function plan(key, prefix, name, { root = ROOT, layout, rust = false } = 
   if (L.MINIGAMES.some((m) => m.key === key)) throw new Error(`a minigame is already called ${key}`);
   if (L.MINIGAMES.some((m) => m.prefix === prefix)) throw new Error(`${L.MINIGAMES.find((m) => m.prefix === prefix).key} has the prefix ${prefix}`);
   if (L.MINIGAMES.some((m) => m.name === name)) throw new Error(`a minigame is already called ${name}`);
-  if (Object.keys(L).some((k) => k.startsWith(`${P}_`)) || Object.keys(L.MG_CONSTS).some((k) => k.startsWith(`${P}_`))) throw new Error(`names starting ${P}_ are taken: pick another prefix`);
+  // the assembler spreads the arena's and flight's constants over the minigames', so a name of theirs wins silently
+  if ([L, L.MG_CONSTS, L.AM_CONSTS || {}, L.FLIGHT_CONSTS || {}].some((o) => Object.keys(o).some((k) => k.startsWith(`${P}_`)))) throw new Error(`names starting ${P}_ are taken: pick another prefix`);
   if (`MG_${K}` in L) throw new Error(`MG_${K} is taken`);
   for (const f of [`src/mg/${key}.wat`, `src/mg/${key}.mjs`, `client/mg/${key}.mjs`, `test/mg-${key}.test.mjs`, `rust/mg/${key}`]) if (existsSync(join(root, f))) throw new Error(`${f} is there already`);
   const id = L.NMG;

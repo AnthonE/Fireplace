@@ -46,9 +46,11 @@
   "mg-gale",
   "mg-gates",
   "mg-glass",
+  "mg-herd",
   "mg-hill",
   "mg-honey",
   "mg-hoops",
+  "mg-jump",
   "mg-kart",
   "mg-lava",
   "mg-light",
@@ -62,6 +64,7 @@
   "mg-pinball",
   "mg-potato",
   "mg-race",
+  "mg-relay",
   "mg-rope",
   "mg-seesaw",
   "mg-slap",
@@ -73,6 +76,7 @@
   "mg-tag",
   "mg-thinice",
   "mg-tilt",
+  "mg-traffic",
   "mg-trails",
   "mg-trap",
   "mg-tug",
@@ -129,6 +133,10 @@
   "bowl": "ROLL FROM BEHIND THE FOUL LINE  A POINT A PIN  ALL TEN A STRIKE",
   "fallball": "ROLL INTO A GIANT BALL TO SHOVE IT  TEAM UP TO MOVE IT",
   "tug": "ON THE ROPE ROLL AWAY FROM THE MUD  HOP OVER TO KNOCK THEIRS OFF",
-  "minigolf": "AIM WITH THE MOUSE  HOLD SPACE TO CHARGE  LET GO TO PUTT"
+  "minigolf": "AIM WITH THE MOUSE  HOLD SPACE TO CHARGE  LET GO TO PUTT",
+  "relay": "RUN A BATON TO THE FAR ZONE  HAND IT ON  BUMP THEIR CARRIERS",
+  "traffic": "CROSS THE ROAD AND BACK  A POINT A CROSSING  MIND THE TRAFFIC",
+  "jump": "TAKE THE PADS  HOP LATE ON THE BOARD  LAND ON SAND  BEST JUMP WINS",
+  "herd": "GET BEHIND A SHEEP  DRIVE IT INTO YOUR PEN  CLICK TO BARK"
  }
 }

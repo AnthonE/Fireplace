@@ -63,6 +63,10 @@
 #include "mg/fallball.wat"
 #include "mg/tug.wat"
 #include "mg/minigolf.wat"
+#include "mg/relay.wat"
+#include "mg/traffic.wat"
+#include "mg/jump.wat"
+#include "mg/herd.wat"
 
 ;; ---- the room and the round
 
