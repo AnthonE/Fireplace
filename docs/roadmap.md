@@ -11,6 +11,9 @@ not measured yet, it says so.
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
 Territories, VIP, Assault) and Party's 49 minigames (bumper balls, once a
 game of its own, among them as Swiss Roll). Fireplace plays them in turn.
+Two more arena modes play only on a map that names them, each gated online
+on its own map: Crossroads, and Obby, an obstacle course over the map's
+parts ([arena.md](arena.md#obby)).
 Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
 on Fireplace's playlist between party and golf.
@@ -53,7 +56,9 @@ each) took 72 to 93 minutes apiece, all four at once.
 - No secrets: every machine holds the whole world.
 - Physics: spheres, Quake-style bodies against a heightfield and up to 2048
   boxes (512 until Roblox places needed more: [docs/roblox.md](roblox.md)),
-  and whatever a minigame's ground and push hooks describe.
+  256 of which may be parts that kill, throw, slide, carry or are climbed
+  ([arena.md](arena.md#parts-boxes-that-do-something)), and whatever a
+  minigame's ground and push hooks describe.
 - 125 Hz. A lower rate (60 Hz halves CPU and bandwidth) means a per-sim tick
   length the relay reads at the hello; do it only for a game that measures
   over budget.
@@ -66,7 +71,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
 | Party (the ball) | 49 | 60 | with teams: a relay race, capture the flag on balls |
-| Arena (the fighter) | 17 | 24 | Slayer at run time, Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a Tower of Hell obby, a zombie horde |
+| Arena (the fighter) | 18 | 24 | Slayer at run time, Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a tower obby (Obby is built: a course is a map now, so a tower is one to draw), a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |
 | Vehicle (new) | 0 | 12 | a kart race, balloon battle, bumper cars, car soccer 64 v 64, boats, hover racing, a demolition derby |

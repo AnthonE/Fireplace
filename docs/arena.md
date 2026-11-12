@@ -472,7 +472,8 @@ start; the finish's time, the clock cut once, the end with everyone home,
 the places; a rifle butt doing nothing; a forced seed on Box Canyon, which
 has no course, running to the clock; the client module's lines and marker;
 8 AI fighters on the debug build through two matches. Online on the course
-(`net/run-arena.mjs --map obby`, a CI step): OBBY_GATE.
+(`net/run-arena.mjs --map obby`, a CI step): 64 AI fighters for 60 s, 3,635 interval hashes checked by
+the referee, all equal, 0.06 ms a step.
 
 ## Teams
 
