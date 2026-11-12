@@ -8,7 +8,7 @@
 //   v.ground({ W, H, ox, oz, hgt, srf })   the editor's images (hgt u16 in 1/256 m)
 //   v.map(result)                          compileSpec's result: boxes and groups
 //   v.marks({ solid, glow, zone })         sprites and zones, as the renderer takes them
-//   v.draw({ target, yaw, pitch, dist })   draws a frame
+//   v.draw({ target, yaw, pitch, dist, tick })   draws a frame, the movers where they are at `tick`
 //
 // With `present: false` it draws into a texture and copies the picture onto
 // the canvas as a 2D image: slower, and what headless Chrome needs (on
@@ -75,16 +75,18 @@ export async function createMapView(canvas, { present = true } = {}) {
     // A frame from the camera: `dist` metres from `target`, looking at it
     // along `yaw` (0 towards +x) and `pitch` (down is negative). The
     // renderer's pitch is a shear, not a turn, so the target stays mid-screen
-    // and steep views stretch; it holds to 1.3.
-    async draw({ target, yaw, pitch, dist }) {
+    // and steep views stretch; it holds to 1.3. client/map-build.mjs
+    // orbitEye() is this camera for the editor's picking and its overlay.
+    // The movers stand where they are at `tick` (the wall clock's, a tick
+    // each 8 ms, unless given).
+    async draw({ target, yaw, pitch, dist, tick = performance.now() * L.TICK_HZ / 1000 }) {
       const r = await sized();
       if (!groundSent) { r.setTerrain(u8); groundSent = true; }
       if (!mapSent) { r.setMap(boxes); mapSent = true; }
       const cp = Math.cos(pitch), sp = Math.sin(pitch);
       const cam = [target[0] - Math.cos(yaw) * cp * dist, target[1] - sp * dist, target[2] - Math.sin(yaw) * cp * dist];
       const s = {
-        // the movers run on the wall clock, a tick each 8 ms
-        cam, yaw, pitch, zoom: 1, time: performance.now() / 1000, tick: performance.now() * L.TICK_HZ / 1000, dt: 0, dtPred: 0, proj: L.PROJ, slot: 999,
+        cam, yaw, pitch, zoom: 1, time: performance.now() / 1000, tick, dt: 0, dtPred: 0, proj: L.PROJ, slot: 999,
         solid: marks.solid, glow: marks.glow, beams: [], rects: [], tracker: null, text, graph: null, marker: 0, hurt: 0,
         scope: false, sides: 0, zone: marks.zone, crosshair: 7, gap: 0,
       };

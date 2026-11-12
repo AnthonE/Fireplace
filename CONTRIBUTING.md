@@ -247,7 +247,8 @@ npm ci && npm run build      # once
 node tools/serve.mjs         # then open http://127.0.0.1:8080/client/map-editor.html
 ```
 
-Start from Box Canyon, Skyways or an empty square. Raise, lower, flatten
+Start from Box Canyon, Skyways, an empty square or **a new obby** (a small
+obstacle course that plays as it is). Raise, lower, flatten
 and smooth the ground and paint it grass, rock, sand or metal; drag out
 boxes for walls, floors and roofs; place spawns, weapon pads, teleporters,
 the two flags, the skull, King of the Hill's hills and, for Dogfight, the
@@ -257,7 +258,13 @@ panel checks the map with the build's own compiler as you
 go and says what it would refuse; the header says whether it is
 **playable**, and **▶ play it** opens it in the arena, you against AI
 fighters, in a new tab. **3D** (or **both**) shows it as the game
-draws it: drag to turn, right-drag to move, the wheel to zoom. Save writes the three files: in Chrome,
+draws it, and is where a course is built: click a box to pick it, drag it
+to move it (Shift up and down, Ctrl a copy), drag the dots on its faces to
+size it, Ctrl+D for another; drag anything else to turn, right-drag to
+move, the wheel to zoom. A picked box's panel says **what it does**: kill,
+bounce, ice, conveyor, ladder, an obby's checkpoint or finish; the map's
+says **how it plays**: its mode (obby for an obstacle course), movement,
+body and void ([docs/arena.md](docs/arena.md#building-in-3d)). Save writes the three files: in Chrome,
 pick a new folder in `maps/`; elsewhere they download and you put them
 there. Then play it with bots:
 

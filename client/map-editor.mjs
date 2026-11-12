@@ -1,5 +1,5 @@
-// The map editor: a map for the arena or Dogfight, drawn from above in the
-// browser. It reads and writes what the build reads, a map directory
+// The map editor: a map for the arena or Dogfight, drawn from above and
+// built in 3D in the browser. It reads and writes what the build reads, a map directory
 // (map.json, height.png, surface.png; tools/map.mjs has the format), and runs
 // the build's own compiler (tools/map-compile.mjs) on every change, so what
 // it calls fine is what `npm run build` takes. The sim never sees the page:
@@ -10,10 +10,17 @@
 // The ground is held as the compiler holds it, a u16 a sample in 1/256 m
 // (16-bit height.png, scale 1/256, base 0), with a surface index beside it.
 // Work in progress is kept in this browser (localStorage) between visits.
+//
+// The 3D view is the arena's renderer on the map (client/map-view.mjs), and
+// a place to build: a box is picked by the ray through the pointer, dragged
+// across the ground, raised, sized by its faces, copied, and given a part
+// (what kills, throws, slides, carries, climbs, an obby's checkpoints and
+// finish). Its maths, the parts' reading and writing, the course's check
+// and the starter obby are client/map-build.mjs, which has no page in it.
 import * as L from '../src/layout.mjs';
 import {
   compileSpec, place, placePoint, half, SURFACES, SURFACE_RGB, MATERIALS, WEAPONS, GROUND,
-  formatSpec, defaultFlags, defaultBall, defaultHills, materialWord, materialOf, packMap,
+  formatSpec, defaultFlags, defaultBall, defaultHills, materialWord, materialOf, packMap, MAP_MODES,
 } from '../tools/map-compile.mjs';
 import { decode, encode } from '../tools/png-codec.mjs';
 import { readRoblox } from '../tools/rbx-file.mjs';
@@ -23,6 +30,11 @@ import { readVox } from '../tools/vox-file.mjs';
 import { voxToMap } from '../tools/vox-map.mjs';
 import { zip } from '../tools/zip.mjs';
 import { createMapView } from './map-view.mjs';
+import {
+  orbitEye, screenOf, rayAt, polygonOf, segmentOf, pickRay, rayPlane, rayGround, alongAxis, snap, movedBox, facedBox, dropBox,
+  worldBox, setWorldBox, moveOf, movedAt, shifted, readPart, setKind, setPartField, nextStage, beltOf, beltVelocity, beltWorld, beltLocal,
+  PART_NAMES, PART_MARK, PART_WHAT, ROBLOX_MOVEMENT, ROBLOX_BODY, ARENA_BODY, needsSides, courseOf, partCounts, starterObby,
+} from './map-build.mjs';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view'), ctx = canvas.getContext('2d');
@@ -45,6 +57,8 @@ const st = {
   folder: 'my-map', dir: null, // a FileSystemDirectoryHandle once saved to or opened from one
   sel: null, tool: 'select', xray: false, dirty: false,
   result: null, error: null,
+  size: [4, 1, 4], // the last box touched: what a new one dropped in 3D is sized like
+  dup: null, // the last copy made and where its original was: Ctrl+D again repeats the step
 };
 // Each state of the ground gets a number of its own, so undo can tell one
 // from another and copy the ground only when it changed.
@@ -74,7 +88,8 @@ function adopt(spec, images, folder, dir = null) {
   }
   // from here on the images are what this page writes
   spec.terrain = Object.assign(t, { height: 'height.png', scale: 0.00390625, base: 0, surface: 'surface.png' });
-  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, rev: ++revs, report: null, brief: null });
+  Object.assign(st, { spec, W, H, ox: t.origin[0], oz: t.origin[1], hgt, srf, folder, dir, sel: null, dup: null, rev: ++revs, report: null, brief: null });
+  asked++;
   undo.length = 0; redo.length = 0;
   paintTerrain();
   fit();
@@ -111,7 +126,7 @@ function surfaceAt(x, z) {
 // body no higher than `top` (the sim's $stand; a spawn's or pad's top).
 function stand(x, z, top = GROUND) {
   let floor = ground(x, z);
-  for (const { box: b } of allBoxes()) if (x - 0.5 < b[3] && x + 0.5 > b[0] && z - 0.5 < b[5] && z + 0.5 > b[2] && b[4] <= top) floor = Math.max(floor, b[4]);
+  for (const { box: b, part } of allBoxes()) if (!part?.ghost && x - 0.5 < b[3] && x + 0.5 > b[0] && z - 0.5 < b[5] && z + 0.5 > b[2] && b[4] <= top) floor = Math.max(floor, b[4]);
   return floor;
 }
 
@@ -124,7 +139,7 @@ function structBoxes(s, si) {
     try { box = place(b, at, turn); } catch { box = b.slice(0, 6); }
     const name = (s.tint && s.tint[b[6]]) || b[6] || 'metal';
     const m = materialOf(Math.max(0, materialWord(name)));
-    return { box, mat: m.look, rgb: m.rgb || MAT_RGB[m.look] || MAT_RGB[0], s: si, b: bi };
+    return { box, mat: m.look, rgb: m.rgb || MAT_RGB[m.look] || MAT_RGB[0], s: si, b: bi, part: readPart(b[7]) };
   });
 }
 const allBoxes = () => (st.spec.structures || []).flatMap(structBoxes);
@@ -142,15 +157,15 @@ function setBoxWorld(s, b, [x0, z0, x1, z1]) {
 }
 const boxList = (s) => (s.prefab ? st.spec.prefabs[s.prefab] : s.boxes);
 
-// Move structure s by (dx, dz) in the world: its "at" if it has one or is a
-// prefab, else its boxes and teleporters themselves.
-function moveStruct(s, dx, dz) {
+// Move structure s by (dx, dz), and dy up, in the world: its "at" if it has
+// one or is a prefab, else its boxes and teleporters themselves.
+function moveStruct(s, dx, dz, dy = 0) {
   if (s.prefab || s.at || s.turn) {
     const at = s.at || [0, 0, 0];
-    s.at = [tidy(at[0] + dx), at[1], tidy(at[2] + dz)];
+    s.at = [tidy(at[0] + dx), tidy(at[1] + dy), tidy(at[2] + dz)];
   } else {
-    for (const b of s.boxes) { b[0] = tidy(b[0] + dx); b[3] = tidy(b[3] + dx); b[2] = tidy(b[2] + dz); b[5] = tidy(b[5] + dz); }
-    for (const tp of s.teleporters || []) for (const p of [tp.from, tp.to]) { p[0] = tidy(p[0] + dx); p[2] = tidy(p[2] + dz); }
+    for (const b of s.boxes) { b[0] = tidy(b[0] + dx); b[3] = tidy(b[3] + dx); b[2] = tidy(b[2] + dz); b[5] = tidy(b[5] + dz); b[1] = tidy(b[1] + dy); b[4] = tidy(b[4] + dy); }
+    for (const tp of s.teleporters || []) for (const p of [tp.from, tp.to]) { p[0] = tidy(p[0] + dx); p[2] = tidy(p[2] + dz); p[1] = tidy(p[1] + dy); }
   }
 }
 
@@ -202,15 +217,19 @@ function moveTo(sel, x, z) {
   }
 }
 
+// The flags, the skull and the hills are the team modes': a map that plays one
+// mode every match, that mode without sides (an obby), shows only those it wrote.
+const sided = () => needsSides(st.spec);
+const shown = (k) => sided() || !!st.spec[k];
 // Every point on the map that can be picked, as drawn: { sel, x, z }.
 function points() {
   const sp = st.spec, out = [];
   (sp.spawns || []).forEach((s, i) => out.push({ sel: { kind: 'spawn', i }, x: s[0], z: s[1] }));
   (sp.pads || []).forEach((p, i) => out.push({ sel: { kind: 'pad', i }, x: p.at[0], z: p.at[1] }));
   (sp.teleporters || []).forEach((t, i) => { out.push({ sel: { kind: 'tele', i, end: 'from' }, x: t.from[0], z: t.from[2] }); out.push({ sel: { kind: 'tele', i, end: 'to' }, x: t.to[0], z: t.to[2] }); });
-  flagsNow().forEach((f, k) => out.push({ sel: { kind: 'flag', k }, x: f[0], z: f[1] }));
-  const b = ballNow(); out.push({ sel: { kind: 'ball' }, x: b[0], z: b[1] });
-  hillsNow().forEach((h, i) => out.push({ sel: { kind: 'hill', i }, x: h[0], z: h[1] }));
+  if (shown('flags')) flagsNow().forEach((f, k) => out.push({ sel: { kind: 'flag', k }, x: f[0], z: f[1] }));
+  const b = ballNow(); if (shown('ball')) out.push({ sel: { kind: 'ball' }, x: b[0], z: b[1] });
+  if (shown('hills')) hillsNow().forEach((h, i) => out.push({ sel: { kind: 'hill', i }, x: h[0], z: h[1] }));
   (sp.race || []).forEach((g, i) => out.push({ sel: { kind: 'gate', i }, x: g[0], z: g[2] }));
   return out;
 }
@@ -239,21 +258,30 @@ function restore(from, to) {
   st.spec = JSON.parse(s.spec);
   const terrain = s.rev !== st.rev;
   st.hgt.set(s.hgt); st.srf.set(s.srf); st.rev = s.rev;
-  st.sel = null;
+  // the pick as it was then, if it names a box that is there
+  const was = s.sel;
+  st.sel = was?.kind === 'box' && boxList(st.spec.structures?.[was.s] || {})?.[was.b] ? was : null;
+  st.dup = null;
   if (terrain) paintTerrain();
   changed();
   renderSide();
 }
 
 // ---- after any edit: check it, keep a draft, draw
-let checkTimer = 0, draftTimer = 0;
+// (while something is dragged the check runs every frame, so the 3D view
+// follows the hand; else a moment after the last change)
+let checkTimer = 0, draftTimer = 0, checkQueued = false, unchecked = false;
 function changed() {
-  clearTimeout(checkTimer); checkTimer = setTimeout(check, 120);
+  clearTimeout(checkTimer);
+  unchecked = true;
+  if (!drag && !drag3?.edit) checkTimer = setTimeout(check, 120);
+  else if (!checkQueued) { checkQueued = true; requestAnimationFrame(() => { checkQueued = false; check(); }); }
   clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 1000);
   st.dirty = true;
   draw();
 }
 function check() {
+  unchecked = false;
   try { st.result = compileSpec(st.spec, images(), 'map.json'); st.error = null; }
   catch (e) { st.result = null; st.error = String(e.message || e).replace(/^map\.json: /, ''); }
   if (st.result) map3 = true;
@@ -282,14 +310,18 @@ function loadDraft() {
 }
 
 // ---- opening and saving
+// (a map fetched is dropped if another was asked for or taken meanwhile: the
+// page's own first map, still on its way, must not land on one just opened)
+let asked = 0;
 async function openBuiltIn(name) {
-  const base = `../maps/${name}/`;
+  const base = `../maps/${name}/`, mine = ++asked;
   const spec = await (await fetch(base + 'map.json')).json();
   const t = spec.terrain || {};
   const png = async (f) => decode(await (await fetch(base + f)).arrayBuffer(), inflate);
   const imgs = { height: await png(t.height || 'height.png') };
   if (t.surface) imgs.surface = await png(t.surface);
-  adopt(spec, imgs, ['canyon', 'skyways', 'crossroads'].includes(name) ? `my-${name}` : name);
+  if (mine !== asked) return;
+  adopt(spec, imgs, ['canyon', 'skyways', 'crossroads', 'obby', 'lifts'].includes(name) ? `my-${name}` : name);
   say(`opened ${spec.name || name}; saving writes a new folder, so the original stays as it is`);
 }
 
@@ -448,6 +480,16 @@ function newMap(size) {
   say(`a new ${size} m map: raise some ground, add boxes, spawns and pads`);
 }
 
+// A new obby: the starter course (client/map-build.mjs starterObby), which
+// compiles and plays as it is, over flat rock.
+function newObby() {
+  const { spec, ground: g } = starterObby(), [W, H] = g.size;
+  const surf = new Uint8Array(W * H * 3);
+  for (let i = 0; i < W * H; i++) surf.set(SURFACE_RGB[g.surface], 3 * i);
+  adopt(spec, { height: { width: W, height: H, channels: 1, depth: 16, data: new Uint16Array(W * H).fill(g.level * 256) }, surface: { width: W, height: H, channels: 3, depth: 8, data: surf } }, 'my-obby');
+  say('a new obby: a start, four stages, a ladder to the finish, lava under it. Play it, then make it yours: pick a block in 3D and drag it, Ctrl+D for another');
+}
+
 // ---- drawing
 const terr = document.createElement('canvas'), tctx = terr.getContext('2d');
 // The ground from above: its surface's colour, lit from the north-west, a
@@ -500,17 +542,50 @@ function frame() {
   // boxes, low tops first, so a roof covers what is under it (x-ray: outlines only)
   const boxes = allBoxes().sort((a, c) => a.box[4] - c.box[4]);
   for (const x of boxes) {
+    if (x.part?.ghost) continue; // no box: drawn with the parts, over everything
     const [x0, y0] = S(x.box[0], x.box[2]), [x1, y1] = S(x.box[3], x.box[5]);
     const c = x.rgb;
     if (!st.xray) { ctx.fillStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, 0.92)`; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
     ctx.strokeStyle = st.xray ? `rgb(${c.map((v) => Math.min(255, v + 60)).join(',')})` : 'rgba(0, 0, 0, 0.55)';
     ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
   }
+  // the parts, as what they are: an outline in the kind's colour, its name
+  // when there is room, a belt's arrow; a ghost (a part with no box) a
+  // dashed, see-through volume
+  const named = [], first = (x) => (x.part.kind === 'checkpoint' || x.part.kind === 'finish' ? 0 : 1);
+  for (const x of boxes.filter((q) => q.part).sort((a, c) => first(a) - first(c))) {
+    const [x0, y0] = S(x.box[0], x.box[2]), [x1, y1] = S(x.box[3], x.box[5]), w = x1 - x0, h = y1 - y0;
+    const mark = PART_MARK[x.part.kind] || '#ff00ff';
+    if (x.part.ghost) { ctx.fillStyle = mark + '38'; ctx.fillRect(x0, y0, w, h); ctx.setLineDash([5, 3]); }
+    ctx.strokeStyle = mark; ctx.lineWidth = 2; ctx.strokeRect(x0 + 1, y0 + 1, w - 2, h - 2); ctx.setLineDash([]);
+    const text = partLabel(x.part);
+    ctx.font = 'bold 9px ui-monospace, monospace';
+    const tw = ctx.measureText(text).width + 6;
+    // its name in its middle, or over a box too low for it; a floor much
+    // bigger than its name (lava under a course) has it in its corner, clear of what stands on it
+    const big = w > 6 * tw && h > 90;
+    const cx = big ? Math.max(x0, 0) + tw / 2 + 5 : (x0 + x1) / 2, cy = big ? Math.max(y0, 0) + 11 : h >= 13 ? (y0 + y1) / 2 : y0 - 7;
+    if (x.part.kind === 'conveyor' && Array.isArray(x.part.velocity)) {
+      // its arrow, the way it carries: beside its name where the box has the room, else under it
+      const v = beltWorld(x.part.velocity, st.spec.structures[x.s].turn), n = Math.hypot(v[0], v[1]);
+      if (n > 0) {
+        const ux = v[0] / n, uy = v[1] / n, across = Math.abs(uy) * w + Math.abs(ux) * h, off = across >= 34 ? 11 : 0;
+        let px = -uy, py = ux;
+        if (py < 0 || (py === 0 && px < 0)) { px = -px; py = -py; }
+        arrow2((x0 + x1) / 2 + px * off, (y0 + y1) / 2 + py * off, ux, uy, Math.max(10, Math.min(60, (Math.abs(ux) * w + Math.abs(uy) * h) * 0.7)), mark);
+      }
+    }
+    if (w * 3 >= tw && h >= 4 && z >= 1.5 && free(named, cx, cy, tw, 12)) {
+      ctx.fillStyle = mark; ctx.fillRect(cx - tw / 2, cy - 6, tw, 12);
+      ctx.fillStyle = '#10131c'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, cx, cy + 0.5); ctx.textBaseline = 'alphabetic';
+    }
+  }
   // the selected structure, and its box with handles
   if (st.sel?.kind === 'box') {
-    const mine = boxes.filter((x) => x.s === st.sel.s);
+    // (dashed round everything a drag would move: the box alone, or its whole structure)
+    const mine = boxes.filter((x) => x.s === st.sel.s), moves = wholeFor(null, st.sel.s);
     ctx.strokeStyle = '#ffcf5a'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
-    for (const x of mine) { const [x0, y0] = S(x.box[0], x.box[2]), [x1, y1] = S(x.box[3], x.box[5]); ctx.strokeRect(x0, y0, x1 - x0, y1 - y0); }
+    for (const x of moves ? mine : []) { const [x0, y0] = S(x.box[0], x.box[2]), [x1, y1] = S(x.box[3], x.box[5]); ctx.strokeRect(x0, y0, x1 - x0, y1 - y0); }
     ctx.setLineDash([]);
     const one = mine.find((x) => x.b === st.sel.b);
     if (one) {
@@ -546,7 +621,7 @@ function frame() {
   }
   // the hills, the skull, the flags
   const defaults = { hills: !st.spec.hills, ball: !st.spec.ball, flags: !st.spec.flags };
-  hillsNow().forEach((h, i) => {
+  if (shown('hills')) hillsNow().forEach((h, i) => {
     const [x, y] = S(h[0], h[1]);
     if (defaults.hills) ctx.setLineDash([3, 4]);
     ring(x, y, h[3] * z, '#c6e05a', same(st.sel, { kind: 'hill', i }));
@@ -554,10 +629,12 @@ function frame() {
     label(x, y + 14, `hill ${i + 1}`, '#c6e05a');
   });
   const ball = ballNow(), [bx, by] = S(ball[0], ball[1]);
-  dot(bx, by, 6, '#f2f2f2', same(st.sel, { kind: 'ball' }), defaults.ball);
-  label(bx, by + 15, 'skull', '#f2f2f2');
+  if (shown('ball')) {
+    dot(bx, by, 6, '#f2f2f2', same(st.sel, { kind: 'ball' }), defaults.ball);
+    label(bx, by + 15, 'skull', '#f2f2f2');
+  }
   const flags = flagsNow();
-  flags.forEach((f, k) => {
+  if (shown('flags')) flags.forEach((f, k) => {
     const [x, y] = S(f[0], f[1]);
     ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y + 8); ctx.lineTo(x, y - 12); ctx.stroke();
     ctx.fillStyle = TEAM[k]; ctx.globalAlpha = defaults.flags ? 0.6 : 1; ctx.beginPath(); ctx.moveTo(x, y - 12); ctx.lineTo(x + 12, y - 8); ctx.lineTo(x, y - 4); ctx.fill(); ctx.globalAlpha = 1;
@@ -575,7 +652,7 @@ function frame() {
   ctx.textBaseline = 'alphabetic';
   (st.spec.spawns || []).forEach((s, i) => {
     const [x, y] = S(s[0], s[1]);
-    dot(x, y, 5, TEAM[half(s[0], s[1], flags)], same(st.sel, { kind: 'spawn', i }), false);
+    dot(x, y, 5, TEAM[sided() ? half(s[0], s[1], flags) : 2], same(st.sel, { kind: 'spawn', i }), false);
   });
   // what the tool is doing
   if (drag?.rect) {
@@ -590,6 +667,31 @@ function frame() {
     const [x, y] = S(hover[0], hover[1]);
     ctx.strokeStyle = '#ffffffaa'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, radius() * z, 0, 7); ctx.stroke();
   }
+}
+// Whether a label w by h about (x, y) clears those already in `placed`, to which it is then added
+function free(placed, x, y, w, h) {
+  if (placed.some((r) => Math.abs(r[0] - x) < (r[2] + w) / 2 + 2 && Math.abs(r[1] - y) < (r[3] + h) / 2 + 1)) return false;
+  placed.push([x, y, w, h]);
+  return true;
+}
+// What a part is, in a word or two, for its mark in both views
+function partLabel(p) {
+  const g = p.ghost ? ' zone' : '';
+  switch (p.kind) {
+    case 'bounce': return `bounce ${p.speed ?? 14}${g}`;
+    case 'ice': return `ice${g}`;
+    case 'conveyor': return `belt ${Array.isArray(p.velocity) ? beltOf(p.velocity).speed : '?'} m/s${g}`;
+    case 'checkpoint': return `stage ${p.stage ?? '?'}${g}`;
+    default: return p.kind + g;
+  }
+}
+// An arrow through (x, y) along the unit (dx, dy), `len` px long
+function arrow2(x, y, dx, dy, len, color, c = ctx) {
+  const ax = x - dx * len / 2, ay = y - dy * len / 2, bx = x + dx * len / 2, by = y + dy * len / 2, hd = Math.min(8, len / 2.5);
+  c.strokeStyle = color; c.lineWidth = 2; c.beginPath();
+  c.moveTo(ax, ay); c.lineTo(bx, by);
+  c.moveTo(bx - (dx + dy * 0.6) * hd, by - (dy - dx * 0.6) * hd); c.lineTo(bx, by); c.lineTo(bx - (dx - dy * 0.6) * hd, by - (dy + dx * 0.6) * hd);
+  c.stroke();
 }
 function ring(x, y, r, color, on) {
   ctx.strokeStyle = on ? '#ffcf5a' : color; ctx.lineWidth = on ? 2.5 : 1.5;
@@ -617,20 +719,40 @@ function drawTele(from, to, mine, i) {
 }
 
 // ---- the 3D view (client/map-view.mjs): the arena's own renderer on the map
-// being edited, from a camera orbiting the 2D view's middle, so panning
-// either moves both. Drag turns it, right-drag (or Shift-drag) moves it, the
-// wheel zooms. Nothing is picked in it yet: picking is the 2D view's.
-const canvas3 = $('view3d');
-const cam3 = { yaw: -Math.PI / 2, pitch: -0.55, dist: 140 };
+// being edited, from a camera orbiting a point over the 2D view's middle, so
+// panning either moves both. Over it lies a 2D canvas of the editor's own
+// (the pick's outline and handles, the parts' marks, ghosts, a belt's arrow),
+// drawn through the same camera (map-build.mjs orbitEye).
+//
+// The gestures, chosen so building and looking don't fight: a press on what
+// is already picked edits it, any other press looks around.
+//   click                pick the box (or spawn, pad, flag...) under the pointer
+//   drag the picked box  move it across the ground, on the grid; Shift: up and
+//                        down; Alt: its whole structure; Ctrl: a copy of it
+//   drag a dot           a face of the picked box: size it
+//   drag the arrow       over the picked box: raise and lower it
+//   drag a picked point  put it on what is under the pointer
+//   drag anything else   turn the camera (the middle button always turns)
+//   right-drag           pan (Shift-drag off the pick too); the wheel zooms
+//   double-click, C      fly to the box
+// With the box tool a click drops a box where the pointer is, on the ground
+// or against the face under it, sized like the last; spawn, pad and hill
+// click one down the same way.
+const HELP3 = 'click picks; drag the picked box to move it (Shift up and down, Alt its structure, Ctrl a copy), its dots to size it, its arrow to raise it; drag elsewhere turns, right-drag pans, the wheel zooms, C flies to it';
+const canvas3 = $('view3d'), over = $('over3d'), octx = over.getContext('2d');
+const cam3 = { yaw: -Math.PI / 2, pitch: -0.55, dist: 140, y: null }; // y: the height it looks at (null: the ground there)
+const present3 = new URLSearchParams(location.search).get('present') !== '0';
 let view3 = null, view3Failed = false, ground3 = true, map3 = true, draw3Queued = false, drawing3 = false, again3 = false;
+// the camera of the frame on screen and the tick its movers stand at, for picking and the overlay
+let eye3 = null, frames3 = 0;
 const MODE = 'fireplace-map-editor-view';
 function setMode(m) {
   st.mode = m;
-  $('wrap').className = m;
+  $('wrap').className = m === 'split' ? m : `m${m}`;
   for (const b of $('modes').children) b.classList.toggle('on', b.dataset.mode === m);
   try { localStorage.setItem(MODE, m); } catch { /* the page works without it */ }
   if (m !== '2d' && !view3 && !view3Failed) {
-    createMapView(canvas3, { present: new URLSearchParams(location.search).get('present') !== '0' }).then((v) => { view3 = v; ground3 = map3 = true; draw3(); }).catch((e) => {
+    createMapView(canvas3, { present: present3 }).then((v) => { view3 = v; ground3 = map3 = true; draw3(); }).catch((e) => {
       view3Failed = true;
       say(`no 3D view: ${e.message || e}`);
       setMode('2d');
@@ -638,30 +760,47 @@ function setMode(m) {
   }
   draw();
 }
+// Where a point stands in the world, as the 3D view marks it: [x, y, z]
+function pos3(sel) {
+  const sp = st.spec;
+  const on = (p, up) => [p[0], stand(p[0], p[1], p[2] ?? GROUND) + up, p[1]];
+  switch (sel.kind) {
+    case 'spawn': return on(sp.spawns[sel.i], 0.1);
+    case 'pad': return on(sp.pads[sel.i].at, 0.7);
+    case 'flag': return on(flagsNow()[sel.k], 1.2);
+    case 'ball': return on(ballNow(), 0.6);
+    case 'hill': return on(hillsNow()[sel.i], 0.2);
+    case 'tele': { const p = sp.teleporters[sel.i][sel.end]; return [p[0], p[1] + (sel.end === 'from' ? 1.1 : 0.15), p[2]]; }
+    case 'gate': return sp.race[sel.i].slice(0, 3);
+  }
+  return [0, 0, 0];
+}
 // what can be placed, as sprites and zones the renderer draws: spawns a disc
 // in their side's colour, pads, flags and the skull standing, hills as the
 // game paints them, teleporters and race gates glowing, the pick bright
 function marks3() {
   const sp = st.spec, solid = [], glow = [], zone = [];
-  const flags = flagsNow();
+  const flags = flagsNow(), teams = sided();
   const side = [[0.9, 0.3, 0.25], [0.3, 0.5, 0.95], [0.85, 0.85, 0.85]];
-  for (const s of sp.spawns || []) glow.push({ pos: [s[0], stand(s[0], s[1], s[2] ?? GROUND) + 0.1, s[1]], size: 0.6, color: [...side[half(s[0], s[1], flags)], 0.9], kind: 3, minpx: 2 });
+  for (const s of sp.spawns || []) glow.push({ pos: [s[0], stand(s[0], s[1], s[2] ?? GROUND) + 0.1, s[1]], size: 0.6, color: [...side[teams ? half(s[0], s[1], flags) : 2], 0.9], kind: 3, minpx: 2 });
   for (const p of sp.pads || []) solid.push({ pos: [p.at[0], stand(p.at[0], p.at[1], p.at[2] ?? GROUND) + 0.7, p.at[1]], size: 0.55, aspect: 0.8, color: [0.9, 0.6, 0.2, 1], kind: 4, minpx: 2 });
-  flags.forEach((f, k) => solid.push({ pos: [f[0], stand(f[0], f[1], f[2]) + 1.2, f[1]], size: 0.8, aspect: 0.5, color: [...side[k], 1], kind: 4, minpx: 3 }));
+  if (shown('flags')) flags.forEach((f, k) => solid.push({ pos: [f[0], stand(f[0], f[1], f[2]) + 1.2, f[1]], size: 0.8, aspect: 0.5, color: [...side[k], 1], kind: 4, minpx: 3 }));
   const b = ballNow();
-  solid.push({ pos: [b[0], stand(b[0], b[1], b[2]) + 0.6, b[1]], size: 0.4, color: [0.95, 0.95, 0.9, 1], kind: 4, minpx: 2 });
-  for (const h of hillsNow().slice(0, 8)) zone.push({ x: h[0], z: h[1], r: h[3], y: stand(h[0], h[1], h[2]), h: 3, color: [0.9, 0.85, 0.3], pulse: 0 });
+  if (shown('ball')) solid.push({ pos: [b[0], stand(b[0], b[1], b[2]) + 0.6, b[1]], size: 0.4, color: [0.95, 0.95, 0.9, 1], kind: 4, minpx: 2 });
+  if (shown('hills')) for (const h of hillsNow().slice(0, 8)) zone.push({ x: h[0], z: h[1], r: h[3], y: stand(h[0], h[1], h[2]), h: 3, color: [0.9, 0.85, 0.3], pulse: 0 });
   for (const t of sp.teleporters || []) {
     glow.push({ pos: [t.from[0], t.from[1] + 1.1, t.from[2]], size: (t.radius ?? 1.2) * 1.3, color: [0.35, 0.85, 1, 0.7], kind: 6, minpx: 1 });
     glow.push({ pos: [t.to[0], t.to[1] + 0.15, t.to[2]], size: 0.8, color: [0.5, 0.9, 1, 0.35], kind: 3, minpx: 1 });
   }
   for (const g of sp.race || []) glow.push({ pos: [g[0], g[1], g[2]], size: g[3], color: [1, 0.8, 0.3, 0.6], kind: 6, minpx: 2 });
   if (st.sel && st.sel.kind !== 'box') {
-    const [x, z] = posOf(st.sel);
-    glow.push({ pos: [x, stand(x, z, 1e9) + 1, z], size: 1.4, color: [1, 0.85, 0.35, 0.9], kind: 3, minpx: 4 });
+    const p = pos3(st.sel);
+    glow.push({ pos: [p[0], p[1] + 0.9, p[2]], size: 1.4, color: [1, 0.85, 0.35, 0.9], kind: 3, minpx: 4 });
   }
   return { solid, glow, zone: zone.length ? zone : null };
 }
+const target3 = () => [view.cx, cam3.y ?? ground(view.cx, view.cz), view.cz];
+const now3 = () => performance.now() * L.TICK_HZ / 1000;
 function draw3() {
   if (!view3 || st.mode === '2d' || draw3Queued || !st.spec) return;
   draw3Queued = true;
@@ -674,19 +813,222 @@ function draw3() {
       if (ground3) { view3.ground(st); ground3 = false; }
       if (map3 && st.result) { view3.map(st.result); map3 = false; }
       view3.marks(marks3());
-      await view3.draw({ target: [view.cx, ground(view.cx, view.cz), view.cz], ...cam3 });
+      // the movers where the wall clock has them; held still while something
+      // is dragged, and while a box of one is picked, that one where it is built
+      const orbit = { target: target3(), yaw: cam3.yaw, pitch: cam3.pitch, dist: cam3.dist };
+      const tick = drag3?.edit && eye3 ? eye3.tick : pickedHome() ?? now3();
+      await view3.draw({ ...orbit, tick });
+      eye3 = Object.assign(orbitEye(orbit, canvas3.clientWidth, canvas3.clientHeight), { tick });
+      frames3++;
+      overlay();
     } finally { drawing3 = false; }
     if (again3) { again3 = false; draw3(); }
   });
 }
-let drag3 = null;
+// The tick at which the picked box's structure, if it moves, is where it is
+// built (the start of its path), so it can be worked on; else undefined
+function pickedHome() {
+  const m = st.sel?.kind === 'box' ? moveOf(st.spec.structures[st.sel.s] || {}) : null;
+  if (!m) return undefined;
+  const cycle = 2 * (m.travel + m.wait);
+  return (cycle - (m.phase % cycle)) % cycle;
+}
+// what moves is shown moving (where the page presents its frames: a capture of each is too slow)
+if (present3) setInterval(() => { if (!document.hidden && st.spec && st.mode !== '2d' && !drag3?.edit && pickedHome() === undefined && (st.spec.structures || []).some((s) => s.move)) draw3(); }, 40);
+
+// Every box where the frame on screen has it (a mover's where its tick put
+// it): the editor's box with `at`, its box as drawn, and `off`, how far that is from where it is built.
+function boxes3() {
+  const t = eye3?.tick ?? 0, offs = new Map();
+  return allBoxes().map((x) => {
+    if (!offs.has(x.s)) offs.set(x.s, movedAt(st.spec.structures[x.s], t));
+    const off = offs.get(x.s);
+    return { ...x, off, at: off[0] || off[1] || off[2] ? shifted(x.box, off) : x.box };
+  });
+}
+const picked3 = () => (st.sel?.kind === 'box' ? boxes3().find((x) => x.s === st.sel.s && x.b === st.sel.b) : null);
+const sizeOf = (w) => [tidy(w[3] - w[0]), tidy(w[4] - w[1]), tidy(w[5] - w[2])];
+const grid = () => Number($('snap').value) || 0;
+// a drag takes the picked box's whole structure when that is asked for (Alt for one drag the other way), and a prefab's always
+const wholeFor = (e, si) => !!st.spec.structures[si]?.prefab || $('whole').checked !== !!e?.altKey;
+const local3 = (e) => { const r = canvas3.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+
+// What the ray through a screen point meets first: a box's face ({ box, at,
+// axis, sign }) or the ground ({ at, ground }). `solid`: only what something
+// can stand on or against (no ghosts).
+function under3(px, py, solid = false) {
+  const { o, d } = rayAt(eye3, px, py), all = boxes3().filter((x) => !solid || !x.part?.ghost);
+  const hit = pickRay(o, d, all.map((x) => x.at));
+  const g = rayGround(o, d, ground);
+  if (hit && (!g || hit.t <= (g[0] - o[0]) * eye3.cy + (g[2] - o[2]) * eye3.sy)) return { ...hit, box: all[hit.i] };
+  return g ? { at: g, axis: 1, sign: 1, ground: true } : null;
+}
+// The point (spawn, pad, flag...) drawn within reach of a screen point
+function pickPoint3(px, py) {
+  let best = null, bd = 12;
+  for (const p of points()) {
+    const q = screenOf(eye3, pos3(p.sel)), d = Math.hypot(q[0] - px, q[1] - py);
+    if (q[2] > 0.3 && d < bd) { bd = d; best = p.sel; }
+  }
+  return best;
+}
+// The picked box's handles on the screen: a dot standing off the middle of
+// each face (drag it: that face moves), and an arrow over the top one (drag
+// it: the box goes up and down). They stand off the box so a press on the box
+// itself is always a move; a face seen head on, whose dot would sit on it and
+// follow no drag, has none: turn the camera for it.
+const OFF3 = 18; // px
+function handles3() {
+  const one = picked3();
+  if (!one || !eye3) return [];
+  const w = one.at, c = [(w[0] + w[3]) / 2, (w[1] + w[4]) / 2, (w[2] + w[5]) / 2], out = [];
+  for (let axis = 0; axis < 3; axis++) for (const sign of [-1, 1]) {
+    const p = c.slice();
+    p[axis] = sign > 0 ? w[axis + 3] : w[axis];
+    const q = screenOf(eye3, p), n = p.slice();
+    n[axis] += sign;
+    const r = screenOf(eye3, n), dx = r[0] - q[0], dy = r[1] - q[1], len = Math.hypot(dx, dy);
+    // (a metre there is focal / depth px across the view)
+    if (q[2] < 0.3 || r[2] < 0.3 || len < 0.3 * eye3.focal / q[2]) continue;
+    out.push({ axis, sign, p, x: q[0] + dx / len * OFF3, y: q[1] + dy / len * OFF3, from: [q[0], q[1]] });
+  }
+  const top = screenOf(eye3, [c[0], w[4], c[2]]);
+  if (top[2] > 0.3) out.push({ lift: true, p: [c[0], w[4], c[2]], x: top[0], y: top[1] - OFF3 - 26 });
+  return out;
+}
+function grabHandle(px, py) {
+  let best = null, bd = 10;
+  for (const h of handles3()) { const d = Math.hypot(h.x - px, h.y - py); if (d < bd) { bd = d; best = h; } }
+  return best;
+}
+
+// ---- the overlay: what the editor adds to the renderer's picture
+function overlay() {
+  const dpr = Math.min(devicePixelRatio || 1, 2), cw = canvas3.clientWidth, ch = canvas3.clientHeight;
+  if (over.width !== Math.round(cw * dpr) || over.height !== Math.round(ch * dpr)) { over.width = Math.round(cw * dpr); over.height = Math.round(ch * dpr); }
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  octx.clearRect(0, 0, cw, ch);
+  if (!eye3 || !st.spec || st.mode === '2d') return;
+  const e = eye3, c = octx;
+  const corner = (w, k) => [w[k & 1 ? 3 : 0], w[k & 2 ? 4 : 1], w[k & 4 ? 5 : 2]];
+  const edges = (w, color, width, dash = []) => {
+    c.strokeStyle = color; c.lineWidth = width; c.setLineDash(dash); c.beginPath();
+    for (const [a, b] of [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]]) {
+      const s = segmentOf(e, corner(w, a), corner(w, b));
+      if (s) { c.moveTo(s[0][0], s[0][1]); c.lineTo(s[1][0], s[1][1]); }
+    }
+    c.stroke(); c.setLineDash([]);
+  };
+  const faces = (w, fill) => {
+    c.fillStyle = fill;
+    for (const f of [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]]) {
+      const p = polygonOf(e, f.map((k) => corner(w, k)));
+      if (p.length < 3) continue;
+      c.beginPath(); p.forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]))); c.closePath(); c.fill();
+    }
+  };
+  const named = [];
+  const badge = (x, y, text, mark, must = false) => {
+    c.font = 'bold 10px ui-monospace, monospace';
+    const tw = c.measureText(text).width + 8;
+    if (!free(named, x, y, tw, 14) && !must) return;
+    c.fillStyle = mark; c.fillRect(x - tw / 2, y - 7, tw, 14);
+    c.fillStyle = '#10131c'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, x, y + 0.5); c.textBaseline = 'alphabetic';
+  };
+  const all = boxes3();
+  // the parts, as what they are: outlined in the kind's colour and named
+  // (the nearest first, where names would run into each other); a ghost,
+  // which the renderer has no box for, a see-through volume
+  const ahead = (x) => (x.at[0] + x.at[3] - 2 * e.cam[0]) * e.cy + (x.at[2] + x.at[5] - 2 * e.cam[2]) * e.sy;
+  for (const x of all.filter((q) => q.part).sort((a, b) => ahead(a) - ahead(b))) {
+    const w = x.at, mark = PART_MARK[x.part.kind] || '#ff00ff';
+    if (x.part.ghost) { faces(w, mark + '2e'); edges(w, mark, 1.5, [5, 4]); } else edges(w, mark + 'c8', 1.25);
+    const mid = [(w[0] + w[3]) / 2, w[4], (w[2] + w[5]) / 2], q = screenOf(e, mid);
+    if (x.part.kind === 'conveyor' && Array.isArray(x.part.velocity)) {
+      // its arrow, lying on its top
+      const v = beltWorld(x.part.velocity, st.spec.structures[x.s].turn), n = Math.hypot(v[0], v[1]);
+      if (n > 0) {
+        const len = Math.max(0.6, 0.7 * (Math.abs(v[0]) * (w[3] - w[0]) + Math.abs(v[1]) * (w[5] - w[2])) / n), ux = v[0] / n, uz = v[1] / n, hd = Math.min(0.6, len / 3);
+        const at = (f, sideways) => [mid[0] + ux * f + -uz * sideways, mid[1] + 0.03, mid[2] + uz * f + ux * sideways];
+        c.strokeStyle = mark; c.lineWidth = 2.5; c.beginPath();
+        for (const [a, b] of [[at(-len / 2, 0), at(len / 2, 0)], [at(len / 2 - hd, hd * 0.6), at(len / 2, 0)], [at(len / 2 - hd, -hd * 0.6), at(len / 2, 0)]]) {
+          const s = segmentOf(e, a, b);
+          if (s) { c.moveTo(s[0][0], s[0][1]); c.lineTo(s[1][0], s[1][1]); }
+        }
+        c.stroke();
+      }
+    }
+    // its name, while it is big enough on the screen to be read as its own
+    if (q[2] > 0.3 && e.focal * Math.max(w[3] - w[0], w[4] - w[1], w[5] - w[2]) / q[2] > 16) badge(q[0], q[1] - 10, partLabel(x.part), mark);
+  }
+  // a box about to be dropped (the box tool)
+  if (hover3?.drop) edges(hover3.drop, '#ffcf5a', 1.5, [4, 3]);
+  // the pick: the box itself, its handles and its size, and dashed round the
+  // rest of its structure when a drag would take that too
+  const one = picked3();
+  if (one) {
+    if (wholeFor(null, one.s)) for (const x of all) if (x.s === one.s && x.b !== one.b) edges(x.at, '#ffcf5aaa', 1, [3, 4]);
+    edges(one.at, '#ffcf5a', 2);
+    for (const h of handles3()) {
+      if (h.lift) {
+        for (const pass of [0, 1]) {
+          c.strokeStyle = pass ? '#ffcf5a' : '#10131c'; c.lineWidth = pass ? 2 : 4.5; c.beginPath();
+          c.moveTo(h.x, h.y - 9); c.lineTo(h.x, h.y + 9);
+          c.moveTo(h.x - 5, h.y - 4); c.lineTo(h.x, h.y - 10); c.lineTo(h.x + 5, h.y - 4);
+          c.moveTo(h.x - 5, h.y + 4); c.lineTo(h.x, h.y + 10); c.lineTo(h.x + 5, h.y + 4);
+          c.stroke();
+        }
+      } else {
+        c.strokeStyle = '#ffcf5a'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(h.from[0], h.from[1]); c.lineTo(h.x, h.y); c.stroke();
+        c.beginPath(); c.arc(h.x, h.y, 5, 0, 7);
+        c.fillStyle = '#ffcf5a'; c.fill();
+        c.strokeStyle = '#10131c'; c.stroke();
+      }
+    }
+    const w = one.at, q = screenOf(e, [(w[0] + w[3]) / 2, w[1], (w[2] + w[5]) / 2]);
+    if (q[2] > 0.3) badge(q[0], q[1] + 16, sizeOf(w).join(' × ') + ' m', '#ffcf5a', true);
+  }
+}
+
+// ---- the pointer in the 3D view
+let drag3 = null, hover3 = null, hover3Queued = false, lastView = '2d';
 canvas3.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas3.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }); // the middle button turns the camera, not the page's scroll
 canvas3.addEventListener('pointerdown', (e) => {
-  drag3 = { x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey };
+  if (!st.spec) return;
   canvas3.setPointerCapture(e.pointerId);
+  const [px, py] = local3(e);
+  const base = { x: e.clientX, y: e.clientY, px, py, moved: false };
+  if (e.button === 2 || space) { drag3 = { ...base, pan: true }; return; }
+  if (e.button === 1 || !eye3) { drag3 = { ...base, turn: true }; return; }
+  if (e.button !== 0) return;
+  if (st.tool === 'select') {
+    const one = picked3();
+    if (one) {
+      const h = grabHandle(px, py);
+      if (h) { drag3 = { ...base, edit: h.lift ? 'lift' : 'face', h, one, w0: one.box.slice(), grab: h.p }; return; }
+      const u = under3(px, py);
+      if (u?.box && u.box.s === one.s && (u.box.b === one.b || wholeFor(e, one.s))) {
+        drag3 = { ...base, edit: e.shiftKey ? 'lift' : 'move', one, w0: one.box.slice(), grab: u.at, whole: wholeFor(e, one.s), copy: e.ctrlKey || e.metaKey, done: [0, 0, 0] };
+        return;
+      }
+    }
+    const p = pickPoint3(px, py);
+    if (p && same(p, st.sel) && p.kind !== 'gate') { drag3 = { ...base, edit: 'point', point: p }; return; }
+  }
+  drag3 = { ...base, [e.shiftKey ? 'pan' : 'turn']: true, click: true };
 });
 canvas3.addEventListener('pointermove', (e) => {
-  if (!drag3) return;
+  if (!st.spec) return;
+  lastView = '3d';
+  const [px, py] = local3(e);
+  if (!drag3) { hoverAt3(px, py); return; }
+  if (!drag3.moved) {
+    // not a drag yet: a click must stay one
+    if (Math.hypot(px - drag3.px, py - drag3.py) < 4) return;
+    drag3.moved = true;
+    if (drag3.edit) beginEdit3();
+  }
   const dx = e.clientX - drag3.x, dy = e.clientY - drag3.y;
   drag3.x = e.clientX; drag3.y = e.clientY;
   if (drag3.pan) {
@@ -696,40 +1038,219 @@ canvas3.addEventListener('pointermove', (e) => {
     const f = 1 / Math.max(0.3, -Math.sin(cam3.pitch)); // the ground foreshortened along the view
     view.cx += (s * dx + c * dy * f) * k;
     view.cz += (-c * dx + s * dy * f) * k;
-  } else {
+  } else if (drag3.turn) {
     cam3.yaw += dx * 0.008;
     cam3.pitch = clamp(cam3.pitch + dy * 0.005, -1.3, -0.03);
-  }
+  } else edit3(px, py);
   draw();
 });
-const end3 = () => { drag3 = null; };
+// The edit a drag makes begins when it first moves: one undo step, and with Ctrl a copy to carry off
+function beginEdit3() {
+  const k = drag3;
+  step();
+  if (!k.copy || k.edit !== 'move') return;
+  const sp = st.spec, s = sp.structures[k.one.s];
+  if (k.whole) {
+    const c = JSON.parse(JSON.stringify(s));
+    c.name = `${s.name || 'structure'} copy`;
+    sp.structures.push(c);
+    st.sel = { kind: 'box', s: sp.structures.length - 1, b: k.one.b };
+  } else {
+    const list = boxList(s), c = copyOf(list[k.one.b]);
+    list.push(c);
+    st.sel = { kind: 'box', s: k.one.s, b: list.length - 1 };
+    st.dup = { ...st.sel, from: k.w0.slice() };
+  }
+  k.one = { ...k.one, s: st.sel.s, b: st.sel.b };
+}
+// A box copied: itself again, a checkpoint the next free stage
+function copyOf(b) {
+  const c = JSON.parse(JSON.stringify(b));
+  if (readPart(c[7])?.kind === 'checkpoint') setPartField(c, 'stage', nextStage(st.spec));
+  return c;
+}
+function edit3(px, py) {
+  const k = drag3, { o, d } = rayAt(eye3, px, py), g = grid();
+  if (k.edit === 'point') {
+    const u = under3(px, py, true);
+    if (u) putPoint3(k.point, u);
+    changed();
+    return;
+  }
+  const s = st.spec.structures[k.one.s], b = boxList(s)[k.one.b];
+  if (k.edit === 'face') {
+    // the handle is where the frame drew it, the box where it is built
+    const v = alongAxis(o, d, k.grab, k.h.axis);
+    if (v === null) return;
+    const w = facedBox(k.w0, k.h.axis, k.h.sign, v - k.one.off[k.h.axis], g);
+    setWorldBox(s, b, w);
+    st.size = sizeOf(w);
+  } else {
+    let by;
+    if (k.edit === 'move') {
+      const p = rayPlane(o, d, 1, k.grab[1]);
+      if (!p || Math.hypot(p[0] - o[0], p[2] - o[2]) > 2000) return;
+      by = [p[0] - k.grab[0], 0, p[2] - k.grab[2]];
+    } else {
+      const y = alongAxis(o, d, k.grab, 1);
+      if (y === null) return;
+      by = [0, y - k.grab[1], 0];
+    }
+    const w = movedBox(k.w0, by, g);
+    if (k.whole) {
+      const m = [w[0] - k.w0[0], w[1] - k.w0[1], w[2] - k.w0[2]];
+      moveStruct(s, m[0] - k.done[0], m[2] - k.done[2], m[1] - k.done[1]);
+      k.done = m;
+    } else setWorldBox(s, b, w);
+  }
+  changed();
+}
+// Put a point on what the pointer is over: a box's top, or the ground
+function putPoint3(sel, u) {
+  moveTo(sel, snapTo(u.at[0]), snapTo(u.at[2]));
+  const sp = st.spec, top = !u.ground && u.axis === 1 && u.sign > 0;
+  const arr = { spawn: () => sp.spawns[sel.i], pad: () => sp.pads[sel.i].at, flag: () => sp.flags.find((f) => f.team === ['red', 'blue'][sel.k]).at, ball: () => sp.ball.at, hill: () => sp.hills[sel.i].at }[sel.kind]?.();
+  if (arr) { if (top) arr[2] = tidy(u.at[1] + 0.05); else if (u.ground) arr.length = 2; }
+  if (sel.kind === 'tele' && (top || u.ground)) sp.teleporters[sel.i][sel.end][1] = tidy(u.at[1] + (sel.end === 'to' ? 0.1 : 0));
+}
+const end3 = (e) => {
+  const k = drag3;
+  if (!k) return;
+  drag3 = null;
+  if (k.edit && k.moved) { endStep(); changed(); renderSide(); }
+  // (a press on the pick that never moved is a click too: another box of a structure that moves whole is picked by it)
+  else if ((k.click || k.edit === 'move') && !k.moved && e.type === 'pointerup') click3(k.px, k.py);
+  draw();
+};
 canvas3.addEventListener('pointerup', end3);
 canvas3.addEventListener('pointercancel', end3);
+// A click: with the select tool it picks; with the box tool it drops a box;
+// spawn, pad and hill put one down on what is there
+function click3(px, py) {
+  const t = st.tool;
+  if (t === 'select') {
+    const p = pickPoint3(px, py), u = p ? null : under3(px, py);
+    st.sel = p || (u?.box ? { kind: 'box', s: u.box.s, b: u.box.b } : null);
+    if (u?.box) st.size = sizeOf(u.box.box);
+    renderSide();
+    return;
+  }
+  const u = under3(px, py, true);
+  if (!u) return;
+  if (t === 'box') { dropAt(u); return; }
+  if (t === 'spawn' || t === 'pad' || t === 'hill') {
+    step();
+    add(t, snapTo(u.at[0]), snapTo(u.at[2]));
+    putPoint3(st.sel, u);
+    endStep(); changed(); renderSide();
+    return;
+  }
+  say(`the ${t} tool works in the 2D view`);
+}
+// A new box against what the pointer is on, sized like the last: in the
+// picked structure if it is built by hand, else the structure of the box it
+// lands on (one that stands still), else one of its own.
+function dropAt(u) {
+  const sp = st.spec;
+  sp.structures ||= [];
+  const ok = (si) => sp.structures[si] && !sp.structures[si].prefab;
+  let si = st.sel?.kind === 'box' && ok(st.sel.s) ? st.sel.s : u.box && ok(u.box.s) && !sp.structures[u.box.s].move ? u.box.s : -1;
+  step();
+  if (si < 0) { sp.structures.push({ name: `structure ${sp.structures.length + 1}`, boxes: [] }); si = sp.structures.length - 1; }
+  const s = sp.structures[si], off = movedAt(s, eye3.tick), b = [0, 0, 0, 0, 0, 0, $('material').value];
+  setWorldBox(s, b, shifted(dropBox(u, st.size, grid()), off.map((v) => -v)));
+  s.boxes.push(b);
+  st.sel = { kind: 'box', s: si, b: s.boxes.length - 1 };
+  hover3 = null;
+  endStep(); changed(); renderSide();
+}
+// The pointer over the view with nothing held: the cursor says what a press
+// would do, the foot where it is, and the box tool shows where a box would land
+function hoverAt3(px, py) {
+  if (hover3Queued || !eye3) return;
+  hover3Queued = true;
+  requestAnimationFrame(() => {
+    hover3Queued = false;
+    if (drag3 || !eye3 || !st.spec) return;
+    const t = st.tool, u = under3(px, py, t !== 'select');
+    const was = hover3;
+    hover3 = t === 'box' && u ? { drop: dropBox(u, st.size, grid()) } : null;
+    let cursor = t === 'select' ? 'default' : 'crosshair';
+    if (t === 'select') {
+      const one = picked3(), h = one && grabHandle(px, py);
+      if (h) cursor = h.lift || h.axis === 1 ? 'ns-resize' : 'ew-resize';
+      else if (one && u?.box && u.box.s === one.s && (u.box.b === one.b || wholeFor(null, one.s))) cursor = 'move';
+      else if (u?.box || pickPoint3(px, py)) cursor = 'pointer';
+    }
+    canvas3.style.cursor = cursor;
+    if (u && performance.now() - saidAt >= 4000) {
+      const what = u.box ? `${st.spec.structures[u.box.s].name || `structure ${u.box.s + 1}`}${u.box.part ? `, ${partLabel(u.box.part)}` : ''}` : `the ground, ${surfaceAt(u.at[0], u.at[2])}`;
+      foot.textContent = `x ${u.at[0].toFixed(1)}  y ${u.at[1].toFixed(2)}  z ${u.at[2].toFixed(1)}  ${what}  ·  ${t === 'select' ? HELP3 : t === 'box' ? 'click drops a box here, sized like the last; drag turns the camera' : TOOLS.find((x) => x[0] === t)?.[2] || ''}`;
+    }
+    if (hover3 || was) overlay();
+  });
+}
+canvas3.addEventListener('pointerleave', () => { if (hover3) { hover3 = null; overlay(); } });
+canvas3.addEventListener('dblclick', (e) => {
+  if (!eye3 || st.tool !== 'select') return;
+  const [px, py] = local3(e), u = under3(px, py);
+  if (u?.box) { st.sel = { kind: 'box', s: u.box.s, b: u.box.b }; renderSide(); flyTo(u.box.at); }
+});
 canvas3.addEventListener('wheel', (e) => {
   e.preventDefault();
-  cam3.dist = clamp(cam3.dist * Math.exp(e.deltaY * 0.0012), 4, 1200);
+  cam3.dist = clamp(cam3.dist * Math.exp(e.deltaY * 0.0012), 2, 1200);
   draw3();
 }, { passive: false });
 new ResizeObserver(() => draw()).observe($('wrap'));
+
+// The camera flown to a box (a world box): both views' middle to its, the 3D
+// one near enough to work on it
+let flying = 0;
+function flyTo(w) {
+  const from = [view.cx, cam3.y ?? ground(view.cx, view.cz), view.cz, cam3.dist];
+  const to = [(w[0] + w[3]) / 2, (w[1] + w[4]) / 2, (w[2] + w[5]) / 2, clamp(Math.max(w[3] - w[0], w[4] - w[1], w[5] - w[2]) * 2.2 + 9, 6, 600)];
+  const t0 = performance.now(), me = ++flying;
+  const go = () => {
+    if (me !== flying) return;
+    const f = Math.min(1, (performance.now() - t0) / 300), k = f * f * (3 - 2 * f);
+    const at = from.map((v, i) => v + (to[i] - v) * k);
+    view.cx = at[0]; cam3.y = at[1]; view.cz = at[2]; cam3.dist = at[3];
+    draw();
+    if (f < 1) requestAnimationFrame(go);
+  };
+  go();
+}
+// to whatever is picked (C, or the panel's button)
+function flyToPick() {
+  const sel = st.sel;
+  if (!sel) return;
+  if (sel.kind === 'box') { const one = picked3() || allBoxes().find((x) => x.s === sel.s && x.b === sel.b); if (one) flyTo(one.at || one.box); return; }
+  const p = pos3(sel);
+  flyTo([p[0] - 1, p[1] - 0.5, p[2] - 1, p[0] + 1, p[1] + 1.5, p[2] + 1]);
+}
 
 function fit() {
   const b = bounds(), cw = canvas.clientWidth || 800, ch = canvas.clientHeight || 600;
   view.cx = (b[0] + b[1]) / 2; view.cz = (b[2] + b[3]) / 2;
   view.zoom = Math.min(cw / (b[1] - b[0] + 40), ch / (b[3] - b[2] + 40));
   cam3.dist = clamp(Math.max(b[1] - b[0], b[3] - b[2]) * 0.9, 20, 1200);
+  // the 3D view looks at the middle of what is built, a course in the sky included, never under the ground
+  const ys = allBoxes().flatMap((x) => [x.box[1], x.box[4]]);
+  flying++;
+  cam3.y = ys.length ? Math.max(ground(view.cx, view.cz), (Math.min(...ys) + Math.max(...ys)) / 2) : null;
   draw();
 }
 
 // ---- tools
 const TOOLS = [
-  ['select', 'V', 'pick and drag anything; drag a box to move its structure, a corner to size it; Alt-drag moves one box'],
+  ['select', 'V', 'pick and drag anything; drag a box to move it, a corner to size it; Alt-drag moves its whole structure'],
   ['raise', 'R', 'raise the ground (Shift lowers)'],
   ['lower', 'L', 'lower the ground'],
   ['flatten', 'F', 'pull the ground to the height where the stroke began'],
   ['smooth', 'M', 'smooth the ground'],
   ['paint', 'P', 'paint what the ground is'],
-  ['box', 'B', 'drag out a box: a wall, a floor, a roof (its heights in the panel)'],
-  ['spawn', 'S', 'click to add a spawn point'],
+  ['box', 'B', 'drag out a box: a wall, a floor, a roof (its heights in the panel); in 3D click to drop one where the pointer is, sized like the last'],
+  ['spawn', 'S', 'click to add a spawn point (in 3D: on what is under the pointer)'],
   ['pad', 'W', 'click to add a weapon pad'],
   ['teleporter', 'T', 'drag from the pad to where it sends you'],
   ['hill', 'H', 'click to add a hill for King of the Hill'],
@@ -738,7 +1259,7 @@ const TOOLS = [
 const BRUSH = { raise: 1, lower: 1, flatten: 1, smooth: 1, paint: 1 };
 const radius = () => Number($('radius').value);
 const strength = () => Number($('strength').value) / 100;
-const snapTo = (v) => { const s = Number($('snap').value); return tidy(Math.round(v / s) * s); };
+const snapTo = (v) => snap(v, grid());
 
 function setTool(t) {
   st.tool = t;
@@ -749,6 +1270,8 @@ function setTool(t) {
   $('material').hidden = t !== 'box';
   $('weapon').hidden = t !== 'pad';
   canvas.style.cursor = t === 'select' ? 'default' : 'crosshair';
+  canvas3.style.cursor = canvas.style.cursor;
+  hover3 = null;
   draw();
 }
 
@@ -841,8 +1364,10 @@ canvas.addEventListener('pointerdown', (e) => {
     draw();
     if (!sel) { drag = { pan: [sx, sy, view.cx, view.cz] }; return; }
     if (sel.kind === 'box') {
+      // the box, or with Alt (or "whole structure") everything built with it; a prefab's always moves whole
       const s = st.spec.structures[sel.s];
-      drag = { box: sel, start: [x, z], moved: [0, 0], one: e.altKey ? boxList(s)[sel.b].slice() : null, fresh: true };
+      st.size = sizeOf(worldBox(s, boxList(s)[sel.b]));
+      drag = { box: sel, start: [x, z], moved: [0, 0], one: wholeFor(e, sel.s) ? null : boxList(s)[sel.b].slice(), fresh: true };
     } else {
       const p = posOf(sel);
       drag = { point: sel, start: [x, z], from: [p[0], p[1]], fresh: true };
@@ -874,6 +1399,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (!st.spec) return;
   const [sx, sy] = local(e), [x, z] = Wd(sx, sy);
   hover = [x, z];
+  lastView = '2d';
   status(x, z);
   if (!drag) { if (BRUSH[st.tool]) draw(); return; }
   if (drag.pan) {
@@ -909,7 +1435,7 @@ canvas.addEventListener('pointermove', (e) => {
   } else if (drag.corner) {
     const s = st.spec.structures[st.sel.s], b = boxList(s)[st.sel.b], w = drag.box.slice();
     w[drag.corner[0]] = snapTo(x); w[drag.corner[1]] = snapTo(z);
-    if (w[0] !== w[3] && w[2] !== w[5]) setBoxWorld(s, b, [w[0], w[2], w[3], w[5]]);
+    if (w[0] !== w[3] && w[2] !== w[5]) { setBoxWorld(s, b, [w[0], w[2], w[3], w[5]]); st.size = sizeOf(worldBox(s, b)); }
     changed();
   } else if (drag.edge !== undefined) {
     st.spec.bounds[drag.edge] = snapTo(drag.edge < 2 ? x : z);
@@ -931,7 +1457,7 @@ const release = () => {
   const wasEdit = !drag.pan;
   drag = null;
   endStep();
-  if (wasEdit) renderSide();
+  if (wasEdit) { clearTimeout(checkTimer); unchecked = true; checkTimer = setTimeout(check, 120); renderSide(); }
   draw();
 };
 canvas.addEventListener('pointerup', release);
@@ -983,6 +1509,7 @@ function addBox(x0, z0, x1, z1) {
   const s = sp.structures[si], at = s.at || [0, 0, 0];
   s.boxes.push([tidy(x0 - at[0]), tidy(y0 - at[1]), tidy(z0 - at[2]), tidy(x1 - at[0]), tidy(y0 + 3 - at[1]), tidy(z1 - at[2]), mat]);
   st.sel = { kind: 'box', s: si, b: s.boxes.length - 1 };
+  st.size = [tidy(x1 - x0), 3, tidy(z1 - z0)];
   changed();
   renderSide();
 }
@@ -1012,24 +1539,38 @@ function remove() {
   }
   endStep();
   st.sel = null;
+  st.dup = null;
   changed();
   renderSide();
 }
-function duplicate() {
+// (whole: a box's whole structure, or the box alone; left out, as "whole structure" says)
+function duplicate(whole) {
   const sel = st.sel, sp = st.spec;
   if (!sel) return;
+  if (typeof whole !== 'boolean') whole = undefined;
   step();
   const off = 4;
   if (sel.kind === 'spawn') { const s = sp.spawns[sel.i]; sp.spawns.push([tidy(s[0] + off), s[1], ...s.slice(2)]); st.sel = { kind: 'spawn', i: sp.spawns.length - 1 }; }
   else if (sel.kind === 'pad') { const p = sp.pads[sel.i]; sp.pads.push({ ...p, at: [tidy(p.at[0] + off), ...p.at.slice(1)] }); st.sel = { kind: 'pad', i: sp.pads.length - 1 }; }
   else if (sel.kind === 'hill') { ensureHills(); const h = sp.hills[sel.i]; sp.hills.push({ ...h, at: [tidy(h.at[0] + off), ...h.at.slice(1)] }); st.sel = { kind: 'hill', i: sp.hills.length - 1 }; }
   else if (sel.kind === 'gate') { const g = sp.race[sel.i]; sp.race.splice(sel.i + 1, 0, [tidy(g[0] + 3 * off), g[1], g[2], g[3]]); st.sel = { kind: 'gate', i: sel.i + 1 }; }
-  else if (sel.kind === 'box') {
+  else if (sel.kind === 'box' && (whole ?? wholeFor(null, sel.s))) {
     const s = JSON.parse(JSON.stringify(sp.structures[sel.s]));
     s.name = `${s.name || 'structure'} copy`;
     moveStruct(s, 4 * off, 0);
     sp.structures.push(s);
     st.sel = { kind: 'box', s: sp.structures.length - 1, b: sel.b };
+  } else if (sel.kind === 'box') {
+    // one box, beside itself; or, when it is the last copy and has been put
+    // somewhere, as far on again: a row of blocks is Ctrl+D, drag, Ctrl+D, Ctrl+D...
+    const s = sp.structures[sel.s], list = boxList(s), w = worldBox(s, list[sel.b]);
+    const d = st.dup && st.dup.s === sel.s && st.dup.b === sel.b ? [0, 1, 2].map((a) => tidy(w[a] - st.dup.from[a])) : [0, 0, 0];
+    const by = d.some((v) => v) ? d : [tidy(w[3] - w[0]), 0, 0];
+    const c = copyOf(list[sel.b]);
+    setWorldBox(s, c, shifted(w, by));
+    list.push(c);
+    st.sel = { kind: 'box', s: sel.s, b: list.length - 1 };
+    st.dup = { ...st.sel, from: w };
   }
   endStep();
   changed();
@@ -1073,7 +1614,7 @@ function renderSide() {
   const sp = st.spec;
   side.replaceChildren();
   side.append(el('ol', { className: 'steps' },
-    el('li', {}, el('b', { textContent: 'Shape it' }), ': the tools above raise and paint the ground and place boxes, spawns, pads and hills.'),
+    el('li', {}, el('b', { textContent: 'Shape it' }), ': the tools above raise and paint the ground and place boxes, spawns, pads and hills; in the 3D view pick a box, drag it, size it, and say what it does.'),
     el('li', {}, el('b', { textContent: 'Play it' }), ' here with AI fighters, as often as you like.'),
     el('li', {}, el('b', { textContent: 'Send it in' }), ' to have it played by everyone.')));
   // the map
@@ -1100,11 +1641,13 @@ function renderSide() {
   side.append(row(...['west', 'east', 'north', 'south'].map((n, k) => num(n, () => b[k], (v) => { b[k] = v; }, { stepBy: 1 }))));
   side.append(row(num('ceiling', () => sp.ceiling, (v) => { if (v === undefined) delete sp.ceiling; else sp.ceiling = v; }, { blank: `auto${st.result ? ` (${st.result.ceiling})` : ''}`, stepBy: 1 })));
   side.append(row(el('label', { textContent: 'x-ray' }), Object.assign(el('input', { type: 'checkbox', checked: st.xray, title: 'X' }), { onchange: (e) => { st.xray = e.target.checked; draw(); } })));
+  side.append(...rulesPanel());
 
   // the selection
   const sel = st.sel;
   if (sel) side.append(...selectionPanel(sel));
-  else side.append(h3('Nothing picked'), hint('Pick something with the select tool (V), or add with the tools above. Drag with the right button (or Space) to pan; the wheel zooms; 0 fits the map.'));
+  else side.append(h3('Nothing picked'), hint('Pick something with the select tool (V), or add with the tools above. Drag with the right button (or Space) to pan; the wheel zooms; 0 fits the map.'),
+    hint(`In the 3D view: ${HELP3}. With the box tool (B) a click drops a box where the pointer is, on the ground or against the face under it, sized like the last. Delete removes the pick, Ctrl+D copies it (again: as far on again), the arrow keys and Page Up and Down nudge it a grid step.`));
 
   // the check
   side.append(h3('Ready to play?'));
@@ -1133,9 +1676,89 @@ function renderSide() {
 function playHere(game) {
   if (!st.result) { say(`not yet: ${st.error || 'the map is still being checked'}`); return; }
   const url = URL.createObjectURL(new Blob([packMap(st.result)]));
-  const q = new URLSearchParams({ local: '1', map: url, ...(game === 'flight' ? { mode: String(L.FLIGHT_CONSTS.M_RACE) } : {}) });
+  // (a page that draws without presenting, a gate's, opens one that does the same)
+  const q = new URLSearchParams({ local: '1', map: url, ...(game === 'flight' ? { mode: String(L.FLIGHT_CONSTS.M_RACE) } : {}), ...(present3 ? {} : { present: '0' }) });
   open(`./${game}.html?${q}`, '_blank');
   say(`opened ${st.spec.name || 'the map'} in ${game === 'flight' ? 'Dogfight' : 'the arena'}, in a new tab`);
+}
+
+const modeName = (k) => { const n = L.MODES[MAP_MODES[k]].name.toLowerCase(); return n === k ? k : `${k}: ${n}`; };
+// How the map plays: the mode every match plays, how its fighters move and
+// how big they are, and where a fall kills (map.json "mode", "movement",
+// "body", "void"), each the arena's own until set.
+function rulesPanel() {
+  const sp = st.spec, out = [h3('How it plays')];
+  const edit = (f) => { step(); f(); endStep(); changed(); renderSide(); };
+  const modes = el('select');
+  modes.append(el('option', { value: '', textContent: 'the rotation', selected: sp.mode === undefined }));
+  for (const k of Object.keys(MAP_MODES)) modes.append(el('option', { value: k, textContent: modeName(k), selected: sp.mode === k }));
+  if (sp.mode !== undefined && !(sp.mode in MAP_MODES)) modes.append(el('option', { value: sp.mode, textContent: `${sp.mode}?`, selected: true }));
+  modes.onchange = () => edit(() => { if (modes.value) sp.mode = modes.value; else delete sp.mode; });
+  out.push(row(el('label', { textContent: 'mode' }), modes));
+  out.push(hint(sp.mode === 'obby' ? 'Obby: an obstacle course. Nobody is armed; a checkpoint is your stage and where you come back, the finish ends your run. It needs a finish, and a spawn at the start only.'
+    : sp.mode in MAP_MODES ? `Every match here is ${L.MODES[MAP_MODES[sp.mode]].name.toLowerCase()}: ${L.MODES[MAP_MODES[sp.mode]].rules.toLowerCase()}.${sided() ? '' : ' It has no sides, so the spawns needn\'t be on each half.'}`
+      : 'The arena\'s modes in turn, a match each. Pick one to have every match here play it: obby makes the map an obstacle course.'));
+  // movement
+  const mv = sp.movement;
+  out.push(row(el('label', { textContent: 'movement' }), pick1(['the arena\'s', 'its own'], mv ? 'its own' : 'the arena\'s', (v) => { if (v === 'its own') sp.movement = { ...ROBLOX_MOVEMENT }; else delete sp.movement; }),
+    btn('Roblox character', () => edit(() => { sp.movement = { ...ROBLOX_MOVEMENT }; }), 'a Humanoid at 0.28 m a stud: walk 4.48 m/s, jump 2.016 m, gravity 54.936 m/s²')));
+  if (mv) {
+    out.push(row(num('walk', () => mv.walk, (v) => { mv.walk = v; }), num('jump', () => mv.jump, (v) => { mv.jump = v; }), num('gravity', () => mv.gravity, (v) => { mv.gravity = v; }, { stepBy: 1 })));
+    const air = mv.walk > 0 && mv.jump > 0 && mv.gravity > 0 ? mv.walk * 2 * Math.sqrt((2 * mv.jump) / mv.gravity) : 0;
+    out.push(hint(`Walks ${mv.walk} m/s and stops when the keys do, jumps ${mv.jump} m high under ${mv.gravity} m/s², steering in the air: a running jump clears ${air.toFixed(1)} m on the level.`));
+  } else out.push(hint('The arena\'s own: a run of 10 m/s with momentum, a 1.2 m jump under 20 m/s², air strafing.'));
+  // body
+  const bd = sp.body;
+  out.push(row(el('label', { textContent: 'body' }), pick1(['the arena\'s', 'its own'], bd ? 'its own' : 'the arena\'s', (v) => { if (v === 'its own') sp.body = { ...ARENA_BODY }; else delete sp.body; }),
+    btn('Roblox character', () => edit(() => { sp.body = { ...ROBLOX_BODY }; }), '2 studs across and 5 tall at 0.28 m a stud: 0.56 m by 1.4 m')));
+  if (bd) {
+    out.push(row(num('width', () => bd.width, (v) => { bd.width = v; }), num('height', () => bd.height, (v) => { bd.height = v; }),
+      num('eye', () => bd.eye, (v) => { if (v === undefined) delete bd.eye; else bd.eye = v; }, { blank: tidy((bd.height || 0) - 0.2) })));
+    out.push(hint(`A fighter ${bd.width} m across and ${bd.height} m tall: it passes a gap and a ceiling that size. ${2 * L.BODY_R[0]} to ${2 * L.BODY_R[1]} m wide, ${L.BODY_TOP[0]} to ${L.BODY_TOP[1]} m tall.`));
+  } else out.push(hint(`The arena's own: ${ARENA_BODY.width} m across, ${ARENA_BODY.height} m tall.`));
+  // the void
+  out.push(row(num('void', () => sp.void, (v) => { if (v === undefined) delete sp.void; else sp.void = v; }, { blank: 'none', stepBy: 1 })));
+  out.push(hint(sp.void === undefined ? 'A height in metres: a fighter below it dies by falling. None: the ground catches everyone.' : `A fighter below ${sp.void} m dies by falling.`));
+  return out;
+}
+
+// What the picked box does (its eighth element, a part): nothing, or a kind
+// with that kind's own numbers, and whether it is a ghost (no box: a zone)
+function partPanel(s, b) {
+  const sp = st.spec, p = readPart(b[7]), out = [h3('What it does')];
+  const edit = (f) => { step(); f(); endStep(); changed(); renderSide(); };
+  const kinds = el('select');
+  kinds.append(el('option', { value: '', textContent: 'nothing: a plain box', selected: !p }));
+  for (const k of PART_NAMES) kinds.append(el('option', { value: k, textContent: k, selected: p?.kind === k }));
+  if (p && !PART_NAMES.includes(p.kind)) kinds.append(el('option', { value: p.kind, textContent: `${p.kind}?`, selected: true }));
+  kinds.onchange = () => edit(() => setKind(sp, b, kinds.value));
+  out.push(row(el('label', { textContent: 'part' }), kinds));
+  if (!p) { out.push(hint('A part acts on the fighter touching it, in every mode: kill, bounce, ice, conveyor, ladder; and an obby\'s checkpoint and finish.')); return out; }
+  const field = (label, k, opts) => num(label, () => p[k], (v) => setPartField(b, k, v), opts);
+  if (p.kind === 'bounce') out.push(row(field('speed', 'speed', { blank: 14, stepBy: 1 })), hint(`m/s up, 1 to 60: ${p.speed ?? 14} throws a fighter ${(((p.speed ?? 14) ** 2) / (2 * (sp.movement?.gravity || 20))).toFixed(1)} m high here.`));
+  if (p.kind === 'ice') out.push(row(field('grip', 'grip', { blank: 0.06, stepBy: 0.01 })), hint('0 to 1: 1 is a floor, 0 never lets you turn or stop.'));
+  if (p.kind === 'ladder') out.push(row(field('speed', 'speed', { blank: 4.5, stepBy: 0.5 })), hint('m/s up and down, 0.5 to 25.'));
+  if (p.kind === 'conveyor') {
+    // a direction and a speed, in the world: the map holds a velocity in the structure's own frame
+    const v = beltWorld(Array.isArray(p.velocity) ? p.velocity : [0, 0], s.turn), { angle, speed } = beltOf(v);
+    const set = (a, sp1) => setPartField(b, 'velocity', beltLocal(beltVelocity(a, sp1), s.turn));
+    const dirs = el('span', { className: 'dirs' }, ...[['←', 180, 'west'], ['↑', 270, 'north'], ['↓', 90, 'south'], ['→', 0, 'east']].map(([t, a, name]) => {
+      const bt = btn(t, () => edit(() => set(a, speed || 3)), `carries ${name}`);
+      bt.classList.toggle('on', speed > 0 && Math.abs(angle - a) < 0.5);
+      return bt;
+    }));
+    out.push(row(el('label', { textContent: 'carries' }), dirs, num('degrees', () => angle, (a) => set(a, speed), { stepBy: 15 })));
+    out.push(row(num('speed', () => speed, (v1) => set(angle, v1), { stepBy: 0.5 })), hint('m/s, up to 25 each way; 0 degrees is east (+x), 90 south (+z). The arrow drawn on the box is the way it carries.'));
+  }
+  if (p.kind === 'checkpoint') {
+    const next = nextStage(sp);
+    out.push(row(field('stage', 'stage', { stepBy: 1 }), ...(p.stage === undefined || next < p.stage ? [btn(`next free: ${next}`, () => edit(() => setPartField(b, 'stage', next)))] : [])));
+  }
+  const ghost = el('input', { type: 'checkbox', checked: !!p.ghost });
+  ghost.onchange = () => edit(() => setPartField(b, 'ghost', ghost.checked || undefined));
+  out.push(row(el('label', { textContent: 'ghost' }), ghost, el('span', { className: 'hint', textContent: 'no box: a zone nothing stops on' })));
+  out.push(hint(`${PART_WHAT[p.kind] || 'Not a kind the game has.'}${p.kind === 'checkpoint' || p.kind === 'finish' ? (sp.mode === 'obby' ? '' : ' The map\'s mode is not obby, so it does nothing yet: set the mode under "How it plays".') : ''}`));
+  return out;
 }
 
 function selectionPanel(sel) {
@@ -1151,7 +1774,7 @@ function selectionPanel(sel) {
     case 'spawn': {
       const s = sp.spawns[sel.i];
       out.push(h3(`Spawn ${sel.i + 1} of ${sp.spawns.length}`), xz(s), topRow(s, 2), stands(s));
-      out.push(hint(`On ${['red', 'blue', 'neither'][half(s[0], s[1], flagsNow())]}'s half: the nearer flag decides. Each team needs one.`), row(del(), btn('duplicate', duplicate, 'Ctrl+D')));
+      out.push(hint(sided() ? `On ${['red', 'blue', 'neither'][half(s[0], s[1], flagsNow())]}'s half: the nearer flag decides. Each team needs one.` : 'This map\'s mode has no sides: a spawn is where everyone starts.'), row(del(), btn('duplicate', duplicate, 'Ctrl+D')));
       break;
     }
     case 'pad': {
@@ -1220,7 +1843,7 @@ function selectionPanel(sel) {
         out.push(row(num('seconds', () => m.seconds ?? 4, (v) => { m.seconds = v; }), num('wait', () => m.wait ?? 1, (v) => { m.wait = v; }), num('phase', () => m.phase ?? 0, (v) => { m.phase = v; })));
         out.push(row(el('label', { textContent: 'speed' }), pick1(['even', 'eased'], m.ease ? 'eased' : 'even', (v) => { m.ease = v === 'eased'; }),
           btn('stand still', () => { step(); delete s.move; endStep(); changed(); renderSide(); })));
-        out.push(hint(`It moves that far (turned with the structure) in that many seconds, waits, comes back and waits again; phase starts it that many seconds later. A fighter on it rides it, and one in its way is pushed. At most ${L.MV_STEP_MAX * L.TICK_HZ} m/s.`));
+        out.push(hint(`It moves that far (turned with the structure) in that many seconds, waits, comes back and waits again; phase starts it that many seconds later. A fighter on it rides it, and one in its way is pushed. At most ${L.MV_STEP_MAX * L.TICK_HZ} m/s. While it is picked the 3D view holds it where it is built.`));
       } else out.push(row(btn('make it move', () => { step(); s.move = { by: [0, 4, 0], seconds: 3, wait: 1 }; endStep(); changed(); renderSide(); }, 'a lift: up 4 m and back')));
       if (b) {
         const w = place(b, at, s.turn || 0);
@@ -1241,14 +1864,30 @@ function selectionPanel(sel) {
         let lo = Infinity;
         for (let x = w[0]; x <= w[3]; x += Math.max(0.5, (w[3] - w[0]) / 6)) for (let z = w[2]; z <= w[5]; z += Math.max(0.5, (w[5] - w[2]) / 6)) lo = Math.min(lo, ground(x, z));
         out.push(hint(`the ground under it from ${lo.toFixed(2)} m. A fighter walks up a step of ${L.STEP} m; anything higher it jumps or goes round.`));
-        out.push(row(btn('sit on the ground', () => { step(); const hgt = b[4] - b[1]; b[1] = tidy(Math.floor((lo - 0.2) * 10) / 10 - at[1]); b[4] = tidy(b[1] + hgt); endStep(); changed(); renderSide(); }), del(s.prefab ? 'delete structure' : 'delete box')));
+        out.push(row(btn('sit on the ground', () => { step(); const hgt = b[4] - b[1]; b[1] = tidy(Math.floor((lo - 0.2) * 10) / 10 - at[1]); b[4] = tidy(b[1] + hgt); endStep(); changed(); renderSide(); }),
+          btn('look at it', flyToPick, 'fly the camera to it (C)'),
+          ...(s.prefab ? [] : [btn('duplicate box', () => duplicate(false), 'another beside it; again, as far on again (Ctrl+D)')]), del(s.prefab ? 'delete structure' : 'delete box')));
+        out.push(...partPanel(s, b));
       }
-      out.push(row(btn('duplicate structure', duplicate, 'Ctrl+D'), ...(s.prefab ? [] : [btn('delete structure', () => { step(); sp.structures.splice(sel.s, 1); st.sel = null; endStep(); changed(); renderSide(); })])));
-      out.push(hint('Drag to move the whole structure; Alt-drag one box; drag a corner to size it. Click again in the same spot to pick the box under.'));
+      out.push(row(btn('duplicate structure', () => duplicate(true)), ...(s.prefab ? [] : [btn('delete structure', () => { step(); sp.structures.splice(sel.s, 1); st.sel = null; endStep(); changed(); renderSide(); })])));
+      out.push(hint(`Drag ${s.prefab ? 'to move the structure' : 'to move the box, Alt-drag its whole structure ("whole structure" above swaps the two)'}; in 2D drag a corner to size it, and click again in the same spot to pick the box under; in 3D drag a face's dot to size it and the arrow over it to raise it (or Shift-drag the box), Ctrl-drag to carry off a copy.`));
       break;
     }
   }
   return out;
+}
+
+// The course, for a map that is one (an obby, or anything with a checkpoint
+// or a finish): its start, its stages in order and its finish, with what is
+// missing or wrong said where it is. A line about a box flies to it.
+function courseList() {
+  const c = courseOf(st.spec, { ground });
+  if (!c) return [];
+  return [el('p', { className: 'hint', textContent: 'The course:' }), el('ul', { className: 'course' }, ...c.lines.map((l) => {
+    const li = el('li', { textContent: l.text, className: `${l.level === 'ok' ? '' : l.level}${l.sel ? ' go' : ''}` });
+    if (l.sel) li.onclick = () => { st.sel = l.sel; renderSide(); flyToPick(); };
+    return li;
+  }))];
 }
 
 function renderCheck() {
@@ -1261,7 +1900,7 @@ function renderCheck() {
   if (!checkBox || !st.spec) return;
   checkBox.replaceChildren();
   if (st.error) {
-    checkBox.append(el('p', { className: 'bad', textContent: st.error }), hint('The game can\'t build the map until this is fixed. Everything else keeps working: fix it, and this turns green.'));
+    checkBox.append(el('p', { className: 'bad', textContent: st.error }), hint('The game can\'t build the map until this is fixed. Everything else keeps working: fix it, and this turns green.'), ...courseList());
     return;
   }
   const m = st.result;
@@ -1271,7 +1910,8 @@ function renderCheck() {
     el('p', { className: 'ok', textContent: 'Yes: the game builds it.' }),
     el('ul', { className: 'facts' }, ...[
       lim(m.boxes.length, L.NBOX, 'boxes') + ' in ' + lim(m.groups.length, L.NGROUP, 'structures'),
-      `${lim(m.spawns.length, L.NSPAWN, 'spawns')}: red's half ${m.sides[0]}, blue's ${m.sides[1]}`,
+      `${lim(m.spawns.length, L.NSPAWN, 'spawns')}: ${sided() ? `red's half ${m.sides[0]}, blue's ${m.sides[1]}` : 'this mode has no sides, so they needn\'t be on each half'}`,
+      ...(m.parts.length ? [`${lim(m.parts.length, L.NPART, 'parts')}: ${Object.entries(partCounts(st.spec)).map(([k, n]) => `${n} ${k}`).join(', ')}`] : []),
       lim(m.pads.length, L.NPAD, 'weapon pads'),
       lim(m.teleporters.length, L.NTELE, 'teleporters'),
       lim(m.hills.length, L.NHILL, 'hills'),
@@ -1279,6 +1919,7 @@ function renderCheck() {
       `ships fly up to ${m.ceiling} m; ${m.bytes.length.toLocaleString()} B in the wasm`,
       ...(m.void !== null ? [`a fighter below ${m.void} m dies by falling`] : []),
     ].map((t) => el('li', { textContent: t }))),
+    ...courseList(),
     ...(st.report ? [el('p', { className: 'hint', textContent: st.reportFrom }), el('ul', {}, ...st.report.map((r) => el('li', { className: 'hint', textContent: r })))] : []),
     ...(st.brief ? [
       el('p', { className: 'hint', textContent: `Its game is ${st.brief.summary.scripts} scripts (${st.brief.summary.lines.toLocaleString('en')} lines). The port brief is them as files and port.md, what they do and lean on: hand it to an agent to write the rules here.` }),
@@ -1306,7 +1947,8 @@ function buildHeader() {
     e.target.value = '';
     if (!v || (st.dirty && !confirm('Leave this map? Its changes are not saved.'))) return;
     try {
-      if (v === 'new') { const m = prompt('How big, in metres? (a square, 128 to 768)', '384'); if (m) newMap(clamp(Math.round(Number(m) / 8) * 8 || 384, 128, 768)); }
+      if (v === 'new-obby') newObby();
+      else if (v === 'new') { const m = prompt('How big, in metres? (a square, 128 to 768)', '384'); if (m) newMap(clamp(Math.round(Number(m) / 8) * 8 || 384, 128, 768)); }
       else if (v === 'folder') await openFolder();
       else if (v === 'roblox') pick('.rbxl,.rbxlx,.rbxm,.rbxmx');
       else if (v === 'vox') pick('.vox');
@@ -1318,6 +1960,8 @@ function buildHeader() {
   $('send-top').onclick = sendIn;
   $('ready').onclick = () => checkBox && checkBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
   for (const b of $('modes').children) b.onclick = () => setMode(b.dataset.mode);
+  $('snap').onchange = () => { hover3 = null; draw(); };
+  $('whole').onchange = () => draw();
   $('undo').onclick = () => restore(undo, redo);
   $('redo').onclick = () => restore(redo, undo);
 }
@@ -1333,11 +1977,31 @@ addEventListener('keydown', (e) => {
   if (k === ' ') { space = true; canvas.style.cursor = 'grab'; e.preventDefault(); return; }
   if (k === 'delete' || k === 'backspace') { remove(); return; }
   if (k === 'escape') { st.sel = null; setTool('select'); renderSide(); return; }
+  if (k === 'c') { flyToPick(); return; }
+  if (/^(arrow|page)/.test(k) && st.sel?.kind === 'box') { e.preventDefault(); nudge(k, e.shiftKey); return; }
   if (k === '0' || k === 'home') { fit(); return; }
   if (k === 'x') { st.xray = !st.xray; renderSide(); draw(); return; }
   const t = TOOLS.find((x) => x[1].toLowerCase() === k);
   if (t) setTool(t[0]);
 });
+// The picked box a grid step along: the arrows as the view the pointer was
+// last in sees them (in 3D, the axes nearest the camera's), Page Up and Down
+// its height; Shift four steps.
+function nudge(key, big) {
+  const d = (grid() || 0.1) * (big ? 4 : 1), sel = st.sel, s = st.spec.structures[sel.s];
+  let fwd = [0, -1], right = [1, 0];
+  if (st.mode === '3d' || (st.mode === 'split' && lastView === '3d')) {
+    const c = Math.cos(cam3.yaw), z = Math.sin(cam3.yaw);
+    fwd = Math.abs(c) >= Math.abs(z) ? [Math.sign(c), 0] : [0, Math.sign(z)];
+    right = [-fwd[1], fwd[0]];
+  }
+  const by = { arrowup: [fwd[0], 0, fwd[1]], arrowdown: [-fwd[0], 0, -fwd[1]], arrowright: [right[0], 0, right[1]], arrowleft: [-right[0], 0, -right[1]], pageup: [0, 1, 0], pagedown: [0, -1, 0] }[key];
+  if (!by) return;
+  step();
+  if (wholeFor(null, sel.s)) moveStruct(s, by[0] * d, by[2] * d, by[1] * d);
+  else { const b = boxList(s)[sel.b]; setWorldBox(s, b, shifted(worldBox(s, b), by.map((v) => v * d))); }
+  endStep(); changed(); renderSide();
+}
 addEventListener('keyup', (e) => { if (e.key === ' ') { space = false; setTool(st.tool); } });
 addEventListener('beforeunload', keepDraft);
 // a Roblox place or a voxel model dropped on the page
@@ -1349,6 +2013,23 @@ addEventListener('drop', (e) => {
   if (st.dirty && !confirm('Leave this map? Its changes are not saved.')) return;
   openFile(f);
 });
+
+// For the gates and whoever drives the page (as window.__studio is the
+// studio's): the map, whether a change is still to be checked or drawn, and
+// where a world point is on the page through the 3D view's camera.
+window.__ed = {
+  st,
+  frames: () => frames3,
+  busy: () => unchecked || drawing3 || draw3Queued || again3,
+  boxes: () => boxes3().map((x) => ({ s: x.s, b: x.b, box: x.at, part: x.part })),
+  at3: (q) => { if (!eye3) return null; const r = canvas3.getBoundingClientRect(), p = screenOf(eye3, q); return [r.left + p[0], r.top + p[1], p[2]]; },
+  under3: (x, y) => { const r = canvas3.getBoundingClientRect(), u = eye3 && under3(x - r.left, y - r.top); return u ? { at: u.at, ground: !!u.ground, ...(u.box ? { s: u.box.s, b: u.box.b } : {}) } : null; },
+  handles: () => { const r = canvas3.getBoundingClientRect(); return handles3().map((h) => ({ ...h, x: r.left + h.x, y: r.top + h.y })); },
+  pick: (sel) => { st.sel = sel; renderSide(); draw(); },
+  cam: () => ({ x: view.cx, z: view.cz, ...cam3 }),
+  look: (o) => { flying++; Object.assign(cam3, o.cam || {}); if (o.at) { view.cx = o.at[0]; cam3.y = o.at[1]; view.cz = o.at[2]; } draw(); },
+  files,
+};
 
 buildHeader();
 setTool('select');

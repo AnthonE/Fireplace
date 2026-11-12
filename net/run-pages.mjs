@@ -6,7 +6,9 @@
 // local (client/local.mjs) with its AI guests in, the sim kept stepping
 // (interval hashes every 128 ticks) through a switch of games, and Party's own
 // page played a local room on the minigame it was asked for, and the map
-// editor opened Box Canyon from the site and its compiler took it, and the
+// editor opened Box Canyon from the site and its compiler took it, then made
+// its starter obby, picked a stone of it in the 3D view by clicking it,
+// dragged it a grid step or more and had the compiler take that too, and the
 // studio built party in the page byte for byte as npm run build does, its
 // check played the debug build and found the split hashes equal, and its
 // build played in party's page, and the shelf (client/games.html) listed every
@@ -102,12 +104,39 @@ try {
   // the map editor from the same site: it opens Box Canyon from maps/ and the build's compiler, in the page, takes it
   const editor = await ctx.newPage();
   watch(editor, 'editor');
-  await editor.goto(`${base}/client/map-editor.html`);
+  await editor.setViewportSize({ width: 1280, height: 720 }); // wide enough that it opens with its 3D view beside the 2D one
+  await editor.goto(`${base}/client/map-editor.html?present=0`);
   await editor.waitForFunction(() => document.querySelector('#foot')?.textContent !== 'loading…', null, { timeout: 30000 });
+  // (the page opens Box Canyon by itself too: the one asked for here is in when the map's number has moved on)
+  const before = await editor.evaluate(() => window.__ed.st.rev);
   await editor.selectOption('#open', 'canyon');
   // the header's pill turns ok when the map compiles (renderCheck)
-  await editor.waitForFunction(() => document.querySelector('#ready')?.classList.contains('ok'), null, { timeout: 30000 }).catch(() => {});
+  await editor.waitForFunction((r) => window.__ed.st.rev > r && !window.__ed.busy() && document.querySelector('#ready')?.classList.contains('ok'), before, { timeout: 30000 }).catch(() => {});
   report.editor = { checked: await editor.evaluate(() => !!document.querySelector('#ready')?.classList.contains('ok')), foot: await editor.textContent('#foot') };
+  // its starter obby, built on in the 3D view: the second stepping stone (the course's box 2) picked by a click on it, then dragged
+  await editor.selectOption('#open', 'new-obby');
+  await editor.waitForFunction(() => window.__ed.st.spec.name === 'My Obby' && window.__ed.frames() > 0 && !window.__ed.busy(), null, { timeout: 120000 }).catch(() => {});
+  const settled = async () => { await sleep(300); await editor.waitForFunction(() => !window.__ed.busy(), null, { timeout: 60000 }).catch(() => {}); };
+  await editor.evaluate(() => window.__ed.look({ at: [492, 26, 512], cam: { yaw: -1.1, pitch: -0.6, dist: 34 } }));
+  await settled();
+  const stone = () => editor.evaluate(() => { const x = window.__ed.boxes().find((q) => q.s === 1 && q.b === 2); return { box: x.box, at: window.__ed.at3([(x.box[0] + x.box[3]) / 2, x.box[4], (x.box[2] + x.box[5]) / 2]) }; });
+  const was = await stone();
+  await editor.mouse.click(was.at[0], was.at[1]);
+  await settled();
+  const picked = await editor.evaluate(() => window.__ed.st.sel);
+  await editor.mouse.move(was.at[0], was.at[1]);
+  await editor.mouse.down();
+  for (let i = 1; i <= 5; i++) { await editor.mouse.move(was.at[0] + 10 * i, was.at[1] + 4 * i); await sleep(60); }
+  await editor.mouse.up();
+  await settled();
+  const now = await stone();
+  await editor.screenshot({ path: 'traces/pages-editor-obby.png' });
+  report.screenshots.push('traces/pages-editor-obby.png');
+  report.editor.obby = {
+    course: await editor.evaluate(() => [...document.querySelectorAll('ul.course li')].map((l) => `${l.className.trim() || 'ok'}: ${l.textContent}`)),
+    picked, from: was.box, to: now.box, error: await editor.evaluate(() => window.__ed.st.error),
+    checked: await editor.evaluate(() => !!document.querySelector('#ready')?.classList.contains('ok')),
+  };
   // the studio: party assembled in the page, checked, and played from its build
   const studio = await ctx.newPage();
   watch(studio, 'studio');
@@ -210,6 +239,11 @@ const gate = {
   partyLocal: !!report.party?.isolated && report.party.hashes > 0,
   partyOnItsMinigame: ps.game === mg,
   editorOpensAMap: !!report.editor?.checked,
+  editorBuildsAnObby: (() => {
+    const o = report.editor?.obby;
+    return !!o && o.checked && !o.error && o.picked?.kind === 'box' && o.picked.s === 1 && o.picked.b === 2 && (o.to[0] !== o.from[0] || o.to[2] !== o.from[2]) && o.to[1] === o.from[1]
+      && o.course.length >= 6 && o.course.every((l) => !/^(bad|warn)/.test(l));
+  })(),
   studioBuildsAsNpm: !!report.studio?.same,
   studioChecks: !!report.studio?.checked?.splitEqual && report.studio.checked.scored > 0,
   studioPlays: (report.studio?.played?.hashes ?? 0) > 2,
