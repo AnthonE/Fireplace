@@ -22,7 +22,6 @@ import { arenaWord, arenaFrame, frameDue, boxClear, boxRay, slab, sees } from '.
 import { aimAt } from './bot.mjs';
 import { AMC } from './am/index.mjs';
 
-const EYE = 1.6;
 const TURN = 16384;
 const STRIKE = 25; // m: an objective's strike (client/am/index.mjs) is fired at from this near
 
@@ -363,7 +362,7 @@ export class Fighter {
     // a kit mode that isn't a fight at all drives the body itself (Obby's course: client/am/obby.mjs)
     // (and stands where it is put until play begins)
     if (AMC[mode]?.drive) return this.word({ ...(h.state === L.H_PLAY ? AMC[mode].drive(view, me, this, t) : {}), serial });
-    const eye = [me.pos[0], me.pos[1] + EYE, me.pos[2]];
+    const eye = [me.pos[0], me.pos[1] + view.map().body.eye, me.pos[2]]; // (the map's body: the arena's own 1.6 m unless it has one)
 
     // the nearest enemy in sight, looked for every 16 ticks (each bot on its own
     // tick of the 16, so a room of them spreads the work); between looks the
