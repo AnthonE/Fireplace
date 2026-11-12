@@ -520,7 +520,7 @@ test('the client module: draws the runways, pads, boards, islands and their ring
   assert.ok(fr.radius >= (s.xe - s.xa) / 2 && fr.centre[0] > s.xa && fr.centre[0] < s.xe + 40);
   assert.equal(jump.facing(g.v, 0), 0);
   const lines = [];
-  jump.hud(g.v, { put: () => {}, centre: (y, x) => lines.push(x), right: (y, x) => lines.push(x), rect: () => {}, rows: 44, C: {}, slot: 0, now: 0, t: r.t * TICK });
+  jump.hud(g.v, { put: (x, y, s2) => lines.push(s2), centre: (y, x) => lines.push(x), right: (y, x) => lines.push(x), rect: () => {}, rows: 44, C: {}, slot: 0, now: 0, t: r.t * TICK });
   assert.ok(lines.includes(`BEST ${landed.last.toFixed(2)} M`) && lines.includes(`LAST ${landed.last.toFixed(2)} M`) && lines.includes('JUMPS 1  FOULS 0'), lines.join(' | '));
   assert.ok(lines.some((x) => /WIND/.test(x)) && lines.some((x) => / IN \d+$/.test(x)), lines.join(' | '));
   const said = [];

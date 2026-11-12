@@ -218,6 +218,7 @@ export default {
   hint: 'TAKE THE PADS  HOP LATE ON THE BOARD  LAND ON SAND  BEST JUMP WINS',
   rules: 'THE SEA IS A FOUL  THE WIND CARRIES YOU OR HOLDS YOU BACK  GO AGAIN',
   env: 'day',
+  ownScore: true, // PG_SCORE is centimetres: rows 0 and 1 are written here, in metres
 
   draw(view, ctx, out) {
     const s = stage(view);
@@ -352,9 +353,18 @@ export default {
     const left = MC.LJ_WSEG - MC.LJ_WTURN - (g.t % MC.LJ_WSEG), nx = level(view, Math.floor(g.t / MC.LJ_WSEG) + 1);
     ctx.right(3, `${nx > 0 ? `TAIL ${nx}` : nx < 0 ? `HEAD ${-nx}` : 'CALM'} ${left > 0 ? `IN ${Math.ceil(left * TICK)}` : 'NOW'}`, C.GREY);
     const me = ctx.me ?? (ctx.slot >= 0 ? view.partier(ctx.slot) : null);
+    // the framework's two lines (rows 0 and 1, which ownScore leaves to it), in metres
+    let lead = -1, best = 0;
+    for (let p = 0; p < L.NPLAYER; p++) {
+      const a = L.PLAYERS + p * L.PSIZE;
+      if (!(view.u8[a + L.P_FL] & L.PF_LIVE)) continue;
+      const sc = view.dv.getUint16(a + L.PG_SCORE, true);
+      if (sc > best) { best = sc; lead = p; }
+    }
+    if (me?.live) ctx.put(1, 0, `BEST ${me.score ? `${dist(me.score / 100)} M` : '-'}`, C.YELLOW);
+    if (lead >= 0) ctx.put(1, 1, lead === ctx.slot ? 'YOU LEAD' : `LEADER P${lead + 1} ${dist(best / 100)} M`, lead === ctx.slot ? C.GREEN : C.WHITE);
     if (!me || !me.live || me.out) return;
     const j = jumper(me.m), so = slotOf(view, ctx.slot);
-    ctx.right(4, `BEST ${me.score ? `${dist(me.score / 100)} M` : '-'}`, me.score ? C.YELLOW : C.GREY);
     if (j.n || so.jumps) ctx.right(5, j.foul ? `LAST SPLASH ${dist(j.last)}` : `LAST ${dist(j.last)} M`, j.foul ? C.GREY : C.WHITE);
     ctx.right(6, `JUMPS ${so.jumps}  FOULS ${so.fouls}`, C.GREY);
   },
