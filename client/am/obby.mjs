@@ -8,7 +8,7 @@
 // jumps what it must, and waits for what moves.
 import * as L from '../../src/layout.mjs';
 import * as AC from '../../src/am/consts.mjs';
-import { partAt } from '../../src/arena-view.mjs';
+import { partAt, moverAt } from '../../src/arena-view.mjs';
 
 const TURN = 16384, FWD = 1, BACK = 2;
 const rec = (view, p) => L.MODE_REC + p * L.MR_SIZE;
@@ -25,6 +25,17 @@ export function nextPart(map, stage) {
   for (const p of map.parts) if (p.kind === L.PK_CHECK && p.stage > stage && (!best || p.stage < best.stage)) best = p;
   return best || map.parts.find((p) => p.kind === L.PK_FINISH) || null;
 }
+// The room as the HUD's corner lists it: who is in, the finishers first by
+// their time, then by stage, then the fewer falls (the board's own order).
+const ROSTER = 6;
+export function roster(view) {
+  const list = [];
+  for (let p = 0; p < L.NPLAYER; p++) {
+    const o = view.fighter(p);
+    if (o.live) list.push({ slot: p, stage: stageOf(view, p), done: doneOf(view, p), deaths: o.deaths });
+  }
+  return list.sort((a, b) => (a.done || 1e9) - (b.done || 1e9) || b.stage - a.stage || a.deaths - b.deaths || a.slot - b.slot);
+}
 const mid = (b) => [(b[0] + b[3]) / 2, b[4], (b[2] + b[5]) / 2];
 
 // The highest top at or under `top` that a body at (x, z) would stand on at
@@ -33,24 +44,39 @@ const mid = (b) => [(b[0] + b[3]) / 2, b[4], (b[2] + b[5]) / 2];
 // -Infinity over nothing).
 function floorAt(map, x, z, top, t, r) {
   let y = -Infinity, deadly = false, moving = false;
-  const hit = (b) => x - r < b[3] && x + r > b[0] && z - r < b[5] && z + r > b[2];
-  for (const g of map.groups) {
-    const o = g.move ? moverOf(g.move, t) : null;
-    if (!o && !hit(g.box)) continue;
-    for (let k = g.first; k < g.first + g.count; k++) {
-      const b = map.boxes[k].box, bb = o ? [b[0] + o[0], b[1] + o[1], b[2] + o[2], b[3] + o[0], b[4] + o[1], b[5] + o[2]] : b;
-      if (hit(bb) && bb[4] <= top && bb[4] > y) { y = bb[4]; moving = !!o; }
+  const hit = (b, o) => (o ? x - r < b[3] + o[0] && x + r > b[0] + o[0] && z - r < b[5] + o[2] && z + r > b[2] + o[2] : x - r < b[3] && x + r > b[0] && z - r < b[5] && z + r > b[2]);
+  const at = moversAt(map, t);
+  for (let k = 0; k < map.groups.length; k++) {
+    const g = map.groups[k], o = at.off[k];
+    if (!hit(o ? at.built[k] : g.box, o)) continue;
+    for (let i = g.first; i < g.first + g.count; i++) {
+      const b = map.boxes[i].box, h = o ? b[4] + o[1] : b[4];
+      if (hit(b, o) && h <= top && h > y) { y = h; moving = !!o; }
     }
   }
-  for (const p of map.parts) {
-    if (p.kind !== L.PK_KILL) continue;
-    const b = partAt(map, p, t);
-    if (hit(b) && Math.abs(b[4] - y) < 0.05) deadly = true;
-  }
+  for (const b of at.deadly) if (Math.abs(b[4] - y) < 0.05 && hit(b, null)) deadly = true;
   return [y, deadly, moving];
 }
-// (partAt's mover, for a group: kept apart so floorAt needn't build a part)
-function moverOf(mv, t) { return partAt({ groups: [{ move: mv }] }, { group: 0, box: [0, 0, 0, 0, 0, 0] }, t); }
+// What floorAt asks of a map again and again, kept: for the map, each moving
+// group's bounds as built and the parts that kill; for the last tick asked
+// about, where each mover and each part that kills is. (A room of fighters waiting at one edge asks
+// some thousands of times a tick: 64 at Sky Steps' ferry stalled the bot host
+// when every call worked these out.)
+const kept = new WeakMap();
+function moversAt(map, t) {
+  let c = kept.get(map);
+  if (!c) {
+    const built = map.groups.map((g) => {
+      if (!g.move) return null;
+      const u = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      for (let i = g.first; i < g.first + g.count; i++) { const b = map.boxes[i].box; for (let k = 0; k < 3; k++) { u[k] = Math.min(u[k], b[k]); u[k + 3] = Math.max(u[k + 3], b[k + 3]); } }
+      return u;
+    });
+    kept.set(map, c = { built, kills: map.parts.filter((p) => p.kind === L.PK_KILL), t: NaN, off: [], deadly: [] });
+  }
+  if (c.t !== t) { c.t = t; c.off = map.groups.map((g) => (g.move ? moverAt(g.move, t) : null)); c.deadly = c.kills.map((p) => partAt(map, p, t)); }
+  return c;
+}
 
 // A part that kills within `far` metres ahead of the body along (dx, dz) at
 // tick t: how far off its near side is, and how high its top stands over the
@@ -76,8 +102,14 @@ export default {
   frags: false,
   own: true,
 
+  // nothing to shoot with or be shot by: the frontend draws no bars, tracker or crosshair, and a phone has only a jump
+  unarmed: true,
+
   // rows 0 to 2 (no kills line over them: nobody is counting kills): your
-  // stage of the course's or your time, how many are home, where a fall puts you
+  // stage of the course's or your time, how many are home, where a fall puts
+  // you. Where a fight's bars would be, the course as a bar, a cell a stage
+  // and the finish's last, and your run's clock under it; in the top right
+  // the room by how far along each is, as a Roblox place lists its players.
   hud(view, ctx) {
     const n = stages(view);
     if (view.hole().state === L.H_COUNT) { ctx.put(1, 0, 'REACH THE END  MIND WHAT GLOWS RED', ctx.C.WHITE); return; }
@@ -87,6 +119,22 @@ export default {
     const fin = view.dv.getUint32(L.AO + AC.OY_DONE, true);
     if (fin) ctx.put(1, 1, `${fin} FINISHED`, ctx.C.GREY);
     if (!done && ctx.me && ctx.me.dead) ctx.put(1, 2, st ? 'BACK TO YOUR CHECKPOINT' : 'BACK TO THE START', ctx.C.RED);
+    if (ctx.board || view.hole().state !== L.H_PLAY) return;
+    if (ctx.rect) {
+      // (320 x 200 units: the bars' own place under the match's clock)
+      const w = 100 / (n + 1);
+      ctx.rect(109, 8, 211, 15, 0.05, 0.08, 0.12, 0.7);
+      for (let k = 0; k <= n; k++) {
+        const c = k === n ? (done ? [1, 0.85, 0.3] : [0.3, 0.27, 0.12]) : k < st || done ? [0.3, 0.9, 0.45] : [0.15, 0.2, 0.17];
+        ctx.rect(110 + k * w + 0.5, 9, 110 + (k + 1) * w - 0.5, 14, ...c);
+      }
+    }
+    ctx.centre?.(3, clock(done || Math.round((ctx.t ?? 0) * L.TICK_HZ)), done ? ctx.C.GREEN : ctx.C.WHITE);
+    if (!ctx.right) return;
+    const list = roster(view), top = list.slice(0, ROSTER);
+    const mine = list.find((o) => o.slot === ctx.slot);
+    if (mine && !top.includes(mine)) top[ROSTER - 1] = mine;
+    top.forEach((o, k) => ctx.right(k, `${ctx.name ? ctx.name(o.slot) : `P${o.slot + 1}`}  ${o.done ? clock(o.done) : String(o.stage).padStart(2)}`, o.slot === ctx.slot ? ctx.C.YELLOW : o.done ? ctx.C.GREEN : ctx.C.WHITE));
   },
 
   news(f, ctx) {
@@ -115,7 +163,8 @@ export default {
     out.markers.push({ pos: [p[0], p[1] + 1.2, p[2]], label: next.kind === L.PK_FINISH ? 'FINISH' : `CHECKPOINT ${next.stage}`, color: next.kind === L.PK_FINISH ? ctx.C?.YELLOW : ctx.C?.GREEN });
   },
 
-  cols: [{ head: 'STAGE', get: (o) => String(o.points) }, { head: 'FALLS', get: (o) => String(o.deaths) }],
+  // (the frontend hands a column the view too: a run's time is the mode's record, not the fighter's)
+  cols: [{ head: 'STAGE', get: (o) => String(o.points) }, { head: 'FALLS', get: (o) => String(o.deaths) }, { head: 'TIME', get: (o, view) => (view && doneOf(view, o.slot) ? clock(doneOf(view, o.slot)) : '-') }],
 
   // the board's order in play: by stage, then the fewer falls (the sim's places once it's over, finishers first)
   standing: (o) => o.points * 65536 + (65535 - Math.min(o.deaths, 65535)),
@@ -151,10 +200,18 @@ export default {
     const reach = 0.9 * (mv ? mv.walk : Number(L.PHYS.RUN)) * air;
     const speed = me.vel[0] * dx + me.vel[2] * dz, fast = speed > 0.7 * (mv ? mv.walk : Number(L.PHYS.RUN));
     // something that kills in the way: over a low one, wait out a tall one
-    const kill = killAhead(map, me.pos, dx, dz, 1.6, tick, body);
+    // (on a belt running its way it meets one sooner: it looks, and jumps, as much further off as the belt makes it faster)
+    let pace = 1;
+    for (const p of map.parts) {
+      if (p.kind !== L.PK_CONVEY) continue;
+      const b = partAt(map, p, tick);
+      if (me.pos[0] > b[0] && me.pos[0] < b[3] && me.pos[2] > b[2] && me.pos[2] < b[5] && Math.abs(b[4] - me.pos[1]) < 0.1) pace = Math.max(1, 1 + (p.a * dx + p.b * dz) / (mv ? mv.walk : Number(L.PHYS.RUN)));
+    }
+    // (and where one that moves will be in the half second the crossing takes: a wall sweeping in is waited for)
+    const kill = killAhead(map, me.pos, dx, dz, 1.6 * pace, tick, body) || killAhead(map, me.pos, dx, dz, 1.6 * pace, tick + 35, body) || killAhead(map, me.pos, dx, dz, 1.6 * pace, tick + 70, body);
     if (kill) {
       if (kill.up > 1) return { move: 0 };
-      if (kill.s <= 1.0) return { move: FWD, jump: 1 };
+      if (kill.s <= 1.0 * pace) return { move: FWD, jump: 1 };
       return { move: FWD };
     }
     // a ladder at hand with more of it overhead: forward climbs it (a wall is no floor to the test below)
@@ -189,8 +246,12 @@ export default {
 
   state(view) {
     const done = [];
-    for (let p = 0; p < L.NPLAYER; p++) if (doneOf(view, p)) done.push(p);
+    let furthest = 0, falls = 0;
+    for (let p = 0; p < L.NPLAYER; p++) {
+      if (doneOf(view, p)) done.push(p);
+      if (view.fighter(p).live) { furthest = Math.max(furthest, stageOf(view, p)); falls += view.fighter(p).deaths; }
+    }
     // (finished: this match's so far, and every match before it was run to its end)
-    return { leader: view.mode().leader, stages: stages(view), finished: view.dv.getUint32(L.AO + AC.OY_DONE, true) + view.hole().hole, done };
+    return { leader: view.mode().leader, stages: stages(view), furthest, falls, finished: view.dv.getUint32(L.AO + AC.OY_DONE, true) + view.hole().hole, done };
   },
 };
