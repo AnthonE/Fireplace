@@ -14,7 +14,8 @@ once a fifth, is party's SWISS ROLL now; `BUMPER` is never set without
 `docs/<game>.md` (golf, arena, flight, party, fireplace) and
 `docs/netcode.md`: read the one for whatever you touch. `docs/wire.md` is
 the protocol for writing a client, `docs/hosting.md` the room pool
-(`net/rooms.mjs`), and `docs/roadmap.md` the plan for what comes next.
+(`net/rooms.mjs`), `docs/roadmap.md` the plan for what comes next, and
+`docs/coin.md` the game's coin, ready to create on pump.fun and not created.
 
 ## Commands
 
@@ -41,6 +42,7 @@ node tools/serve.mjs                        # then /client/games.html: the shelf
 node tools/shelf.mjs [--only id,id] [--lines]   # the shelf's pictures (client/shelf/<id>.webp, each tile's own page shot with no GPU) and index.json; packs maps/ into build/maps/
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
 node tools/arena-shot.mjs [--views track,ships] [--scenes figures,faces [--env night]]   # the arena's and Dogfight's views of it alone (a local room on a fixed seed), or the arena renderer's demo page with no sim, into traces/
+node tools/coin.mjs [--check] [--pick a|b|c]   # the coin's sheet (coin/fireplace.json) held to pump.fun's create form, and its pictures drawn into coin/art/ (docs/coin.md)
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -277,6 +279,16 @@ shell whose own command line contains the name: it kills that shell.
   (`test/chat.test.mjs` checks).
 - `elo.json` is Fireplace's manifest for its Elo Pros store row (jobs, mods);
   CONTRIBUTING.md is the outside contributor's guide, pay included.
+- The coin (`docs/coin.md`) is outside every sim, like a look: no tick,
+  record or hash knows it. `coin/fireplace.json` is what pump.fun's create
+  form is typed from, in the shape of Elo Pros' launch kit, and its name,
+  ticker, description, picture and links are welded at the create, so they
+  change there first or never; `tools/coin.mjs` checks it and draws
+  `coin/art/` (`test/coin.test.mjs` holds the doc to the sheet). What a daily
+  pot pays on is the challenges' pool, `CHALLENGES` in
+  `client/achievements.mjs`, written into `elo.json` with the stats and
+  append-only like the achievements. The amounts are the house's: no text
+  here, a description or a challenge, names one. Tickers are bare, no `$`.
 
 ## Style
 

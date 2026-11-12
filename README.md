@@ -238,6 +238,7 @@ protocol, for writing a client in any language, and
 | `rust/` | Party minigames in Rust (Sumo Ring) and the engine's bindings for them |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, hosting, the roadmap, and maps from [Roblox](docs/roblox.md) and [MagicaVoxel](docs/vox.md), minigames in [Rust](docs/rust.md) |
+| `coin/` | Fireplace's coin before it exists: the sheet pump.fun's create form is typed from, and its pictures, drawn by `tools/coin.mjs` ([docs/coin.md](docs/coin.md)) |
 
 ## Develop
 

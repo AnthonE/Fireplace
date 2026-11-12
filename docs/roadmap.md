@@ -369,7 +369,8 @@ do yet, and each names what it would need first; the first is built.
 6. **Pay a minigame's author by the rounds played.** The referee knows which
    minigame each round was, on rooms we host. A pot split by measured rounds
    passes invariant 1's test (the payer and the amount change no bit of any
-   round). It needs a rule for where the pot comes from.
+   round). It needs a rule for where the pot comes from; the coin's creator
+   fees are one answer ([coin.md](coin.md)).
 7. **A clip per match.** Every hosted room already writes a replay
    (`--replays`); a watch link per match, and its interval hashes beside it,
    is the "replay" evidence tier for results and something a player shares.
