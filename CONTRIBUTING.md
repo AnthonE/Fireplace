@@ -199,26 +199,38 @@ never in it, so a look can't desync a room either. Each is one entry in
 `client/looks.mjs`:
 
 - a ball: a `key`, a `name` (capitals, as the TV's font has them), one of
-  the patterns (`BEACH`, `STRIPES`, `RIBS`, `SOLID`, `METAL`, `EIGHT`) and
+  the patterns (`BEACH`, `STRIPES`, `RIBS`, `SOLID`, `METAL`, `EIGHT`,
+  `DOTS`, `CHECKER`, `SWIRL`, `DISCO`) and
   its two colours `a` and `b` (0 to 1 each);
 - a hat: a `key`, a `name`, one of the styles (`CAP`, `BEANIE`, `BAND`,
-  `HELMET`, `NONE`, `PUMPKIN`, `CROWN`) and its `color`;
+  `HELMET`, `NONE`, `PUMPKIN`, `CROWN`, `TOPHAT`, `CONE`, `HALO`, `ANTLERS`,
+  `PHONES`, `PROP`) and its `color`;
 - a body: a `key`, a `name`, `blocky: true`, its `skin` (the arms and head)
   and its `face` (1 a smile, 4 a robot's; `client/rider.mjs` `PART`).
 
 Add it at the end of its list: a look's number is its place in the list, and
 that number is what goes over the network. `unlock: '<achievement id>'` makes
 it earned rather than free (`client/achievements.mjs` has the ids).
+`price: <marshmallows>` makes it bought instead: the wardrobe shows the price
+and takes it from the player's purse (`client/purse.mjs`). A look has one or
+neither, never both. Price it against the ones there, 5 to 150: the top
+three of a game win 3, 2 and 1, so 10 is a couple of good games and 100 is
+thirty-odd wins.
 
 ```sh
-node tools/serve.mjs     # then /client/party-render-demo.html?scene=wardrobe: every ball and hat, rolling; ?scene=blocky, ?scene=outfits: the bodies
-node --test test/looks.test.mjs test/rider.test.mjs
+node tools/serve.mjs     # then /client/party-render-demo.html?scene=wardrobe: every ball and hat, rolling; ?scene=shop: the priced ones, close; ?scene=blocky, ?scene=outfits: the bodies
+node tools/party-shot.mjs --scenes wardrobe,shop,outfits   # the same as PNGs in traces/, with no GPU
+node --test test/looks.test.mjs test/rider.test.mjs test/purse.test.mjs
 ```
 
 A new pattern or hat style is code: a case in the ball's or the head's
 shader, in `client/party-render.mjs` (`lookBall`, `lookHat`), and the test
 checks it has it. On a blocky body
-a hat is boxes, in `rider()` in `client/rider.mjs`.
+a hat is boxes, in `rider()` in `client/rider.mjs`; a hat that stands off the
+head (a top hat, antlers) is boxes on the round rider too (`standing`, there),
+with only its foot painted in `lookHat`. The TV's cards and the wardrobe's
+tiles draw a look flat, in `drawLook` in `client/looks.mjs`: give the new
+pattern or style a few rectangles there.
 
 ## A map
 

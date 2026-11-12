@@ -5,7 +5,7 @@
 // traces/party-render-<scene>.png; in a browser it draws the one in ?scene=
 // (or flips through them all, a click for the next), moving.
 //   ?orbit=0 holds the camera still
-//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
+//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=shop (the ones marshmallows buy, close)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
 import { createRenderer, Scene, LOOK, SPRITE, COLS, DECAL, ENVS } from './party-render.mjs';
 import { put, C } from './font.mjs';
 import { BALLS, HATS, BODIES, packLook, riderSprites } from './looks.mjs';
@@ -57,7 +57,8 @@ function chase(s, at, yaw, { back = 9.2, pitch = -0.42, lift = 1.6 } = {}) {
   s.cam = [at[0] - Math.cos(yaw) * Math.cos(pitch) * back, at[1] + lift - Math.sin(pitch) * back, at[2] - Math.sin(yaw) * Math.cos(pitch) * back];
 }
 // HUD text at a point in the world (the renderer's projection)
-function label(s, r, p, text, color = C.WHITE) {
+// down: text rows under it, for names side by side that would run into each other
+function label(s, r, p, text, color = C.WHITE, down = 0) {
   const focal = Math.min(r.width, r.height * 1.6) * 0.62;
   const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw), cp = Math.cos(s.pitch), sp = Math.sin(s.pitch);
   const d = [p[0] - s.cam[0], p[1] - s.cam[1], p[2] - s.cam[2]];
@@ -65,9 +66,11 @@ function label(s, r, p, text, color = C.WHITE) {
   if (z < 1) return;
   const sx = r.width / 2 + (d[0] * -sy + d[2] * cy) * focal / z;
   const syy = r.height / 2 - (d[0] * -sp * cy + d[1] * cp + d[2] * -sp * sy) * focal / z;
-  const col = Math.round((sx - r.hudX) / (4 * r.hudScale) - text.length / 2), row = Math.floor(syy / (6 * r.hudScale));
+  const col = Math.round((sx - r.hudX) / (4 * r.hudScale) - text.length / 2), row = Math.floor(syy / (6 * r.hudScale)) + down;
   put(s.text, COLS, col, row, text, color);
 }
+// a look's label colour: earned, bought or free
+const tag = (x) => (x.unlock ? C.YELLOW : x.price ? C.GREEN : C.WHITE);
 const title = (s, r, t, sub, color = C.YELLOW) => {
   put(s.text, COLS, Math.floor((COLS - t.length) / 2), 1, t, color);
   if (sub) put(s.text, COLS, Math.floor((COLS - sub.length) / 2), 2, sub, C.GREY);
@@ -129,22 +132,57 @@ const SCENES = {
     title(s, r, 'EVERY LOOK ON EVERY SHAPE', 'BOX  CYLINDER  HEX  SPHERE   DECALS: RING DISC ZONE TARGET');
   },
 
-  // every ball a player can pick at the back (on the house hat), and in front every hat (on the house ball), rolling toward the camera
+  // every hat a player can pick in front (on the house ball), every ball behind (on the house hat), rolling toward the camera, seven to a row, seen from above
   wardrobe(s, r) {
     s.env = 'day';
-    s.yaw = Math.PI / 2; s.pitch = -0.3;
-    s.cam = [CX, FLOOR + 5, CX - 17];
-    s.scene.box(CX, FLOOR - 0.5, CX, 24, 0.5, 12, 0, 0.78, 0.8, 0.84, LOOK.MATTE);
-    const row = (list, z, gap, look, p0) => list.forEach((x, k) => {
-      const px = CX + (list.length - 1) * gap / 2 - k * gap;
+    s.yaw = Math.PI / 2; s.pitch = -0.66;
+    s.cam = [CX, FLOOR + 15.5, CX - 19.5];
+    s.scene.box(CX, FLOOR - 0.5, CX, 24, 0.5, 16, 0, 0.78, 0.8, 0.84, LOOK.MATTE);
+    const rows = (list, z0, look, p0) => list.forEach((x, k) => {
+      const row = Math.floor(k / 7), n = Math.min(7, list.length - row * 7);
+      const px = CX + (n - 1) * 1.3 - (k % 7) * 2.6, z = z0 + row * 4.3;
       ball(s, p0 + k, px, FLOOR, z, { vel: [0, 0, -2], roll: (s.time / 1000) * 1.5 + k, face: -Math.PI / 2 + 0.4, look: look(k) });
-      label(s, r, [px, z > CX ? FLOOR + 3.6 + (k & 1) * 0.7 : FLOOR - 0.3, z], x.name, x.unlock ? C.YELLOW : C.WHITE);
+      label(s, r, [px, FLOOR, z - 1.25], x.name, tag(x), k & 1);
     });
-    row(BALLS, CX + 3, 2.6, (k) => packLook(k, 0), 0);
-    row(HATS, CX - 7, 2.6, (k) => packLook(0, k), 16);
+    rows(HATS, CX - 9.5, (k) => packLook(0, k), 32);
+    rows(BALLS, CX - 0.9, (k) => packLook(k, 0), 0);
     s.slot = -1;
+    s.mini = null;
     s.focus = [CX, CX]; s.extent = 24;
-    title(s, r, 'EVERY BALL AND HAT', 'IN YELLOW: EARNED WITH AN ACHIEVEMENT');
+    title(s, r, 'EVERY BALL AND HAT', 'YELLOW: EARNED WITH AN ACHIEVEMENT   GREEN: BOUGHT WITH MARSHMALLOWS');
+  },
+
+  // close: what marshmallows buy (client/looks.mjs `price`). Each priced hat on a blocky rider, then the priced bodies; in front, the same hats on the round rider, each on a priced ball
+  shop(s, r) {
+    s.env = 'day';
+    s.yaw = Math.PI / 2; s.pitch = -0.24;
+    s.cam = [CX, FLOOR + 4.6, CX - 9.6];
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.62, 0.64, 0.66, LOOK.CHECKER, 4, 0.6);
+    const t = s.time / 1000;
+    const priced = (list) => list.map((x, k) => (x.price ? k : -1)).filter((k) => k >= 0);
+    const balls = priced(BALLS), hats = priced(HATS), bodies = priced(BODIES);
+    const n = hats.length + bodies.length;
+    const px = (k) => CX + (n - 1) * 0.75 - k * 1.5;
+    const name = (k, x) => label(s, r, [px(k), FLOOR + 3.9 + (k & 1) * 0.42, CX], `${x.name} ${x.price}`, C.GREEN);
+    hats.forEach((h, k) => {
+      const turn = -Math.PI / 2 + 0.5 * Math.sin(t + k);
+      const b = balls[k % balls.length];
+      ball(s, k, px(k), FLOOR, CX, { r: 0.7, face: turn, roll: t * 2, look: packLook(0, h, 1 + (k % 3)) });
+      ball(s, 16 + k, px(k) - 0.7, FLOOR, CX - 2.6, { r: 0.7, face: turn, roll: t * 2 + 1, look: packLook(b, h, 0) });
+      name(k, HATS[h]);
+    });
+    bodies.forEach((b, k) => {
+      ball(s, 8 + k, px(hats.length + k), FLOOR, CX, { r: 0.7, face: -Math.PI / 2 + 0.5 * Math.sin(t + k), look: packLook(0, HATS.findIndex((x) => x.key === 'none'), b) });
+      name(hats.length + k, BODIES[b]);
+    });
+    s.slot = -1;
+    s.mini = null;
+    s.focus = [CX, CX]; s.extent = 16;
+    title(s, r, 'WHAT MARSHMALLOWS BUY', 'EACH HAT ON EITHER BODY; THE BALLS IN FRONT, FROM THE LEFT:');
+    for (const [row, some] of [[3, balls.slice(0, 3)], [4, balls.slice(3)]]) {
+      const line = some.map((k) => `${BALLS[k].name} ${BALLS[k].price}`).join('   ');
+      put(s.text, COLS, Math.max(0, Math.floor((COLS - line.length) / 2)), row, line, C.GREEN);
+    }
   },
 
   // every body a player can pick (client/rider.mjs) in front, standing still, then walking; a crowd of blocky riders behind, each hat on one
@@ -224,21 +262,25 @@ const SCENES = {
     title(s, r, 'ELO PROS AVATARS', 'SIX PARTS FROM A 32-COLOUR PALETTE, AND A FACE');
   },
 
-  // close: every hat on a blocky rider, turning to show its face and its back
+  // close: every hat on a blocky rider, turning to show its face and its back, seven to a row
   outfits(s, r) {
     s.env = 'day';
-    s.yaw = Math.PI / 2; s.pitch = -0.12;
-    s.cam = [CX, FLOOR + 2.9, CX - 7.5];
+    s.yaw = Math.PI / 2; s.pitch = -0.24;
+    s.cam = [CX, FLOOR + 4.8, CX - 9.6];
     s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.62, 0.64, 0.66, LOOK.CHECKER, 4, 0.6);
     const t = s.time / 1000;
     HATS.forEach((x, k) => {
-      const px = CX + (HATS.length - 1) * 0.9 - k * 1.8;
-      ball(s, k, px, FLOOR, CX, { r: 0.7, face: -Math.PI / 2 + 0.5 * Math.sin(t + k), look: packLook(k + 1, k, 1 + (k % (BODIES.length - 1))) });
-      label(s, r, [px, FLOOR - 0.35, CX], x.name, x.unlock ? C.YELLOW : C.WHITE);
+      const row = Math.floor(k / 7), n = Math.min(7, HATS.length - row * 7);
+      const px = CX + (n - 1) * 0.8 - (k % 7) * 1.6 - row * 0.8, z = CX + row * 3.6;
+      ball(s, k, px, FLOOR, z, { r: 0.7, face: -Math.PI / 2 + 0.5 * Math.sin(t + k), look: packLook(k + 1, k, 1 + (k % 4)) });
+      // the front row's names under it, the back row's over it
+      if (row) label(s, r, [px, FLOOR + 3.7, z], x.name, tag(x), -(k & 1));
+      else label(s, r, [px, FLOOR - 0.3, z - 0.8], x.name, tag(x), k & 1);
     });
     s.slot = -1;
+    s.mini = null;
     s.focus = [CX, CX]; s.extent = 16;
-    title(s, r, 'EVERY HAT, BLOCKY', 'IN YELLOW: EARNED WITH AN ACHIEVEMENT');
+    title(s, r, 'EVERY HAT, BLOCKY', 'YELLOW: EARNED WITH AN ACHIEVEMENT   GREEN: BOUGHT WITH MARSHMALLOWS');
   },
 
   // three floors of hex ice, cracking under the crowd; tiles that went, tiles going

@@ -14,12 +14,12 @@
 // a hanging limb's foot going forward), color.a its part (PART) plus 16 times
 // its splay, turned about its front first (a twentieth of a radian a step,
 // 64 none: a hanging arm's hand going out to its right).
-import { lookOf, unpackLook, riderSprites, BODIES, STYLE } from './looks.mjs';
+import { lookOf, unpackLook, riderSprites, BODIES, STYLE, TRIM } from './looks.mjs';
 import { colorsOf } from './avatar.mjs';
 
 export const BLOCK = 12; // the sprite kind, the same in both renderers
-// what a box's faces show: 0 plain plastic, 1 a head's face, 2 a pumpkin's lit face and ribs, 3 metal, 4 a robot's face
-export const PART = { PLAIN: 0, FACE: 1, PUMPKIN: 2, METAL: 3, ROBOT: 4 };
+// what a box's faces show: 0 plain plastic, 1 a head's face, 2 a pumpkin's lit face and ribs, 3 metal, 4 a robot's face, 5 lit from inside (a halo)
+export const PART = { PLAIN: 0, FACE: 1, PUMPKIN: 2, METAL: 3, ROBOT: 4, GLOW: 5 };
 
 // A box's pixel, in WGSL any renderer can declare (the arena's fighters too):
 // blockRay casts a ray from e along unit d at a box, fwd the camera's forward
@@ -107,6 +107,7 @@ fn blockRay(e: vec3f, d: vec3f, fwd: vec3f, focal: f32, ctr: vec3f, h: vec3f, ya
         if (fv < -0.3 && fv > -0.6 && abs(fu) < 0.45) { b.alb = c * select(0.35, 0.8, fract(fu * 5.0) < 0.5); }
       }
     }
+    case 5u: { b.glow = c * 1.1; b.shine = 2.0; } // lit from inside
     default: {}
   }
   return b;
@@ -142,6 +143,8 @@ export function emoteOf(seen, p, w, now) {
 }
 
 const PEACH = [1.0, 0.8, 0.66];
+// how far under a round head's crown a standing hat's foot sits (m): where the head is as wide as the foot
+const ROUND_SINK = { [STYLE.TOPHAT]: 0.07, [STYLE.CONE]: 0.05, [STYLE.ANTLERS]: 0.05, [STYLE.PROP]: 0.01 };
 const madd = (a, v, k) => [a[0] + v[0] * k, a[1] + v[1] * k, a[2] + v[2] * k];
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const scale = (c, k) => c.map((v) => v * k);
@@ -166,17 +169,59 @@ export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob
   if (ek === EMOTE.DANCE) { bob += 0.05 * Math.abs(Math.sin(et * 9)); face += 0.45 * Math.sin(et * 4.5); }
   if (ek === EMOTE.SPIN) face += Math.min(1, et / 1.6) * Math.PI * 4;
   bob += 0.12 * jolt;
-  if (!B.blocky) {
-    const rs = riderSprites(slot, w);
-    out.push({ pos: [at[0], at[1] + 0.22 + bob, at[2]], size: 0.34, color: rs.body.color, kind: 1, minpx: 1 });
-    out.push({ pos: [at[0], at[1] + 0.78 + bob, at[2]], size: 0.3, color: rs.head.color, kind: 8, minpx: 1, vel: [Math.cos(face), 0, Math.sin(face)] });
-    return;
-  }
   const L = lookOf(slot, w);
   const f = [Math.cos(face), 0, Math.sin(face)];
   const side = [-f[2], 0, f[0]];
   const up = [0, 1, 0];
-  const box = (ctr, h, color, part = 0, pitch = 0, splay = 0) => out.push({ pos: ctr, size: Math.hypot(h[0], h[1], h[2]), color: [color[0], color[1], color[2], part + 16 * (Math.round(turnHalf(splay) / 0.05) + 64)], kind: BLOCK, minpx: 0.5, vel: h, roll: face, seed: pitch });
+  const box = (ctr, h, color, part = 0, pitch = 0, splay = 0, yaw = face) => out.push({ pos: ctr, size: Math.hypot(h[0], h[1], h[2]), color: [color[0], color[1], color[2], part + 16 * (Math.round(turnHalf(splay) / 0.05) + 64)], kind: BLOCK, minpx: 0.5, vel: h, roll: yaw, seed: pitch });
+  // A hat that stands off the head (STYLE.TOPHAT on), in boxes, on either
+  // body: mid the head's centre, top how far over it the hat sits, wide the
+  // head's half width, k the hat's size. A piece is put at (up from the
+  // hat's foot, forward, to its right), all times k.
+  const standing = (mid, top, wide, k) => {
+    const c = L.hatColor;
+    const at = (u, fw = 0, a = 0) => madd(madd(madd(mid, up, top + u * k), f, fw * k), side, a * k);
+    const put = (ctr, h, color, part, pitch, splay, yaw) => box(ctr, h.map((v) => v * k), color, part, pitch, splay, yaw);
+    if (st === STYLE.TOPHAT) {
+      put(at(0.012), [0.21, 0.012, 0.2], c);
+      put(at(0.124), [0.14, 0.1, 0.135], c);
+      put(at(0.046), [0.146, 0.022, 0.141], TRIM.BAND);
+    } else if (st === STYLE.CONE) {
+      // five tiers, narrowing, striped, and a bobble
+      for (let i = 0; i < 5; i++) put(at(0.026 + i * 0.052), [0.125 - i * 0.024, 0.026, 0.125 - i * 0.024], i & 1 ? TRIM.CREAM : c);
+      put(at(0.284), [0.034, 0.024, 0.034], TRIM.CREAM);
+    } else if (st === STYLE.HALO) {
+      // a ring of eight over the head, each lit from inside
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        put(at(0.15, 0.15 * Math.cos(a), 0.15 * Math.sin(a)), [0.07, 0.018, 0.026], c, PART.GLOW, 0, 0, face + a);
+      }
+    } else if (st === STYLE.ANTLERS) {
+      // each a beam leaning out, a tine off its middle leaning in, another off its tip
+      for (const s of [-1, 1]) {
+        put(at(0.09, 0, s * 0.1335), [0.02, 0.1, 0.02], c, 0, 0, -s * 0.45);
+        put(at(0.134, 0, s * 0.1095), [0.015, 0.05, 0.015], c, 0, 0, s * 0.5);
+        put(at(0.2016, 0, s * 0.2107), [0.015, 0.045, 0.015], c, 0, 0, -s);
+      }
+    } else if (st === STYLE.PHONES) {
+      // a cup on each ear, at the head's own width
+      for (const s of [-1, 1]) box(madd(mid, side, s * (wide + 0.02 * k)), [0.03 * k, 0.07 * k, 0.065 * k], c);
+    } else if (st === STYLE.PROP) {
+      // a stalk, and a blade that turns as the ball rolls
+      put(at(0.03), [0.012, 0.03, 0.012], TRIM.YELLOW);
+      put(at(0.066), [0.15, 0.006, 0.028], TRIM.YELLOW, 0, 0, 0, face + roll * 2);
+      put(at(0.07), [0.022, 0.012, 0.022], c);
+    }
+  };
+  const st = L.style;
+  if (!B.blocky) {
+    const rs = riderSprites(slot, w);
+    out.push({ pos: [at[0], at[1] + 0.22 + bob, at[2]], size: 0.34, color: rs.body.color, kind: 1, minpx: 1 });
+    out.push({ pos: [at[0], at[1] + 0.78 + bob, at[2]], size: 0.3, color: rs.head.color, kind: 8, minpx: 1, vel: [Math.cos(face), 0, Math.sin(face)] });
+    // a standing hat's boxes over the round head (0.3 across at its middle), sunk to where the head is as wide as the hat's foot; the rest is painted on it (party's lookHat)
+    if (st >= STYLE.TOPHAT) standing([at[0], at[1] + 0.78 + bob, at[2]], 0.3 - (ROUND_SINK[st] ?? 0), 0.3, 1.45);
+    return;
+  }
   // a limb hung from its pivot, hang metres down to its centre, swung by pitch and splayed (blockAt's frame)
   const limb = (pivot, h, hang, [pitch, splay], color, part = 0) => {
     const u0 = [-f[0] * Math.sin(pitch), Math.cos(pitch), -f[2] * Math.sin(pitch)];
@@ -216,7 +261,6 @@ export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob
   // the head, a size up on the rest (as such figures have it), and its hat
   const hs = 1.15;
   const hc = madd(base, up, 1.01 + 0.15 * hs);
-  const st = L.style;
   const pumpkin = st === STYLE.PUMPKIN;
   box(hc, [0.16 * hs, 0.15 * hs, 0.15 * hs], pumpkin ? L.hatColor : A ? A.head : skin, pumpkin ? PART.PUMPKIN : A ? (A.robot ? PART.ROBOT : PART.FACE) : B.face);
   const at3 = (u, fw, a = 0) => madd(madd(madd(hc, up, u * hs), f, fw * hs), side, a * hs);
@@ -240,5 +284,11 @@ export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob
     hat3(at3(0.19, 0.163), [0.03, 0.025, 0.006], [0.85, 0.04, 0.06]);
   } else if (pumpkin) {
     hat3(at3(0.2, 0), [0.03, 0.05, 0.03], [0.12, 0.3, 0.06]);
+  } else if (st >= STYLE.TOPHAT) {
+    // what a standing hat has on a box of a head and not on a round one: the band it hangs from, a cap's panels
+    if (st === STYLE.ANTLERS) hat3(at3(0.16, 0), [0.165, 0.012, 0.03], scale(hcol, 0.6));
+    if (st === STYLE.PHONES) hat3(at3(0.165, 0), [0.19, 0.016, 0.03], scale(hcol, 0.35));
+    if (st === STYLE.PROP) [hcol, TRIM.BLUE, TRIM.YELLOW].forEach((c, i) => hat3(at3(0.17, 0, (i - 1) * 0.113), [0.0565, 0.04, 0.165], c));
+    standing(hc, (st === STYLE.PROP ? 0.21 : 0.15) * hs, 0.16 * hs, hs);
   }
 }

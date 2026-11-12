@@ -24,7 +24,8 @@ import { relayFor, room, mapUrl } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { savedLook, wearable, guestLook } from './looks.mjs';
 import { guestAvatar } from './avatar.mjs';
-import { loadTally, gotSet } from './achievements.mjs';
+import { loadTally } from './achievements.mjs';
+import { loadPurse, openSet } from './purse.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
 
@@ -71,8 +72,8 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   };
   h.set(L.CL_SLOT, -1);
   h.set(L.CL_PITCH, 512);
-  // this player's look, as this browser keeps it (Fireplace's TV picks it; ?look=<word> for this visit), worn on every page
-  h.set(L.CL_LOOK, watch ? 0 : q.has('look') ? Number(q.get('look')) >>> 0 : wearable(savedLook(), gotSet(loadTally())));
+  // this player's look, as this browser keeps it (Fireplace's TV picks it; ?look=<word> for this visit), worn on every page; what it has neither earned nor bought comes off
+  h.set(L.CL_LOOK, watch ? 0 : q.has('look') ? Number(q.get('look')) >>> 0 : wearable(savedLook(), openSet(loadTally(), loadPurse())));
   // a slot's look word (client/looks.mjs): this player's own as picked, the rest as the relay sent them
   h.look = (p) => (p === h.get(L.CL_SLOT) ? h.get(L.CL_LOOK) : h.u32[(L.CL_LOOKS >> 2) + p]) >>> 0;
   // what a label calls a slot: the name its wallet goes by on Elo Pros, as the relay sent it, or P<n>
