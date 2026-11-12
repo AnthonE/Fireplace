@@ -360,6 +360,9 @@ export class Fighter {
     }
     const serial = (this.frame >> (t & 7)) & 1;
     if (!me.live || me.dead || h.state === L.H_OVER) return this.word({ serial });
+    // a kit mode that isn't a fight at all drives the body itself (Obby's course: client/am/obby.mjs)
+    // (and stands where it is put until play begins)
+    if (AMC[mode]?.drive) return this.word({ ...(h.state === L.H_PLAY ? AMC[mode].drive(view, me, this, t) : {}), serial });
     const eye = [me.pos[0], me.pos[1] + EYE, me.pos[2]];
 
     // the nearest enemy in sight, looked for every 16 ticks (each bot on its own

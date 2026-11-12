@@ -504,6 +504,57 @@ export const RU_JUMP = 20;
 export const RU_ZJUMP = 24;
 export const RU_GRAV = 28;
 export const RU_MAX = 100; // map_load takes each of the six f32s over 0 and at most this
+// Parts (map.json: a box's eighth element, tools/map-compile.mjs), after the
+// rules and laid with them: places that do something to the fighter touching
+// them, in every mode, as a Roblox obby's bricks do. A head of PARTS_HEAD
+// bytes: u32 how many, 12 B zero; then the fighter's body here, eight f32s
+// (BD_*: map.json "body"; a map without one has the arena's own, BODY, which
+// init writes, so the sim reads the body from MAP_BODY and never a
+// constant); then NPART rows of PART_SIZE: f32 x0, y0, z0, x1, y1, z1 where it is built;
+// u32 its kind (PK_*) in the low byte, a checkpoint's stage in the 16 bits
+// above; u32 its group + 1 if it moves with one (0: it stands still); f32 a,
+// b, c, the kind's own numbers; u32 0. A part is its own row and nothing
+// else: a solid one has a box of the same corners among the boxes, a ghost
+// none. $move reads the kinds that move a body (on either bank: they write
+// only its own record); the rest are the confirmed world's.
+export const MAP_PARTS = MAP_RULES + MAP_RULES_SIZE;
+export const PARTS_HEAD = 64;
+export const MAP_NPART = MAP_PARTS; // u32
+export const MAP_OWNBODY = MAP_PARTS + 4; // u32 1 if the body is the map's own: $move then asks only the body's own height of headroom, where the arena's asks a step more
+export const MAP_BODY = MAP_PARTS + 16; // 8 x f32, BD_*
+export const BD_R = 0; // half its width (it is a square post to the boxes, a cylinder to a shot)
+export const BD_TOP = 4; // its height
+export const BD_EYE = 8; // its eye's height: where its shots leave from
+export const BD_PUSH = 12; // how far from a mover's face it is pushed clear: BD_R and a millimetre
+export const BD_HEAD = 16; // its head's centre, for a head shot
+export const BD_HEADR2 = 20; // its head's radius, squared
+export const BD_HITR2 = 24; // the radius a shot hits it within, squared
+export const BD_HITTOP = 28; // and up to this height (its shoulders)
+// the arena's own body, as the sim's literals had it
+export const BODY = ['0.5', '1.8', '1.6', '0.501', '1.62', '0.0484', '0.2025', '1.45'];
+export const MAP_PART = MAP_PARTS + PARTS_HEAD;
+export const PART_SIZE = 48;
+export const NPART = 256;
+export const MAP_PARTS_END = MAP_PART + NPART * PART_SIZE;
+export const PT_KIND = 24; // byte offsets in a part's row
+export const PT_GROUP = 28;
+export const PT_A = 32;
+export const PT_B = 36;
+export const PT_C = 40;
+export const PK_KILL = 1; // touching it kills (lava, a kill brick)
+export const PK_BOUNCE = 2; // standing on it throws the body up at a m/s
+export const PK_ICE = 3; // standing on it, the speed across changes a of what it would (0..1)
+export const PK_CONVEY = 4; // standing on it carries the body (a, b) m/s along x and z
+export const PK_LADDER = 5; // beside it, under its top: forward climbs at a m/s, back comes down, nothing hangs on, jump lets go
+export const PK_CHECK = 6; // Obby: reaching it makes its stage the fighter's, and where it comes back
+export const PK_FINISH = 7; // Obby: reaching it finishes the course
+export const PK_NAMES = ['', 'kill', 'bounce', 'ice', 'conveyor', 'ladder', 'checkpoint', 'finish'];
+export const PK_FLOOR = (1 << PK_BOUNCE) | (1 << PK_ICE) | (1 << PK_CONVEY); // the kinds that act on what stands on them
+export const PT_EPS = '0.03'; // m: a body this near a part touches it (a body stops a hair off a box's face)
+export const PT_MAX = 100; // map_load takes a part's a, b and c within this
+export const NSTAGE = 250; // a checkpoint's stage, 1 to this
+export const BODY_R = [0.2, 1]; // map.json "body": half its width, its height and how far below its top the eye is, in metres
+export const BODY_TOP = [0.8, 3];
 export const NBOX = 2048; // a place brought from Roblox (tools/roblox.mjs) wants hundreds to thousands
 // A map from outside the build, packed (tools/map-compile.mjs packMap) for the
 // arena's and flight's map_load export: a head, then the bytes a build's own
@@ -580,6 +631,7 @@ export const KILL_BEHIND = 12;
 export const KILL_SUPER = 13;
 export const KILL_FALL = 14;
 export const KILL_CARRY = 15; // a flag or the skull swung by its carrier
+export const KILL_PART = 22; // a part of the map that kills (lava, a kill brick): past flight's, Crossroads' and Battle Royale's causes
 
 // More FX kinds, for the arena. A tracer's record is its end (the hit, or
 // where the ray gave out), the weapon as its size, the shot number; a hit's is
@@ -679,6 +731,13 @@ export const M_CROSSROADS = 15;
 //   by when they went out. Its constants in src/am/royale.mjs. (Flight's Ring
 //   Race moved to 17 for it.)
 export const M_ROYALE = 16;
+// Obby, on the kit with no sides, never in the rotation: a map that names it
+// plays it (map.json "mode": "obby"), or a forced seed.
+//   M_OBBY: an obstacle course over the map's parts (MAP_PARTS): no guns,
+//   nobody hurts anybody; checkpoints are stages and where you come back, the
+//   finish ends your run; the first to finish cuts the clock. Its constants
+//   in src/am/obby.mjs. (Flight's Ring Race moved to 18 for it.)
+export const M_OBBY = 17;
 // name is what a player sees (the M_* and FIESTA names are only the code's)
 export const MODES = [
   { name: FIESTA ? 'GRAB BAG' : 'FREE FOR ALL', rules: FIESTA ? 'RANDOM GUNS  MOST KILLS IN 10 MIN' : `${FRAG_LIMIT} KILLS WIN`, ticks: MATCH_TICKS },
@@ -698,6 +757,7 @@ export const MODES = [
   { name: 'ESCAPE', rules: 'HACK THE TERMINALS  REACH AN EXIT  OUTRUN THE HUNTER', ticks: 30000, team: 0 },
   { name: 'CROSSROADS', rules: 'SWORD  ROCKET  SUPERBALL  MOST KOS IN 10 MIN', ticks: 75000, team: 0 },
   { name: 'BATTLE ROYALE', rules: 'ONE LIFE  LOOT THE CRATES  STAY IN THE ZONE  LAST ONE STANDING WINS', ticks: 48750, team: 0, pads: 1 },
+  { name: 'OBBY', rules: 'REACH THE END  CHECKPOINTS SAVE YOUR PLACE  MIND WHAT GLOWS RED', ticks: 37500, team: 0 },
 ];
 export const MODE_TICKS = MODES.map((m) => m.ticks);
 // a room opens on a Fiesta, then two team matches to every free-for-all, and Lucky Blocks, Evade, Escape and Battle Royale before it comes round
@@ -780,6 +840,7 @@ export const AM = [
   { mode: M_ESCAPE, key: 'escape', prefix: 'es', hooks: ['spawn', 'hurt'] },
   { mode: M_CROSSROADS, key: 'crossroads', prefix: 'cx', hooks: ['spawn', 'hurt'] },
   { mode: M_ROYALE, key: 'royale', prefix: 'ry', hooks: ['spawn'] },
+  { mode: M_OBBY, key: 'obby', prefix: 'oy', hooks: ['spawn', 'hurt'] },
 ];
 export const AM_HOOKS = ['start', 'tick', 'kill', 'bar']; // every mode on the kit has these
 export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on the kit, sides or none

@@ -125,7 +125,8 @@ const gate = {
   refereeChecked: !!r && r.compared >= 4 * (nbots + chrome),
   hashesAgree: !!r && (r.mismatches?.length ?? r.mismatches) === 0 && r.agreed === r.compared,
   // (or, in Evade and Escape, where nobody kills anybody, someone was caught or downed)
-  someoneDied: (report.chromeState || []).some((s) => s.kills + s.deaths > 0 || s.kit?.caught > 0) || (report.botHost?.kills ?? 0) > 0 || report.botHost?.kit?.caught > 0,
+  // (in a mode that is no fight, something of its own happened: Evade's catches, an obby's finishers)
+  someoneDied: (report.chromeState || []).some((s) => s.kills + s.deaths > 0 || s.kit?.caught > 0 || s.kit?.finished > 0) || (report.botHost?.kills ?? 0) > 0 || report.botHost?.kit?.caught > 0 || report.botHost?.kit?.finished > 0,
   chromeKeptUp: (report.chromeState || []).every((s) => !s.behind),
   modePlayed: mode === null || ((!nbots || report.botHost?.mode?.mode === mode) && (report.chromeState || []).every((s) => s.mode === mode)),
   sidesDealt: !teamed || ((!two || both(report.sides)) && (report.chromeState || []).every((s) => (s.team === 0 || s.team === 1) && (!two || both(s.teamN)))),

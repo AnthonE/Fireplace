@@ -102,7 +102,7 @@ export function compileSpec(spec, images, name = 'map.json') {
     if (step > L.MV_STEP_MAX) fail(`${name}: move goes ${(step * L.TICK_HZ).toFixed(1)} m/s at its fastest, at most ${L.MV_STEP_MAX * L.TICK_HZ} (more seconds, or a shorter move)`);
     return { by, travel, wait, phase, ease: !!m.ease };
   };
-  const groups = [], boxes = [], teleporters = [];
+  const groups = [], boxes = [], teleporters = [], pts = [];
   const mat = (name, tint, ctx) => {
     const m = materialWord((tint && tint[name]) || name || 'metal');
     if (m < 0) fail(`${ctx}: no material "${name}" (${MATERIALS.join(', ')}, or a colour: "#rrggbb", "rock#rrggbb")`);
@@ -113,12 +113,22 @@ export function compileSpec(spec, images, name = 'map.json') {
     const list = s.prefab ? (prefabs[s.prefab] || fail(`${name}: no prefab "${s.prefab}"`)) : (s.boxes || fail(`${name}: no boxes`));
     const at = s.at || [0, 0, 0], turn = s.turn || 0;
     const first = boxes.length;
+    const firstPart = pts.length;
     for (const b of list) {
       if (b.length < 6 || b.slice(0, 6).some((v) => typeof v !== 'number')) fail(`${name}: a box is [x0, y0, z0, x1, y1, z1, material]`);
       if (!(b[0] < b[3] && b[1] < b[4] && b[2] < b[5])) fail(`${name}: box ${JSON.stringify(b)} is empty or inside out`);
-      boxes.push({ box: place(b, at, turn).map(round), material: mat(b[6], s.tint, name), group: groups.length });
+      const box = place(b, at, turn).map(round);
+      // a part: the box's eighth element says what it does to who touches it
+      const pt = b[7] === undefined ? null : partOf(b[7], turn, (m) => fail(`${name}: box ${JSON.stringify(b.slice(0, 6))}: ${m}`));
+      if (pt) pts.push({ ...pt, box, group: groups.length });
+      if (!pt || !pt.ghost) boxes.push({ box, material: mat(b[6], s.tint, name), group: groups.length });
     }
-    if (boxes.length === first) continue;
+    if (boxes.length === first) {
+      // nothing solid: no group, and its ghosts stand still
+      if (s.move && pts.length > firstPart) fail(`${name}: a structure that moves needs a solid box`);
+      for (const pt of pts.slice(firstPart)) pt.group = -1;
+      continue;
+    }
     const mine = boxes.slice(first);
     const bound = [0, 1, 2].map((a) => Math.min(...mine.map((b) => b.box[a]))).concat([3, 4, 5].map((a) => Math.max(...mine.map((b) => b.box[a]))));
     // a mover's group is bounded over its whole path, so a query that misses
@@ -132,6 +142,9 @@ export function compileSpec(spec, images, name = 'map.json') {
   if (boxes.length > L.NBOX) fail(`${boxes.length} boxes, at most ${L.NBOX}`);
   if (groups.length > L.NGROUP) fail(`${groups.length} structures, at most ${L.NGROUP}`);
   if (teleporters.length > L.NTELE) fail(`${teleporters.length} teleporters, at most ${L.NTELE}`);
+  if (pts.length > L.NPART) fail(`${pts.length} parts (boxes that do something), at most ${L.NPART}`);
+  // the fighter's body here (map.json "body", metres): a Roblox character's, for a place built round one
+  const body = spec.body ? bodyOf(spec.body, fail) : null;
   // ---- where fighters go, start and find guns
   const bounds = spec.bounds || fail('no "bounds": [x0, x1, z0, z1], where fighters can go');
   if (!(bounds[0] < bounds[1] && bounds[2] < bounds[3])) fail('bounds: [x0, x1, z0, z1]');
@@ -198,9 +211,13 @@ export function compileSpec(spec, images, name = 'map.json') {
     if (!(spec.mode in MAP_MODES)) fail(`mode "${spec.mode}": one of ${Object.keys(MAP_MODES).join(', ')}`);
     mode = MAP_MODES[spec.mode] + 1;
   }
+  if (spec.mode === 'obby' && !pts.some((p) => p.kind === L.PK_FINISH)) fail('mode "obby": the course needs a finish (a box whose eighth element is { "kind": "finish" })');
   const sides = [0, 0];
   for (const s of spawns) { const k = half(s.x, s.z, flags); if (k < 2) sides[k]++; }
-  ['red', 'blue'].forEach((team, k) => { if (!sides[k]) fail(`no spawn on ${team}'s half (the spawns nearer its flag at ${flags[k][0]}, ${flags[k][1]} than the other)`); });
+  // (a map that plays one mode every match, and that mode without sides, needs no spawn on each half: an obby starts at one end)
+  if (!(mode && !((L.TEAMED >> (mode - 1)) & 1))) {
+    ['red', 'blue'].forEach((team, k) => { if (!sides[k]) fail(`no spawn on ${team}'s half (the spawns nearer its flag at ${flags[k][0]}, ${flags[k][1]} than the other)`); });
+  }
 
   // ---- the bytes: the head as MAP lays it out, the groups, the boxes, the images
   const head = new DataView(new ArrayBuffer(L.MAP_HEAD));
@@ -257,12 +274,30 @@ export function compileSpec(spec, images, name = 'map.json') {
     [m.travel, m.wait, m.phase, L.MV_ON | (m.ease ? L.MV_EASE : 0)].forEach((v, i) => mb.setUint32(a + 12 + 4 * i, v, true));
   });
   if (nmove) parts.push(new Uint8Array(mb.buffer));
-  // the rules as MAP_RULES lays them out, only for a map that has them (the same)
-  const rb = new DataView(new ArrayBuffer(gait || mode ? L.MAP_RULES_SIZE : 0));
+  // the rules as MAP_RULES lays them out, only for a map that has them (the
+  // same), and after them the parts' head and rows as MAP_PARTS does, only
+  // for a map with a part or a body of its own
+  const long = pts.length || body;
+  const rb = new DataView(new ArrayBuffer(long ? L.MAP_RULES_SIZE + L.PARTS_HEAD + pts.length * L.PART_SIZE : gait || mode ? L.MAP_RULES_SIZE : 0));
   if (rb.byteLength) {
     rb.setUint32(L.RU_FLAGS, gait ? L.RU_GAIT : 0, true);
     rb.setUint32(L.RU_MODE, mode, true);
     if (gait) for (const k of ['WALK', 'ZWALK', 'ACCEL', 'JUMP', 'ZJUMP', 'GRAV']) rb.setFloat32(L[`RU_${k}`], gait[k], true);
+    if (long) {
+      const ph = L.MAP_RULES_SIZE;
+      rb.setUint32(ph + L.MAP_NPART - L.MAP_PARTS, pts.length, true);
+      if (body) {
+        rb.setUint32(ph + L.MAP_OWNBODY - L.MAP_PARTS, 1, true);
+        body.forEach((v, i) => rb.setFloat32(ph + L.MAP_BODY - L.MAP_PARTS + 4 * i, v, true));
+      }
+      pts.forEach((p, k) => {
+        const a = ph + L.PARTS_HEAD + k * L.PART_SIZE;
+        p.box.forEach((v, i) => rb.setFloat32(a + 4 * i, v, true));
+        rb.setUint32(a + L.PT_KIND, p.kind | (p.stage << 8), true);
+        rb.setUint32(a + L.PT_GROUP, p.group < 0 || !groups[p.group].move ? 0 : p.group + 1, true);
+        [p.a, p.b, p.c].forEach((v, i) => rb.setFloat32(a + L.PT_A + 4 * i, v, true));
+      });
+    }
     parts.push(new Uint8Array(rb.buffer));
   }
   const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
@@ -279,9 +314,55 @@ export function compileSpec(spec, images, name = 'map.json') {
       MAPSEG_MOVE: nmove ? offs[parts.length - (rb.byteLength ? 2 : 1)] : bytes.length, MAPSEG_NMOVEB: mb.byteLength,
       MAPSEG_RULES: rb.byteLength ? offs[parts.length - 1] : bytes.length, MAPSEG_NRULESB: rb.byteLength,
     },
-    ceiling, void: voidY, movement: gait, mode,
+    ceiling, void: voidY, movement: gait, mode, body, parts: pts,
     bounds, groups, boxes, teleporters, spawns, pads, flags, ball, hills, race, sides, heights, surf, origin: [ox, oz], size: [W, H],
   };
+}
+
+// A part, from a box's eighth element: { kind } and the kind's own numbers,
+// as a row of MAP_PART holds them. "ghost": true is a part with no box: it
+// does what it does and nothing stops on it (a kill zone, a finish line).
+//   kill                                 touching it kills
+//   bounce      speed (m/s up, 14)       standing on it throws you up
+//   ice         grip (0 to 1, 0.06)      standing on it, your speed across changes that share of what it would
+//   conveyor    velocity [vx, vz] (m/s)  standing on it carries you, turned with its structure
+//   ladder      speed (m/s, 4.5)         beside it: forward climbs, back comes down, jump lets go
+//   checkpoint  stage (1 and up)         Obby: where you come back, and how far you are
+//   finish                               Obby: the end of the course
+export const PART_KINDS = Object.fromEntries(L.PK_NAMES.map((n, k) => [n, k]).filter(([n]) => n));
+export function partOf(o, turn = 0, fail = (s) => { throw new Error(s); }) {
+  if (typeof o === 'string') o = { kind: o };
+  if (!o || typeof o !== 'object' || Array.isArray(o)) fail('a box\'s eighth element is a part: { "kind": ... }');
+  const kind = PART_KINDS[o.kind] || fail(`no part kind "${o.kind}" (${Object.keys(PART_KINDS).join(', ')})`);
+  const num = (v, what, lo, hi) => { if (typeof v !== 'number' || !(v >= lo && v <= hi)) fail(`${o.kind}: ${what} ${JSON.stringify(v)}: ${lo} to ${hi}`); return round(v); };
+  const p = { kind, name: o.kind, stage: 0, a: 0, b: 0, c: 0, ghost: !!o.ghost };
+  if (kind === L.PK_BOUNCE) p.a = num(o.speed ?? 14, 'speed', 1, 60);
+  if (kind === L.PK_ICE) p.a = num(o.grip ?? 0.06, 'grip', 0, 1);
+  if (kind === L.PK_LADDER) p.a = num(o.speed ?? 4.5, 'speed', 0.5, 25);
+  if (kind === L.PK_CONVEY) {
+    if (!Array.isArray(o.velocity) || o.velocity.length !== 2) fail('conveyor: velocity is [vx, vz], metres a second');
+    const v = placePoint([num(o.velocity[0], 'velocity', -25, 25), 0, num(o.velocity[1], 'velocity', -25, 25)], [0, 0, 0], turn);
+    p.a = round(v[0]); p.b = round(v[2]);
+  }
+  if (kind === L.PK_CHECK) {
+    if (!Number.isInteger(o.stage) || o.stage < 1 || o.stage > L.NSTAGE) fail(`checkpoint: stage ${JSON.stringify(o.stage)}: a whole number, 1 to ${L.NSTAGE}`);
+    p.stage = o.stage;
+  }
+  return p;
+}
+
+// map.json's "body" as MAP_BODY holds it (layout.mjs BD_*): { width, height,
+// eye } in metres. The arena's own is 1 m
+// wide and 1.8 tall, its eye at 1.6; a classic Roblox character at 0.28 m a
+// stud is 0.56 by 1.4.
+export function bodyOf(b, fail = (s) => { throw new Error(s); }) {
+  const num = (v, what, lo, hi) => { if (typeof v !== 'number' || !(v >= lo && v <= hi)) fail(`body.${what} ${JSON.stringify(v)}: ${lo} to ${hi} m`); return v; };
+  const r = num(b.width, 'width', 2 * L.BODY_R[0], 2 * L.BODY_R[1]) / 2, top = num(b.height, 'height', L.BODY_TOP[0], L.BODY_TOP[1]);
+  const eye = num(b.eye ?? top - 0.2, 'eye', 0.3, top - 0.05);
+  // what a shot hits, in the arena's own proportions: a head 0.22 m in radius
+  // 0.18 under the top of a 1.8 m body, and a trunk 0.9 of the width up to the shoulders
+  const k = top / 1.8;
+  return [r, top, eye, r + 0.001, top - 0.18 * k, (0.22 * k) ** 2, (0.9 * r) ** 2, top - 0.35 * k].map(round);
 }
 
 // The objectives a map leaves out. The flags: an eighth in from each end of
@@ -341,7 +422,8 @@ export function packMap(m) {
 // What map_load's codes mean
 export const MAP_LOAD_ERRORS = ['', 'not a packed map (its head)', 'a count past the build\'s limits', 'a part outside its bytes',
   'its images outside the world', 'a group or a box (out of range, inside out, or not a number)', 'its ceiling or void', 'a place that is not a number in reach',
-  'a mover (past its groups, its ticks out of range, or its flags)', 'its rules (a mode it hasn\'t, its flags, or a speed out of range)'];
+  'a mover (past its groups, its ticks out of range, or its flags)', 'its rules (a mode it hasn\'t, its flags, or a speed out of range)',
+  'a part or the body (too many, a kind it hasn\'t, inside out, a group it hasn\'t, or a number out of range)'];
 
 // The modes a map may name ("mode"), by M_*: the arena's own and the kit's keys.
 export const MAP_MODES = { fiesta: L.M_FIESTA, infection: L.M_INFECTION, gungame: L.M_GUNGAME, juggernaut: L.M_JUGGERNAUT,

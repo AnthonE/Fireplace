@@ -33,6 +33,7 @@ node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the ki
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
 node tools/roblox.mjs place.rbxl [maps/<name>] [--brief]   # a Roblox place (.rbxl/.rbxlx) as a map, --brief its scripts and port.md (docs/roblox.md); the editor opens one too
+node tools/obby.mjs                         # writes maps/obby/ (Sky Steps, the Obby mode's course: every kind of part); node net/play.mjs --arena --map obby plays it
 node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs/vox.md), through the same back half (tools/scene-map.mjs); the editor opens one too
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
@@ -105,8 +106,9 @@ shell whose own command line contains the name: it kills that shell.
   and the team modes Team Slayer, Capture the Flag, Oddball, King of the
   Hill, Headhunter, Territories, VIP, Assault, and the kit modes without
   sides Lucky Blocks, Evade, Escape and Battle Royale (`M_ROYALE`, 16:
-  crates and a zone in `AO`, the dead out for the match), and Crossroads,
-  which only a map naming it plays) are picked per match at run time, not built: `AH_MODE` to `AH_END`
+  crates and a zone in `AO`, the dead out for the match), and Crossroads
+  and Obby (`M_OBBY`, 17: a course over the map's parts, checkpoints and a
+  finish), which only a map naming one plays) are picked per match at run time, not built: `AH_MODE` to `AH_END`
   at `REGION + 0x48..0x74` (the team modes' scores, target and winner
   included), a side in `P_FL` (`PF_ZOMBIE`, `PF_JUGG`, `PF_BLUE`, and
   `PF_CARRY` for a flag's, the skull's or the bomb's carrier, `PF_FAST` for
@@ -139,6 +141,13 @@ shell whose own command line contains the name: it kills that shell.
   built-in half. A map's rules (`MAP_RULES`: map.json `movement`, a Roblox
   place's Humanoid that `$move` runs through `$a_gait`, and `mode`, played
   every match) are 0 for a map without them, so `$move` takes its old path.
+  After the rules sit the map's parts (`MAP_PARTS`: a box's eighth element
+  in map.json, a row each: `PK_KILL`, bounce, ice, conveyor, ladder, an
+  obby's checkpoint and finish; the kinds that move a body run in `$move` on
+  either bank, killing is confirmed-only) and the fighter's body
+  (`MAP_BODY`, map.json `body`): arena code reads the body through
+  `(!body r)`, `(!body top)`..., never `P_R` or `P_TOP`, and a map with
+  neither parts nor a body of its own must step the bits it always has.
 - Flight (`src/flight.wat`) is the arena build with `#if FLIGHT` where a
   ship differs: `$move` hands its tick to `$f_move`, charge shots and bombs
   fly in `$f_proj`, `$a_spawn` ends in `$f_spawn`, no pads, the match picks
@@ -148,8 +157,8 @@ shell whose own command line contains the name: it kills that shell.
   (`$a_arm`, pickups) must stay off a ship. A ship's position is its
   centre. It builds on its own map (`FLIGHT_MAP`, `maps/skyways/`,
   drawn by `tools/skyways.mjs`; `--flight-map` gives it another);
-  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 17: `MODES.length`, its news past every kit
-  mode's MX codes (120 and 121), which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
+  `MAP_CEILING` holds its ceiling. Its own mode, Ring Race (`M_RACE`, 18: `MODES.length`, its news past every kit
+  mode's MX codes (128 and 129), which `test/flight.test.mjs` checks), sits past the arena's `MODES` so the
   arena's build never sees it: its clock is `FLIGHT_TICKS`, its course the
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
   meeting (`$f_collide`) touch two records, so they are confirmed-only.

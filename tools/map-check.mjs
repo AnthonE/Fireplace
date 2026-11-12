@@ -25,6 +25,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // The matches a map is played in: [name, seed]
 export function matchesFor(spec) {
   if (spec.ceiling) return [['Dogfight', 7], ...(spec.race?.length ? [['Ring Race', forcedSeed(M_RACE)]] : [])];
+  // a course that starts at one end (an obby: its mode has no sides, and it names it) is played as itself alone
+  if (spec.mode === 'obby') return [['Obby', 7]];
   return [['Fiesta', 7], ['Capture the Flag', forcedSeed(L.M_CTF)], ['King of the Hill', forcedSeed(L.M_HILL)]];
 }
 

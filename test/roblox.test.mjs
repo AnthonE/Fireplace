@@ -344,3 +344,61 @@ test('a place\'s characters\' walk, jump and gravity are the map\'s movement, in
   assert.match(brief, /walking 4\.48 m\/s, jumping 1\.78 m, falling at 54\.9 m\/s\^2/);
   assert.match(brief, /plays the arena's Crossroads mode every match/);
 });
+
+test('an obby comes over as one: kill bricks by script and by name, a truss a ladder, a belt, ice, numbered checkpoints, a finish, and a Roblox character\'s body', () => {
+  const src = (t) => `<ProtectedString name="Source"><![CDATA[${t}]]></ProtectedString>`;
+  const kill = 'script.Parent.Touched:Connect(function(hit)\n  local h = hit.Parent:FindFirstChild("Humanoid")\n  if h then h.Health = 0 end\nend)';
+  const pad = 'script.Parent.Touched:Connect(function(hit)\n  hit.Parent.HumanoidRootPart.Velocity = Vector3.new(0, 80, 0)\nend)';
+  const belt = 'script.Parent.Velocity = script.Parent.CFrame.lookVector * 10';
+  const o = convert(baseplate,
+    { cls: 'SpawnLocation', name: 'SpawnLocation', size: [6, 1, 6], at: [-100, 0.5, 0] },
+    { name: 'Hot', size: [4, 1, 4], at: [-80, 0.5, 0], colour: [255, 0, 0], kids: [{ cls: 'Script', name: 'Kill', props: src(kill) }] },
+    { name: 'Lava', size: [4, 1, 4], at: [-70, 0.5, 0], colour: [255, 80, 0] },
+    { name: 'Beam', size: [8, 8, 1], at: [-60, 4, 0], collide: false, kids: [{ cls: 'Script', name: 'Kill', props: src(kill) }] },
+    { cls: 'TrussPart', name: 'Truss', size: [2, 20, 2], at: [-50, 10, 0] },
+    { name: 'Jump', size: [4, 1, 4], at: [-40, 0.5, 0], kids: [{ cls: 'Script', name: 'Up', props: src(pad) }] },
+    { name: 'Belt', size: [4, 1, 12], at: [-30, 0.5, 0], kids: [{ cls: 'Script', name: 'Go', props: src(belt) }] },
+    { name: 'Rink', size: [10, 1, 10], at: [-10, 0.5, 0], material: 1536 },
+    { cls: 'Folder', name: 'Checkpoints', kids: [
+      { name: '1', size: [4, 1, 4], at: [10, 0.5, 0] }, { name: '2', size: [4, 1, 4], at: [30, 0.5, 0] }, { name: '3', size: [4, 1, 4], at: [50, 0.5, 0] }] },
+    { name: 'Finish', size: [6, 1, 6], at: [80, 0.5, 0] },
+    { name: 'Wall', size: [4, 10, 4], at: [100, 5, 0] });
+  const parts = o.boxes.filter((b) => b[7]).map((b) => b[7]);
+  const by = (kind) => parts.filter((p) => p.kind === kind);
+  assert.equal(by('kill').length, 3, 'a script that kills, a name, and a beam nothing collides with');
+  assert.equal(by('kill').filter((p) => p.ghost).length, 1, 'the beam is a zone: no box');
+  assert.deepEqual(by('ladder'), [{ kind: 'ladder', speed: 4.48 }], 'climbed at the walk');
+  assert.deepEqual(by('bounce'), [{ kind: 'bounce', speed: 22.4 }], '80 studs/s up');
+  assert.deepEqual(by('conveyor'), [{ kind: 'conveyor', velocity: [0, -2.8] }], '10 studs/s the way it faces: -Z');
+  assert.deepEqual(by('ice'), [{ kind: 'ice' }]);
+  // the folder's parts are the stages: 1 the start (a spawn), 2 and 3 checkpoints
+  assert.deepEqual(by('checkpoint').map((p) => p.stage), [1, 2]);
+  assert.equal(by('finish').length, 1);
+  assert.equal(o.spec.mode, 'obby');
+  assert.deepEqual(o.spec.body, { width: 0.56, height: 1.4 });
+  assert.equal(o.spec.spawns.length, 1, 'only the start is a spawn');
+  assert.ok(o.report.some((r) => /parts that do something: .*3 kill/.test(r)), o.report.join('\n'));
+  assert.ok(o.report.some((r) => /an obby's stages: 3, from the numbered parts of Workspace\.Checkpoints/.test(r)));
+  // and it compiles: the parts' rows, the mode, the body
+  assert.equal(o.map.parts.length, parts.length);
+  assert.equal(o.map.mode, L.M_OBBY + 1);
+  assert.equal(o.map.body[0], Math.fround(0.28));
+  assert.equal(o.map.boxes.length, o.boxes.length - 1, 'every box but the ghost');
+  // Roblox's own way: spawn locations that change your team, a team a stage; the last stage is the finish
+  const t = convert(baseplate,
+    { cls: 'SpawnLocation', name: 'A', size: [6, 1, 6], at: [0, 0.5, 0], team: 1, props: '<bool name="AllowTeamChangeOnTouch">true</bool>' },
+    { cls: 'SpawnLocation', name: 'B', size: [6, 1, 6], at: [40, 0.5, 0], team: 21, props: '<bool name="AllowTeamChangeOnTouch">true</bool>' },
+    { cls: 'SpawnLocation', name: 'C', size: [6, 1, 6], at: [80, 0.5, 0], team: 23, props: '<bool name="AllowTeamChangeOnTouch">true</bool>' });
+  const tp = t.boxes.filter((b) => b[7]).map((b) => b[7]);
+  assert.deepEqual(tp.map((p) => [p.kind, p.stage]), [['checkpoint', 1], ['finish', undefined]]);
+  assert.equal(t.spec.mode, 'obby');
+  assert.equal(t.spec.spawns.length, 1);
+});
+
+test('a place with nothing of an obby in it has no parts, and a fighter is still a Roblox character\'s size', () => {
+  const o = convert(baseplate, { name: 'Wall', size: [4, 10, 4], at: [10, 5, 0] });
+  assert.ok(o.boxes.every((b) => b[7] === undefined));
+  assert.equal(o.spec.mode, undefined);
+  assert.deepEqual(o.spec.body, { width: 0.56, height: 1.4 });
+  assert.equal(o.map.parts.length, 0);
+});

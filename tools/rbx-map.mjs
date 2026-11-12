@@ -25,7 +25,7 @@
 // classic gear plays the arena's Crossroads mode ("mode").
 import { ancestor, path, readRoblox } from './rbx-file.mjs';
 import { weaponOf, humanoidOf, classicGear } from './rbx-brief.mjs';
-import { SURFACES, SURFACE_RGB, movement } from './map-compile.mjs';
+import { SURFACES, SURFACE_RGB, movement, bodyOf } from './map-compile.mjs';
 import { hex, solid, sceneToMap } from './scene-map.mjs';
 import * as L from '../src/layout.mjs';
 
@@ -263,6 +263,77 @@ export function moverParts(doc, under, s) {
   return movers;
 }
 
+// ---- parts: what a place's bricks do to who touches them, as map.json's
+// eighth element says it (tools/map-compile.mjs partOf). Read from what a
+// script plainly does to its parent, from what a part is, and last from the
+// names obby kits give their bricks: Map(part -> { part, why }).
+const KILL_NAME = /^(kill|lava|kill ?(brick|part|block)|death|deadly|damage|dmg|spikes?|lasers?)\d*$/i;
+const FINISH_NAME = /^(finish|end|win|winner|winners|victory|goal)( ?(line|pad|part|brick|block))?$/i;
+const KILLS = /\.Health\s*=\s*0\b|:TakeDamage\s*\(|:BreakJoints\s*\(|\.Health\s*-=|\.Health\s*=\s*[\w.]*\.Health\s*-/;
+const ICE = 1536; // Enum.Material.Ice
+export function partKinds(doc, under, s, walk) {
+  const out = new Map();
+  const set = (p, part, why) => { if (PARTS.has(p.class) && under(p) && !out.has(p)) out.set(p, { part, why }); };
+  const partsOf = (x) => { const list = []; const go = (y) => { if (PARTS.has(y.class)) list.push(y); y.children.forEach(go); }; go(x); return list; };
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v * 100) / 100)) + 0; // (+ 0: no -0 in map.json)
+  for (const sc of doc.instances) {
+    const src = sc.props.Source, t = sc.parent;
+    if (!SCRIPTS.has(sc.class) || typeof src !== 'string' || !t || !under(t)) continue;
+    const targets = PARTS.has(t.class) ? [t] : t.class === 'Model' || t.class === 'Folder' ? partsOf(t) : [];
+    if (!targets.length) continue;
+    const touched = /\.Touched\b/.test(src), why = `its script ${path(sc)}`;
+    let m;
+    if (touched && KILLS.test(src)) for (const p of targets) set(p, { kind: 'kill' }, why);
+    else if (touched && (m = new RegExp(`Velocity\\s*=\\s*Vector3\\.new\\s*\\(\\s*0\\s*,\\s*${NUM}\\s*,\\s*0\\s*\\)`).exec(src)) && Number(m[1]) > 0) {
+      for (const p of targets) set(p, { kind: 'bounce', speed: clamp(Number(m[1]) * s, 1, 60) }, why);
+    } else if ((m = new RegExp(`Velocity\\s*=\\s*(?:[\\w.]+\\.)?CFrame\\.[lL]ookVector\\s*\\*\\s*${NUM}`).exec(src))) {
+      // along the way the part faces (a CFrame's look is its -Z)
+      for (const p of targets) {
+        const r = p.props.CFrame?.r || [1, 0, 0, 0, 1, 0, 0, 0, 1], k = Number(m[1]) * s;
+        set(p, { kind: 'conveyor', velocity: [clamp(-r[2] * k, -25, 25), clamp(-r[8] * k, -25, 25)] }, why);
+      }
+    } else if (!touched && (m = new RegExp(`Velocity\\s*=\\s*Vector3\\.new\\s*\\(\\s*${NUM}\\s*,\\s*${NUM}\\s*,\\s*${NUM}\\s*\\)`).exec(src)) && (Number(m[1]) || Number(m[3]))) {
+      for (const p of targets) set(p, { kind: 'conveyor', velocity: [clamp(Number(m[1]) * s, -25, 25), clamp(Number(m[3]) * s, -25, 25)] }, why);
+    }
+  }
+  for (const p of doc.instances) {
+    if (!PARTS.has(p.class) || !under(p) || out.has(p)) continue;
+    const v = p.props.Velocity;
+    if (p.class === 'TrussPart') set(p, { kind: 'ladder', speed: clamp(walk, 0.5, 25) }, 'a truss');
+    else if (Array.isArray(v) && (v[0] || v[2]) && p.props.Anchored !== false) set(p, { kind: 'conveyor', velocity: [clamp(v[0] * s, -25, 25), clamp(v[2] * s, -25, 25)] }, 'its own Velocity, anchored');
+    else if (KILL_NAME.test(p.name || '')) set(p, { kind: 'kill' }, `its name, "${p.name}"`);
+    else if (FINISH_NAME.test(p.name || '')) set(p, { kind: 'finish' }, `its name, "${p.name}"`);
+    else if (p.props.Material === ICE) set(p, { kind: 'ice' }, 'its material, Ice');
+  }
+  return out;
+}
+
+// An obby's stages: the parts a player comes back on, in the course's order,
+// the first of them the start. Either spawn locations that change your team
+// when touched (a team a stage: Roblox's own way), in the order of the Teams
+// by the numbers in their names or as they are listed; or the parts of a
+// folder or model named for checkpoints or stages, each named by its number.
+// { start, checks: [...], why }, or null for a place with no stages.
+export function stagesOf(doc, under) {
+  const num = (x) => { const m = /(\d+)/.exec(x.name || ''); return m ? Number(m[1]) : null; };
+  const spawns = doc.instances.filter((x) => x.class === 'SpawnLocation' && under(x) && x.props.Enabled !== false && x.props.AllowTeamChangeOnTouch === true && x.props.Neutral === false);
+  const colours = [...new Set(spawns.map((x) => x.props.TeamColor))];
+  if (colours.length >= 2) {
+    const teams = doc.instances.filter((x) => x.class === 'Team');
+    const order = teams.every((t) => num(t) !== null) ? [...teams].sort((a, b) => num(a) - num(b)) : teams;
+    const rank = (c) => { const k = order.findIndex((t) => t.props.TeamColor === c); return k < 0 ? 1e6 + colours.indexOf(c) : k; };
+    const list = [...spawns].sort((a, b) => rank(a.props.TeamColor) - rank(b.props.TeamColor));
+    return { start: list[0], checks: list.slice(1), why: 'spawn locations that change your team when touched' };
+  }
+  for (const f of doc.instances) {
+    if (!(f.class === 'Folder' || f.class === 'Model') || !under(f) || !/^(check ?points?|stages?|spawns?)$/i.test(f.name || '')) continue;
+    const partOf = (x) => (PARTS.has(x.class) ? x : x.children.find((k) => PARTS.has(k.class)));
+    const kids = f.children.filter((x) => /^\D*\d+$/.test(x.name || '') && partOf(x)).sort((a, b) => num(a) - num(b)).map(partOf);
+    if (kids.length >= 2) return { start: kids[0], checks: kids.slice(1), why: `the numbered parts of ${path(f)}` };
+  }
+  return null;
+}
+
 // ---- the conversion
 
 export function robloxToMap(doc, opts = {}) {
@@ -285,6 +356,17 @@ export function robloxToMap(doc, opts = {}) {
 
   // the parts that are the place's solid ground and walls, and which of them move
   const movers = moverParts(doc, under, s);
+  // what its bricks do (a kill brick, a truss, a conveyor), and an obby's stages
+  const hum = humanoidOf(doc);
+  const kinds = partKinds(doc, under, s, hum.walk * s), stg = stagesOf(doc, under);
+  let finish = [...kinds.values()].some((k) => k.part.kind === 'finish');
+  const stageOf = new Map();
+  if (stg) {
+    stg.checks.forEach((x, k) => stageOf.set(x, k + 1));
+    // a course with no finish of its own ends on its last stage
+    if (!finish && stg.checks.length) { stageOf.delete(stg.checks.at(-1)); kinds.set(stg.checks.at(-1), { part: { kind: 'finish' }, why: 'the last stage' }); finish = true; }
+  }
+  const did = {};
   const objs = [], spawnParts = [];
   for (const inst of doc.instances) {
     if (!PARTS.has(inst.class)) continue;
@@ -292,8 +374,14 @@ export function robloxToMap(doc, opts = {}) {
     if (!under(inst)) { count.outside++; continue; }
     if (ancestor(inst, 'Camera') || ancestor(inst, 'Tool') || ancestor(inst, 'Accessory') || isCharacter(inst)) { count.characters++; continue; }
     const p = inst.props;
-    if (p.CanCollide === false) { count.passable++; continue; }
-    if ((p.Transparency ?? 0) >= 0.95) { count.invisible++; continue; }
+    // what it does, if anything: a stage's checkpoint, else what partKinds read
+    let part = stageOf.has(inst) ? { kind: 'checkpoint', stage: stageOf.get(inst) } : kinds.get(inst)?.part || null;
+    // a part nothing collides with, or nobody sees, is still what it does if it is a zone: one that kills, a stage, the finish
+    const zone = part && (part.kind === 'kill' || part.kind === 'checkpoint' || part.kind === 'finish');
+    if (p.CanCollide === false || (p.Transparency ?? 0) >= 0.95) {
+      if (!zone) { if (p.CanCollide === false) count.passable++; else count.invisible++; continue; }
+      part = { ...part, ghost: true };
+    }
     if (p.Anchored === false && o.anchored) { count.loose++; continue; }
     if (p.Anchored === false && isVehicle(inst)) { count.vehicles++; continue; }
     const { pos, neg, approx } = partSolids(inst, s, o.zstd);
@@ -303,10 +391,12 @@ export function robloxToMap(doc, opts = {}) {
     const colour = colourOf(p);
     const lk = look(p.Material ?? 256);
     const model = ancestor(inst.parent, 'Model');
-    const spawn = inst.class === 'SpawnLocation';
-    const obj = { pos, neg, colour, look: lk, surface: surfaceOf(p.Material ?? 256, colour), key: `${lk}${hex(colour)}`, model: model ? model.name : '', spawn, mover: movers.get(inst) || null };
+    // (a stage past the start is a checkpoint, not somewhere anyone starts; a numbered part that is the start is a spawn)
+    const spawn = (inst.class === 'SpawnLocation' && !stageOf.has(inst) && !(stg && part?.kind === 'finish')) || (!!stg && stg.start === inst);
+    if (part) did[part.kind] = (did[part.kind] || 0) + 1;
+    const obj = { pos, neg, colour, look: lk, surface: surfaceOf(p.Material ?? 256, colour), key: `${lk}${hex(colour)}`, model: model ? model.name : '', spawn, mover: movers.get(inst) || null, part };
     objs.push(obj);
-    if (spawn && p.Enabled !== false) {
+    if (spawn && p.Enabled !== false && !(stg && stg.start !== inst)) {
       const team = p.Neutral === false ? p.TeamColor : null;
       spawnParts.push({ obj, team, rgb: team == null ? null : brickRGB(team) });
     }
@@ -363,12 +453,29 @@ export function robloxToMap(doc, opts = {}) {
   };
 
   const out = sceneToMap({
-    objs, terrain, spawns: spawnParts, pads, count, notes, report, empty, maxMovers: MAX_MOVERS,
+    objs, terrain, spawns: spawnParts, pads, count, notes, report, empty, maxMovers: MAX_MOVERS, oneEnd: finish,
     name: o.name || doc.meta?.name || 'Roblox Place',
     words: { unit: `${s} m a stud`, void: 'Roblox\'s void', spawns: 'spawn locations', unnamed: 'parts', from: `a Roblox place, ${s} m a stud (tools/roblox.mjs)` },
   }, o);
+  // what its bricks do
+  if (Object.keys(did).length) {
+    out.report.push(`parts that do something: ${Object.entries(did).map(([k, n]) => `${n} ${k}`).join(', ')} (a script that plainly kills, throws or carries what touches its part; a truss; an anchored part's Velocity; Ice; and bricks named as obby kits name them)`);
+  }
+  if (stg) out.report.push(`an obby's stages: ${stg.checks.length + 1}, from ${stg.why}; the first is the start, the rest checkpoints`);
+  // an obstacle course: the arena's Obby mode, which needs a finish
+  if (finish && out.spec.structures.some((st) => st.boxes.some((b) => b[7]?.kind === 'finish'))) {
+    out.spec.mode = 'obby';
+    out.report.push('it has a finish: the map plays the arena\'s Obby mode (no guns; checkpoints save your place)');
+  }
+  // its characters' size: a classic one is 2 studs across and 5 tall, so a doorway built for it is one here
+  const bd = { width: Math.round(2 * s * 100) / 100, height: Math.round(5 * s * 100) / 100 };
+  try {
+    bodyOf(bd);
+    out.spec.body = bd;
+    out.report.push(`a fighter is a Roblox character's size: ${bd.width} m across, ${bd.height} m tall (2 by 5 studs)`);
+  } catch { out.report.push(`keeps the arena's body: a character at ${s} m a stud is out of the range a map takes`); }
   // how its characters move, in metres; out of the range a map takes, the arena's own
-  const hum = humanoidOf(doc), round = (v) => Math.round(v * 1e4) / 1e4;
+  const round = (v) => Math.round(v * 1e4) / 1e4;
   const mv = { walk: round(hum.walk * s), jump: round(hum.height * s), gravity: round(hum.gravity * s) };
   try {
     movement(mv);
@@ -377,7 +484,7 @@ export function robloxToMap(doc, opts = {}) {
   } catch (e) {
     out.report.push(`keeps the arena's movement: the place's (${hum.walk} studs/s, a ${hum.height.toFixed(1)}-stud jump, ${hum.gravity} studs/s^2) is out of range (${e.message})`);
   }
-  if (classicGear(doc)) {
+  if (classicGear(doc) && out.spec.mode !== 'obby') {
     out.spec.mode = 'crossroads';
     out.report.push('everyone spawns with Roblox\'s classic gear: the map plays the arena\'s Crossroads mode');
   }

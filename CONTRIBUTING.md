@@ -247,7 +247,7 @@ there. Then play it with bots:
 
 ```sh
 node net/play.mjs --arena --map <folder>                # open the URL it prints
-node net/play.mjs --flight --mode 17 --map <folder>     # Dogfight's Ring Race, on a map with gates
+node net/play.mjs --flight --mode 18 --map <folder>     # Dogfight's Ring Race, on a map with gates
 ```
 
 A Roblox place makes a map too: in the editor, **open… > a Roblox place…**

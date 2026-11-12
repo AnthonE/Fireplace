@@ -118,7 +118,7 @@ jobs:
           node harness/matrix.mjs --ticks 20000 --log logs/flight.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
           node tools/genflight.mjs --bots 8 --ticks 20000 --mode 4 --out logs/flight-slayer.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/flight-slayer.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
-          node tools/genflight.mjs --bots 8 --ticks 20000 --mode 17 --out logs/flight-race.qgl
+          node tools/genflight.mjs --bots 8 --ticks 20000 --mode 18 --out logs/flight-race.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/flight-race.qgl --wasm build/flight/game.wasm --runtimes node,deno,chromium
       - name: Party (build/party/), sixteen AI balls through the rotation of minigames
         run: |
@@ -298,12 +298,14 @@ jobs:
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --map crossroads
       - name: The arena on moving boxes (maps/lifts: lifts up two towers, platforms sliding over a pit; 64 AI fighters, every hash checked)
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --map lifts
+      - name: Obby on its own course laid at run time (maps/obby, Sky Steps: parts that kill, throw, slide, carry and climb, checkpoints and a finish; 64 AI fighters running it, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --map obby
       - name: Flight online, full (a relay on flight's sim, 256 AI pilots through its native door, every hash checked), and its team, juggernaut and race modes
         run: |
           node net/run-flight.mjs --chrome 0 --bots 256 --seconds 40
           node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 4
           node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 3
-          node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 17
+          node net/run-flight.mjs --chrome 0 --bots 64 --seconds 60 --mode 18
       - name: Party online, full (a relay on Party's sim, 256 AI balls through its native door, the rotation, a round placed, every hash checked)
         run: node net/run-party.mjs --chrome 0 --bots 256 --seconds 100
       - name: SUMO RING online (the minigame written in Rust forced, 64 AI balls, every hash checked)

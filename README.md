@@ -80,7 +80,7 @@ of golf. The top three of each game get 3, 2 and
 | | |
 | --- | --- |
 | [**Party**](docs/party.md) | Every player a ball, and a different minigame every round, 49 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring, Swiss Roll (a wheel of Swiss cheese, bump the others into its holes: once a game of its own, bumper balls), Whack a Mole, Balloon Bash, Egg Raid, Bowling, Fall Ball, Tug o' War and Mini Golf. |
-| [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and seventeen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, Battle Royale (one life, loot from crates, a zone closing in stages), and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault; and Crossroads, Roblox's own level with its classic sword, rocket launcher and superball, walking and jumping as Roblox does. |
+| [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and eighteen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, Battle Royale (one life, loot from crates, a zone closing in stages), and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault; Crossroads, Roblox's own level with its classic sword, rocket launcher and superball, walking and jumping as Roblox does; and Obby, an obstacle course of kill bricks, ice, conveyors, bounce pads, ladders and moving platforms with a checkpoint after each stage (Sky Steps, `--map obby`). |
 | [**Dogfight**](docs/flight.md) | The arena with wings: every fighter a ship over Skyways, a valley with a river canyon, spires, arches and ring gates. Lasers, a homing charge shot, bombs, boost, brake and barrel rolls, in a free-for-all, red against blue, the juggernaut or Ring Race, three laps through the gates. |
 | [**Golf**](docs/golf.md) | One course for everyone, rockets and grenades for clubs: a blast just behind your ball drives it 200 m, and every ball ever hit stays in play. |
 
@@ -141,6 +141,11 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
   the file on the editor ([docs/roblox.md](docs/roblox.md),
   [docs/vox.md](docs/vox.md)); `maps/crossroads/` is one of Roblox's own
   open-source places.
+- **Parts.** A box may do something to whoever touches it: kill, bounce,
+  slide like ice, carry like a conveyor, be climbed like a ladder, or be an
+  obby's checkpoint or finish. A Roblox obby's kill bricks, trusses,
+  conveyors and stages come over as these, and its characters' size with
+  them ([docs/arena.md](docs/arena.md#parts-boxes-that-do-something)).
 - **Moving boxes.** A structure may move to and fro, and fighters ride it and
   are pushed by it; a Roblox lift or platform that its script tweens comes
   over moving (`maps/lifts/`, [docs/arena.md](docs/arena.md#moving-boxes)).
@@ -197,7 +202,7 @@ protocol, for writing a client in any language, and
 | `net/` | the relay and its referee, the bot host, the room pool, and the online gates (`run-*.mjs`) |
 | `harness/` | replays one recorded match in Node, Deno and Chrome, every JIT tier and thread count, and compares every tick |
 | `tools/` | the assembler, the map compiler, a Roblox place's and a MagicaVoxel model's converters (`roblox.mjs`, `vox.mjs`), match recorders (`gen*.mjs`), a minigame generator, the trailer renderer, the starter kit's first run (`kit.mjs`) and the static site for GitHub Pages (`site.mjs`) |
-| `maps/` | Box Canyon, Skyways, Crossroads (a Roblox place) and Lifts (moving boxes): two images and a JSON file each, and Crossroads its licence |
+| `maps/` | Box Canyon, Skyways, Crossroads (a Roblox place), Lifts (moving boxes) and Sky Steps (an obby): two images and a JSON file each, and Crossroads its licence |
 | `rust/` | Party minigames in Rust (Sumo Ring) and the engine's bindings for them |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, hosting, the roadmap, and maps from [Roblox](docs/roblox.md) and [MagicaVoxel](docs/vox.md), minigames in [Rust](docs/rust.md) |

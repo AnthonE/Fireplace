@@ -70,6 +70,9 @@
 //     pos as faced now, no turn first), swing (a carrier's swing without
 //     carrying: at an enemy close in front, Escape's shove) }. me is
 //     fighter() of the confirmed world. Called every 8 ticks, staggered by slot.
+//   drive(view, me, bot, t) (optional): for a mode that is no fight at all
+//     (Obby's course), the AI fighter's whole tick in place of the brain's:
+//     it turns the bot (bot.turnTo) and returns { move, jump } for its word.
 //   state(view) (optional): what the gates (net/run-arena.mjs) should see, JSON.
 //   And for a mode without sides, optionally: own (its hud has rows 0 to 4,
 //   no kills line over them), kills (false: no KILLS or DEATHS on the board),
@@ -94,9 +97,10 @@ import evade from './evade.mjs';
 import escape from './escape.mjs';
 import crossroads from './crossroads.mjs';
 import royale from './royale.mjs';
+import obby from './obby.mjs';
 
 export const AMC = [];
-for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault, lucky, evade, escape, crossroads, royale]) AMC[m.mode] = m;
+for (const m of [slayer, ctf, oddball, hill, headhunter, territories, vip, assault, lucky, evade, escape, crossroads, royale, obby]) AMC[m.mode] = m;
 // the module whose MX codes a news item's size falls in (MX_AM + 8k for AM[k]), or undefined
 export const newsOf = (size) => (size >= L.MX_AM ? AMC[L.AM[(size - L.MX_AM) >> 3]?.mode] : undefined);
 export { SIDE, SIDE_C, SIDE_RGB, sideOf } from './sides.mjs';

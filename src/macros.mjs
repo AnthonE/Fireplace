@@ -160,6 +160,14 @@ export function makeMacros({ DEBUG }) {
       return out;
     },
 
+    // The arena: (!body top), a number of the fighter's body on this map
+    // (layout.mjs MAP_BODY, BD_*: r, top, eye, push, head, headr2, hitr2, hittop).
+    body: (k) => {
+      const off = layout[`BD_${k.toUpperCase()}`];
+      if (off === undefined) throw new Error(`(!body ${k}): no such number`);
+      return `(f32.load (i32.const ${layout.MAP_BODY + off}))`;
+    },
+
     // Debug-only: trap with a code if a value is NaN or infinite.
     chk: (v, code, idx) => (DEBUG ? `(call $assert_finite ${v} (i32.const ${code}) ${idx})` : ''),
   };

@@ -148,13 +148,13 @@ of a room plays `ARENA_MODES[k % 16]` (`src/layout.mjs`), Fiesta, Team Slayer,
 Headhunter, Infection, Capture the Flag, Territories, gun game, Oddball, VIP,
 Juggernaut, King of the Hill, Assault, Lucky Blocks, Evade, Escape, Battle
 Royale, and round again: a free-for-all, then two [team modes](#teams), and
-the four kit modes without sides last. A seventeenth, [Crossroads](#crossroads), is in no
-rotation: a map that names it plays it every match. So a room
+the four kit modes without sides last. Two more, [Crossroads](#crossroads) and [Obby](#obby), are in no
+rotation: a map that names one plays it every match. So a room
 opens on a Fiesta; Fireplace's arena, one match long, plays whichever mode
 the room draws for it ([fireplace.md](fireplace.md)). A seed whose top byte is `0xA8` plays
 mode `(seed >>> 16) & 0xff` (the mode's `M_*`: 1 Infection, 2 gun game, 3
 Juggernaut, 4 Team Slayer, 5 Capture the Flag, 6 Oddball, 7 King of the Hill,
-8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads, 16 Battle Royale) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
+8 Headhunter, 9 Territories, 10 VIP, 11 Assault, 12 Lucky Blocks, 13 Evade, 14 Escape, 15 Crossroads, 16 Battle Royale, 17 [Obby](#obby)) every match: `node net/play.mjs --arena --mode 1` is a room of Infection only
 (`tools/genarena.mjs` and `net/run-arena.mjs` take `--mode` too). The four
 free-for-all modes:
 
@@ -423,6 +423,57 @@ Online on its own map, laid at run time with its movement (`net/run-arena.mjs
 --map crossroads`, a CI step): 64 AI fighters for 60 s, every hash the
 referee checked equal, 524 KOs, 0.15 ms a step.
 
+### Obby
+
+An obstacle course (mode 17), on the kit with no sides and never in the
+rotation: a map that names it plays it (`"mode": "obby"`, which needs a
+`finish` part), or a forced seed. Nobody is armed and nobody can hurt
+anybody. The course is the map's [parts](#parts-boxes-that-do-something);
+the mode reads two of them:
+
+- a **checkpoint** touched whose stage is past yours is your stage (any
+  later one counts: a shortcut found is a shortcut earned), and where you
+  come back, a second after a death, on its top; before the first, at the
+  map's spawn;
+- the **finish** ends your run, timed from the start of play. The first
+  home cuts the clock to 45 s, so a room doesn't wait out a straggler; the
+  match is over at the clock (5 minutes) or when everyone in it is home.
+
+As play begins everyone is put back at the start, wherever the countdown
+took them. Places: the finishers by their time, then the rest by stage, then
+the fewer deaths. Such a map needs no spawn on each half, and
+`tools/map-check.mjs` plays it as itself alone.
+
+`maps/obby/` is **Sky Steps** (`node tools/obby.mjs` writes it): seven
+stages in a line over a floor of lava, one for each kind of part: stepping
+stones 2.4 m apart, two bars that kill across a walkway, 12 m of ice half as
+wide, a belt running back at half a walk, a bounce pad up to a ledge 3.5 m
+over it, a ladder 6 m up a tower, and a platform ferrying 12 m to the
+finish. Its fighters walk 6 m/s, stop when the keys do and jump 2 m under
+55 m/s² ([a map's own movement](#a-maps-own-movement)), so a jump is 3.2 m
+of air.
+
+```sh
+node net/play.mjs --arena --map obby
+```
+
+The AI fighter doesn't fight here: the mode's client module drives it
+(`drive` in `client/am/obby.mjs`): at the next checkpoint, forward; a jump
+at an edge with somewhere still to land inside 0.85 of a jump's reach, taken
+at speed, with a step back from the brink for the run-up; over a low thing
+that kills, and a halt before a tall one; nothing that moves is jumped from
+or onto, it is waited for and walked. Eight of them all finish Sky Steps
+in 30 to 45 s, the first in about 25, match after match.
+
+`test/arena-obby.test.mjs` (9 tests): the mode on the kit and out of the
+rotation; everyone at the start with empty hands as play begins; stages
+taken, skipped to and never lost; a death back on its checkpoint or the
+start; the finish's time, the clock cut once, the end with everyone home,
+the places; a rifle butt doing nothing; a forced seed on Box Canyon, which
+has no course, running to the clock; the client module's lines and marker;
+8 AI fighters on the debug build through two matches. Online on the course
+(`net/run-arena.mjs --map obby`, a CI step): OBBY_GATE.
+
 ## Teams
 
 Red against blue, in eight more modes on the same build: Team Slayer, Capture
@@ -688,9 +739,11 @@ QG_MAP=mymap npm run build                # or build it in, as the build's own: 
   Hill's, `[{ at, radius }]` (`at` as a spawn's: `[x, z]` or `[x, z, top]`);
   `void`, a height in metres below which a fighter dies by falling (left
   out, none); `movement`, how its fighters walk, jump and fall
-  ([A map's own movement](#a-maps-own-movement)); `mode`, the mode every
-  match on it plays (a key: `crossroads`, `lucky`, `ctf`...; left out, the
-  rotation). A structure may `move` ([Moving boxes](#moving-boxes)). Left out, the flags stand an eighth in from each end of the
+  ([A map's own movement](#a-maps-own-movement)); `body`, how big a fighter
+  is on it ([A map's own body](#a-maps-own-body)); `mode`, the mode every
+  match on it plays (a key: `crossroads`, `obby`, `lucky`, `ctf`...; left out, the
+  rotation). A box may have an eighth element, which makes it a
+  [part](#parts-boxes-that-do-something): `"kill"`, `{ "kind": "bounce" }`... A structure may `move` ([Moving boxes](#moving-boxes)). Left out, the flags stand an eighth in from each end of the
   bounds' longer side, the skull in the middle, and three hills in the
   middle and halfway to each flag. Materials: `metal`, `rock`, `dark`,
   `red`, `blue`, `light`, `plain`, or a colour of the box's own over one of
@@ -763,6 +816,68 @@ one plank, a tower at each end with a lift. Online, 7 AI fighters and
 Chrome for 40 s on it (`net/run-arena.mjs --map lifts`): 305 interval
 hashes checked by the referee, all equal; 64 AI fighters for 60 s (a CI
 step): 3,702, all equal.
+
+### Parts: boxes that do something
+
+A box's eighth element makes it a part: something that acts on the fighter
+touching it, in every mode, as an obby's bricks do in Roblox.
+
+```json
+[483, 30, 486, 483.4, 30.4, 490, "light#ff4a1c", "kill"],
+[526, 29.5, 486, 529, 30, 490, "light#ffd23f", { "kind": "bounce", "speed": 22 }]
+```
+
+| Kind | Its numbers | What it does |
+| --- | --- | --- |
+| `kill` | | touching it anywhere kills (the feed says LAVA) |
+| `bounce` | `speed`, m/s up (14) | standing on it throws you up at that speed |
+| `ice` | `grip`, 0 to 1 (0.06) | standing on it, your speed across changes only that share of what it would: slow away, slow to stop |
+| `conveyor` | `velocity` `[vx, vz]`, m/s | standing on it carries you, through the boxes as your own steps go; turned with its structure |
+| `ladder` | `speed`, m/s (4.5) | beside it with your feet under its top: forward climbs, back comes down, neither hangs on, the jump key lets go; from the ground only forward takes hold |
+| `checkpoint` | `stage`, 1 to 250 | [Obby](#obby): reaching it is your stage, and where you come back |
+| `finish` | | Obby: the end of the course |
+
+`"ghost": true` is a part with no box: it does what it does and nothing
+stops on it (a kill zone, a finish line across a doorway). A part in a
+structure that moves goes with it. At most 256 parts a map.
+
+They are rows of their own after the map's rules (`MAP_PARTS` in
+`src/layout.mjs`: the box where it is built, the kind, its group if it rides
+one, three numbers), 48 B each, and a solid one is also a box among the
+boxes. `$move` reads the kinds that move a body, on either bank, since they
+write only its own record: the part it stood on as the tick began (a
+mover's where it was then) and a ladder beside it. Killing is the confirmed
+world's, in `$arena` beside the void. A body touches a part within 3 cm,
+because a body stops a hair off a box's face. A map with no parts loads
+`MAP_NPART` once a tick and takes none of it: Box Canyon, Lifts, Crossroads,
+Evade and Battle Royale on Box Canyon and a Dogfight gave the same interval
+hashes before and after, over 4,000 to 12,000 ticks each of AI fighters.
+
+`test/arena-parts.test.mjs` (12 tests): the rows as compiled, a ghost with
+no box, a map without parts keeping its bytes; what the compiler and
+map_load refuse; a kill brick from the side, on top and as a zone; a bounce
+to the height its speed gives; ice against a floor; a conveyor's 4 m in a
+second and its wall; a ladder climbed, hung on, come down and let go; a
+kill brick and a bounce pad on movers; the prediction bit for bit over ice,
+a belt, a pad and a ladder (900 ticks, over 900 comparisons); the body
+below.
+
+### A map's own body
+
+`"body": { "width": 0.56, "height": 1.4 }` (and `eye`, 0.2 under the top
+unless given) makes the fighter that size on this map: a classic Roblox
+character at 0.28 m a stud, which `tools/roblox.mjs` writes for every place.
+The arena's own is 1 m across and 1.8 tall with its eye at 1.6. The sim
+reads the body from `MAP_BODY` (eight f32s: half the width, the height, the
+eye, how far a mover pushes it clear, and what a shot hits: the head's
+centre and radius, the trunk's radius and top), which init fills with the
+arena's own numbers when the map has none, so no build's constants changed.
+A map's own body also asks only its own height of headroom when it walks:
+the arena's body keeps a step (0.5 m) of room over its head, so it needs
+2.3 m to walk under a ceiling, where a 1.4 m body with its own asks 1.4 and
+is put back if a step up would leave its head no room. A gap 0.8 m wide and
+a slab 1.5 m off the floor pass the Roblox body and stop the arena's
+(`test/arena-parts.test.mjs`).
 
 ### A map's own movement
 
