@@ -37,6 +37,8 @@ node tools/obby.mjs                         # writes maps/obby/ (Sky Steps, the 
 node tools/vox.mjs model.vox [maps/<name>]  # a MagicaVoxel model as a map (docs/vox.md), through the same back half (tools/scene-map.mjs); the editor opens one too
 node net/play.mjs --arena --map <name>      # play the arena on it, laid at run time, no build (--flight --map for Dogfight's)
 node tools/serve.mjs                        # then /client/studio.html: a Party minigame edited, built (tools/asm-core.mjs in a worker), checked and played in the page
+node tools/serve.mjs                        # then /client/games.html: the shelf, every game, minigame, mode and map a tile that plays it
+node tools/shelf.mjs [--only id,id] [--lines]   # the shelf's pictures (client/shelf/<id>.webp, each tile's own page shot with no GPU) and index.json; packs maps/ into build/maps/
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
 node tools/arena-shot.mjs [--views track,ships] [--scenes figures,faces [--env night]]   # the arena's and Dogfight's views of it alone (a local room on a fixed seed), or the arena renderer's demo page with no sim, into traces/
 ```
@@ -204,6 +206,18 @@ shell whose own command line contains the name: it kills that shell.
   players after. Both sample the input slots through `client/input.mjs`.
   `coi.js` makes a page cross-origin isolated where the host can't send the
   headers.
+- The shelf (`client/games.html`, `client/games.mjs`) draws the catalogue
+  `client/shelf.mjs` builds, which touches no page and no network
+  (`test/shelf.test.mjs`): its tiles come from `FP_SETS`, `PLAYLIST`,
+  `MINIGAMES`, `MODES`, `ARENA_MODES`, `FLIGHT_MODES` and the maps
+  `tools/site.mjs` packs (`build/maps/index.json`), so a new minigame, mode
+  or map is on it by being in its list, and a whole new game by a row in its
+  `PAGES`. A tile's link is its page's own query for a local room
+  (`?local=1`, `&mg=`, `&mode=`, `&map=`): a page that changes one changes
+  the catalogue with it. `client/golf.html` is golf on the host (a local room
+  with bred golfers; `index.html` stays the relay's page), and
+  `client/shelf-link.mjs` each page's link back. Counts come from the pools
+  (docs/hosting.md, "What the shelf reads"), never from a relay.
 - The studio (`client/studio.html`, its worker `client/studio-worker.mjs`)
   builds party in the page: `tools/asm-core.mjs` (the assembler's
   preprocessor, checks and prefixer, the file reader passed in) and

@@ -13,9 +13,9 @@ node net/rooms.mjs net/rooms.example.json   # Fireplace's rooms on game.elopros.
 Each room writes its status to `status_dir/<port>.json` every 2 s
 (`relay.ts --status`): `players`, `max_players`, `spectators`, the sim `tick`
 and `tick_hz`, written whole so a reader never sees half a file. The pool
-writes the game's server list to `list`, one row per room (`id`, `name`,
-`addr`, `max_players`, `status_url`), the shape the Elo Pros launcher and store
-read. A page host serves both over https, the status at `status_base`:
+writes the game's server list to `list`, one row per room (`id`, `game`,
+`name`, `addr`, `max_players`, `status_url`), the shape the Elo Pros launcher
+and store read. A page host serves both over https, the status at `status_base`:
 
 ```nginx
 location /fireplace/rooms/ { alias /srv/fireplace/traces/rooms/; add_header Cache-Control no-store; }
@@ -166,5 +166,40 @@ room 115 MB resident, 5% of a core empty and 16% with 4 in, so the example's
 step slower; the referee watchdog ends a room whose sim falls 10 s behind.
 `node net/run-kit-rooms.mjs` is the gate: a fake Pages host, the pool, a
 page going online at the button, a second meeting it by invite, bots at the
-door, the arena's page doing the same on a map the site publishes, the
-refusals and the caps.
+door, the shelf counting them on Fireplace's tile and a page opened from that
+tile landing in the room, the arena's page doing the same on a map the site
+publishes (its two players counted on the map's tile), the refusals and the
+caps.
+
+## What the shelf reads
+
+The shelf (`client/games.html`) shows how many are playing on a tile, and
+makes the tile's click a seat among them, from what the two pools already
+serve; it asks nothing of a relay. With neither, every tile is a local room
+with AI players.
+
+- **The list beside the page**, `rooms/servers.json` with each row's
+  `status_url`. A row's `game` (the pool's `game`; added for this, and read
+  from the status or the row's `id` where a list has none) puts its room on
+  that game's tile: `players` summed over the game's rooms, the link the
+  fullest room with a seat, `<page>?url=https://<addr>/`, which the page pins
+  with `certs/hash.txt` as it does its own relay. Rooms all full: the count
+  shows and the tile plays its local room. A pool plays its game's rotation
+  on the build's own map, so its rooms count on the game's tile (and on its
+  built-in map's), never on a mode's or a minigame's.
+- **The kit pool**, `GET <pool>`: beside `rooms`, `max_rooms` and `players`
+  it now answers `open`, a row for each room that is up, `{room, game,
+  game_sha256, map, map_sha256, players, max_players}` (no address, which
+  `rooms/<room>` gives to who asks for it). A room counts on this site's
+  shelf only where both hashes are the site's own (`build/<game>/manifest.json`
+  and `build/maps/index.json`, which `tools/site.mjs` writes with each map's
+  sha256), so another copy's rooms are nobody else's tiles. The link is the
+  invite, `<page>?room=<id>` with `&map=` for a map's room. A map's room
+  counts on the map's tile, and on the tile of the mode the map plays
+  (Sky Steps and Obby are one room).
+
+The shelf reads both when it opens and every 20 s while it is in view: one
+fetch of the list and one per room's status, or one `GET` of the pool, and
+the five manifests once if the pool has any room. A mode's or a minigame's
+tile is a seed (`?mode=`, `?mg=`) a pool's room is not started with, so those
+tiles are local rooms until a pool takes a seed with the ask.
