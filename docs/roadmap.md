@@ -260,7 +260,8 @@ crediting who made what (every theme is one). Next, in order:
    `/api/items/of/{wallet}?title=fireplace` once a slot has a wallet (below)
    and refusing an owned look a slot doesn't hold. A theme is free, a look is
    free, earned or bought, an item is owned.
-   Next for the purse: sync purchases to the wallet. Today a bought look is
+   Partly done, through items: each priced look is also an owned item
+   ([coin.md](coin.md#skins)). Next for the purse: sync purchases to the wallet. Today a bought look is
    one browser's (localStorage), while a signed-in player's marshmallows are
    already a stat on Elo Pros, so a second browser shows the same total and
    an empty purse, and the relay, which cannot see a purse, passes on any

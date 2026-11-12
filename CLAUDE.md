@@ -43,6 +43,7 @@ node tools/shelf.mjs [--only id,id] [--lines]   # the shelf's pictures (client/s
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
 node tools/arena-shot.mjs [--views track,ships] [--scenes figures,faces [--env night]]   # the arena's and Dogfight's views of it alone (a local room on a fixed seed), or the arena renderer's demo page with no sim, into traces/
 node tools/coin.mjs [--check] [--pick a|b|c]   # the coin's sheet (coin/fireplace.json) held to pump.fun's create form, and its pictures drawn into coin/art/ (docs/coin.md)
+node tools/shop.mjs [--payer W | --coin MINT --cap N] [--write]   # the shop's prices, and opening it or moving it to the coin (coin/shop.json, elo.json); node tools/shop-shots.mjs draws its pictures into coin/art/items/
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -289,6 +290,13 @@ shell whose own command line contains the name: it kills that shell.
   `client/achievements.mjs`, written into `elo.json` with the stats and
   append-only like the achievements. The amounts are the house's: no text
   here, a description or a challenge, names one. Tickers are bare, no `$`.
+  The thirteen priced looks are also the shop's items (`client/shop.mjs`,
+  `docs/coin.md#skins`): a look's key is its item's key, its place in
+  `BADGE_ITEMS` (`net/wire.mjs`, append-only) its bit in a badge word, and
+  `elo.json`'s `economy` is written from that table by `tools/elo.mjs` for
+  Fireplace's own manifest only, and only once `coin/shop.json` names the
+  wallet that is paid (`tools/shop.mjs`); give a look a `price` and it needs a
+  tier there (`test/shop.test.mjs`).
 
 ## Style
 

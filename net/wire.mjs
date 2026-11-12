@@ -138,7 +138,11 @@ export const CHAT = { LINE: 0, OPEN: 1, LISTEN: 2, OFF: 3 };
 // to net/chat.mjs's CHAT_MAX first; a session that sends more than this is ended.
 export const CHAT_WIRE_MAX = 480;
 // A badge word's bits, what the relay read off a wallet's Solana items: append-only.
+// Bit 0 is the Pill; bit 1 + k is the shop's item BADGE_ITEMS[k], a priced look
+// (client/looks.mjs) the wallet owns as a Fireplace Items NFT. A key's bit never moves.
 export const BADGE_PILL = 1;
+export const BADGE_ITEMS = ['bee', 'soccer', 'ladybird', 'checker', 'mint', 'disco', 'cone', 'phones', 'tophat', 'antlers', 'prop', 'halo', 'goldbot'];
+export const BADGE_ITEM_MASK = ((1 << BADGE_ITEMS.length) - 1) << 1;
 // why a keyframe is sent: a join, or a resync for an old hole, a client far behind, or a hash mismatch
 export const SYNC = { JOIN: 0, HOLE: 1, BEHIND: 2, DESYNC: 3 };
 export const EV_JOIN = 1;

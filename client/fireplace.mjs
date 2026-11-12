@@ -31,6 +31,7 @@ import { readClock } from './clock.mjs';
 import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName, lookId } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult } from './achievements.mjs';
 import { balance, buy, openSet, emptyPurse, loadPurse, freshPurse, savePurse } from './purse.mjs';
+import { ownedLooks } from './shop.mjs';
 import { filmClock, filmSound, scoreTrack, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 import { touchWanted } from './touch.mjs';
@@ -97,7 +98,10 @@ async function main() {
   let tally = KEEP ? loadTally() : emptyTally();
   // what the marshmallows bought (client/purse.mjs); got is all this browser holds, the achievements and those
   let purse = KEEP ? loadPurse() : emptyPurse();
-  let got = openSet(tally, purse);
+  // what this slot's wallet owns as items, a badge word's item bits: the page's open set takes them, once it has signed in
+  const owned = () => ownedLooks(host.badges(get(L.CL_SLOT)));
+  let got = openSet(tally, purse, owned());
+  let ownedSeen = owned().join();
   let look = q.has('look') ? Number(q.get('look')) >>> 0 : KEEP ? wearable(savedLook(), got) : 0;
   set(L.CL_LOOK, look);
   let lookAt = -1e9, listAt = -1e9, listPage = 0; // when B, H or P, and L, last put their card on the TV; the list's page
@@ -108,7 +112,7 @@ async function main() {
     purse = freshPurse(purse);
     const r = buy(tally, purse, lookId(x), x.price);
     if (r.ok) { purse = r.purse; savePurse(purse); }
-    got = openSet(tally, purse);
+    got = openSet(tally, purse, owned());
     return r;
   };
   // the looks an achievement opens
@@ -123,7 +127,7 @@ async function main() {
     if (next.tally === tally) return;
     tally = next.tally;
     saveTally(tally);
-    got = openSet(tally, purse);
+    got = openSet(tally, purse, owned());
     opened = next.opened;
   }
 
@@ -396,6 +400,14 @@ async function main() {
     const g = view.dv.getUint32(L.FP_GAME, true);
     const held = view.dv.getUint32(L.FP_STAGE, true) === 1;
     if (held) tallyUp();
+    // signing in can hand over looks the wallet owns: open them, and put on the one this browser last wore
+    const ownedNow = owned().join();
+    if (ownedNow !== ownedSeen) {
+      ownedSeen = ownedNow;
+      got = openSet(tally, purse, owned());
+      const w = wearable(savedLook(), got);
+      if (!q.has('look') && KEEP && w !== look) wear(w);
+    }
     if (st >= 1 && g !== game && !mounting) mountGame(g);
     drive();
     showLine(!(scene === 'in' && zoom >= 0.999));

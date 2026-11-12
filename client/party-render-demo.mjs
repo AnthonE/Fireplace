@@ -5,7 +5,7 @@
 // traces/party-render-<scene>.png; in a browser it draws the one in ?scene=
 // (or flips through them all, a click for the next), moving.
 //   ?orbit=0 holds the camera still
-//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=shop (the ones marshmallows buy, close)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
+//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=shop (the ones marshmallows buy, close)  ?scene=item~ball:bee (one look, close: the shop's pictures)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
 import { createRenderer, Scene, LOOK, SPRITE, COLS, DECAL, ENVS } from './party-render.mjs';
 import { put, C } from './font.mjs';
 import { BALLS, HATS, BODIES, packLook, riderSprites } from './looks.mjs';
@@ -183,6 +183,26 @@ const SCENES = {
       const line = some.map((k) => `${BALLS[k].name} ${BALLS[k].price}`).join('   ');
       put(s.text, COLS, Math.max(0, Math.floor((COLS - line.length) / 2)), row, line, C.GREEN);
     }
+  },
+
+  // one look close on a plain stage, for the shop's pictures (client/shop.mjs, tools/shop-shots.mjs): item~ball:bee, item~hat:halo, item~body:goldbot.
+  // A ball on the house rider with no hat, a hat on the house ball, a body on a ball of its own colour with no hat.
+  item(s, r, env, view = 'ball:bee') {
+    s.env = env || 'sunset';
+    s.yaw = Math.PI / 2;
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.5, 0.52, 0.56, LOOK.MATTE);
+    const [kind, key] = view.split(':'), none = HATS.findIndex((x) => x.key === 'none');
+    const at = (list) => list.findIndex((x) => x.key === key);
+    const look = kind === 'ball' ? packLook(at(BALLS), none, 0) : kind === 'hat' ? packLook(0, at(HATS), 0) : packLook(0, none, at(BODIES));
+    if (look === 0 && !(kind === 'hat' || kind === 'ball' || kind === 'body')) throw new Error(`item~${view}: ball:, hat: or body: and a key`);
+    // the camera looks level at the middle of what is for sale: the whole rider for a ball or a body, the head for a hat
+    const [ty, dz] = kind === 'hat' ? [3.0, 2.5] : kind === 'body' ? [2.3, 3.8] : [1.7, 3.6];
+    s.cam = [CX, FLOOR + ty + 0.3, CX - dz];
+    s.pitch = -Math.atan2(0.3, dz);
+    ball(s, 0, CX, FLOOR, CX, { r: 0.8, face: -Math.PI / 2 + 0.55, roll: 0.9, look });
+    s.slot = -1;
+    s.mini = null;
+    s.focus = [CX, CX]; s.extent = 12;
   },
 
   // every body a player can pick (client/rider.mjs) in front, standing still, then walking; a crowd of blocky riders behind, each hat on one
@@ -670,7 +690,7 @@ async function main() {
     const s = frameState(W, H, HS);
     s.text = new Uint32Array(COLS * r.rows);
     s.time = time;
-    SCENES[base](s, r, env);
+    SCENES[base](s, r, env, view);
     if (env) s.env = env;
     // ~over: the frontends' view when there is nobody to follow, high over the stage's edge
     if (view === 'over') {
@@ -679,7 +699,7 @@ async function main() {
       s.cam = [s.focus[0] + Math.cos(0.8) * R * 1.3, FLOOR + R * 0.95, s.focus[1] + Math.sin(0.8) * R * 1.3];
     }
     s.time = time;
-    put(s.text, COLS, 1, r.rows - 1, `${base.toUpperCase()}  ${s.env.toUpperCase()}  ${s.scene.count} SOLIDS  ${s.casters.length} CASTERS  ${s.solid.length + s.glow.length} SPRITES`, C.GREY);
+    if (base !== 'item') put(s.text, COLS, 1, r.rows - 1, `${base.toUpperCase()}  ${s.env.toUpperCase()}  ${s.scene.count} SOLIDS  ${s.casters.length} CASTERS  ${s.solid.length + s.glow.length} SPRITES`, C.GREY);
     return s;
   };
   // a frame read back as a PNG (base64), headless Chrome can't composite WebGPU

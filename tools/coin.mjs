@@ -18,6 +18,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FONT } from '../client/font.mjs';
+import { isWallet } from '../client/shop.mjs';
 import { isMain } from './main.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,17 +28,6 @@ export const SIZES = { coin: [1024, 1024], banner: [1500, 500], post: [1600, 900
 
 // ---- the sheet
 
-const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-// a Solana address: base58 of 32 bytes
-function isWallet(s) {
-  if (typeof s !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s)) return false;
-  let n = 0n;
-  for (const ch of s) n = n * 58n + BigInt(B58.indexOf(ch));
-  let bytes = 0;
-  for (; n > 0n; n >>= 8n) bytes++;
-  for (const ch of s) { if (ch !== '1') break; bytes++; } // a leading 1 is a zero byte
-  return bytes === 32;
-}
 const https = (u) => typeof u === 'string' && /^https:\/\/[^\s/]+\.[^\s/]+(\/\S*)?$/.test(u);
 const picture = (p) => typeof p === 'string' && /\.(png|jpe?g|gif|webp)$/i.test(p);
 
@@ -72,7 +62,7 @@ export function problems(sheet) {
 // ---- the pixels
 
 // the TV's card and title (client/room.mjs), its fire (client/room-render.mjs cardFire), Grandma's room (client/themes/grandma.json)
-const INK = '#10141f', INK_DEEP = '#080a10', GOLD = '#ffcf6a', BONE = '#c9b89a', WHITE = '#ffffff';
+export const INK = '#10141f', INK_DEEP = '#080a10', GOLD = '#ffcf6a', BONE = '#c9b89a', WHITE = '#ffffff';
 const LIME = '#b8ff38', ELO_INK = '#0a0c0a'; // Elo Pros' mark, as on its other coins
 const PAL = {
   r: '#d8461a', o: '#ff9a2a', y: '#ffe9a0', w: '#fff6d0', // the fire, out to in
@@ -211,8 +201,8 @@ const letter = (k) => Object.keys(DRAFTS).find((d) => d[0] === k);
 
 // ---- the banner and the post: the room behind, the words on the right where the TV was
 
-const FIRE_MARK = (s) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${17 * s} ${20 * s}" width="${17 * s}" height="${20 * s}">${centred(FLAME, 8.5 * s, 0, s)}${bitmap(LOGS, 0, 17 * s, s)}</svg>`;
-const words = (text, px, fill) => {
+export const FIRE_MARK = (s) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${17 * s} ${20 * s}" width="${17 * s}" height="${20 * s}">${centred(FLAME, 8.5 * s, 0, s)}${bitmap(LOGS, 0, 17 * s, s)}</svg>`;
+export const words = (text, px, fill) => {
   const t = pixelText(text, 0, 0, px, fill);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${t.w} ${5 * px}" width="${t.w}" height="${5 * px}" style="display:block">${t.svg}</svg>`;
 };
@@ -225,7 +215,7 @@ function wrap(text, n) {
   }
   return lines;
 }
-const page = (w, h, body) => `<!doctype html><html><head><meta charset="utf-8"><style>
+export const page = (w, h, body) => `<!doctype html><html><head><meta charset="utf-8"><style>
 body{margin:0;width:${w}px;height:${h}px;overflow:hidden;background:${INK};position:relative}
 .col{position:absolute;display:flex;flex-direction:column;align-items:flex-end}
 .by{position:absolute;display:flex;align-items:center;gap:14px}

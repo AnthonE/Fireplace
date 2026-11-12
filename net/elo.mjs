@@ -9,7 +9,7 @@
 // wallet's achievements to POST /api/gamestats/<slug>/report (the relay's
 // reportAchievements). Results come from the referee, never from a client. Runs in Deno (the relay), Node (the tests) and Workers.
 import * as L from '../src/layout.mjs';
-import { BADGE_PILL } from './wire.mjs';
+import { BADGE_PILL, BADGE_ITEMS } from './wire.mjs';
 
 // The ratings ladder for each game, by G_*: a game's skill is its own.
 export const LADDERS = ['golf', 'arena', 'bumper', 'party', 'dogfight']; // bumper balls' retired (layout.mjs FP_SETS): its number kept
@@ -51,12 +51,20 @@ export function readResult(u8, dv) {
 }
 
 // The badge word a wallet's items give it (GET /api/items/sol/of/<wallet>,
-// which reads the Solana wallet linked to an Ethereum one): a row of this game
-// (slug) with the item's key. Drawing only. Anything else is no badge: a dark
-// answer (no collection yet), an unreachable one, null for a read that failed.
+// which reads the Solana wallet linked to an Ethereum one): the Pill for a row
+// of this game (slug) with its key, and a bit (wire.mjs BADGE_ITEMS) for each
+// priced look the wallet owns, which the page opens in its wardrobe. Drawing
+// only. Anything else is no badge: a dark answer (no collection yet), an
+// unreachable one, null for a read that failed, an item this build has no bit for.
 export function badgesOf(answer, slug) {
   const rows = Array.isArray(answer?.items) ? answer.items : [];
-  return rows.some((i) => i?.item === 'pill' && String(i?.title).toLowerCase() === slug) ? BADGE_PILL : 0;
+  let word = 0;
+  for (const i of rows) {
+    if (String(i?.title).toLowerCase() !== slug) continue;
+    if (i?.item === 'pill') word |= BADGE_PILL;
+    else { const k = BADGE_ITEMS.indexOf(i?.item); if (k >= 0) word |= 2 << k; }
+  }
+  return word >>> 0;
 }
 
 // A result as the match Elo Pros rates, or null when fewer than two of its

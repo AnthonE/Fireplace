@@ -155,7 +155,10 @@ flag 64 gets every signed-in slot's badge word after its welcome, then the
 ones that changed; a client that doesn't never sees one. The relay reads them
 when the slot signs in, from `GET /api/items/sol/of/<wallet>` on Elo Pros
 (`badgesOf` in `net/elo.mjs`); no client can say its own. Bit 0 is the Pill, a
-free cosmetic for ten minutes of hosted play. A slot with none, or that
+free cosmetic for ten minutes of hosted play. Bits 1 to 13 are the shop's
+looks, `BADGE_ITEMS[k]` at bit 1 + k (`net/wire.mjs`): a ball, hat or body the
+wallet owns as a Fireplace Items NFT, which the page opens in its wardrobe
+([coin.md](coin.md)). A key's bit never moves; a new item is appended. A slot with none, or that
 empties, is 0. So is any answer but the item itself, a read that failed
 included: sign-in never waits for this read and never turns on it.
 

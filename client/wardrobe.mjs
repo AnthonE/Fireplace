@@ -12,9 +12,10 @@
 // the mouse is free, with PLAY to take the controls again.
 
 import * as L from '../src/layout.mjs';
-import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, drawLook, lookName, lookId, saveLook } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, drawLook, lookName, lookId, saveLook, savedLook, wearable } from './looks.mjs';
 import { ACHIEVEMENTS, loadTally } from './achievements.mjs';
 import { balance, buy, openSet, loadPurse, freshPurse, savePurse } from './purse.mjs';
+import { ownedLooks } from './shop.mjs';
 import { touchWanted } from './touch.mjs';
 
 const CSS = `
@@ -289,12 +290,15 @@ export function createWardrobe(s) {
 export function pageWardrobe(h, { canvas, q, watch = false }) {
   if (watch || q.get('bot') === '1' || q.get('watch') === '1') return null;
   const tally = loadTally();
-  let purse = loadPurse(), got = openSet(tally, purse);
+  let purse = loadPurse();
+  // what this slot's wallet owns as items (client/shop.mjs), once the page has signed in
+  const owned = () => ownedLooks(h.badges(h.get(L.CL_SLOT)));
+  let got = openSet(tally, purse, owned()), ownedSeen = owned().join();
   const spend = (x) => {
     purse = freshPurse(purse);
     const r = buy(tally, purse, lookId(x), x.price);
     if (r.ok) { purse = r.purse; savePurse(purse); }
-    got = openSet(tally, purse);
+    got = openSet(tally, purse, owned());
     return r;
   };
   const fullscreen = () => {
@@ -307,5 +311,11 @@ export function pageWardrobe(h, { canvas, q, watch = false }) {
     slot: () => h.get(L.CL_SLOT), avatar: () => h.avatar(h.get(L.CL_SLOT)), sit: () => canvas.click(), fullscreen,
     keys: false, play: 'PLAY', note: 'or click the game', folded: touchWanted(q),
   });
-  return { frame: (now) => w.frame(!document.pointerLockElement, true, now) };
+  return {
+    frame: (now) => {
+      const o = owned().join();
+      if (o !== ownedSeen) { ownedSeen = o; got = openSet(tally, purse, owned()); const w = wearable(savedLook(), got); if (!q.has('look') && w !== (h.get(L.CL_LOOK) >>> 0)) h.set(L.CL_LOOK, w); }
+      w.frame(!document.pointerLockElement, true, now);
+    },
+  };
 }

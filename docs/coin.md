@@ -77,7 +77,7 @@ read at 48 px.
 | pairs against | PROS, on pump.fun's curve and then its pool |
 | how a player gets it | buys it, or plays for it: a share of a daily pot for the day's challenges, on rooms we host, signed in |
 | a game's pay | none. The top three still get marshmallows, and marshmallows are the room's score: they are not the coin, and no rate between the two is posted |
-| what it buys | nothing yet. Looks are bought with marshmallows out of a browser's purse (`client/purse.mjs`); selling one for the coin waits on purchases living with the wallet ([roadmap.md](roadmap.md)) |
+| what it buys | the thirteen priced looks as owned items, in PROS until it lands ([Skins](#skins)). Marshmallows still buy them into one browser's purse (`client/purse.mjs`) |
 | the house | never sells it: a prize wallet spends it on players only |
 
 The pot is the house's rule, not the game's: a fixed sum a UTC day, split by
@@ -109,6 +109,8 @@ Built here, with the coin:
    the live service: the first signed-in Solana game should show on
    `/api/gamestats/fireplace/of/<wallet>`.
 3. **The sheet and the pictures**, above.
+4. **Owned looks** ([Skins](#skins)): the relay reads a signed-in wallet's
+   items and the page opens the looks it owns.
 
 Results come from the referee, never a client, and a local room
 (`?local=1`) reports nothing, so only play on rooms we host earns. A player
@@ -116,6 +118,75 @@ alone in a hosted room wins every game; the pot's cap bounds what that takes,
 and the gate after it is the one ONESHOT's plan names: count only games with
 two signed-in wallets in them, which is already the rule for a rated match
 (`matchOf`).
+
+## Skins
+
+The thirteen looks marshmallows buy (`client/looks.mjs` `price`: six balls, six
+hats and the gold robot) are also sold as owned items, one pass each in the
+Fireplace Items collection on Solana (Metaplex Core, as oneshot's skins are).
+A purchase then follows the wallet to any browser and can be sold on, which a
+marshmallow purse in one browser cannot. Marshmallows keep buying a look into
+this browser; the two are separate doors to one look, and no rate between them
+is posted. A look is still drawing only: no tick, record or hash knows it.
+
+`client/shop.mjs` is the table, by tier. In PROS now (oneshot's skins were
+50,000 to 1,000,000 PROS before its coin), and with the coin in days of the
+daily pot's per-player cap, the way oneshot's were (gear two days of a maxed
+pot, its top skin twenty):
+
+| tier | PROS | days of the cap | looks |
+|---|---|---|---|
+| 0 | 50,000 | 2 | bumblebee, soccer ball, ladybird, party hat, headphones |
+| 1 | 100,000 | 4 | checkers, peppermint, top hat, antlers |
+| 2 | 250,000 | 10 | propeller cap, halo |
+| 3 | 500,000 | 15 | disco ball |
+| 4 | 1,000,000 | 20 | gold robot |
+
+The tiers follow the marshmallow prices' order (a test holds it) and are a
+proposal: one table, edit it. `node tools/shop.mjs` prints what each look
+costs now.
+
+- **The pictures** are Party's own renderer's, one per look and the
+  collection's (`node tools/shop-shots.mjs`, into `coin/art/items/`, 512 px
+  each and 1024 px for the collection), copied into Elo Pros' items kit as
+  `deploy/solana-items/art/fireplace-<key>.jpg` with the sheet that names the
+  fourteen items, the Pill and these.
+- **What a wallet owns reaches the page** through the relay, which already
+  reads `GET /api/items/sol/of/<wallet>` at sign-in for the Pill: bit 1 + k of
+  the slot's badge word is the shop's item k (`BADGE_ITEMS` in
+  `net/wire.mjs`, [wire.md](wire.md)). The page opens those looks in the
+  wardrobe the way a bought one opens and puts back the one the browser last
+  wore. Nothing is enforced: the relay still passes any look word a client
+  sends, as it does a bought one.
+- **The shop is dark** until `coin/shop.json` names the wallet that is paid,
+  and `elo.json` has no `economy` until then (a copy made from this template
+  never does): people would pay for what cannot be minted before the
+  collection exists. `node tools/shop.mjs --payer <wallet> --write` opens it,
+  priced in PROS; on the coin's landing day `node tools/shop.mjs --coin <mint>
+  --cap <n> --write` moves every price to the coin and the cap, and committing
+  `elo.json` to main is the switch, as oneshot's `ops/skins_in_coin.py` was.
+  A sale lands in that wallet; the platform mints the item to the buyer.
+
+## Cards
+
+Elo Pros already has a Fireplace card set (`data/cards/catalogs.json`, set 3:
+five cards and a badge) and drops from hosted play work for any game in the
+catalog: half the set, a card per half hour on our rooms, a full set crafted
+into the badge. What this adds is the other way to earn one: Fireplace gets a
+row in Elo Pros' `data/challenges/rewards.json`, so each day's three
+challenges and each week's three pay cards from that set, at the caps oneshot
+has (six cards a week a wallet, the house paying the gas), once the pool above
+has landed on Elo Pros and that row is released (`/api/challenges/fireplace`
+says `pool: 0` and `pays: false` until then). A challenge's card
+goes to an Ethereum wallet; a Solana one earns it and it waits for a link.
+
+The set itself is behind the game: it has Bumper Balls, which is Party's Swiss
+Roll now, and no golf. It is left alone on purpose. A set's card list may
+change only until someone first crafts it, and a drop is a hash over the set's
+sorted ids, so adding or dropping a card moves which card every later drop is
+and leaves one already minted outside the set; a card for a missing game is a new set, which
+needs its screenshots and the kiln's owner to define it once on chain
+(`docs/items/TRADING-CARDS.md` §3 step 4). That is the operator's call.
 
 ## Owed
 
@@ -141,6 +212,16 @@ Before the create, in order; the owner in brackets.
 5. [here] **The page says so**: a line on the TV's standings or the couch
    for the day's challenges and what is left of them, read from
    `/api/challenges/fireplace/<wallet>`. Not built: it waits on the calls.
+6. [operator] **The collection**: `Fireplace Items` made from the sheet with
+   the items kit on your machine (`host`, release, `rehearse`, `collection
+   --arm`, `record`: `docs/items/SOLANA-ITEMS.md` §2), its `CoreCollection:
+   FIREPLACE` row landed. Before the shop opens, never after.
+7. [operator] **The shop's wallet**: the wallet that is paid and that mints are
+   owed from, then `node tools/shop.mjs --payer <it> --write`. The prize
+   wallet of item 3 can be it, as oneshot's is, or a wallet of its own for
+   the shop.
+8. [operator] **The card set**: leave set 3 as it is, or make a second for the
+   games it lacks (see [Cards](#cards)).
 
 Open, and not this page's to decide: where the creator fees go. The
 [roadmap](roadmap.md) has wanted a pot for a minigame's author, split by the
@@ -165,8 +246,9 @@ After ONESHOT's, with what its day taught.
    coin that isn't ours.
 5. **The landing commit** on Elo Pros: the record, the wallets' rows, the
    listing, the post. The pot switches on from the record.
-6. **Here**: the store's economy line for Fireplace changes with the listing;
-   `elo.json` needs nothing, since the coin sells nothing yet.
+6. **Here**: `node tools/shop.mjs --coin <mint> --cap <n> --write` (the
+   shop open already, in PROS) moves the prices to the coin; commit `elo.json`
+   to main. The store's economy line for Fireplace changes with the listing.
 7. **Post it**: `coin/art/fireplace-post.jpg`, with the coin's address in the
    words and what the house holds as it was bought.
 8. **Each morning**: the day's file written, read by a person, paid.

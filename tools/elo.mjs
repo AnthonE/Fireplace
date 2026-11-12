@@ -21,9 +21,14 @@ import { fileURLToPath } from 'node:url';
 import { readThemes } from './themes.mjs';
 import { isMain } from './main.mjs';
 import { eloStats } from '../client/achievements.mjs';
+import { SLUG as HOME, economy as shopEconomy } from '../client/shop.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const FILE = join(ROOT, 'elo.json');
+export const SHOP = join(ROOT, 'coin', 'shop.json');
+
+// coin/shop.json: the shop's wallet and, on the coin's landing day, the coin (tools/shop.mjs writes it); none until then
+export const readShop = (file = SHOP) => (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {});
 
 // The maps in maps/ a mod each: those whose map.json names a GitHub login as "by".
 export function readMaps(dir = join(ROOT, 'maps')) {
@@ -42,14 +47,19 @@ const themeMod = (t) => ({ id: t.id, kind: 'theme', name: t.name, by: t.by, ...(
 
 // elo.json as it should be: its theme mods from the themes and its map mods
 // from the maps (a mod's own pr link, added when it was merged, kept), its stats from the achievements,
+// and, Fireplace's own only, its economy from the shop (client/shop.mjs: none until coin/shop.json
+// names the wallet that is paid, so a copy made from this template, which sells nothing, never has one);
 // everything else as it is.
-export function withGenerated(manifest = JSON.parse(readFileSync(FILE, 'utf8')), themes = readThemes(), maps = readMaps()) {
+export function withGenerated(manifest = JSON.parse(readFileSync(FILE, 'utf8')), themes = readThemes(), maps = readMaps(), shop = readShop()) {
   const made = (m) => m.kind === 'theme' || (m.kind === 'map' && String(m.path || '').startsWith('maps/'));
   const old = new Map((manifest.mods || []).filter(made).map((m) => [m.id, m]));
   const others = (manifest.mods || []).filter((m) => !made(m));
   const keepPr = (m) => ({ ...m, ...(old.get(m.id)?.pr ? { pr: old.get(m.id).pr } : {}) });
   const mods = [...themes.map((t) => keepPr(themeMod(t))), ...maps.map((m) => keepPr(mapMod(m))), ...others];
-  return { ...manifest, mods, stats: eloStats() };
+  if (manifest.game !== HOME) return { ...manifest, mods, stats: eloStats() };
+  const { economy: _was, ...rest } = manifest;
+  const eco = shopEconomy(shop);
+  return { ...rest, mods, stats: eloStats(), ...(eco ? { economy: eco } : {}) };
 }
 
 // elo.json with a server key's public half (raw 32 bytes, base64) under id:
