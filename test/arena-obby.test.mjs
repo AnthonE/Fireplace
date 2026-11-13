@@ -12,15 +12,16 @@ import { View, arenaWord, forcedSeed } from '../src/arena-view.mjs';
 import { packMap, compileSpec, MAP_MODES } from '../tools/map-compile.mjs';
 import { compileMap, mapDir } from '../tools/map.mjs';
 import { playArena } from '../tools/genarena.mjs';
-import { obby } from '../tools/obby.mjs';
+import { obby, SIZE } from '../tools/obby.mjs';
 import { AMC } from '../client/am/index.mjs';
-import mod, { stageOf, doneOf, stages, nextPart } from '../client/am/obby.mjs';
+import mod, { stageOf, doneOf, stages, nextPart, roster } from '../client/am/obby.mjs';
 import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
 
 const MAP = compileMap(mapDir('obby')), Z = 488, Y = 30;
 // where each stage's checkpoint is, and the finish (tools/obby.mjs)
-const CP = { 1: [477.6, Y], 2: [494, Y], 3: [510, Y], 4: [524, Y], 5: [532.5, Y + 3.501], 6: [542, Y + 9.501] }, FINISH = [563, Y + 9.6];
+// (the first leg's, along Z: the second leg comes back along another line, its last stage 11)
+const CP = { 1: [477.6, Y], 2: [494, Y], 3: [510, Y], 4: [524, Y], 5: [532.5, Y + 3.501], 6: [542, Y + 9.501] }, FINISH = [484, Y + 19.6, 508], LAST = 11;
 
 async function course(n = 1, seed = 7) {
   const sim = await newArena(true);
@@ -32,7 +33,7 @@ async function course(n = 1, seed = 7) {
   while (v.hole().state !== L.H_PLAY) step();
   return { sim, v, dv, step, run: (k) => { for (let i = 0; i < k; i++) step(); } };
 }
-function put(g, p, [x, y], z = Z) {
+function put(g, p, [x, y, z = Z]) {
   const b = L.PLAYERS + p * L.PSIZE;
   g.dv.setFloat32(b + L.P_PX, x, true); g.dv.setFloat32(b + L.P_PY, y, true); g.dv.setFloat32(b + L.P_PZ, z, true);
   for (const o of [L.P_VX, L.P_VY, L.P_VZ]) g.dv.setFloat32(b + o, 0, true);
@@ -51,14 +52,14 @@ test('Obby: on the kit with no sides, out of the rotation, a map\'s to name; Sky
   assert.equal(AMC[L.M_OBBY], mod);
   assert.equal(MAP.mode, L.M_OBBY + 1);
   assert.deepEqual(MAP.sides, [6, 0], 'every spawn at the start');
-  assert.equal(MAP.parts.filter((p) => p.kind === L.PK_CHECK).length, 6);
-  assert.deepEqual(JSON.parse(JSON.stringify(obby())).structures.length, 3, 'the generator\'s spec is the file\'s');
+  assert.equal(MAP.parts.filter((p) => p.kind === L.PK_CHECK).length, LAST);
+  assert.deepEqual(JSON.parse(JSON.stringify(obby())).structures.length, 6, 'the generator\'s spec is the file\'s');
 });
 
 test('Obby: as play begins everyone is at the start with empty hands, and the course knows its last stage', async () => {
   const g = await course(4);
   assert.equal(g.v.mode().mode, L.M_OBBY);
-  assert.equal(stages(g.v), 6);
+  assert.equal(stages(g.v), LAST);
   for (let p = 0; p < 4; p++) {
     const f = g.v.fighter(p);
     assert.ok(f.pos[0] >= 450 && f.pos[0] <= 460 && f.pos[1] === Y, `slot ${p} on the start: ${f.pos}`);
@@ -153,8 +154,8 @@ test('Obby: the finish times a run; the first home cuts the clock; over when eve
 
 test('Obby: nobody hurts anybody: a rifle butt in the back does nothing', async () => {
   const g = await course(2);
-  put(g, 0, [453, Y], 488);
-  put(g, 1, [454.2, Y], 488);
+  put(g, 0, [453, Y]);
+  put(g, 1, [454.2, Y]);
   g.run(2);
   for (let k = 0; k < 60; k++) g.step([[L.EV_INPUT, 0, arenaWord({ yaw: 0, pitch: 512, melee: (k >> 4) & 1 })]]);
   const f = g.v.fighter(1);
@@ -179,23 +180,36 @@ test('Obby\'s client module: the next part to go for, the HUD\'s and the board\'
   const g = await course(2);
   const map = g.v.map();
   assert.equal(map.parts.length, MAP.parts.length);
-  assert.deepEqual([nextPart(map, 0).stage, nextPart(map, 3).stage, nextPart(map, 6).kind], [1, 4, L.PK_FINISH]);
+  assert.deepEqual([nextPart(map, 0).stage, nextPart(map, 3).stage, nextPart(map, 6).stage, nextPart(map, LAST).kind], [1, 4, 7, L.PK_FINISH]);
   put(g, 0, CP[2]);
   g.run(2);
   const lines = [];
   const ctx = { put: (x, y, s) => lines.push(s), C: { WHITE: 0, YELLOW: 1, GREEN: 2, GREY: 3, RED: 4 }, slot: 0, me: g.v.fighter(0) };
   mod.hud(g.v, ctx);
-  assert.deepEqual(lines, ['STAGE 2 OF 6']);
+  assert.deepEqual(lines, ['STAGE 2 OF 11']);
+  // on the frontend's HUD: the course as a bar (a backing, a cell a stage and the finish's), the run's clock, the room in the corner
+  assert.equal(mod.unarmed, true);
+  const rects = [], mid = [], side = [];
+  mod.hud(g.v, { ...ctx, put: () => {}, rect: (...a) => rects.push(a), centre: (y, s) => mid.push(s), right: (y, s) => side.push(s), name: (p) => (p ? `P${p + 1}` : 'YOU'), t: 12.5 });
+  assert.equal(rects.length, 1 + LAST + 1);
+  assert.equal(rects.filter((r) => r[5] === 0.9).length, 2, 'two stages behind it, lit');
+  assert.deepEqual(mid, ['0:12.50']);
+  assert.deepEqual(side, ['YOU   2', 'P2   0']);
+  assert.deepEqual(roster(g.v).map((o) => o.slot), [0, 1]);
+  rects.length = 0;
+  mod.hud(g.v, { ...ctx, put: () => {}, rect: (...a) => rects.push(a), board: true });
+  assert.equal(rects.length, 0, 'nothing under the board');
   const out = { markers: [] };
   mod.draw(g.v, { shown: 0, C: ctx.C }, out);
   assert.equal(out.markers[0].label, 'CHECKPOINT 3');
-  assert.deepEqual(mod.cols.map((c) => c.get(g.v.fighter(0))), ['2', '0']);
+  assert.deepEqual(mod.cols.map((c) => c.get(g.v.fighter(0), g.v)), ['2', '0', '-']);
   put(g, 0, FINISH);
   g.run(2);
   lines.length = 0;
   mod.hud(g.v, ctx);
   assert.match(lines[0], /^FINISHED IN 0:0\d\.\d\d$/);
   assert.deepEqual(mod.state(g.v).done, [0]);
+  assert.match(mod.cols[2].get(g.v.fighter(0), g.v), /^0:0\d\.\d\d$/, 'the board has the run\'s time');
   out.markers.length = 0;
   mod.draw(g.v, { shown: 0, C: ctx.C }, out);
   assert.equal(out.markers.length, 0, 'home: nothing left to point at');
@@ -204,20 +218,20 @@ test('Obby\'s client module: the next part to go for, the HUD\'s and the board\'
 test('Obby with 8 AI fighters on Sky Steps: every one runs the whole course, match after match, on the debug build', async () => {
   const seen = { finished: new Set(), matches: 0, firstHome: 0 };
   let last = -1;
-  const r = await playArena({ bytes: arenaBytes(true), seed: 7, bots: 8, ticks: 11000, map: packMap(MAP), onTick: (t, view) => {
+  const r = await playArena({ bytes: arenaBytes(true), seed: 7, bots: 8, ticks: 16500, map: packMap(MAP), onTick: (t, view) => {
     const h = view.hole();
     if (h.hole !== last) { last = h.hole; seen.matches++; seen.finished.clear(); }
     for (let p = 0; p < 8; p++) if (doneOf(view, p)) { if (h.hole === 0 && !seen.firstHome) seen.firstHome = doneOf(view, p); seen.finished.add(p); }
     if (h.hole === 0 && h.state === L.H_OVER) seen.all = seen.finished.size;
   } });
   assert.equal(seen.all, 8, 'all eight home in the first match');
-  assert.ok(seen.firstHome > 2500 && seen.firstHome < 6000, `the first home in ${(seen.firstHome / 125).toFixed(1)} s`);
+  assert.ok(seen.firstHome > 4000 && seen.firstHome < 8500, `the first home in ${(seen.firstHome / 125).toFixed(1)} s`);
   assert.ok(r.matches >= 2, `${r.matches} matches played through`);
   assert.equal(r.mode.mode, L.M_OBBY, 'the map plays it every match');
 });
 
 test('Obby with a Roblox character\'s body: 8 AI fighters still run Sky Steps, ladder and all', async () => {
-  const flat = { height: { width: 68, height: 24, channels: 1, depth: 8, data: new Uint8Array(68 * 24).fill(40) } };
+  const flat = { height: { width: SIZE[0], height: SIZE[1], channels: 1, depth: 8, data: new Uint8Array(SIZE[0] * SIZE[1]).fill(40) } };
   const small = compileSpec({ ...obby(), body: { width: 0.56, height: 1.4 } }, flat);
   let home = 0;
   await playArena({ bytes: arenaBytes(true), seed: 7, bots: 8, ticks: 9000, map: packMap(small), onTick: (t, view) => {

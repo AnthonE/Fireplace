@@ -246,7 +246,7 @@ test('the course\'s check: stages in order, a missing number, no finish, a mode 
     assert.deepEqual(c.lines.filter((l) => l.level !== 'ok'), [], spec.name);
     assert.equal(c.finishes, 1);
   }
-  assert.equal(courseOf(obby(), { ground }).stages, 6);
+  assert.equal(courseOf(obby(), { ground }).stages, 11);
   assert.equal(courseOf(starterObby().spec, { ground }).stages, 4);
   // a map with no course in it has nothing to say
   assert.equal(courseOf({ structures: [{ boxes: [[0, 0, 0, 1, 1, 1, 'metal', 'kill']] }], spawns: [[0, 0]] }, { ground }), null);
@@ -355,8 +355,8 @@ test('Sky Steps as the editor opens it: its parts drawn from the map, its course
   const spec = JSON.parse(readFileSync(`${mapDir('obby')}/map.json`, 'utf8'));
   const m = compileMap(mapDir('obby'));
   assert.equal(partsOf(spec).length, m.parts.length);
-  assert.deepEqual(partCounts(spec), { kill: 3, checkpoint: 6, ice: 1, conveyor: 1, bounce: 1, ladder: 1, finish: 1 });
+  assert.deepEqual(partCounts(spec), { kill: 7, checkpoint: 11, ice: 1, conveyor: 2, bounce: 3, ladder: 1, finish: 1 });
   // each part's box in the world is the compiler's
   partsOf(spec).forEach((p, k) => nears(p.box, m.parts[k].box, 1e-4, `part ${k}`));
-  assert.equal(nextStage(spec), 7);
+  assert.equal(nextStage(spec), 12);
 });

@@ -108,6 +108,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const swap = (s) => { if (s !== slotOut) { sound.weapon(); zoomed = false; } slotOut = s; set(L.CL_WEAPON, s); };
   let locked = document.pointerLockElement === lockTarget;
   let touch = null; // the touch controls, on a phone
+  let touchFor = null, touchBare = false; // how they are made, and whether the ones up are an unarmed mode's
   // the view: how far behind your fighter the camera is asked to sit (0 first person) and the last third-person
   // distance, for the key; ?view= over what this browser kept, a map's own until you choose (client/chase.mjs)
   let viewAt = startView(host.q?.get('view'), (() => { try { return viewOf(localStorage.getItem(VIEW_KEY)); } catch { return null; } })(), Number(host.q?.get('dist')));
@@ -198,9 +199,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); trigger = false; set(L.CL_AUTO, 0); });
-    if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
+    // (unarmed, kit.unarmed: the thumb's button is the jump, and there is nothing else to press)
+    if (TOUCH) touchFor = (unarmed) => { touch?.remove(); touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
       look: (dx, dy) => look({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
-      buttons: [
+      buttons: unarmed ? [{ label: 'JUMP', code: 'Space' }, { label: 'VIEW', tap: flipView }] : [
         { label: 'FIRE', hold: (on) => { if (on) press(L.CL_PRESSES); trigger = on; if (!on) set(L.CL_AUTO, 0); } },
         { label: 'JUMP', code: 'Space' },
         { label: 'GREN', tap: () => { press(L.CL_GREN); zoomed = false; } },
@@ -210,7 +212,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         { label: 'USE', tap: () => press(L.CL_USE) },
         { label: 'SCOPE', tap: () => { if (zoomOf() > 1) { zoomed = !zoomed; sound.weapon(); } } },
         { label: 'VIEW', tap: flipView },
-      ] });
+      ] }); };
+    touchFor?.(false);
   }
 
   // ---- the prediction (as golf's), with the arena's word in progress
@@ -604,6 +607,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     // the team mode's objective: its sprites, glows and beams ahead of everything else's, its waypoints and zone
     const md = view.mode();
     const kit = AMC[md.mode];
+    if (touchFor && st >= 1 && !!kit?.unarmed !== touchBare) { touchBare = !touchBare; touchFor(touchBare); }
     const out = { solid: [], glow: [], beams: [], markers: [], zone: null, storm: null };
     const playT = h.state === L.H_PLAY ? (h.tick - h.start) * 0.008 + dt : 0;
     // the fighter whose eyes the camera has: yours, or the one a spectator watches (none for a fixed camera)
@@ -667,7 +671,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         inHand = f.carry ? carryBoxes(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], handMotion(now, moving))
           : gunBoxes(f.weapon, handMotion(now, moving, f.weapon), now - lastShotAt < 50 && f.weapon !== L.W_SWORD);
       }
-      if (!f.dead) { const hr = hudRects(f, now); rects.push(...hr.rects); blips = hr.blips; tracker = hr.tracker; }
+      // (a mode with nothing to shoot or be shot by, kit.unarmed, has no bars and no tracker: an obby's HUD is its own)
+      if (!f.dead && !kit?.unarmed) { const hr = hudRects(f, now); rects.push(...hr.rects); blips = hr.blips; tracker = hr.tracker; }
     }
     const zoom = zoomed && f && !f.dead ? zoomOf() : 1;
     const kitRects = [];
@@ -690,7 +695,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       // the hour, the match's own (client/lowpoly.mjs envOf; ?env= holds one)
       env: HOUR || envOf((seed ^ Math.imul(h.hole + 1, 0x85ebca6b)) >>> 0),
       solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone, storm: out.storm,
-      crosshair: FIXED ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, eye) ? 8 : 0), gap: spread / 30 + kick * 3,
+      crosshair: FIXED || (kit?.unarmed && st >= 1) ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, eye) ? 8 : 0), gap: spread / 30 + kick * 3,
       own: chasing ? ownRec : null, aim: aimAt, size: body.top / Number(L.BODY[1]),
       tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
     };
@@ -820,7 +825,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       }
       // a kit mode without sides: its own lines under them (rows 2 to 4; with kit.own, 0 to 4)
       kit?.hud(view, { put: (x, y, str, c) => put(t, COLS, x, y, str, c), centre, right, rect: (...a) => kitRects.push(urect(...a)),
-        rows, C, slot, me: f, team: -1, now, t: playT, watching: WATCH || slot !== get(L.CL_SLOT), mine: WATCH ? -1 : get(L.CL_SLOT) });
+        rows, C, slot, me: f, team: -1, now, t: playT, board, name: (p) => (p === slot && !WATCH ? 'YOU' : host.label(p)), watching: WATCH || slot !== get(L.CL_SLOT), mine: WATCH ? -1 : get(L.CL_SLOT) });
     }
     if (f?.live) {
       if (f.dead) centre(Math.floor(rows / 2) + 2, kit?.dead?.(f) ?? `RESPAWN IN ${Math.ceil(f.respawn / 125)}`, C.YELLOW);
@@ -876,7 +881,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
         : [...kc.map((c) => c.head), ...(kit?.kills === false ? [] : ['KILLS', 'DEATHS'])];
       const cells = (o) => m === L.M_INFECTION ? [o.zombie || over ? clock(o.human) : 'ALIVE', o.points, o.zombie ? 'ZOMBIE' : 'HUMAN']
         : m === L.M_GUNGAME ? [Math.min(o.rung + 1, RUNGS), o.rung >= RUNGS ? 'WON' : SHORT[L.LADDER[o.rung]], o.kills]
-        : m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths] : [...kc.map((c) => c.get(o)), ...(kit?.kills === false ? [] : [o.kills, o.deaths])];
+        : m === L.M_JUGGERNAUT ? [o.points, o.kills, o.deaths] : [...kc.map((c) => c.get(o, view)), ...(kit?.kills === false ? [] : [o.kills, o.deaths])];
       const row = (rank, name, xs) => `${String(rank).padStart(4)}  ${String(name).padEnd(8)}${xs.map((x, k) => '  ' + String(x).padStart(Math.max(6, cols[k].length))).join('')}`;
       centre(y0 + 2, row('RANK', 'PLAYER', cols), C.GREY);
       const fit = rows - y0 - 6;
