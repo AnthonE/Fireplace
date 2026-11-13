@@ -73,7 +73,7 @@
       "kind": "map",
       "name": "Sky Steps",
       "by": "AnthonE",
-      "about": "An obstacle course over lava: stones, bars, ice, a belt, a bounce pad, a ladder and a ferry, a checkpoint after each.",
+      "about": "An obstacle course over lava, out and back: stones, bars, ice, belts, bounce pads, a ladder, a ferry, sweeping walls and a lift, a checkpoint after each.",
       "path": "maps/obby"
     },
     {
@@ -529,8 +529,8 @@
     ]
   },
   "web": {
-    "url": "https://github.com/AnthonE/Fireplace/releases/download/web-f1247ba8bee9/site.zip",
-    "sha256": "6922b1984d815bc29946c1eee54af34cfa0dc3ed1ec0de26b8b02c6b24ec865f",
+    "url": "https://github.com/AnthonE/Fireplace/releases/download/web-eec67fb099e2/site.zip",
+    "sha256": "60dabdea42f775ef7478093b809aedb662b23364d432de6aedf9a9d803cd0699",
     "entry": "index.html",
     "frame": false
   }

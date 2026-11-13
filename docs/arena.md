@@ -488,14 +488,27 @@ took them. Places: the finishers by their time, then the rest by stage, then
 the fewer deaths. Such a map needs no spawn on each half, and
 `tools/map-check.mjs` plays it as itself alone.
 
-`maps/obby/` is **Sky Steps** (`node tools/obby.mjs` writes it): seven
-stages in a line over a floor of lava, one for each kind of part: stepping
-stones 2.4 m apart, two bars that kill across a walkway, 12 m of ice half as
-wide, a belt running back at half a walk, a bounce pad up to a ledge 3.5 m
-over it, a ladder 6 m up a tower, and a platform ferrying 12 m to the
-finish. Its fighters walk 6 m/s, stop when the keys do and jump 2 m under
-55 m/s² ([a map's own movement](#a-maps-own-movement)), so a jump is 3.2 m
-of air.
+`maps/obby/` is **Sky Steps** (`node tools/obby.mjs` writes it): twelve
+stages over a floor of lava, a colour each, out along one line and back
+along another 11.5 m higher. The first leg has one stage for each kind of
+part: stepping stones 2.4 m apart, two bars that kill across a walkway, 12 m
+of ice half as wide, a belt running back at half a walk, a bounce pad up to
+a ledge 3.5 m over it, a ladder 6 m up a tower, and a platform ferrying
+12 m. The second puts them together: three stones 2 m apart that climb
+half a metre each, a belt running your way under two bars (met at 9 m/s),
+two walls of lava sweeping a deck 10 m wide (6 m across in 2 s, 1.2 s at
+rest with the middle clear), two bounce pads each over 4.5 m of nothing,
+and a lift 8 m up the last tower to the finish. Its fighters walk 6 m/s,
+stop when the keys do and jump 2 m under 55 m/s²
+([a map's own movement](#a-maps-own-movement)), so a jump is 3.2 m of air.
+
+The mode's HUD is its own (`unarmed` in its client module): no shield or
+health bars, no tracker, no crosshair. Where the bars were, the course as a
+bar, a cell a stage and the finish's last, with your run's clock under it;
+in the top right the room, six of it, by how far along each is (a
+finisher's time in green, you always among them); the board (Tab, and at
+the end) has STAGE, FALLS and TIME. On a phone the buttons are JUMP and
+VIEW.
 
 ```sh
 node net/play.mjs --arena --map obby
@@ -505,19 +518,27 @@ The AI fighter doesn't fight here: the mode's client module drives it
 (`drive` in `client/am/obby.mjs`): at the next checkpoint, forward; a jump
 at an edge with somewhere still to land inside 0.9 of a jump's reach, taken
 at speed, with a step back from the brink for the run-up; over a low thing
-that kills, and a halt before a tall one; nothing that moves is jumped from
-or onto, it is waited for and walked. Eight of them all finish Sky Steps
-in 30 to 45 s, the first in about 25, match after match.
+that kills (from as much further off as a belt underfoot makes it faster),
+and a halt before a tall one, or before where one that moves will be in the
+next half second; nothing that moves is jumped from or onto, it is waited
+for and walked. Eight of them all finish Sky Steps in 41 to 56 s (the lift
+takes them up together), match after match, and as well with their words
+landing 12 ticks late as 6. What the floor query asks of the map every call
+(each mover's bounds, where it and each part that kills is this tick) is
+kept: 64 of them waiting at the ferry asked it some thousands of times a
+tick, which with four movers in the map stalled the bot host until it was.
 
-`test/arena-obby.test.mjs` (9 tests): the mode on the kit and out of the
+`test/arena-obby.test.mjs` (10 tests): the mode on the kit and out of the
 rotation; everyone at the start with empty hands as play begins; stages
 taken, skipped to and never lost; a death back on its checkpoint or the
 start; the finish's time, the clock cut once, the end with everyone home,
 the places; a rifle butt doing nothing; a forced seed on Box Canyon, which
-has no course, running to the clock; the client module's lines and marker;
-8 AI fighters on the debug build through two matches. Online on the course
-(`net/run-arena.mjs --map obby`, a CI step): 64 AI fighters for 60 s, 3,635 interval hashes checked by
-the referee, all equal, 0.06 ms a step.
+has no course, running to the clock; the client module's lines, bar, clock,
+corner list, board columns and marker; 8 AI fighters on the debug build
+through two matches, and with a Roblox character's body. Online on the course
+(`net/run-arena.mjs --map obby`, a CI step): 64 AI fighters for 90 s, a
+match run to its end and the next begun, 5,622 interval hashes checked by
+the referee, all equal, 0.10 ms a step.
 
 ## Teams
 
@@ -875,7 +896,7 @@ a bounce's speed (and how high that throws a fighter here), ice's grip, a
 ladder's speed, a conveyor's direction (four arrows, or degrees: 0 east,
 90 south) and speed, a checkpoint's stage, the next free one by default.
 **ghost** makes it a zone with no box. A new box's plain metal takes the
-kind's look as `tools/obby.mjs` paints them (what kills glows red-orange
+kind's look (`PART_LOOKS` in `client/map-build.mjs`: what kills glows red-orange
 `light#ff4a1c`, a bounce pad yellow, ice pale blue, a checkpoint green, the
 finish white); a material or a colour chosen by hand is never changed.
 

@@ -83,7 +83,9 @@
 //   camera goes to the first slot p this says may be watched), sides (1:
 //   everyone but the juggernaut's gold drawn one colour, as Juggernaut's),
 //   frags (false: no FRAGS line), dealt(me) (the banner as one spawns, in
-//   place of its guns).
+//   place of its guns), unarmed (true: no shield or health bars, tracker or
+//   crosshair, and a phone's buttons are a jump and the view: Obby's; its
+//   hud's ctx has board, true while the board is up, and name(p)).
 import * as L from '../../src/layout.mjs';
 import slayer from './slayer.mjs';
 import ctf from './ctf.mjs';

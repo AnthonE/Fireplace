@@ -6,10 +6,10 @@ not measured yet, it says so.
 
 ## Where it is
 
-66 games, each gated online: golf, the arena's sixteen modes
+70 games, each gated online: golf, the arena's sixteen modes
 (Grab Bag, Zombies, gun game, Juggernaut, Lucky Blocks, Evade, Escape, Battle Royale, and red against blue: Team
 Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt,
-Territories, VIP, Assault) and Party's 49 minigames (bumper balls, once a
+Territories, VIP, Assault) and Party's 53 minigames (bumper balls, once a
 game of its own, among them as Swiss Roll). Fireplace plays them in turn.
 Two more arena modes play only on a map that names them, each gated online
 on its own map: Crossroads, and Obby, an obstacle course over the map's
@@ -18,11 +18,11 @@ Dogfight ([docs/flight.md](flight.md)), the arena with every fighter a ship
 over its own map, is gated online too (256 pilots, every hash equal) and is
 on Fireplace's playlist between party and golf.
 
-The shelf (`client/games.html`) lists all of it, 81 tiles: the five games,
-the 49 minigames, the arena's eighteen modes and four maps, Dogfight's four
+The shelf (`client/games.html`) lists all of it, 85 tiles: the five games,
+the 53 minigames, the arena's eighteen modes and four maps, Dogfight's four
 modes and its map, each one click from a local room with AI players and each
-with a picture shot from its own page (`tools/shelf.mjs`: 79 WebP files, 320
-x 200 and the five games' 640 x 400, 866 KB in all, about 12 minutes to shoot
+with a picture shot from its own page (`tools/shelf.mjs`: 83 WebP files, 320
+x 200 and the five games' 640 x 400, 905 KB in all, about 12 minutes to shoot
 on SwiftShader; a mode only a map plays shares the map's). Where a pool
 reports rooms a tile counts who is playing and its click takes a seat
 ([hosting.md](hosting.md#what-the-shelf-reads)). Left: a pool's room started
@@ -84,7 +84,7 @@ wave to build (framework, frontend, bot), then a game on it is one agent.
 
 | Kit | Now | Target | Candidates |
 | --- | --- | --- | --- |
-| Party (the ball) | 49 | 60 | with teams: a relay race, capture the flag on balls |
+| Party (the ball) | 53 | 60 | with teams: capture the flag on balls |
 | Arena (the fighter) | 18 | 24 | Slayer at run time, Snipers, Swords, Grifball, Stockpile, Infection by teams, Floor is Lava, a tower obby (Obby is built: a course is a map now, so a tower is one to draw), a zombie horde |
 | Champion (top-down, new) | 0 | 14 | FFA ARAM (below), team ARAM 128 v 128, co-op survivors against hordes, a boss raid of telegraphed patterns, Gem Grab, Showdown, Bounty |
 | Grid (2D boards, new) | 0 | 16 | Tetris 99, Puyo 99, Dr. Mario 99, Bomberman 128, Snake, Pac-Man 99; races of Minesweeper, 2048, match-3, nonograms |

@@ -2,7 +2,7 @@
 
 ![Fruit Chute with 128 balls: the belt carrying everyone down, fruit rolling down the lanes](p1-chute-128.png)
 
-Every player a ball, and every round a different minigame: forty-nine of them,
+Every player a ball, and every round a different minigame: fifty-three of them,
 after Mario Party, Mario Kart's battle mode, Fall Guys, Squid Game and Roblox, up to 256 in a room.
 `src/` built with `BUMPER` and `PARTY` set (`build/party/game.wasm`), with the
 same lockstep, relays, keyframes, prediction, spectators and replays.
@@ -73,6 +73,10 @@ the standings are party points, then wins. `?bot=1` hands your ball to an AI;
 | 46 | FALL BALL | the side with more goals | red against blue on a pitch over the sea, 1.5 times as long as wide (34 by 22.7 m for 1, 52.2 by 34.8 for 16, 108.3 by 72.2 for 256); at each end a wall with a goal mouth half the pitch's width (13 to 36 m) and a net box 8 m deep; the sides open over the void but for kerbs 0.7 m high by the corners and the halfway line; giant balls 3 m in radius and five balls heavy drop from 34 m onto a spot ringed on the floor 2.2 s ahead: one on the centre spot at the kickoff, one more every 8 s up to a cap of 1 for every 10 balls plus 1 (2 to 16), and a golden one worth 2 at 90 s, past the cap; one landing on you throws you out at 9 m/s and up; one ball pushing moves a giant ball at about 2 m/s, three at 4 or more, and a ram at 8 m/s sends a still one off at 2.1; all the way into a goal scores for the side attacking it, off a side it's lost, and either way a new one drops 2 s later; fall off and you're down 1.5 s, then drop back in on your own side; points of your own: a touch 1 (once a second), a goal 5 times its worth to your side's last toucher, an assist 2, a foe bumped off 2; 120 s, draws allowed |
 | 47 | TUG O WAR | the side to 3 pulls | red against blue on two decks over a mud pit 3.5 m wide (19.6 by 20.4 m each for 16, 30.4 by 39.6 for 256), a rope down the middle of both; on your own deck within the band beside it (2 m for 16, 3.2 for 256) you hold it: dug in along it, free across it, pulling by how much your keys point away from the mud; each side's pull is the root of its holders' sum over half the room, the rope easing toward 16 m/s times the difference (5 m/s at most), the losing side's holders dragged with it; the flag past a line, closing from 6 m to 1 m over 12 s, wins the pull: the losers are reeled toward the pit at 3 m/s, gripped till they hop, and 2 s later the front 4 m of their deck tips them into the mud for 1 s; back 1 s after you're down; next pull 3.5 s after the tip; hop the pit to knock their holders off the rope across it; at the 120 s clock with pulls level, the flag's side of the middle takes a decider |
 | 48 | MINI GOLF | fewest strokes | every ball the golf ball, on a putt-putt course of 3 to 6 walled holes side by side 28 m apart, picked and mirrored from the seed out of six: a windmill whose blades shut its 3.2 m door 34% of the time, a dogleg with a bank and a bumper, a gate whose 3.4 m gap slides 5.3 m either way over 4 s before a ramp up 1.2 m to a raised green, five bumper posts over a hump, two baffles over a dip, a 9.2 m bar spinning a turn in 3.85 s before a bowl round the cup; no rolling: aim with the mouse, hold Space (or click, then click again) to charge, 1.28 s to full (19 m/s), let go to putt; 3 m/s² of friction (60 m flat out); a ball under 5 m/s over the cup drops in; balls pass through each other and everyone plays at their own pace; 6 strokes still out and you're picked up for 7; once half are home the rest have 30 s; a hole not finished counts 7, ties go to whoever holed out first |
+| 49 | RELAY RACE | the first side to the target | red against blue on a walled track, 64 m plus the root of the balls in long and 12 m plus 4.5 times it wide (65 by 16.5 m for 1, 68 by 30 for 16, 72 by 48 for 64, 80 by 84 for 256), a zone 8 m deep across each end, red's own at one and blue's at the other; a baton for every 4 balls of a side (1 for up to 11 balls, 2 for 16, 8 for 64, 32 for 256) lies in its own zone at the start, half of each side there and half in the far zone; roll within 1.6 m of a lying baton of your side to carry it, one at a time, 15% slower (8.5 m/s flat out); over the far zone's line is a leg, a point for your side and 3 of your own, the baton set down 2.5 m past the line and turned round, any teammate's at once (one waiting there takes it on that tick), and you take none for 4 s, unless you are your side's only ball; a foe faster into the bump than you at over 5 m/s of closing knocks it loose, a point of its own: it lies where it fell, nobody's for 0.24 s, not yours for 1.2 s, and only ever your side's; between the zones 4 to 6 rows of posts 10 m apart, 1.2 m in radius, 8 m apart along a row, slide 4 m either way on a triangle wave, 3.1 to 4.7 m/s, each row's phase and pace the seed's, and one that meets you sends you off at 9 m/s and up; first to 8 legs and 6 more for each baton past the first (14 for 16 balls, 50 for 64, 194 for 256) or the most at 100 s; draws allowed |
+| 50 | RUSH HOUR | points | a street between two pavements 10 m deep, 43 m long for one ball to 148 for 256, crossed along its width again and again: on the ground 1 m past the far kerb is a point, and then that kerb is yours and the other is the far one; the road is nine strips from the seed, 33 to 36 m kerb to kerb: two lanes, a median or a belt, three strips of which one or two are a bike lane or a tram line, a median or a belt (never two belts), two lanes; each lane its own way, 6 to 10 m/s, in cells 13 to 18 m long holding a car (4.4 m), a van (6 m), a lorry (10.5 m, only in cells of 15.5 m or more) or nothing; motorbikes at 15 to 18 m/s, a 22 m tram every 72 m at 12 m/s; traffic runs 40% faster by the end and its cells fill from 59% to 94% (bikes 35% to 66%); a vehicle that touches you knocks you on down its lane 5 m/s faster than it goes and up at 8 to 13 m/s, and 1.12 s later you drop from 2.5 m, 3 m or more behind the kerb you last scored from, where down the street you got to; medians are safe, a belt carries you along at 4 m/s; a zebra 6.8 m wide (18.8 for 256) crosses it all, and every 16 s, from 3 s, its lights hold the traffic back for 4.4 s, amber 1.5 s before and flashing its last 1.5 s: no vehicle is within 1.5 m of it then; a gold coin drops on a lane every 4 s, one more for every 16 balls, lies 12 s and pays 3 to the first ball within 1.7 m; let go of the keys and you stop in about a metre; the last 15 s pay double; no bumps; 90 s |
+| 51 | LONG JUMP | best jump | runways side by side over the sea, one for every 6 balls (2 to 32), 14 m apart, railed: a 7 m start deck, a 56 m slope dropping 11.2 m, a 9 m take-off board 5 m over the water; the slope pulls 1.6 m/s² and three boost pads 18 m apart, 1.6 m left then right of the middle (the other way round on the next runway), push 24 m/s² more while you're on one; the keys steer in full but push only a fifth along the slope and the board, so the line makes the speed: 16.7 m/s off the board straight down the middle, 24 down one side, 27 weaving all three; Space on the board's last 5 m hops you, 1.5 m/s of lift at the zone's start rising to 9 at the edge, nothing past it (an early hop lands no farther than rolling off); in the air a wind along the runways, a level from -4 to 4 every 6 s from the seed, 1.25 m/s² a level, turning over its last second and called as the turn starts; five sand islands on each runway's line, 10.5, 18.6, 25, 30.2 and 34.3 m out, 4 m in radius down to 1.1, 1.4 to 1.5 m of sea between: come down on one and the jump is the edge to where you landed, in cm; the sea scores nothing; 1 s later you're back on the deck; about 11 jumps in the 90 s; no bumps |
+| 52 | ROUND UP | the side with the fuller pen | red against blue in a fenced meadow 1.8 times as long as wide, its corners rounded (37 by 20 m for 1, 53 by 30 for 16, 126 by 70 for 256); a pen behind each end, 9.4 by 5.9 m for 16, its mouth a gap in the middle of the end fence 0.62 of the pen's width (5.8 m for 16); a sheep for every ball (8 to 120) grazing in the middle, laid the same for both sides; a sheep runs straight away from every ball within 6 m, 10 m/s at no distance falling to nothing at 6, the pushes summed and held to 6 m/s (a ball makes 10), takes half its neighbours' mean velocity, wanders back to them at 0.6 m/s when no ball is near, and keeps 1.15 m off the fence, leaning in off it at up to 2 m/s; a sheep 0.5 m past an end's line is that pen's for good: a point to the side, and one of their own to every ball of that side within its sight as it went in; a golden ram worth 3 (it sees from 7 m and makes 8 m/s) comes on in the middle at 25 s, called 3 s ahead, three of them from 24 balls (25, 45 and 65 s), and at once when the meadow is empty; a click barks, half as far and half as hard again for 0.48 s, 3 s apart; the other side's mouth is fence to you and the ground within 2.5 m of its posts rolls you away at 25 m/s²; over when everything is penned, or at 100 s; a draw allowed |
 
 **The ball** (`src/bumper.wat`: it began as bumper balls, a game of its own,
 whose wheel of cheese is SWISS ROLL now) rolls up to 10 m/s with a slippery
@@ -397,5 +401,63 @@ the farthest point of that path it can see and tries 10 putts a think on a JS
 copy of the roll: 10 rounds of 16 took 2.65 strokes a hole and finished 637 of
 640 holes. A tick of 256 balls costs 0.05 to 0.18 ms in each; Party's wasm is
 228 KB, 96 KB gzipped.
+
+**The seventh wave.** Four more (49 to 52), the same way: slots reserved with
+`tools/new-mg.mjs`, then one agent each in its own worktree, 43 to 79 minutes
+apiece, all four at once, none touching a file outside its own four. 16 or 17
+tests a file; each one's recorded log of 16 AI balls equal in all 27
+configurations; each forced online with Chrome and 15 AI balls and with 127,
+every hash equal (942 to 2,031 at 16, 7,454 to 16,282 at 128). Relay Race is
+Egg Raid's carrying run end to end: takes, legs, handoffs and knocks are the
+confirmed world's, the carrier's 15% a push reading its own `PG_M`, and the
+posts an integer triangle wave of the tick that never knocks a baton loose,
+so a carrier's prediction is exact through them. Its prefix found a hole:
+Battle Royale's constants are `RY_` too, the assembler spreads the arena's
+over the minigames', and `RY_UP` assembled as the arena's 0.6 with no error
+(`tools/new-mg.mjs` refuses such a prefix now). With every spare ball
+hunting, 64 balls knocked 63 to 81 batons loose a side and never reached the
+target, and 256 drew 112:112; with hunters an eighth of a side and a target
+of 8 legs and 6 a further baton, rounds of 2 to 64 end at the target in 75 to
+97 s (14:10 to 14:13 at 16, 50:44 to 50:49 at 64), and one of 256 went to the
+clock at 153:156 of 194. Rush Hour is all schedule: the hit, the way back and
+the crossing's point run in `push` on either bank, so the prediction test
+compares the whole record, score included, and only the coins are the
+confirmed world's. Its lights stop nothing: setup leaves out every vehicle
+that would be within 1.5 m of the zebra during a green, so a gap comes down
+each lane and they meet on the crossing. Bumps are off: without the kick the
+crowd still shoved itself under the traffic (22% of runs ending in a hit at
+16 balls, 41% at 64, 50% at 256; off, 11% at 64 and 256 as first tuned).
+Twenty rounds of 16 AI balls made 8.9 crossings a ball with 20.1% of runs
+ending in a hit (264 by cars, 248 vans, 55 lorries, 90 motorbikes, 63 trams);
+a coin every 2 s out-scored the crossings (474 points to 350), every 4 s they
+are a fifth of the points. Long Jump found the ball's roll in the way of a
+slalom: with the round's ordinary push and drag, weaving cost more than three
+pads gave back (15.3 m/s off the board weaving, 20 straight), so its `push`
+splits the axes, the full push against a firm drag across and a fifth of the
+keys' push against the runway's own drag along. Nobody is ever down: the sea
+has a bed `ground` returns everywhere, and the run, the flight, the landing
+and the way back are all the ball's `PG_M`, written by `push` on either bank
+(2,255 comparisons through a weaving run, a hop, the sand, the sea and a wind
+turn in the air). Its score is centimetres, so its module writes the page's
+score lines itself, in metres (`ownScore`). Eight rounds of 16 AI balls
+jumped 11.2 times a ball with 19.9% in the sea, landings by island 35, 249,
+449, 407 and 12 from the near one out, the winner at 31.33 to 34.35 m; skill
+and best correlate 0.58 by rank, one lucky jump in eleven lifting a middling
+ball. Round Up's sheep are the confirmed world's and never move a ball, so
+the prediction runs the fence, the pens and the bark (its counter in `PG_M`,
+as Slap Happy's glove). Pens inside the meadow pinned 8 to 10 sheep of 16
+between the end fence and a pen's rail by 40 s, so each pen is behind its end
+and its mouth a gap in the fence; sheep keep 1.15 m off the fence, more than
+a ball's radius, since at 0.6 m a clump was tugged along it for the rest of
+the round. On a plain sunflower of 8 sheep the side at high x won 22 of 30
+rounds between two AI balls; laid point-symmetric, 146 sheep to 149. Two
+rams drew 4 rounds of 12 at 11-11, so there are one or three. Before its AI
+left alone a sheep the foe had in the last third before its mouth, each side
+walled the other's off and 256 balls penned 33 to 55 of 122 by the clock;
+after, rounds of 8 to 64 pen everything (medians about 40 s at 8 and 16, 58
+to 96 s at 64) and 256 pen 86% by the clock. A tick of 256 balls costs 0.03
+to 0.36 ms in each (Round Up's flock about 0.13 ms of its 0.28 to 0.36:
+balls through a grid of 10.5 m cells, sheep against sheep all pairs); Party's
+wasm is 243 KB, 103 KB gzipped.
 
 Not done yet: power-ups in more of the minigames.

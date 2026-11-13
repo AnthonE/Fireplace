@@ -79,7 +79,7 @@ of golf. The top three of each game get 3, 2 and
 
 | | |
 | --- | --- |
-| [**Party**](docs/party.md) | Every player a ball, and a different minigame every round, 49 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring, Swiss Roll (a wheel of Swiss cheese, bump the others into its holes: once a game of its own, bumper balls), Whack a Mole, Balloon Bash, Egg Raid, Bowling, Fall Ball, Tug o' War and Mini Golf. |
+| [**Party**](docs/party.md) | Every player a ball, and a different minigame every round, 53 of them: Thin Ice, Color Call, Sweeper, Red Light, Bomb Rain, The Wall, Musical Pads, King of the Hill, Hot Potato, Coin Rush, Paint Party, Downhill, Fruit Chute, Tag, Snowball, Tilt Table, Rising Lava, Gale Force, Drum Roll, Hoopla, Pinball, Light Trails, Maze Run, Bullseye, Cannonade, Jump Rope, Glass Bridge, Gate Crash, Stompin' Ground, Seesaws, Kart Grab, Disaster Island, Slap Happy, Trap Run, Parry Ball, Mingle, Honeycomb, Dodgeball, Volleyball, Soccer, Sumo Ring, Swiss Roll (a wheel of Swiss cheese, bump the others into its holes: once a game of its own, bumper balls), Whack a Mole, Balloon Bash, Egg Raid, Bowling, Fall Ball, Tug o' War, Mini Golf, Relay Race, Rush Hour, Long Jump and Round Up. |
 | [**The arena**](docs/arena.md) | A shooter on Box Canyon, a map with two bases, a cave and teleporters, and eighteen modes: Grab Bag, Zombies, Gun Game, Juggernaut, Lucky Blocks, Evade, Escape, Battle Royale (one life, loot from crates, a zone closing in stages), and red against blue, Team Deathmatch, Capture the Flag, Keep Away, King of the Hill, Skull Hunt, Territories, VIP and Assault; Crossroads, Roblox's own level with its classic sword, rocket launcher and superball, walking and jumping as Roblox does; and Obby, an obstacle course of kill bricks, ice, conveyors, bounce pads, ladders and moving platforms with a checkpoint after each stage (Sky Steps, `--map obby`). |
 | [**Dogfight**](docs/flight.md) | The arena with wings: every fighter a ship over Skyways, a valley with a river canyon, spires, arches and ring gates. Lasers, a homing charge shot, bombs, boost, brake and barrel rolls, in a free-for-all, red against blue, the juggernaut or Ring Race, three laps through the gates. |
 | [**Golf**](docs/golf.md) | One course for everyone, rockets and grenades for clubs: a blast just behind your ball drives it 200 m, and every ball ever hit stays in play. |
@@ -132,7 +132,7 @@ node net/play.mjs                        # golf, client/index.html
 ```
 
 **The shelf**, `client/games.html`, is everything the site can play, a tile
-each with a picture: Fireplace, Party and each of its 49 minigames, the arena
+each with a picture: Fireplace, Party and each of its 53 minigames, the arena
 and each of its eighteen modes and four maps, Dogfight and its four modes,
 golf. A click plays the tile in a local room with AI players; the box finds
 one by name. Where a room pool reports rooms, a tile says how many are
