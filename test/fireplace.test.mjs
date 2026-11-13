@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { newFireplace, fireplaceBytes, wasmBytes, arenaBytes, partyBytes } from './helpers.mjs';
 import { View } from '../src/view.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
@@ -9,7 +10,7 @@ import { hash32 } from '../src/party-view.mjs';
 import { playFireplace } from '../tools/genfireplace.mjs';
 import { replay, parseLog, decodeTrace } from '../harness/core.mjs';
 import { startWorkers } from '../harness/run-node.mjs';
-import { prefixed } from '../tools/asm.mjs';
+import { prefixed, mergeTwins } from '../tools/asm.mjs';
 import * as L from '../src/layout.mjs';
 import { emptyTally, record, readResult } from '../client/achievements.mjs';
 
@@ -51,6 +52,39 @@ test('the games are a list (FP_SETS): each entry one of the ways the playlist kn
   const rows = page.slice(page.indexOf('const PAGES = ['), page.indexOf('];', page.indexOf('const PAGES = ['))).match(/frontend:|null,/g) || [];
   assert.equal(rows.length, L.FP_SETS.length, "client/fireplace.mjs's PAGES has a row for every game");
   rows.forEach((r, k) => assert.equal(r === 'null,', !!L.FP_SETS[k].retired, `row ${k}`));
+});
+
+test('mergeTwins: the same code in two games kept once and called there; a difference anywhere down the calls, or in the data read, keeps both', () => {
+  const wat = `(module
+  (import "env" "mem" (memory 1 1 shared))
+  (func $g.leaf (param $g.x i32) (result i32) (i32.add (local.get $g.x) (i32.const 1)))
+  (func $a.leaf (param $a.x i32) (result i32) (i32.add (local.get $a.x) (i32.const 1)))
+  (func $p.leaf (param $p.x i32) (result i32) (i32.add (local.get $p.x) (i32.const 2)))
+  (func $g.mid (result i32) (call $g.leaf (i32.const 3)))
+  (func $a.mid (result i32) (call $a.leaf (i32.const 3)))
+  (func $p.mid (result i32) (call $p.leaf (i32.const 3)))
+  (func $a.data (memory.init $a.blob (i32.const 0) (i32.const 0) (i32.const 1)))
+  (func $f.data (memory.init $f.blob (i32.const 0) (i32.const 0) (i32.const 1)))
+  (data $a.blob "(")
+  (data $f.blob ")")
+  (func (export "step") (result i32) (i32.add (call $a.mid) (call $p.mid)))
+)`;
+  const { wat: out, merged } = mergeTwins(wat, ['g', 'a', 'p', 'f']);
+  assert.equal(merged, 2, 'a.leaf into g.leaf, a.mid into g.mid');
+  const names = [...out.matchAll(/\(func (\$[\w.]+)/g)].map((m) => m[1]);
+  assert.deepEqual(names, ['$g.leaf', '$p.leaf', '$g.mid', '$p.mid', '$a.data', '$f.data']);
+  assert.match(out, /\(func \(export "step"\) \(result i32\) \(i32\.add \(call \$g\.mid\) \(call \$p\.mid\)\)\)/);
+  assert.ok(out.includes('(data $a.blob "(")') && out.includes('(data $f.blob ")")'), 'data kept, a ( in a string no harm');
+  assert.equal(mergeTwins(out, ['g', 'a', 'p', 'f']).merged, 0, 'a fixpoint');
+});
+
+test('Fireplace keeps one copy of what its games share: some 480 functions fewer than its games have between them, and the module still compiles', async () => {
+  const funcs = (f) => (readFileSync(new URL(`../build/${f}.wat`, import.meta.url), 'utf8').match(/\(func /g) || []).length;
+  const each = ['game', 'arena/game', 'party/game', 'flight/game'].map(funcs);
+  const all = funcs('fireplace/game');
+  assert.ok(all < each.reduce((a, b) => a + b, 0) - 400, `${all} functions for games of ${each}`);
+  assert.ok(all > Math.max(...each), 'and more than any one game has');
+  await WebAssembly.compile(fireplaceBytes());
 });
 
 test('Fireplace is one module with every game in it, and the games on their own build as before', async () => {

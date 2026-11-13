@@ -267,3 +267,50 @@ export function prefixed(wat, prefix) {
   });
   return out.replace(/\(func (\$[\w.]+) \(export "\w+"\)/g, '(func $1');
 }
+
+// A module's functions that are the same code, kept once: Fireplace's games
+// share their engine (the hash, the snapshot, the prediction, the ball's
+// phases; the arena's fighter in the arena and Dogfight), each copy under its
+// own prefix. Two functions are the same when their text matches with the
+// prefixes taken out and everything they name outside themselves (a function
+// called, a data segment read) is the same in turn, refined to a fixpoint, so
+// a difference anywhere down a call chain keeps both. The one kept is the
+// first in the module; calls to the others go to it. Every instruction any
+// game runs is what it was, so every hash is.
+export function mergeTwins(wat, prefixes) {
+  const at = wat.indexOf('(module') + 7;
+  const body = wat.slice(at, wat.lastIndexOf(')'));
+  const forms = [];
+  for (let i = 0, depth = 0, start = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '"') { i = closeString(body, i) - 1; continue; }
+    if (c === '(') { if (depth++ === 0) start = i; } else if (c === ')' && --depth === 0) forms.push(body.slice(start, i + 1));
+  }
+  const strip = new RegExp(`\\$(?:${prefixes.join('|')})\\.`, 'g');
+  const refs = /\b(?:call|memory\.init|data\.drop) (\$[\w.]+)/g;
+  const nameOf = (text) => text.match(/^\(func (\$[\w.]+)/);
+  const funcs = new Map(); // name -> { canon, refs }
+  for (const text of forms) {
+    const m = nameOf(text);
+    if (m) funcs.set(m[1], { canon: text.slice(m[0].length).replace(strip, '$.'), refs: [...text.matchAll(refs)].map((r) => r[1]) });
+  }
+  let cls = new Map(), n = -1;
+  const ids = new Map();
+  for (const [name, f] of funcs) { if (!ids.has(f.canon)) ids.set(f.canon, ids.size); cls.set(name, ids.get(f.canon)); }
+  while (n !== ids.size) {
+    n = ids.size;
+    ids.clear();
+    const next = new Map();
+    for (const [name, f] of funcs) {
+      const key = `${cls.get(name)}|${f.refs.map((r) => (funcs.has(r) ? cls.get(r) : r)).join(',')}`;
+      if (!ids.has(key)) ids.set(key, ids.size);
+      next.set(name, ids.get(key));
+    }
+    cls = next;
+  }
+  const keep = new Map(), to = new Map();
+  for (const [name] of funcs) { const k = cls.get(name); if (keep.has(k)) to.set(name, keep.get(k)); else keep.set(k, name); }
+  if (!to.size) return { wat, merged: 0 };
+  const out = forms.filter((t) => !to.has(nameOf(t)?.[1])).map((t) => t.replace(/\bcall (\$[\w.]+)/g, (s, f) => (to.has(f) ? `call ${to.get(f)}` : s)));
+  return { wat: `${wat.slice(0, at)}\n${out.join('\n')}\n)\n`, merged: to.size };
+}
