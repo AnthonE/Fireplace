@@ -1,8 +1,8 @@
 {
   "_read": "Fireplace's coin, quoted in PROS, to be created on pump.fun's web app. name, symbol, description, image, links and mayhem_mode are WELDED at the create: a wrong one is a second coin. This folder has the shape of Elo Pros' launch kit (scry-forge deploy/pumpfun) and copies over it; there, `node launch.mjs price fireplace.json` reads what the opening buy costs in PROS, and after the create `node launch.mjs coin --mint <coin> --title fireplace` records it. `node tools/coin.mjs` checks this file and draws the pictures; docs/coin.md is the plan and the day. Nothing here has an address yet.",
   "name": "Fireplace",
-  "symbol": "FIREPLACE",
-  "description": "Fireplace is a free party game on Elo Pros, in your browser: a living room with a fire going and a TV that plays party minigames, an arena, a dogfight and golf in turn, with a whole crowd in one room. FIREPLACE is its coin, paired against PROS. Play signed in and finish the day's challenges for a share of the daily pot. Every house wallet is listed at elopros.com/tokenomics.html",
+  "symbol": "FIRE",
+  "description": "Fireplace is a free party game on Elo Pros, in your browser: a living room with a fire going and a TV that plays party minigames, an arena, a dogfight and golf in turn, with a whole crowd in one room. FIRE is its coin, paired against PROS. Play signed in and finish the day's challenges for a share of the daily pot. Every house wallet is listed at elopros.com/tokenomics.html",
   "image": "art/fireplace-coin.png",
   "banner": "art/fireplace-banner.jpg",
   "links": {
@@ -11,8 +11,8 @@
     "telegram": "https://t.me/eloonsol"
   },
   "mayhem_mode": false,
-  "buy_tokens": 100000000,
+  "buy_tokens": 50000000,
   "creator": "FF31ZeUkM8T4YVT1dm1XTKsf9HfXcycTAGrPu2Pu6Vkx",
-  "creator_fee_bps": 200,
+  "creator_fee_bps": 100,
   "priority_fee_cap": 2000000
 }

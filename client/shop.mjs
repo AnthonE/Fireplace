@@ -80,7 +80,7 @@ export function economy(shop = {}) {
   if (bad.length) throw new Error(`coin/shop.json: ${bad.join('; ')}`);
   if (!shop.payer) return null;
   const coin = shop.coin ? { coin: shop.coin, cap: shop.cap } : null;
-  const symbol = shop.symbol || 'FIREPLACE';
+  const symbol = shop.symbol || 'FIRE';
   return {
     currency: coin ? { name: symbol, symbol } : { name: 'PROS', symbol: 'PROS' },
     mode: 'real',

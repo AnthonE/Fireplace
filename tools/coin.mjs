@@ -240,8 +240,8 @@ export function postHtml(room, coin, sheet) {
 <div style="position:absolute;inset:0;background:linear-gradient(270deg,rgba(16,20,31,.98) 0%,rgba(16,20,31,.97) 44%,rgba(16,20,31,.3) 58%,rgba(16,20,31,0) 74%)"></div>
 <div style="position:absolute;inset:0;background:linear-gradient(0deg,rgba(8,10,16,.55) 0%,rgba(8,10,16,0) 22%)"></div>
 <img src="${coin}" style="position:absolute;left:60px;top:36px;width:272px;height:272px;clip-path:circle(48.9%)">
-<div class="col" style="right:88px;top:104px">${words('THE COIN OF THE BROWSER PARTY GAME', 5, BONE)}
-<div style="margin-top:30px;display:flex;align-items:flex-end;gap:24px">${FIRE_MARK(5)}${words('FIREPLACE', 17, GOLD)}</div>
+<div class="col" style="right:88px;top:104px">${words('THE COIN OF THE PARTY GAME FIREPLACE', 5, BONE)}
+<div style="margin-top:30px;display:flex;align-items:flex-end;gap:24px">${FIRE_MARK(5)}${words(sheet.symbol, 17, GOLD)}</div>
 <div style="margin-top:44px">${words('LIVE ON SOLANA', 12, WHITE)}</div>
 <div style="margin-top:40px;display:flex;flex-direction:column;align-items:flex-end;gap:14px">${sub.map((l) => words(l, 5, '#e8e2d6')).join('')}</div>
 <div style="margin-top:44px;padding:18px 24px;border:4px solid ${GOLD}">${words('ELOPROS.COM/GAMES/FIREPLACE', 5, GOLD)}</div></div>
