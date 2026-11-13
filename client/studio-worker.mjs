@@ -6,12 +6,13 @@
 // and the log replayed with the ball phases split two ways, every tick's
 // hash equal, as the determinism matrix asks of a build split over threads.
 //   in:  { build: { key, wat, consts } }  out: { built: { bytes, debug, ms, size } } or { error }
-//   in:  { check: { debug, mg, ticks, bots } }  out: { progress } ..., then { checked } or { error }
+//   in:  { check: { debug, mg, consts, ticks, bots } }  out: { progress } ..., then { checked } or { error }
 import * as L from '../src/layout.mjs';
 import { MG_CONSTS } from '../src/mg/consts.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { expandWith, assembleWith, includesOf, joinPath } from '../tools/asm-core.mjs';
 import { playParty } from '../tools/party-play.mjs';
+import { withConsts } from './mg/load.mjs';
 import { parseLog, replay, decodeTrace } from '../harness/core.mjs';
 
 const ROOT = new URL('../', import.meta.url);
@@ -85,8 +86,13 @@ async function build({ key, wat, consts }) {
 // three minutes, plus the start), so "did anyone score" is asked of a finished
 // round: a survival minigame's round can last its whole length when the AI
 // balls play it well, and a fixed 4000 ticks once called that nobody scoring.
-async function check({ debug, mg, ticks = 24000, bots = 12 }) {
+async function check({ debug, mg, consts = '', ticks = 24000, bots = 12 }) {
   const t0 = performance.now();
+  // the AI balls' sense of the stage on the numbers the build was made on (client/mg/load.mjs)
+  if (consts) {
+    const url = URL.createObjectURL(new Blob([consts], { type: 'text/javascript' }));
+    try { await withConsts(mg, url); } finally { URL.revokeObjectURL(url); }
+  }
   let lastSent = 0, at = 0;
   const onTick = (t) => {
     at = t + 1;

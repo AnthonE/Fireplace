@@ -12,6 +12,7 @@ import { MG_CONSTS } from '../src/mg/consts.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { expandWith, assembleWith, includesOf, joinPath } from '../tools/asm-core.mjs';
 import { expand, assemble } from '../tools/asm.mjs';
+import { variantSource } from '../client/mg/load.mjs';
 
 const ROOT = new URL('../', import.meta.url);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
@@ -39,4 +40,21 @@ test("party built by the page's half on relative paths is npm run build's party,
   const layout = { ...L, MG_CONSTS: { ...MG_CONSTS, SW_STUDIO: 7 } };
   const changed = await assembleWith(wabt, expandWith(edited, 'src/game.wat', { BUMPER: true, PARTY: true, layout, macros: makeMacros }), 'game.wat');
   assert.notEqual(sha(changed), sha(bytes));
+  // an edited array reaches the sim too, through (!tab NAME i)
+  const arrays = { ...L, MG_CONSTS: { ...MG_CONSTS, SW_TS: MG_CONSTS.SW_TS.map((v) => v + 1) } };
+  const tabbed = await assembleWith(wabt, expandWith(read, 'src/game.wat', { BUMPER: true, PARTY: true, layout: arrays, macros: makeMacros }), 'game.wat');
+  assert.notEqual(sha(tabbed), sha(bytes));
+});
+
+test("the studio's play: a minigame's client module on the edited constants, its other imports as the site serves them", () => {
+  const base = new URL('https://example.test/site/client/mg/sweep.mjs');
+  const text = readFileSync(new URL('client/mg/sweep.mjs', ROOT), 'utf8');
+  const out = variantSource(text, base, 'sweep', 'blob:https://example.test/abc');
+  assert.match(out, /import \* as MC from 'blob:https:\/\/example\.test\/abc';/);
+  assert.match(out, /from 'https:\/\/example\.test\/site\/src\/layout\.mjs'/);
+  assert.match(out, /from 'https:\/\/example\.test\/site\/client\/party-render\.mjs'/);
+  assert.doesNotMatch(out, /from '\.\.?\//, 'no relative import left: a blob has no address to resolve one against');
+  assert.throws(() => variantSource("import * as L from '../../src/layout.mjs';", base, 'sweep', 'blob:x'), /imports no src\/mg\/sweep\.mjs/);
+  // every minigame's module takes it: each imports its own constants, by a relative path
+  for (const m of L.MINIGAMES) variantSource(readFileSync(new URL(`client/mg/${m.key}.mjs`, ROOT), 'utf8'), new URL(`https://example.test/site/client/mg/${m.key}.mjs`), m.key, 'blob:x');
 });

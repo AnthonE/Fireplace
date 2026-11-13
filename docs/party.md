@@ -282,8 +282,11 @@ with the assembler's own half (`tools/asm-core.mjs`), the debug build played
 by 12 AI balls for 4,000 ticks and replayed split two ways (every tick's hash
 equal), the build played in party's page against AI balls, and the changed
 files sent in through GitHub's upload page. Unchanged, a minigame builds to
-`npm run build`'s bytes, in about 5 s here; edited constants reach the sim,
-not yet the client module that draws it and steers the AI.
+`npm run build`'s bytes, in about 5 s here. Edited constants reach the sim
+(an array's through `(!tab)` as well) and, in the check and the play, the
+client module that draws the minigame and steers its AI balls: the page
+loads that module on the edited numbers in place of the served ones
+(`client/mg/load.mjs` `withConsts`).
 
 ![Swiss Roll: sixteen balls on the wheel, its holes cut through, the rim crumbling in](p6-swiss-roll.png)
 

@@ -172,7 +172,9 @@ function localRoom(q, wasm, { arena, fireplace, kind: named = '' }) {
   const seed = q.has('seed') ? Number(q.get('seed')) >>> 0
     : q.has('mg') && kind === 'party' ? ((0xa7 << 24) | ((Number(q.get('mg')) & 0xff) << 16) | (rand & 0xffff)) >>> 0
       : q.has('mode') && (kind === 'arena' || kind === 'flight') ? forcedSeed(Number(q.get('mode')), rand) : undefined;
-  return { kind, bots: q.has('bots') ? Number(q.get('bots')) : 7, seed };
+  // a studio build's edited constants (client/party.mjs checks them), for the AI balls' sense of the stage
+  const consts = kind === 'party' && q.get('consts') && q.has('mg') ? { mg: Number(q.get('mg')), url: q.get('consts') } : null;
+  return { kind, bots: q.has('bots') ? Number(q.get('bots')) : 7, seed, consts };
 }
 
 // The prediction for slot: the newest confirmed tick plus every input sampled

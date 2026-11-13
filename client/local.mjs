@@ -58,7 +58,9 @@ async function brain(kind, slot, seed) {
   return null;
 }
 
-async function run({ local: { kind = '', bots = 0, seed }, memory, simPort, watch = false, arena = false, fireplace = false }) {
+async function run({ local: { kind = '', bots = 0, seed, consts = null }, memory, simPort, watch = false, arena = false, fireplace = false }) {
+  // the studio's play: the minigame's module on the numbers being edited, before any ball thinks (client/mg/load.mjs)
+  if (consts) await (await import('./mg/load.mjs')).withConsts(consts.mg, consts.url);
   const i32 = new Int32Array(memory.buffer);
   const u32 = new Uint32Array(memory.buffer);
   const f32 = new Float32Array(memory.buffer);

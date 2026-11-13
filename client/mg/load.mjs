@@ -15,4 +15,34 @@ export const need = r.need;
 // every minigame's, for a room played faster than a fetch (the studio's check)
 export const needAll = () => Promise.all(MINIGAMES.map((_, k) => need(k)));
 
+// A minigame's client module on other numbers than the site serves: its text
+// with its imports made absolute and the one of its own constants
+// (src/mg/<key>.mjs) pointed at url, a module of the same names. base is the
+// module's own address.
+export function variantSource(text, base, key, url) {
+  const own = new URL(`../../src/mg/${key}.mjs`, base).href;
+  let hit = 0;
+  const out = text.replace(/(\bfrom\s*|\bimport\s*)(['"])(\.\.?\/[^'"]+)\2/g, (s, kw, q, spec) => {
+    const abs = new URL(spec, base).href;
+    if (abs === own) hit++;
+    return `${kw}${q}${abs === own ? url : abs}${q}`;
+  });
+  if (!hit) throw new Error(`client/mg/${key}.mjs imports no src/mg/${key}.mjs`);
+  return out;
+}
+
+// The studio's play (client/studio.mjs): minigame id's module built on the
+// constants at url (a blob of the edited text), so what the edited numbers
+// move in the sim, the drawing and the AI ball move with. Should it not
+// load, the module as served.
+export function withConsts(id, url) {
+  const key = MINIGAMES[id]?.key;
+  if (!key) return undefined;
+  const base = new URL(`./${key}.mjs`, import.meta.url);
+  return r.put(id, fetch(base, { cache: 'no-cache' }).then((res) => res.text()).then((text) => {
+    const blob = URL.createObjectURL(new Blob([variantSource(text, base, key, url)], { type: 'text/javascript' }));
+    return import(blob).finally(() => URL.revokeObjectURL(blob));
+  }).catch((e) => { console.warn(`${key} on the edited numbers: ${e?.message || e}`); return import(base.href); }));
+}
+
 if (!PAGE) (await import('./index.mjs')).MG.forEach((m, k) => { MG[k] = m; });

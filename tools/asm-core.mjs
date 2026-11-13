@@ -211,7 +211,7 @@ export function expandWith(read, file, { DEBUG = false, ARENA = false, FLIGHT = 
   // the arena's mode is a layout constant, so #if FIESTA picks its rules at build time
   src = conditionals(src, { DEBUG, ARENA, FLIGHT: ARENA && FLIGHT, BUMPER, PARTY, FIESTA: ARENA && !!lay.FIESTA });
   src = stripComments(src);
-  const m = macros({ DEBUG });
+  const m = macros({ DEBUG, layout: lay });
   if (map) m.mapdata = () => dataSegment(map.bytes);
   src = expandMacros(src, m);
   src = constants(src, scope);
