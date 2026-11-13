@@ -1,5 +1,5 @@
-// Fireplace's shop on Elo Pros (docs/coin.md): the thirteen looks that
-// marshmallows buy (client/looks.mjs `price`) are also sold as owned items, one
+// Fireplace's shop on Elo Pros (docs/coin.md): the looks and dress pieces that
+// marshmallows buy (client/looks.mjs and client/dress.mjs `price`) are also sold as owned items, one
 // NFT each in the Fireplace Items collection, so a purchase follows the wallet
 // to any browser and can be sold on. Marshmallows still buy a look into this
 // browser's purse as they always did; the two are separate doors to the same
@@ -17,6 +17,7 @@
 // switches it). The tiers are a proposal to edit, and the shop stays dark
 // until coin/shop.json names the wallet that is paid (tools/elo.mjs).
 import { BALLS, HATS, BODIES, lookId } from './looks.mjs';
+import { FACES, SHIRTS, BACKS } from './dress.mjs';
 import { BADGE_ITEMS, BADGE_ITEM_MASK } from '../net/wire.mjs';
 
 export const SLUG = 'fireplace';
@@ -27,13 +28,16 @@ export const TIERS = [
   { pros: 500_000, days: 15 },
   { pros: 1_000_000, days: 20 },
 ];
-// a look's tier, by its key: the marshmallow price's order, in five steps
-const TIER = { bee: 0, soccer: 0, cone: 0, ladybird: 0, phones: 0, checker: 1, tophat: 1, antlers: 1, mint: 1, prop: 2, halo: 2, disco: 3, goldbot: 4 };
+// a piece's tier, by its key: the marshmallow price's order, in five steps
+const TIER = {
+  bee: 0, soccer: 0, cone: 0, ladybird: 0, phones: 0, checker: 1, tophat: 1, antlers: 1, mint: 1, prop: 2, halo: 2, disco: 3, goldbot: 4,
+  cool: 0, wink: 0, oh: 0, cat: 1, stars: 2, stripes: 0, check: 0, chevrons: 1, heart: 1, star: 1, pack: 1, cape: 2, jet: 3,
+};
 
-const KINDS = [[BALLS, 'ball'], [HATS, 'hat'], [BODIES, 'body']];
+const KINDS = [[BALLS, 'ball'], [HATS, 'hat'], [BODIES, 'body'], [FACES, 'face'], [SHIRTS, 'shirt'], [BACKS, 'back']];
 const title = (s) => s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 
-// what is for sale: every priced look, in the order BADGE_ITEMS keeps
+// what is for sale: every priced look and dress piece, in the order BADGE_ITEMS keeps
 export const SHOP = KINDS.flatMap(([list, kind]) => list.filter((x) => x.price).map((x) => ({
   key: x.key, id: lookId(x), kind, name: title(x.name), marshmallows: x.price, tier: TIER[x.key],
 }))).sort((a, b) => BADGE_ITEMS.indexOf(a.key) - BADGE_ITEMS.indexOf(b.key));

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The shop's pictures (client/shop.mjs, docs/coin.md): each priced look close,
+// The shop's pictures (client/shop.mjs, docs/coin.md): each priced look or dress piece close,
 // drawn by Party's own renderer on its demo stage (client/party-render-demo.mjs
 // `item`, headless Chrome on SwiftShader with ?present=0), 512 px, one JPEG to
 // an item, and the collection's picture, all of them in a row. They are what a
@@ -19,12 +19,12 @@ const LOCAL_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
 // the collection's picture: the title, and every look in a row under it, the last row in the middle
 export function collectionHtml(dir) {
-  const cell = 188, gap = 14, per = 5;
-  const rows = [SHOP.slice(0, per), SHOP.slice(per, 2 * per), SHOP.slice(2 * per)];
-  const grid = rows.map((row) => `<div style="display:flex;gap:${gap}px;justify-content:center">${row.map((x) => `<img src="${join(dir, `${x.key}.jpg`)}" width="${cell}" height="${cell}" style="border-radius:20px;display:block">`).join('')}</div>`).join(`<div style="height:${gap}px"></div>`);
+  const gap = 12, per = 7, cell = Math.floor((1024 - 48 - (per - 1) * gap) / per);
+  const rows = Array.from({ length: Math.ceil(SHOP.length / per) }, (_, k) => SHOP.slice(k * per, (k + 1) * per));
+  const grid = rows.map((row) => `<div style="display:flex;gap:${gap}px;justify-content:center">${row.map((x) => `<img src="${join(dir, `${x.key}.jpg`)}" width="${cell}" height="${cell}" style="border-radius:14px;display:block">`).join('')}</div>`).join(`<div style="height:${gap}px"></div>`);
   return page(1024, 1024, `<div style="position:absolute;inset:0;background:${INK}"></div>
-<div style="position:absolute;left:0;right:0;top:60px;display:flex;flex-direction:column;align-items:center;gap:26px">${FIRE_MARK(5)}<div>${words('FIREPLACE ITEMS', 10, GOLD)}</div></div>
-<div style="position:absolute;left:0;right:0;top:300px">${grid}</div>`);
+<div style="position:absolute;left:0;right:0;top:44px;display:flex;flex-direction:column;align-items:center;gap:22px">${FIRE_MARK(4)}<div>${words('FIREPLACE ITEMS', 9, GOLD)}</div></div>
+<div style="position:absolute;left:0;right:0;top:250px">${grid}</div>`);
 }
 
 async function main() {

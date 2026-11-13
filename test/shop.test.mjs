@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { BALLS, HATS, BODIES, lookId, isOpen, wearable, packLook } from '../client/looks.mjs';
+import { FACES, SHIRTS, BACKS, packDress, wearableDress } from '../client/dress.mjs';
 import { eloStats } from '../client/achievements.mjs';
 import { SHOP, TIERS, SLUG, priceOf, economy, shopProblems, isWallet, ownedLooks } from '../client/shop.mjs';
 import { openSet, emptyPurse } from '../client/purse.mjs';
@@ -16,14 +17,15 @@ import * as Elo from '../net/elo.mjs';
 import * as W from '../net/wire.mjs';
 
 const PAYER = 'D29z38je9jFaWYQXBLVK71QKbiyLb1QKmbibhyrECWun', MINT = '9SghtAqLvMmCdgJAqtGP8nPM5p7hqcpr5exL9YWLpump';
-const priced = [...BALLS, ...HATS, ...BODIES].filter((x) => x.price);
+const priced = [...BALLS, ...HATS, ...BODIES, ...FACES, ...SHIRTS, ...BACKS].filter((x) => x.price);
 
-test('every priced look is an item, once, in the order the badge bits keep', () => {
-  assert.equal(SHOP.length, 13);
+test('every priced look and dress piece is an item, once, in the order the badge bits keep', () => {
+  assert.equal(SHOP.length, 26);
   assert.deepEqual(SHOP.map((x) => x.key).sort(), priced.map((x) => x.key).sort(), 'a look gets a price, or loses it, and the shop follows');
   assert.deepEqual(SHOP.map((x) => x.key), W.BADGE_ITEMS, 'BADGE_ITEMS is the shop\'s order: a key\'s bit never moves');
   assert.equal(new Set(W.BADGE_ITEMS).size, W.BADGE_ITEMS.length);
-  assert.equal(W.BADGE_ITEMS.length, 13);
+  assert.equal(W.BADGE_ITEMS.length, 26);
+  assert.deepEqual(W.BADGE_ITEMS.slice(0, 13), ['bee', 'soccer', 'ladybird', 'checker', 'mint', 'disco', 'cone', 'phones', 'tophat', 'antlers', 'prop', 'halo', 'goldbot'], 'the first thirteen keep their bits');
   assert.ok(1 + W.BADGE_ITEMS.length <= 31, 'a badge word is 32 bits and the Pill has bit 0');
   assert.equal(W.BADGE_PILL & W.BADGE_ITEM_MASK, 0, 'the Pill is not an item\'s bit');
   for (const x of SHOP) {
@@ -41,7 +43,9 @@ test('an item\'s key and name pass Elo Pros\' item rules, and name nothing that 
     assert.ok(!taken.has(x.key.replace(/-/g, '_')), `${x.key}: an item id that names an achievement, stat, board or challenge is refused`);
     assert.ok(x.name === x.name.replace(/(^|\s)\S/g, (c) => c.toUpperCase()).replace(/(?<=\S)([A-Z])/g, (c) => c.toLowerCase()), `${x.key}: ${x.name} is in title case`);
   }
-  assert.deepEqual(SHOP.map((x) => x.name), ['Bumblebee', 'Soccer Ball', 'Ladybird', 'Checkers', 'Peppermint', 'Disco Ball', 'Party Hat', 'Headphones', 'Top Hat', 'Antlers', 'Propeller Cap', 'Halo', 'Gold Robot']);
+  assert.deepEqual(SHOP.map((x) => x.name), ['Bumblebee', 'Soccer Ball', 'Ladybird', 'Checkers', 'Peppermint', 'Disco Ball', 'Party Hat', 'Headphones', 'Top Hat', 'Antlers', 'Propeller Cap', 'Halo', 'Gold Robot',
+    'Cool', 'Wink', 'Surprised', 'Cat', 'Star Eyes', 'Stripes', 'Checks', 'Chevrons', 'Heart', 'Star', 'Backpack', 'Cape', 'Jetpack']);
+  assert.equal(new Set(SHOP.map((x) => x.key)).size, SHOP.length, 'one key a piece across every slot: it is the collection\'s key');
 });
 
 test('the price ladder: five tiers, dearer as the marshmallow price is, in PROS now and in days of a cap with the coin', () => {
@@ -79,7 +83,7 @@ test('coin/shop.json: what is a good one, and the economy block each gives', () 
 
   const pros = economy({ payer: PAYER });
   assert.deepEqual({ ...pros, items: undefined }, { currency: { name: 'PROS', symbol: 'PROS' }, mode: 'real', coin: 'reserve', chain: 'solana', payer: PAYER, items: undefined });
-  assert.equal(pros.items.length, 13);
+  assert.equal(pros.items.length, 26);
   const coin = economy({ payer: PAYER, coin: MINT, cap: 5000, symbol: 'FIREPLACE' });
   assert.deepEqual({ ...coin, items: undefined }, { currency: { name: 'FIREPLACE', symbol: 'FIREPLACE' }, mode: 'real', coin: MINT, chain: 'solana', payer: PAYER, items: undefined });
   // the rows, as meter/game_economy.py validate_items takes them
@@ -104,7 +108,7 @@ test("elo.json: the shop is Fireplace's own, generated, dark until a wallet is n
   const base = { elo: 1, game: SLUG, stats: {}, mods: [] };
   const open = withGenerated(base, [], [], { payer: PAYER });
   assert.equal(open.economy.payer, PAYER);
-  assert.equal(open.economy.items.length, 13);
+  assert.equal(open.economy.items.length, 26);
   assert.equal(withGenerated({ ...base, economy: { mode: 'paper' } }, [], [], {}).economy, undefined, 'a hand-written economy on Fireplace\'s own goes: the shop is the one writer');
   assert.equal(withGenerated({ ...base, game: 'my-game' }, [], [], { payer: PAYER }).economy, undefined, 'a copy made from this template sells nothing');
   assert.deepEqual(withGenerated({ ...base, game: 'my-game', economy: { mode: 'paper' } }, [], [], {}).economy, { mode: 'paper' }, 'and keeps what it wrote itself');
@@ -118,7 +122,7 @@ test('tools/shop.mjs: the table, and what each flag changes in coin/shop.json', 
   assert.deepEqual(next({ payer: PAYER, coin: MINT, cap: 5000 }, []), { payer: PAYER, coin: MINT, cap: 5000 }, 'no flag, no change');
   assert.ok(shopProblems(next({ payer: PAYER }, ['--coin', MINT])).some((p) => p.startsWith('cap')), 'the cap is not guessed');
   const t = table({ payer: PAYER });
-  assert.equal(t.split('\n').length, 13);
+  assert.equal(t.split('\n').length, 26);
   assert.match(t, /goldbot\s+body\s+1,000,000 PROS/);
   assert.match(table({ payer: PAYER, coin: MINT, cap: 5000, symbol: 'FIREPLACE' }), /goldbot\s+body\s+100,000 FIREPLACE/);
 });
@@ -131,7 +135,7 @@ test('a wallet\'s items become badge bits, and the page opens the looks they nam
   assert.equal(Elo.badgesOf(rows(['oneshot', 'bee'], ['gates', 'pill'], ['fireplace', 'ember']), 'fireplace'), 0, 'another title\'s, or a key this build has no bit for');
   assert.equal(Elo.badgesOf(rows(['fireplace', 'bee'], ['fireplace', 'bee']), 'fireplace'), 2, 'twice is once');
   assert.equal(Elo.badgesOf(null, 'fireplace'), 0);
-  for (const k of W.BADGE_ITEMS.keys()) assert.ok((Elo.badgesOf(rows(['fireplace', W.BADGE_ITEMS[k]]), 'fireplace') >>> 0) < 2 ** 14);
+  for (const k of W.BADGE_ITEMS.keys()) assert.ok((Elo.badgesOf(rows(['fireplace', W.BADGE_ITEMS[k]]), 'fireplace') >>> 0) === 2 ** (1 + k), W.BADGE_ITEMS[k]);
 
   const word = Elo.badgesOf(rows(['fireplace', 'pill'], ['fireplace', 'tophat'], ['fireplace', 'ladybird'], ['fireplace', 'goldbot']), 'fireplace');
   assert.deepEqual(ownedLooks(word).sort(), ['ball:ladybird', 'body:goldbot', 'hat:tophat']);
@@ -148,6 +152,13 @@ test('a wallet\'s items become badge bits, and the page opens the looks they nam
   assert.equal(wearable(saved, shut), 0, 'before it signs in a page can\'t wear it');
   assert.equal(wearable(saved, got), saved, 'once it has, the saved look is back');
   assert.deepEqual([...openSet(tally, purse)], [], 'and with no owned list, the open set is what it was');
+  // a dress piece the same way: the wallet's cape opens the cape, and a saved dress wearing it comes back
+  const capeWord = Elo.badgesOf(rows(['fireplace', 'cape'], ['fireplace', 'cool']), 'fireplace');
+  const dressed = openSet(tally, purse, ownedLooks(capeWord));
+  const cape = BACKS.findIndex((x) => x.key === 'cape'), cool = FACES.findIndex((x) => x.key === 'cool'), flame = SHIRTS.findIndex((x) => x.key === 'flame');
+  assert.deepEqual(ownedLooks(capeWord).sort(), ['back:cape', 'face:cool']);
+  assert.equal(wearableDress(packDress(cool, flame, cape), shut), 0, 'nothing owned, nothing worn');
+  assert.equal(wearableDress(packDress(cool, flame, cape), dressed), packDress(cool, 0, cape), 'the flame shirt is earned, never an item');
 });
 
 // a JPEG's size is its frame's (SOF0 to SOF15, less the three that are tables)
