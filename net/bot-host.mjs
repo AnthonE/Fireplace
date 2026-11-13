@@ -465,13 +465,26 @@ const timer = setInterval(() => {
   for (const s of sessions) s.tick(now);
 }, W.TICK_MS / 2);
 let last = 0;
+let stop = () => {};
+// A host with no end (--seconds 0: a service) whose every bot is gone has
+// nothing left to do in the room. One relay is no failover (lost()), so a bot
+// it drops (silent past its SILENT_MS on a stall here, its stream ended) stays
+// closed: exit non-zero so the supervisor starts the host again and the bots
+// join afresh, rather than run on with the process up and nobody in the room.
+let allGone = false;
 const progress = setInterval(() => {
   const live = sessions.filter((s) => s.joined && !s.closed).length;
   const sim = world.sim.tick;
   if (!argv.includes('--quiet')) process.stderr.write(`\r[bot-host] ${((performance.now() - t0) / 1000).toFixed(0)} s, ${live} sessions, world at sim tick ${sim} (+${sim - last}), ${world.store.size} queued   `);
   last = sim;
+  if (seconds === 0 && !allGone && sessions.length === nBots && sessions.every((s) => s.closed)) {
+    allGone = true;
+    const refused = sessions.filter((s) => s.reject !== null).length;
+    console.error(`[bot-host] every bot is gone (${sessions.filter((s) => s.joined).length} had joined, ${refused} refused); exiting for the supervisor to start the host again`);
+    stop();
+  }
 }, 1000);
-await new Promise((ok) => { if (seconds > 0) setTimeout(ok, seconds * 1000); process.once('SIGINT', ok); process.once('SIGTERM', ok); });
+await new Promise((ok) => { stop = ok; if (seconds > 0) setTimeout(ok, seconds * 1000); process.once('SIGINT', ok); process.once('SIGTERM', ok); });
 clearInterval(timer);
 clearInterval(progress);
 for (const s of sessions) s.leave();
@@ -518,4 +531,4 @@ const summary = {
 const text = JSON.stringify(summary);
 if (outPath) writeFileSync(outPath, text + '\n');
 else console.log(text);
-setTimeout(() => process.exit(0), 200);
+setTimeout(() => process.exit(allGone ? 1 : 0), 200);
