@@ -10,7 +10,7 @@
 // ones are harder and the calm between them shorter; in the calm the rim
 // crumbles in. Bumps on; the last ball on wins, and the balls one disaster
 // takes off together share it.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const ND_R0 = 16; // the island: ND_R0 m plus ND_RK times the root of the balls in, at most ND_RMAX
 export const ND_RK = 2.5;

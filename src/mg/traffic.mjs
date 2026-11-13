@@ -1,7 +1,7 @@
 // RUSH HOUR (MG_TRAFFIC, prefix rh): a street to cross again and again, from
 // one pavement to the other and back, through lanes of traffic that knock a
 // ball down the lane and send it back to the pavement it last scored from.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const RH_LEN = 11250; // 90 s
 export const RH_DOUBLE = 9375; // from here every point is two

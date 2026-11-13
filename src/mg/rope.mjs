@@ -6,7 +6,7 @@
 // it goes; from 30 s a second rope half a turn behind the first (double
 // dutch), from 60 s the turners switch direction now and then, from 70 s
 // the stage's ends crumble in. Off it and you're out; the last ball on wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The stage: its long axis along x through the centre, JR_HW either side of
 // it across; long enough for the balls in rows of JR_ROWS, JR_SP apart

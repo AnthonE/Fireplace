@@ -87,8 +87,9 @@ shell whose own command line contains the name: it kills that shell.
 - Party (`src/party.wat`) is the ball (`src/bumper.wat`: its power-ups,
   bumps, blasts and rockets) and the round around it. Each minigame is `src/mg/<key>.wat` (nine hooks under
   its prefix, called through `(!mg)`), its constants in `src/mg/<key>.mjs`
-  (literal numbers, no imports; the WAT sees them through layout.mjs's
-  `MG_CONSTS`, JS imports the file itself), its client module
+  (literal numbers, no imports; the WAT sees them through
+  `src/mg/consts.mjs`'s `MG_CONSTS`, which layout.mjs must not import: every
+  page loads it; JS imports the file itself), its client module
   `client/mg/<key>.mjs`, its tests `test/mg-<key>.test.mjs`. State only in
   `PG_H` (header, in the prediction's copy), `PG_S`, `PG_BIG` and the record's
   party fields. `begin` (a ball's own start), `ground` and `push` run on the

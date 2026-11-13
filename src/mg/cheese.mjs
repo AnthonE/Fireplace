@@ -4,7 +4,7 @@
 // drops through and is out. Over CH_SHRINK the rim crumbles in to CH_RMIN and
 // every hole widens by half; power-ups fall from the sky. Bumps on; the last
 // ball rolling wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const CH_R0 = 16; // the wheel: CH_R0 m plus CH_RK times the root of the balls in, at most CH_RMAX
 export const CH_RK = 3.5;

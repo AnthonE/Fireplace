@@ -7,7 +7,7 @@
 // line thins and the candy grows more brittle as the round goes. Fall through
 // and you're out, placed by how much you'd traced; the first all the way
 // round wins, the rest by how far they got.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const HC_CS = 0.45; // m, a candy cell a side
 export const HC_G = 29; // cells a cookie's square a side

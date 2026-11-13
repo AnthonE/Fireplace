@@ -10,7 +10,7 @@
 // A click barks: a wider, harder scare for half a second. The round ends
 // when every sheep is penned, or at 100 s; the fuller pen wins, a draw
 // allowed.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The meadow: a rounded rectangle HD_ASP times as long as wide, HD_A0 m²
 // plus HD_AK for each ball up to HD_NK and HD_AK2 for each past (37 by 20 m

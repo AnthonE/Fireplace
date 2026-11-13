@@ -7,7 +7,7 @@
 // gust, vent and blade runs on the tick and the round's seed. Off the course
 // a ball is down, back at its last deck GF_BACK ticks later. Placed by
 // finishing order, the rest by how far along they got.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const GF_LEN = 15000; // 120 s
 export const GF_LATE = 3750; // 30 s after the first ball home the round ends

@@ -8,6 +8,7 @@
 //   in:  { build: { key, wat, consts } }  out: { built: { bytes, debug, ms, size } } or { error }
 //   in:  { check: { debug, mg, ticks, bots } }  out: { progress } ..., then { checked } or { error }
 import * as L from '../src/layout.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { expandWith, assembleWith, includesOf, joinPath } from '../tools/asm-core.mjs';
 import { playParty } from '../tools/party-play.mjs';
@@ -61,7 +62,7 @@ async function build({ key, wat, consts }) {
     if (!files.has(p)) throw new Error(`no ${p}`);
     return files.get(p);
   };
-  const layout = { ...L, MG_CONSTS: { ...L.MG_CONSTS, ...(await constsOf(consts)) } };
+  const layout = { ...L, MG_CONSTS: { ...MG_CONSTS, ...(await constsOf(consts)) } };
   const w = await loadWabt();
   const out = {};
   for (const DEBUG of [false, true]) {

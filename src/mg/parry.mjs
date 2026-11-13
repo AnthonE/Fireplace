@@ -7,7 +7,7 @@
 // ball unparried puts it out. A click with nothing in reach locks the ball's
 // parry for PY_LOCK. Orbs speed up with every parry and over the round; from
 // PY_SHRINK0 the rim closes in. The last one in wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const PY_R0 = 12; // the disc: PY_R0 m plus PY_RK times the root of the balls in, at most PY_RMAX
 export const PY_RK = 3.6;

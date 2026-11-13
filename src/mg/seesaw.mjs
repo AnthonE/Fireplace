@@ -8,7 +8,7 @@
 // a ball down it, and off its low end into the sea. From SS_CUT0 the planks
 // are cut shorter or narrower one by one, and from SS_DROP0 they drop away
 // for good, flashing first, so the crowd crams onto fewer. The last ball on
-// wins. Literal numbers only: the sim reads them through layout.mjs's
+// wins. Literal numbers only: the sim reads them through consts.mjs's
 // MG_CONSTS, the client imports this file itself.
 export const SS_LEN = 12500; // 100 s
 // The field: a plank for every SS_PER balls and one more (SS_KMIN to

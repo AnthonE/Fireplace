@@ -9,7 +9,7 @@
 // loose: it lies where it fell, its own side's only. Between the zones rows
 // of posts slide from side to side on the clock and bat away whoever they
 // meet. First side to its target of legs, or the most at 100 s; draws allowed.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The track: RY_L0 m plus RY_LK times the root of the balls in long (x),
 // RY_W0 plus RY_WK times it wide (65 by 16.5 m for 1, 68 by 30 for 16, 72 by

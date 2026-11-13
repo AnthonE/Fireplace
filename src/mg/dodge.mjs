@@ -11,7 +11,7 @@
 // thrower goes to jail and the catcher's side's longest jailed comes back. A
 // click with nothing in reach locks the catch for DB_LOCK. The side with balls
 // in play when the other has none wins; at the clock, the side with more.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // Each half is a square DB_HX m deep and twice that wide: DB_AREA m² for each
 // ball of the bigger side, at least DB_AMIN.

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { newParty, partyBytes, wasmBytes, arenaBytes, fireplaceBytes, scriptedParty, predicted } from './helpers.mjs';
 import { View, partyWord, hexAt, hexCentre, seed, hash32, PLAT_Y, B_RAD } from '../src/party-view.mjs';
 import { replay, parseLog, decodeTrace } from '../harness/core.mjs';
@@ -8,6 +9,7 @@ import { expandMacros } from '../tools/asm.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { playParty, partySeed } from '../tools/genparty.mjs';
 import { MG } from '../client/mg/index.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 import * as L from '../src/layout.mjs';
 import * as MC from '../src/mg/thinice.mjs'; // TI_*: the minigame's own constants
 
@@ -63,7 +65,7 @@ test('the layout: the header between golf\'s and Fireplace\'s, the state between
   assert.deepEqual(L.MINIGAMES.map((m) => m.prefix), ['ti', 'cc', 'sw', 'rl', 'bo', 'wl', 'mp', 'kh', 'hp', 'cr', 'pp', 'rc', 'fc', 'tg', 'sb', 'tt', 'lv', 'gf', 'dr', 'ho', 'pn', 'lt', 'mz', 'be', 'cn', 'jr', 'gb', 'gc', 'sg', 'ss', 'kt', 'nd', 'sl', 'tr', 'py', 'mi', 'hc', 'db', 'vb', 'so', 'su', 'ch', 'wm', 'bl', 'eg', 'bw', 'fa', 'tw', 'pt', 'ry', 'rh', 'lj', 'hd']);
   assert.equal(MC.TI_FX_CRACK, L.FX_MG + 4 * L.MG_THINICE);
   // every minigame's FX kinds are literals in its .mjs: each in its own block of four, FX_MG + 4 * its id
-  for (const [k, v] of Object.entries(L.MG_CONSTS)) {
+  for (const [k, v] of Object.entries(MG_CONSTS)) {
     const m = /^([A-Z]{2})_FX_/.exec(k);
     if (!m) continue;
     const id = L.MINIGAMES.findIndex((g) => g.prefix === m[1].toLowerCase());
@@ -77,11 +79,15 @@ test('MG_CONSTS: every minigame\'s constants, none named twice or after a layout
     for (const [k, v] of Object.entries(await import(`../src/mg/${m.key}.mjs`))) {
       assert.ok(!seen.has(k), `${k} in ${m.key} and ${seen.get(k)}`);
       assert.ok(!(k in L), `${k} in ${m.key} and layout.mjs`);
-      assert.deepEqual(L.MG_CONSTS[k], v);
+      assert.deepEqual(MG_CONSTS[k], v);
       seen.set(k, m.key);
     }
   }
-  assert.equal(Object.keys(L.MG_CONSTS).length, seen.size);
+  assert.equal(Object.keys(MG_CONSTS).length, seen.size);
+  // nor does layout.mjs import them: every page and worker loads it, and a
+  // minigame's constants come with its own client module
+  assert.ok(!('MG_CONSTS' in L));
+  assert.doesNotMatch(readFileSync(new URL('../src/layout.mjs', import.meta.url), 'utf8'), /from '\.\/mg\//);
   // past about 1,020 exports V8 keeps a module namespace as a dictionary, and
   // every L.NAME read in the bot host, the relay and a page's frame slows 14 times
   assert.ok(Object.keys(L).length < 800, `layout.mjs exports ${Object.keys(L).length} names`);

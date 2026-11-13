@@ -8,7 +8,7 @@
 // the middle every 20 s, and bumper's power-ups fall onto the yard. A side's
 // score is the value of its nest, live; the bigger nest at 90 s wins, a draw
 // allowed.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The yard: a rounded rectangle EG_ASP times as long as wide, EG_A0 m² plus
 // EG_AK for each ball up to EG_NK and EG_AK2 for each past (32.2 by 20.2 m

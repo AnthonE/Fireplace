@@ -845,8 +845,9 @@ export const AM = [
 export const AM_HOOKS = ['start', 'tick', 'kill', 'bar']; // every mode on the kit has these
 export const KIT = AM.reduce((b, m) => b | (1 << m.mode), 0); // the modes on the kit, sides or none
 // Each team mode's own constants (src/am/<key>.mjs), gathered as one object
-// the assembler spreads into its scope, as MG_CONSTS is, and not names of this
-// module (V8's dictionary line, below); JS reads them from src/am/consts.mjs.
+// the assembler spreads into its scope, as src/mg/consts.mjs's MG_CONSTS is,
+// and not names of this module (V8's dictionary line, below); JS reads them
+// from src/am/consts.mjs.
 import * as am_consts from './am/consts.mjs';
 export const AM_CONSTS = Object.freeze({ ...am_consts });
 
@@ -952,7 +953,7 @@ export const BPHYS = {
 // rotation, joins, the ball's move over any stage, outs, places, points),
 // which calls each minigame's hooks (src/mg/<key>.wat, named $<prefix>_<hook>)
 // through (!mg). A minigame's own constants live in src/mg/<key>.mjs, every
-// name under its prefix in capitals, gathered into MG_CONSTS below.
+// name under its prefix in capitals, gathered into MG_CONSTS (src/mg/consts.mjs).
 export const MINIGAMES = [
   { key: 'thinice', prefix: 'ti', name: 'THIN ICE' },
   { key: 'color', prefix: 'cc', name: 'COLOR CALL' },
@@ -1110,66 +1111,15 @@ export const PG_S_SIZE = 0xe000 - 0xc100;
 export const PG_BIG = REGION + 0x10000; // big minigame state (tiles, grids), to the region's end: party has no golf balls
 export const PG_BIG_SIZE = REGION_SIZE - 0x10000;
 
-// Each minigame's own constants (src/mg/<key>.mjs), as one object the
-// assembler spreads into its scope (tools/asm.mjs) rather than as names of
-// this module: V8 keeps a namespace of more than about a thousand exports as a
-// dictionary, and every L.NAME read in the hot loops (the bot host, the relay,
-// the referee, a page's frame) took 14 times as long once these 763 joined
-// it (test/party.test.mjs holds the count down). JS reads a minigame's own file.
-import * as mg_thinice from './mg/thinice.mjs';
-import * as mg_color from './mg/color.mjs';
-import * as mg_sweep from './mg/sweep.mjs';
-import * as mg_light from './mg/light.mjs';
-import * as mg_bombs from './mg/bombs.mjs';
-import * as mg_wall from './mg/wall.mjs';
-import * as mg_pads from './mg/pads.mjs';
-import * as mg_hill from './mg/hill.mjs';
-import * as mg_potato from './mg/potato.mjs';
-import * as mg_coins from './mg/coins.mjs';
-import * as mg_paint from './mg/paint.mjs';
-import * as mg_race from './mg/race.mjs';
-import * as mg_chute from './mg/chute.mjs';
-import * as mg_tag from './mg/tag.mjs';
-import * as mg_snowball from './mg/snowball.mjs';
-import * as mg_tilt from './mg/tilt.mjs';
-import * as mg_lava from './mg/lava.mjs';
-import * as mg_gale from './mg/gale.mjs';
-import * as mg_drums from './mg/drums.mjs';
-import * as mg_hoops from './mg/hoops.mjs';
-import * as mg_pinball from './mg/pinball.mjs';
-import * as mg_trails from './mg/trails.mjs';
-import * as mg_maze from './mg/maze.mjs';
-import * as mg_bullseye from './mg/bullseye.mjs';
-import * as mg_cannon from './mg/cannon.mjs';
-import * as mg_rope from './mg/rope.mjs';
-import * as mg_glass from './mg/glass.mjs';
-import * as mg_gates from './mg/gates.mjs';
-import * as mg_stomp from './mg/stomp.mjs';
-import * as mg_seesaw from './mg/seesaw.mjs';
-import * as mg_kart from './mg/kart.mjs';
-import * as mg_disaster from './mg/disaster.mjs';
-import * as mg_slap from './mg/slap.mjs';
-import * as mg_trap from './mg/trap.mjs';
-import * as mg_parry from './mg/parry.mjs';
-import * as mg_mingle from './mg/mingle.mjs';
-import * as mg_honey from './mg/honey.mjs';
-import * as mg_dodge from './mg/dodge.mjs';
-import * as mg_volley from './mg/volley.mjs';
-import * as mg_soccer from './mg/soccer.mjs';
-import * as mg_sumo from './mg/sumo.mjs';
-import * as mg_cheese from './mg/cheese.mjs';
-import * as mg_mole from './mg/mole.mjs';
-import * as mg_balloon from './mg/balloon.mjs';
-import * as mg_eggs from './mg/eggs.mjs';
-import * as mg_bowl from './mg/bowl.mjs';
-import * as mg_fallball from './mg/fallball.mjs';
-import * as mg_tug from './mg/tug.mjs';
-import * as mg_minigolf from './mg/minigolf.mjs';
-import * as mg_relay from './mg/relay.mjs';
-import * as mg_traffic from './mg/traffic.mjs';
-import * as mg_jump from './mg/jump.mjs';
-import * as mg_herd from './mg/herd.mjs';
-export const MG_CONSTS = Object.freeze(Object.assign({}, mg_thinice, mg_color, mg_sweep, mg_light, mg_bombs, mg_wall, mg_pads, mg_hill, mg_potato, mg_coins, mg_paint, mg_race, mg_chute, mg_tag, mg_snowball, mg_tilt, mg_lava, mg_gale, mg_drums, mg_hoops, mg_pinball, mg_trails, mg_maze, mg_bullseye, mg_cannon, mg_rope, mg_glass, mg_gates, mg_stomp, mg_seesaw, mg_kart, mg_disaster, mg_slap, mg_trap, mg_parry, mg_mingle, mg_honey, mg_dodge, mg_volley, mg_soccer, mg_sumo, mg_cheese, mg_mole, mg_balloon, mg_eggs, mg_bowl, mg_fallball, mg_tug, mg_minigolf, mg_relay, mg_traffic, mg_jump, mg_herd));
+// Each minigame's own constants (src/mg/<key>.mjs) are gathered in
+// src/mg/consts.mjs as MG_CONSTS, one object the assembler spreads into its
+// scope (tools/asm.mjs), and are not names of this module: V8 keeps a
+// namespace of more than about a thousand exports as a dictionary, and every
+// L.NAME read in the hot loops (the bot host, the relay, the referee, a page's
+// frame) took 14 times as long once these joined it (test/party.test.mjs
+// holds the count down). Nor does this module import them: every page and
+// worker loads it, and only a minigame's round needs that minigame's file
+// (128 KB gzipped, all 53, on the arena's page while it did).
 
 // ---- Fireplace: every game in one module (build/fireplace/game.wasm), a
 // playlist of matches the room plays through, Mario Party style; people come

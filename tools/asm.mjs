@@ -31,6 +31,7 @@ import { gzipSync } from 'node:zlib';
 import wabtInit from 'wabt';
 import { FEATURES, includeWith, conditionals, stripComments, splitArgs, expandMacros, constants, forbid, expandWith, assembleWith, canonicalWith, prefixed } from './asm-core.mjs';
 import * as layout from '../src/layout.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { pathToFileURL } from 'node:url';
 import { isMain } from './main.mjs';
@@ -45,7 +46,8 @@ export const include = (file) => includeWith((p) => readFileSync(p, 'utf8'), res
 export function expand(file, { ARENA = false, FLIGHT = false, layout: lay = layout, macros = makeMacros, map = null, ...flags } = {}) {
   // flight flies its own map (src/flight.mjs FLIGHT_MAP), the arena Box Canyon unless told otherwise
   if (ARENA && !map) map = compileMap(FLIGHT ? mapDir(lay.FLIGHT_CONSTS?.FLIGHT_MAP) : mapDir());
-  return expandWith((p) => readFileSync(p, 'utf8'), resolve(file), { ...flags, ARENA, FLIGHT, layout: lay, macros, map });
+  // the minigames' constants are not the layout's own (src/mg/consts.mjs): a caller's layout may bring its own
+  return expandWith((p) => readFileSync(p, 'utf8'), resolve(file), { ...flags, ARENA, FLIGHT, layout: lay.MG_CONSTS ? lay : { ...lay, MG_CONSTS }, macros, map });
 }
 
 export async function assemble(wat, name = 'game.wat', opts = {}) {

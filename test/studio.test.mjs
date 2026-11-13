@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import wabtInit from 'wabt';
 import * as L from '../src/layout.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { expandWith, assembleWith, includesOf, joinPath } from '../tools/asm-core.mjs';
 import { expand, assemble } from '../tools/asm.mjs';
@@ -26,14 +27,16 @@ test("party built by the page's half on relative paths is npm run build's party,
   // relative paths from the root, as the page fetches them
   const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
   const wabt = await wabtInit();
-  const bytes = await assembleWith(wabt, expandWith(read, 'src/game.wat', { BUMPER: true, PARTY: true, layout: L, macros: makeMacros }), 'game.wat');
+  // the layout with every minigame's constants beside it, as the worker passes it (client/studio-worker.mjs)
+  const served = { ...L, MG_CONSTS };
+  const bytes = await assembleWith(wabt, expandWith(read, 'src/game.wat', { BUMPER: true, PARTY: true, layout: served, macros: makeMacros }), 'game.wat');
   const npm = await assemble(expand('src/game.wat', { BUMPER: true, PARTY: true }));
   assert.equal(sha(bytes), sha(npm));
   assert.equal(sha(bytes), sha(readFileSync(new URL('build/party/game.wasm', ROOT))), 'build/party/game.wasm, as npm run build left it');
   // the minigame's file read from the edit, its constants from the edit's
   const edited = (p) => (p === 'src/mg/sweep.wat' ? read(p).replace('(func $sw_', '(func $sw_unused (result i32) (i32.const @SW_STUDIO))\n(func $sw_') : read(p));
-  assert.throws(() => expandWith(edited, 'src/game.wat', { BUMPER: true, PARTY: true, layout: L, macros: makeMacros }), /unknown constant @SW_STUDIO/);
-  const layout = { ...L, MG_CONSTS: { ...L.MG_CONSTS, SW_STUDIO: 7 } };
+  assert.throws(() => expandWith(edited, 'src/game.wat', { BUMPER: true, PARTY: true, layout: served, macros: makeMacros }), /unknown constant @SW_STUDIO/);
+  const layout = { ...L, MG_CONSTS: { ...MG_CONSTS, SW_STUDIO: 7 } };
   const changed = await assembleWith(wabt, expandWith(edited, 'src/game.wat', { BUMPER: true, PARTY: true, layout, macros: makeMacros }), 'game.wat');
   assert.notEqual(sha(changed), sha(bytes));
 });

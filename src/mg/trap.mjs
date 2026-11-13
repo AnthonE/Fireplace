@@ -12,7 +12,7 @@
 // they got (the fallen where they fell); trappers behind every runner home
 // and ahead of every runner who isn't, among themselves by the runners
 // their traps took out. Bumps on, without the kick. Literal numbers only:
-// the sim reads them through layout.mjs's MG_CONSTS, the client imports
+// the sim reads them through consts.mjs's MG_CONSTS, the client imports
 // this file itself.
 export const TR_LEN = 15000; // 120 s
 export const TR_LATE = 3750; // 30 s after the first runner home the round ends

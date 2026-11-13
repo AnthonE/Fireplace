@@ -6,7 +6,7 @@
 // ball scores the same hoop again only HO_AGAIN later; the last 15 s every
 // hoop is worth double. Off the rim and you're down 2 s; most points at 90 s
 // wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const HO_R0 = 22; // the court: HO_R0 m plus HO_RK times the root of the balls in, at most HO_RMAX
 export const HO_RK = 3;

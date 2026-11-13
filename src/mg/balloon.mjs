@@ -8,7 +8,7 @@
 // taking the crates it reaches; in that last ring a ram takes less, a pop
 // steals nothing and power-ups fall twice as often. At the clock whoever is
 // still in shares the win.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const BL_R0 = 14; // the arena: BL_R0 m plus BL_RK times the root of the balls in, at most BL_RMAX
 export const BL_RK = 2.5;
