@@ -22,6 +22,7 @@ import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { BLOCK, BLOCK_WGSL } from './rider.mjs';
 import { TRIM } from './looks.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
+import { compile } from './pipelines.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 4096;
@@ -1525,7 +1526,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
   const meshLayout = [{ arrayStride: 24, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' }] }];
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const add = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
-  const pipe = (vs, fs, { depthWrite, depthCompare, blend, coverage = false, mesh = false, cull = 'none' }) => device.createRenderPipeline({
+  const pipe = (vs, fs, { depthWrite, depthCompare, blend, coverage = false, mesh = false, cull = 'none' }) => ({
     layout: plMain,
     vertex: { module, entryPoint: vs, buffers: mesh ? meshLayout : [] },
     fragment: { module, entryPoint: fs, targets: [{ format, blend }] },
@@ -1533,43 +1534,51 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
     depthStencil: { format: 'depth32float', depthWriteEnabled: depthWrite, depthCompare },
     multisample: { count: MSAA, alphaToCoverageEnabled: coverage },
   });
-  const world = pipe('vs_full', 'fs_world', { depthWrite: true, depthCompare: 'always' });
-  const solidPipe = pipe('vs_solid', 'fs_solid', { depthWrite: true, depthCompare: 'greater', mesh: true, cull: 'back' });
-  const clearPipe = pipe('vs_solid', 'fs_solid_t', { depthWrite: false, depthCompare: 'greater', mesh: true, cull: 'back', blend: over });
-  const sprite = pipe('vs_sprite', 'fs_sprite', { depthWrite: true, depthCompare: 'greater', coverage: true });
-  const decal = pipe('vs_decal', 'fs_decal', { depthWrite: false, depthCompare: 'greater', blend: add });
-  const glow = pipe('vs_sprite', 'fs_glow', { depthWrite: false, depthCompare: 'greater', blend: add });
-  const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'greater', blend: add });
-  const snow = pipe('vs_snow', 'fs_snow', { depthWrite: false, depthCompare: 'greater', blend: add });
-  const hudPipe = pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over });
   // the shadow map stores the far side of things from the sun (front faces culled), so lit faces never shade themselves
-  const shadowPipe = (vs) => device.createRenderPipeline({
+  const shadowPipe = (vs) => ({
     layout: plShadow,
     vertex: { module, entryPoint: vs, buffers: meshLayout },
     primitive: { topology: 'triangle-list', cullMode: 'front' },
     depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less', depthBias: 1, depthBiasSlopeScale: 1.5 },
   });
-  const shadowSolid = shadowPipe('vs_shadow');
-  const shadowBall = shadowPipe('vs_shadow_ball');
-  const contactPipe = device.createRenderPipeline({
-    layout: plShadow,
-    vertex: { module, entryPoint: 'vs_contact' },
-    fragment: { module, entryPoint: 'fs_contact', targets: [{ format: 'rg8unorm', blend: { color: { operation: 'max', srcFactor: 'one', dstFactor: 'one' }, alpha: { operation: 'max', srcFactor: 'one', dstFactor: 'one' } } }] },
-    primitive: { topology: 'triangle-list' },
-  });
-  const mapPipe = device.createRenderPipeline({
-    layout: plMap,
-    vertex: { module, entryPoint: 'vs_map', buffers: meshLayout },
-    fragment: { module, entryPoint: 'fs_map', targets: [{ format: 'rgba8unorm' }] },
-    primitive: { topology: 'triangle-list', cullMode: 'none' },
-    depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less' },
-  });
-  const dotPipe = device.createRenderPipeline({
-    layout: plMap,
-    vertex: { module, entryPoint: 'vs_mapdot' },
-    fragment: { module, entryPoint: 'fs_mapdot', targets: [{ format: 'rgba8unorm' }] },
-    primitive: { topology: 'triangle-list' },
-    depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'always' },
+  // all at once and off the GPU process's main thread (client/pipelines.mjs)
+  const { world, solidPipe, clearPipe, sprite, decal, glow, beam, snow, hudPipe, shadowSolid, shadowBall, contactPipe, mapPipe, dotPipe } = await compile(device, {
+    world: pipe('vs_full', 'fs_world', { depthWrite: true, depthCompare: 'always' }),
+    solidPipe: pipe('vs_solid', 'fs_solid', { depthWrite: true, depthCompare: 'greater', mesh: true, cull: 'back' }),
+    clearPipe: pipe('vs_solid', 'fs_solid_t', { depthWrite: false, depthCompare: 'greater', mesh: true, cull: 'back', blend: over }),
+    sprite: pipe('vs_sprite', 'fs_sprite', { depthWrite: true, depthCompare: 'greater', coverage: true }),
+    decal: pipe('vs_decal', 'fs_decal', { depthWrite: false, depthCompare: 'greater', blend: add }),
+    glow: pipe('vs_sprite', 'fs_glow', { depthWrite: false, depthCompare: 'greater', blend: add }),
+    beam: pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'greater', blend: add }),
+    snow: pipe('vs_snow', 'fs_snow', { depthWrite: false, depthCompare: 'greater', blend: add }),
+    hudPipe: pipe('vs_full', 'fs_hud', { depthWrite: false, depthCompare: 'always', blend: over }),
+    shadowSolid: shadowPipe('vs_shadow'),
+    shadowBall: shadowPipe('vs_shadow_ball'),
+    contactPipe: {
+      layout: plShadow,
+      vertex: { module, entryPoint: 'vs_contact' },
+      fragment: { module, entryPoint: 'fs_contact', targets: [{ format: 'rg8unorm', blend: { color: { operation: 'max', srcFactor: 'one', dstFactor: 'one' }, alpha: { operation: 'max', srcFactor: 'one', dstFactor: 'one' } } }] },
+      primitive: { topology: 'triangle-list' },
+    },
+    mapPipe: {
+      layout: plMap,
+      vertex: { module, entryPoint: 'vs_map', buffers: meshLayout },
+      fragment: { module, entryPoint: 'fs_map', targets: [{ format: 'rgba8unorm' }] },
+      primitive: { topology: 'triangle-list', cullMode: 'none' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less' },
+    },
+    dotPipe: {
+      layout: plMap,
+      vertex: { module, entryPoint: 'vs_mapdot' },
+      fragment: { module, entryPoint: 'fs_mapdot', targets: [{ format: 'rgba8unorm' }] },
+      primitive: { topology: 'triangle-list' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'always' },
+    },
+  }, (pass, d) => {
+    pass.setBindGroup(0, g0);
+    if (d.layout !== plShadow) pass.setBindGroup(1, g1);
+    if (d.layout === plMain) pass.setBindGroup(2, g2);
+    if (d.vertex.buffers?.length) pass.setVertexBuffer(0, vbuf);
   });
 
   const uf = new Float32Array(UF);

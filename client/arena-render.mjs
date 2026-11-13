@@ -26,6 +26,7 @@ import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, FX_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { VIEWMODEL_WGSL, MAX_VM, handRect } from './viewmodel.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
+import { compile } from './pipelines.mjs';
 
 export const COLS = 80;
 export const MAX_SPRITE = 256;
@@ -889,7 +890,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   // the world is drawn into the post's float texture and depth; ink, bloom and the HUD come after (client/post.mjs)
-  const post = createPost(device, { W, H, format, far: FAR });
+  const postMade = createPost(device, { W, H, format, far: FAR });
 
   const layout = device.createBindGroupLayout({
     entries: [
@@ -913,7 +914,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
-  const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => device.createRenderPipeline({
+  const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => ({
     layout: pl,
     vertex: { module, entryPoint: vs },
     fragment: { module, entryPoint: fs, targets: [{ format: SCENE_FORMAT, blend }] },
@@ -922,18 +923,19 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   });
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const add = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
-  const terrain = pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' });
   const times = { color: { srcFactor: 'zero', dstFactor: 'src' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } };
-  const shade = pipe('vs_shade', 'fs_shade', { depthWrite: false, depthCompare: 'less', blend: times });
-  const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
-  const glow = pipe('vs_splat', 'fs_glow', { depthWrite: false, depthCompare: 'less', blend: add });
-  const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
-  // what I hold: over whatever the world has there, its own depth written for the post's ink
-  const hand = pipe('vs_hand', 'fs_hand', { depthWrite: true, depthCompare: 'always' });
-  // the HUD goes straight onto the finished frame
-  const hudPipe = device.createRenderPipeline({
-    layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
-  });
+  // compiled with the post's, all at once and off the GPU process's main thread (client/pipelines.mjs)
+  const [post, { terrain, shade, splat, glow, beam, hand, hudPipe }] = await Promise.all([postMade, compile(device, {
+    terrain: pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' }),
+    shade: pipe('vs_shade', 'fs_shade', { depthWrite: false, depthCompare: 'less', blend: times }),
+    splat: pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' }),
+    glow: pipe('vs_splat', 'fs_glow', { depthWrite: false, depthCompare: 'less', blend: add }),
+    beam: pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add }),
+    // what I hold: over whatever the world has there, its own depth written for the post's ink
+    hand: pipe('vs_hand', 'fs_hand', { depthWrite: true, depthCompare: 'always' }),
+    // the HUD goes straight onto the finished frame
+    hudPipe: { layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' } },
+  }, (pass) => pass.setBindGroup(0, bind))]);
 
   const uf = new Float32Array(56 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);

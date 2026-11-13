@@ -12,6 +12,7 @@ import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
+import { compile } from './pipelines.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
@@ -614,7 +615,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const hmap = device.createTexture({ size: [512, 512], format: 'r32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const smap = device.createTexture({ size: [512, 512], format: 'r8uint', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   // the world is drawn into the post's float texture and depth; ink, bloom and the HUD come after (client/post.mjs)
-  const post = createPost(device, { W, H, format, far: FAR });
+  const postMade = createPost(device, { W, H, format, far: FAR });
 
   const layout = device.createBindGroupLayout({
     entries: [
@@ -636,7 +637,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     ],
   });
   const pl = device.createPipelineLayout({ bindGroupLayouts: [layout] });
-  const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => device.createRenderPipeline({
+  const pipe = (vs, fs, { depthWrite, depthCompare, blend }) => ({
     layout: pl,
     vertex: { module, entryPoint: vs },
     fragment: { module, entryPoint: fs, targets: [{ format: SCENE_FORMAT, blend }] },
@@ -644,14 +645,15 @@ export async function createRenderer(canvas, { present = true, device: shared = 
     depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: depthWrite, depthCompare },
   });
   const over = { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
-  const terrain = pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' });
-  const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
-  const shadow = pipe('vs_splat', 'fs_shadow', { depthWrite: false, depthCompare: 'less', blend: over });
-  const flash = pipe('vs_splat', 'fs_flash', { depthWrite: false, depthCompare: 'less', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } });
-  // the HUD goes straight onto the finished frame
-  const hudPipe = device.createRenderPipeline({
-    layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
-  });
+  // compiled with the post's, all at once and off the GPU process's main thread (client/pipelines.mjs)
+  const [post, { terrain, splat, shadow, flash, hudPipe }] = await Promise.all([postMade, compile(device, {
+    terrain: pipe('vs_full', 'fs_terrain', { depthWrite: true, depthCompare: 'always' }),
+    splat: pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' }),
+    shadow: pipe('vs_splat', 'fs_shadow', { depthWrite: false, depthCompare: 'less', blend: over }),
+    flash: pipe('vs_splat', 'fs_flash', { depthWrite: false, depthCompare: 'less', blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }),
+    // the HUD goes straight onto the finished frame
+    hudPipe: { layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' } },
+  }, (pass) => pass.setBindGroup(0, bind))]);
 
   const uf = new Float32Array(32);
   const uu = new Uint32Array(uf.buffer);

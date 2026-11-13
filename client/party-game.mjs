@@ -67,14 +67,19 @@ const smooth = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a
 const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
 const BARE = {}; // a minigame whose module hasn't arrived yet: every hook a module has is optional
 
+// the HUD's 3x5 font in pixels this many screen pixels a side
+const hudScale = (canvas, hud) => hud || Math.max(1, Math.round(canvas.height / 240));
+// The renderer, made once a page and the host's (client/host.mjs renderer()):
+// by the first mount, or ahead of it, as Fireplace does for the game after the
+// one on, so its pipelines are compiled before the room gets there.
+export const warm = (h, { canvas, hud, present = true }) => h.renderer('party', () => createRenderer(canvas, { present, hudScale: hudScale(canvas, hud), device: h.device }));
+
 export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, skill = 0.8, sens: SENS = 3, hud, present = true, showGraph: graphOn = false, external = false } = {}) {
   const { u8, i32, f32, f64, view, pview, set, get, press, sound, memory, hashes, keys } = h;
   const WATCH = h.watch;
   const W = canvas.width, H = canvas.height;
-  // the HUD's 3x5 font in pixels this many screen pixels a side
-  const HS = hud || Math.max(1, Math.round(H / 240));
-  const renderer = h.renderers.get('party') || await createRenderer(canvas, { present, hudScale: HS, device: h.device });
-  h.renderers.set('party', renderer);
+  const HS = hudScale(canvas, hud);
+  const renderer = await warm(h, { canvas, hud, present });
   const { on, off } = listeners();
   set(L.CL_PITCH, 512);
   set(L.CL_WEAPON, 0);

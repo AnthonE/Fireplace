@@ -5,7 +5,10 @@
 // controls. Passes when the referee checked interval hashes from every
 // session and none differed, the room moved from one game to the next with
 // everyone in it (given time: party's three minigames come first, about
-// 4.5 min, then the arena), Chrome kept up, and each Chrome page's look (client/looks.mjs) went
+// 4.5 min, then the arena), Chrome kept up, the GPU had drawn each game's first
+// frame within 30 s of the page seeing the game change (the report's mounts:
+// SwiftShader takes a second or two; a TV sent frames faster than it draws
+// them took a minute or more), and each Chrome page's look (client/looks.mjs) went
 // round the relay to every page. Screenshots go to traces/. --start k starts
 // the playlist at its entry k (layout.mjs FP_START, through the relay's seed),
 // and the gate wants that entry's game played.
@@ -83,7 +86,8 @@ try {
   }
   process.stderr.write('\n');
   const end = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.state())));
-  report.chromeState = end.map((s) => ({ slot: s.slot, game: s.gameName, games: s.games, mallows: s.mallows, behind: s.clState !== 2, look: s.look, relayLooks: s.relayLooks }));
+  // mounts: each game the page mounted, ms until its frontend was up and until the GPU had drawn its first frame
+  report.chromeState = end.map((s) => ({ slot: s.slot, game: s.gameName, games: s.games, mounts: s.mounts.map((m) => ({ ...m, game: L.GAMES[m.game] })), mallows: s.mallows, behind: s.clState !== 2, look: s.look, relayLooks: s.relayLooks }));
   report.chromeHashes = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.hashes.length)));
 } finally {
   await browser.close();
@@ -110,6 +114,8 @@ const gate = {
   // started at an entry: its game is the one played first
   startedThere: start === null || (report.botHost?.games?.[0]?.game === L.PLAYLIST[start % L.PLAYLIST.length]),
   chromeKeptUp: (report.chromeState || []).every((s) => !s.behind),
+  // a mount's first frame, where the run saw it drawn: soon after the game changed (null: not drawn before the run ended)
+  mountsDrawn: (report.chromeState || []).every((s) => s.mounts.every((m) => m.firstFrameMs === null || m.firstFrameMs < 30000)),
   // every page's table holds every page's look at its slot, and nothing for the bots, who wear none
   looksWentRound: !!report.chromeState && report.chromeState.every((s) => JSON.stringify(s.relayLooks) === JSON.stringify(report.chromeState.map((x) => [x.slot, x.look]).sort((a, b) => a[0] - b[0]))),
   noErrors: report.errors.length === 0,

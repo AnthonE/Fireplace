@@ -134,9 +134,17 @@ only of your own body), physics sandboxes, open worlds.
    - Fireplace taking one (its playlist builds each game's world itself).
 4. Fireplace: a vote for the next game, then a board between games (dice,
    stars, coins) over the minigames.
-5. Pipelines compiled before a Fireplace switch: on SwiftShader the first
-   switch into Party held the page's GPU about 40 s while its shaders
-   compiled (every hash still equal). Then a frame rate on a real laptop GPU.
+5. ~~Pipelines compiled before a Fireplace switch~~: done
+   ([fireplace.md](fireplace.md), "A switch"). The next game's renderer is
+   made while this one plays, its pipelines compiled off the GPU process's
+   main thread and each drawn with once; at a switch the mount takes 3 to
+   13 ms and on SwiftShader the next game's first frame is drawn 0.6 to
+   1.3 s on, where it was 46 to 140 s. The 40 s of the first switch into
+   Party was not its shaders, which held the GPU process 1.1 s compiled in
+   line: it was the TV, sent a frame of the game every page frame, faster
+   than SwiftShader draws them, and it waits for the GPU now. Left: a frame
+   rate on a real laptop GPU, and what compiling costs one (this box has
+   none).
 6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
    less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
    than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); the

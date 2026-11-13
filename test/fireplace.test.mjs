@@ -134,6 +134,8 @@ test('the room plays the playlist by position: party, the arena, party, Dogfight
   const { games, states, overs, starts } = await playlist();
   assert.deepEqual(games.map((g) => g.game), ROUND, games.map((g) => `${L.GAMES[g.game]} at ${g.at}`).join(', '));
   assert.deepEqual(games.map((g) => g.n), ROUND.map((_, k) => k + 1), 'FP_COUNT counts the games played');
+  // so from a game's first tick the page can name the one after it (client/fireplace.mjs nextGame), and makes it ready meanwhile
+  for (let k = 0; k + 1 < games.length; k++) assert.equal(L.PLAYLIST[games[k].n % L.PLAYLIST.length], games[k + 1].game, `after ${L.GAMES[games[k].game]}`);
   // each game played its matches (party's 3 minigames, one match, one hole), then the next
   for (let k = 0; k < L.PLAYLIST.length; k++) {
     const g = games[k];

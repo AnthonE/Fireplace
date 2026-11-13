@@ -13,11 +13,15 @@ import { epoch, predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
+// The renderer, made once a page and the host's (client/host.mjs renderer()):
+// by the first mount, or ahead of it, as Fireplace does for the game after the
+// one on, so its pipelines are compiled before the room gets there.
+export const warm = (host, { canvas, present = true }) => host.renderer('golf', () => createRenderer(canvas, { present, device: host.device }));
+
 export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, sens: SENS = 3, present = true, external = false } = {}) {
   const { u8, i32, f32, f64, view, pview, set, get, sound } = host;
   const WATCH = host.watch;
-  const renderer = host.renderers.get('golf') || await createRenderer(canvas, { present, device: host.device });
-  host.renderers.set('golf', renderer);
+  const renderer = await warm(host, { canvas, present });
   const { on, off } = listeners();
 
   // input: yaw and pitch kept as floats for the camera, sampled as integers

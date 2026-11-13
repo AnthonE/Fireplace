@@ -119,7 +119,8 @@ test('the arena draws it in the world\'s pass, last and over everything, lit by 
   const src = read('client/arena-render.mjs');
   assert.match(src, /import \{ VIEWMODEL_WGSL, MAX_VM, handRect \} from '\.\/viewmodel\.mjs';/);
   // into the post's float texture and depth: over whatever is there, its own depth for the ink
-  assert.match(src, /const hand = pipe\('vs_hand', 'fs_hand', \{ depthWrite: true, depthCompare: 'always' \}\);/);
+  // (one of the pipelines compile() makes together: client/pipelines.mjs)
+  assert.match(src, /hand: pipe\('vs_hand', 'fs_hand', \{ depthWrite: true, depthCompare: 'always' \}\),/);
   assert.match(src, /if \(ng > 0\) pass\.draw\(6, ng, 0, L\.NPLAYER \+ L\.NPROJ \+ s\.solid\.length\);\n      if \(held\) \{ pass\.setPipeline\(hand\); pass\.draw\(6\); \}\n      pass\.end\(\);/, 'after everything else of the world');
   assert.match(src, /uf\.set\(handRect\(held, W, H, focalFor\(W, H\)\), 52\);/, 'its quad, at the lens unzoomed');
   assert.match(src, /let s = mix\(u\.hand\.xy, u\.hand\.zw, CORNERS\[v\] \* 0\.5 \+ 0\.5\);/);

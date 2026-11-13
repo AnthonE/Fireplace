@@ -50,12 +50,16 @@ function standing(m, o, teamWin = 0) {
   return o.kills * 65536 - o.deaths;
 }
 
+// The renderer, made once a page and the host's (client/host.mjs renderer()):
+// by the first mount, or ahead of it, as Fireplace does for the game after the
+// one on, so its pipelines are compiled before the room gets there.
+export const warm = (host, { canvas, present = true }) => host.renderer('flight', () => createRenderer(canvas, { present, device: host.device }));
+
 export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, skill = 0.7, sens: SENS = 3, fixed: FIXED = null, present = true, showGraph: graphOn = false, external = false } = {}) {
   const { u8, i32, f32, f64, view, pview, set, get, press, sound, memory, hashes, keys } = host;
   const WATCH = host.watch || !!FIXED;
   const W = canvas.width, H = canvas.height;
-  const renderer = host.renderers.get('flight') || await createRenderer(canvas, { present, device: host.device });
-  host.renderers.set('flight', renderer);
+  const renderer = await warm(host, { canvas, present });
   const { on, off } = listeners();
   const epoch = () => performance.timeOrigin + performance.now();
 

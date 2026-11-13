@@ -66,7 +66,7 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
     error: '', welcome: null, hashes: [], keys: [], desyncs: [],
     sound: createSound({ music: q.get('music') !== '0' }),
     device: null,
-    renderers: new Map(), // a frontend's renderer, kept for when it mounts again
+    renderers: new Map(), // a frontend's renderer (the promise of it: h.renderer below), kept for when it mounts again
     connected: false,
     transport: '', // how the session reaches its relay, once it does: 'webtransport', or 'websocket' (a browser without the first, or ?ws=1)
     // the relay's sign-in (net/elo.mjs): the nonce it handed this session, and its answer to the last one
@@ -101,6 +101,12 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   if (!adapter) throw new Error('WebGPU is not available in this browser');
   h.device = await adapter.requestDevice();
   h.device.lost.then((info) => { h.error = `GPU device lost (${info.reason}): ${info.message}`; console.error(h.error, performance.now()); });
+  // A frontend's renderer, made once a page and the host's from then on: by
+  // the frontend's first mount, or ahead of it by its warm() (Fireplace, for
+  // the game after this one, so its pipelines are compiled before the room
+  // gets there). Nothing else is made ahead: one warmed and never mounted is
+  // only this, and the host keeps it as it keeps one whose frontend unmounted.
+  h.renderer = (key, make) => once(h.renderers, key, make);
 
   // the session: connect() opens it (a page may show something first)
   h.connect = async () => {
@@ -273,6 +279,19 @@ export async function capturePng(renderer, u8, s, scale = 1) {
   let bin = '';
   for (let i = 0; i < out.length; i += 0x8000) bin += String.fromCharCode(...out.subarray(i, i + 0x8000));
   return btoa(bin);
+}
+
+// kept[key], made by make() the first time it is asked for and kept as its
+// promise: whoever asks while it is still being made waits for the same one.
+// One that failed is forgotten, so the next to ask makes it again and hears why.
+export function once(kept, key, make) {
+  let r = kept.get(key);
+  if (!r) {
+    r = make();
+    kept.set(key, r);
+    r.catch(() => { if (kept.get(key) === r) kept.delete(key); });
+  }
+  return r;
 }
 
 // Listeners that go when the frontend does: on(target, type, fn, opts).

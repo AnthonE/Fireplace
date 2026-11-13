@@ -133,6 +133,24 @@ on its grid (`client/hudfont.mjs` `drawGlyphs`).
 `client/fireplace-bot.mjs` is a guest: a brain for each game (party's is
 `client/party-bot.mjs`'s Partier), asked for the one that's on.
 
+**A switch.** The playlist goes by position, so the game after this one is
+known from this one's first tick, and the page makes it ready while this one
+plays. Once the camera is through the glass, `warmNext` fetches the next
+frontend's modules and has its renderer made on the host: the frontend's
+`warm()`, the call its `mount()` makes too, so the mount finds that renderer
+or waits for the same one (`host.renderer()` keeps one a game, as its
+promise). A renderer's pipelines come from `client/pipelines.mjs`:
+`createRenderPipelineAsync`, all at once, compiled on the GPU process's
+worker threads, where `createRenderPipeline` compiled in line and the GPU
+process answered nothing meanwhile; then each is drawn with once, into a
+scratch pixel, because SwiftShader builds a pipeline's routines at its first
+draw. The TV's picture is a frame of the game's own each time the room is
+drawn, and it waits for the GPU: none is sent while three are still to be
+drawn (`TV_AHEAD`). And the page reads the game on only from a world that is
+in (the join's keyframe) and not mid-change (`CL_SEQ`): a local room is laid
+out again from its seed, the header wiped first, and a frame that landed
+there used to mount golf on the way to the room's first game.
+
 **Themes.** A theme is a reskin of the room, local to whoever picks it: one
 JSON file in `client/themes/` naming any of the room's 29 colours (the brick,
 the wallpaper's stripes, the rug's yarns, the fire, the night through the
@@ -360,10 +378,32 @@ Chrome), the room moved from party into the arena (Territories) at 218 s,
 tick on average, 4.8 KB/s down and 2.0 KB/s up a session, each page's look
 round every page (`looksWentRound`). Started at Dogfight (`--start 3`,
 225 s): 16 sessions, 3,518 interval hashes checked, all equal, the room
-through Dogfight into golf at 189 s, Chrome with it and kept up. On
-SwiftShader, compiling party's pipelines holds up the page's GPU for about
-40 s (measured as the room switched into it); its sim worker and its hashes
-carry on, and it catches up. The switch tick costs 30 to 46 ms (measured
+through Dogfight into golf at 189 s, Chrome with it and kept up. A switch
+on SwiftShader, in a local room of 8 at 320 x 200 on that machine, from the
+page's frame that saw the game change (`__qa.state().mounts`, which the
+gate reports and holds under 30 s): the mount took 3 to 13 ms, and the next
+game's first frame was drawn 0.6 s on into party from golf, 1.0 s into
+party from the arena, 0.8 s into Dogfight, 1.3 s into golf and 1.2 s into
+the arena, behind at most three frames of the game before it (0.9 to 3.9 s
+with other jobs on the machine, its load 5 to 11; 0.6 to 2.9 s in the two
+gates above, a relay's room of 16 with the tests running beside it). The
+GPU process's slowest answer at a switch was 9 ms (an error scope popped
+every 100 ms) and the main thread had no gap over 0.1 s. Making a game ready,
+1.7 s into the one before it: its pipelines compiled 0.4 to 1.7 s on and
+each drawn with by 1.0 to 3.8 s on, the GPU process's slowest answer 2 to
+103 ms, no gap over 0.1 s. Before, the same switches drew their first frame
+87, 140, 46, 124 and 50 s on, and where a renderer was compiled in line the
+GPU process answered nothing for 0.4 to 1.1 s and the main thread stood 0.3
+to 0.9 s with it. The 40 s this page gave for party's shaders was not them:
+a frame of the game went to the TV every page frame, 360 through the 6 s a
+result is held, each 0.14 to 0.39 s of SwiftShader's time, and the next
+game's first frame was drawn behind them all (golf's 124 s came with its
+renderer already made). With the renderer made ahead and the TV not
+waiting, party's first frame came 150 s after the switch; with the TV
+waiting and nothing made ahead, 2.8 s (1.5 s of compiling, 1.3 s of first
+draws); those two with other jobs on the machine. What compiling costs a
+real GPU is unmeasured: this box has none. The sim worker and its hashes
+carried on through all of it. The switch tick costs 30 to 46 ms (measured
 with the machine busy) on the relay's referee and every client (most of it
 the 512 x 512 terrain each game builds); the sim workers catch up past it.
 
