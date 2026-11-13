@@ -1663,7 +1663,7 @@ function renderSide() {
   side.append(hint('Online with friends and bots: save it into Fireplace\'s maps/' + f + '/ (or download the files and put them there), then from the repo:'));
   side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --arena --map ${f}` })));
   if (race) side.append(el('p', {}, el('code', { textContent: `node net/play.mjs --flight --mode ${L.FLIGHT_CONSTS.M_RACE} --map ${f}` })), hint('flies its Ring Race.'));
-  side.append(hint('Open the URL it prints: that is your map with bots on it. --bots N for more, --mode k for one mode (5 Capture the Flag, 6 Oddball, 7 King of the Hill).'));
+  side.append(hint('Open the URL it prints: that is your map with bots on it. --bots N for more, --mode k for one mode (5 Capture the Flag, 6 Keep Away, 7 King of the Hill).'));
   side.append(h3('Send it in'));
   side.append(hint('To have it played for everyone: send it in downloads the three files and opens GitHub\'s upload page for this folder. Drop them there and propose the change; that is the pull request, and CI plays the map with AI fighters. CONTRIBUTING.md, "A map", has the rest.'));
   side.append(row(btn('send it in', sendIn, 'download the files and open GitHub\'s upload page'), btn('download the files', download)));
@@ -1802,7 +1802,7 @@ function selectionPanel(sel) {
       out.push(h3('The skull'));
       if (sp.ball) out.push(xz(sp.ball.at), topRow(sp.ball.at, 2), stands(sp.ball.at));
       else out.push(hint('Mid-field by default. Drag it to place it yourself.'));
-      out.push(hint('Where Oddball\'s skull starts.'));
+      out.push(hint('Where Keep Away\'s skull starts.'));
       break;
     }
     case 'hill': {
