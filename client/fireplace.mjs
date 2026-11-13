@@ -32,6 +32,7 @@ import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpe
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult } from './achievements.mjs';
 import { balance, buy, openSet, emptyPurse, loadPurse, freshPurse, savePurse } from './purse.mjs';
 import { ownedLooks } from './shop.mjs';
+import { FACES, SHIRTS, BACKS, dressOf, savedDress, saveDress, wearableDress } from './dress.mjs';
 import { filmClock, filmSound, scoreTrack, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 import { touchWanted } from './touch.mjs';
@@ -107,6 +108,10 @@ async function main() {
   let lookAt = -1e9, listAt = -1e9, listPage = 0; // when B, H or P, and L, last put their card on the TV; the list's page
   let heldKey = '', opened = []; // the game held now, and what its end opened
   const wear = (w) => { look = w; set(L.CL_LOOK, w); saveLook(w); lookAt = performance.now(); listAt = -1e9; };
+  // the dress word (client/dress.mjs: a face, a shirt's print, a back item), kept and sent with the look; host.mjs set it at load
+  let dress = q.has('dress') ? Number(q.get('dress')) >>> 0 : KEEP ? wearableDress(savedDress(), got) : 0;
+  set(L.CL_DRESS, dress);
+  const wearDress = (d) => { dress = d >>> 0; set(L.CL_DRESS, dress); saveDress(dress); lookAt = performance.now(); listAt = -1e9; };
   // the wardrobe's BUY: a priced look out of the purse, as storage holds it now
   const spend = (x) => {
     purse = freshPurse(purse);
@@ -116,7 +121,7 @@ async function main() {
     return r;
   };
   // the looks an achievement opens
-  const opens = (id) => [...BALLS, ...HATS, ...BODIES].filter((x) => x.unlock === id).map(lookName);
+  const opens = (id) => [...BALLS, ...HATS, ...BODIES, ...FACES, ...SHIRTS, ...BACKS].filter((x) => x.unlock === id).map(lookName);
   // what this slot did in the game just held, counted once
   function tallyUp() {
     const slot = get(L.CL_SLOT);
@@ -177,7 +182,7 @@ async function main() {
   }
   // the couch's keys as a panel, on a phone the only way to them (client/wardrobe.mjs)
   const wardrobe = KEEP && !FILM ? createWardrobe({
-    look: () => look, wear, got: () => got, tally: () => tally, balance: () => balance(tally, purse), buy: spend,
+    look: () => look, wear, dress: () => dress, wearDress, got: () => got, tally: () => tally, balance: () => balance(tally, purse), buy: spend,
     slot: () => get(L.CL_SLOT), avatar: () => host.avatar(get(L.CL_SLOT)),
     theme: () => room.theme, turn: (dir) => nextTheme(dir), sit: sitDown, fullscreen,
   }) : null;
@@ -254,7 +259,7 @@ async function main() {
       text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
       text(GAMES_LINE, 320, 275, GAMES_LINE.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
       if (KEEP) {
-        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
+        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)), dressOf(dress));
         const { ball, hat, body } = unpackLook(look);
         const s = `B: ${BALLS[ball].name}  H: ${HATS[hat].name}  P: ${BODIES[body].name}  L: ACHIEVEMENTS ${Object.keys(tally.got).length}/${ACHIEVEMENTS.length}`;
         text(s, 320, 300, s.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
@@ -307,7 +312,7 @@ async function main() {
     text('YOUR LOOK', 320, 26, 5, '#ffcf6a', 'center');
     const left = balance(tally, purse);
     if (wardrobe && left) text(`${left} MARSHMALLOW${left === 1 ? '' : 'S'} TO SPEND IN THE WARDROBE`, 320, 56, 3, '#c9b89a', 'center');
-    drawLook(g2, 170, 246, 50, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
+    drawLook(g2, 170, 246, 50, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)), dressOf(dress));
     text('BALL', 330, 80, 3, '#8ea0b8');
     text(BALLS[ball].name, 330, 98, 5, '#ffffff');
     text('B FOR ANOTHER', 330, 126, 3, '#c9b89a');
@@ -319,7 +324,7 @@ async function main() {
     text('P FOR ANOTHER', 330, 286, 3, '#c9b89a');
     text('EVERYONE IN THE ROOM SEES IT', 320, 310, 3, '#8ea0b8', 'center');
     text('IN A GAME, 1 TO 4: WAVE, CHEER, DANCE, SPIN', 320, 331, 3, '#8ea0b8', 'center');
-    const shut = [...BALLS, ...HATS, ...BODIES].find((x) => x.unlock && !isOpen(x, got));
+    const shut = [...BALLS, ...HATS, ...BODIES, ...FACES, ...SHIRTS, ...BACKS].find((x) => x.unlock && !isOpen(x, got));
     if (shut) {
       const s = `EARN ${lookName(shut)}: ${ACHIEVEMENTS.find((a) => a.id === shut.unlock).about}`;
       text(s, 320, 352, s.length * 12 <= 620 ? 3 : 2, '#7fdf7f', 'center');
@@ -405,8 +410,9 @@ async function main() {
     if (ownedNow !== ownedSeen) {
       ownedSeen = ownedNow;
       got = openSet(tally, purse, owned());
-      const w = wearable(savedLook(), got);
+      const w = wearable(savedLook(), got), d = wearableDress(savedDress(), got);
       if (!q.has('look') && KEEP && w !== look) wear(w);
+      if (!q.has('dress') && KEEP && d !== dress) wearDress(d);
     }
     if (st >= 1 && g !== game && !mounting) mountGame(g);
     drive();
