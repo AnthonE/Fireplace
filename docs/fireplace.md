@@ -440,7 +440,11 @@ baked: `--start 0 --seed 46` (Fall Ball, then Battle Royale from 295 s),
 139` (Round Up, Rush Hour from 90 s). The camera is on P1, so each shot sits
 where P1 is in it: Long Jump on one of its runs (it jumps every 7 s or so), and
 Battle Royale before 319 s, when P1 is out and the view goes to the grey of
-the dead.
+the dead. Its 1106 frames were shot in one process in 101 minutes on this
+4-core box: about 3.7 s a frame in Party and on the couch, 6.5 s in the arena
+and 11 s in Dogfight (both at `"gres": "960x540"`), and some 4 minutes to open
+each room. Four shoots at once went slower than one, the four Chromes fighting
+over the cores.
 
 A signed-in player goes by the name their wallet has on Elo Pros, in every
 game's labels and the marshmallow board; the relay looks it up and sends it
