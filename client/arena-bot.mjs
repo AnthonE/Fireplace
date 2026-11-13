@@ -20,7 +20,7 @@
 import * as L from '../src/layout.mjs';
 import { arenaWord, arenaFrame, frameDue, boxClear, boxRay, slab, sees } from '../src/arena-view.mjs';
 import { aimAt } from './bot.mjs';
-import { AMC } from './am/index.mjs';
+import { AMC, need } from './am/load.mjs';
 
 const TURN = 16384;
 const STRIKE = 25; // m: an objective's strike (client/am/index.mjs) is fired at from this near
@@ -345,6 +345,7 @@ export class Fighter {
     const me = view.fighter(this.slot);
     const h = view.hole();
     const mode = view.dv.getUint32(L.AH_MODE, true);
+    if (!AMC[mode]) need(mode); // a page fetches a kit mode's module as its match comes up (client/am/load.mjs)
     // a new mode, or a team mode's new match: what it knew of the last one goes
     // (a free-for-all's next match of the same mode keeps it, as it always has)
     if (h.hole !== this.match || mode !== this.modeSeen) {

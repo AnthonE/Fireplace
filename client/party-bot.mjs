@@ -31,7 +31,7 @@
 //     them; without a yaw only hop and use count and the planner steers
 import * as L from '../src/layout.mjs';
 import { partyWord } from '../src/party-view.mjs';
-import { MG } from './mg/index.mjs';
+import { MG, need } from './mg/load.mjs';
 import { world, team, CELL } from './party-world.mjs';
 
 export { team };
@@ -44,6 +44,7 @@ const N = (k) => Math.fround(Number(L.BPHYS[k]));
 const ACC = N('B_ACC_DT'), AIR = N('B_AIR_DT'), AIR_DRAG = N('B_AIR_DRAG');
 const ROOM = 2.6; // m between centres it likes to keep from a rival
 const NEAR_MAX = 12; // rivals it minds at once
+const BARE = {}; // a minigame whose module hasn't arrived yet (a page's: client/mg/load.mjs)
 // the planner's per-think arrays, shared: bots think one at a time
 const SCRATCH = { coastX: new Float64Array(8), coastZ: new Float64Array(8), pushK: new Float64Array(8), idleX: new Float64Array(8), idleZ: new Float64Array(8),
   rx: new Float64Array(8 * NEAR_MAX), rz: new Float64Array(8 * NEAR_MAX) };
@@ -52,7 +53,8 @@ const SCRATCH = { coastX: new Float64Array(8), coastZ: new Float64Array(8), push
 // minigame module added for the brain.
 function worldOf(view) {
   const w = world(view);
-  if (!w.mg) w.mg = MG[w.g.game] || MG[0];
+  // (in a page its module may still be on the way: no brain of its own for those ticks)
+  if (!w.mg) w.mg = MG[w.g.game] || (need(w.g.game), BARE);
   return w;
 }
 

@@ -25,11 +25,10 @@ import { flightWord, modeName } from '../src/flight-view.mjs';
 import { unpackArena } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, project, basis } from './flight-render.mjs';
 import { ENVS, envOf } from './lowpoly.mjs';
-import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
+import { AMC, need, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/load.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Pilot } from './flight-bot.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
@@ -105,7 +104,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else if (BOT) {
-    if (!external) bot = new Pilot(0, (Math.random() * 1e9) | 0, skill);
+    if (!external) bot = new (await import('./flight-bot.mjs')).Pilot(0, (Math.random() * 1e9) | 0, skill); // loaded only for ?bot=1
     on(document, 'keydown', (e) => {
       if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); }
       if (e.code === 'KeyN' && !e.repeat) showGraph = !showGraph;
@@ -597,6 +596,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     }
     // engine trails: the nearest ships' last half second
     const md = view.mode();
+    if (!AMC[md.mode]) need(md.mode); // a team match's module, fetched as it comes up (client/am/load.mjs)
     const trailNear = [];
     for (let p = 0; p < L.NPLAYER; p++) {
       const b = L.PLAYERS + p * L.PSIZE;

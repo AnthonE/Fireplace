@@ -10,6 +10,8 @@ import { makeMacros } from '../src/macros.mjs';
 import { playParty, partySeed } from '../tools/genparty.mjs';
 import { MG } from '../client/mg/index.mjs';
 import { MG_CONSTS } from '../src/mg/consts.mjs';
+import * as lazy from '../client/mg/load.mjs';
+import { registry, PAGE } from '../client/lazy.mjs';
 import * as L from '../src/layout.mjs';
 import * as MC from '../src/mg/thinice.mjs'; // TI_*: the minigame's own constants
 
@@ -427,6 +429,31 @@ test('a room of scripted balls into the rotation replays to the same hash on eve
   const a = await replay({ bytes, log: parsed, ticks: 6000, threads: 1, tag: 'p1' });
   const b = await replay({ bytes, log: parsed, ticks: 6000, threads: 4, tag: 'p4', startWorkers });
   assert.deepEqual([...decodeTrace(a.trace).tickHashes], [...decodeTrace(b.trace).tickHashes]);
+});
+
+test('the registry a frontend and an AI ball read (client/mg/load.mjs): whole from the start outside a page; a page\'s holds nothing until a round needs it, one import however many frames ask, the module the list holds', async () => {
+  assert.equal(PAGE, false);
+  assert.equal(lazy.MG.length, L.NMG);
+  MG.forEach((m, k) => assert.equal(lazy.MG[k], m, L.MINIGAMES[k].key));
+  assert.equal(lazy.need(L.MG_GLASS), undefined, 'nothing to wait for here');
+  // a page's, as load.mjs makes it
+  const r = registry((id) => L.MINIGAMES[id] && import(`../client/mg/${L.MINIGAMES[id].key}.mjs`));
+  assert.equal(r.all[L.MG_GLASS], undefined, 'nothing loaded before a round needs it');
+  const p = r.need(L.MG_GLASS);
+  assert.equal(r.need(L.MG_GLASS), p, 'one import for any number of frames asking');
+  await p;
+  assert.equal(r.all[L.MG_GLASS], MG[L.MG_GLASS]);
+  assert.equal(r.need(L.MG_GLASS), p);
+  assert.equal(r.need(L.NMG), undefined, 'no module past the list');
+  assert.deepEqual(Object.keys(r.all), [String(L.MG_GLASS)], 'and no other fetched');
+  // a fetch that fails leaves the registry as it was, quietly
+  const warn = console.warn; let said = 0; console.warn = () => { said++; };
+  const bad = registry(() => Promise.reject(new Error('offline')));
+  await bad.need(3);
+  console.warn = warn;
+  assert.deepEqual([bad.all[3], said], [undefined, 1]);
+  // and neither the frontend nor the AI ball imports the list: a page that did would fetch all of them
+  for (const f of ['party-game.mjs', 'party-bot.mjs', 'fireplace.mjs', 'party.mjs']) assert.doesNotMatch(readFileSync(new URL(`../client/${f}`, import.meta.url), 'utf8'), /from '\.\/mg\/index\.mjs'|from '\.\/(party|fireplace)-bot\.mjs'/, f);
 });
 
 test('every minigame has a client module: its id, key and name as the layout has them, a backdrop, a hint the HUD can show, a brain', () => {

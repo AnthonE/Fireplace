@@ -12,6 +12,9 @@ import { C } from '../client/font.mjs';
 import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
 import { MG_CONSTS } from '../src/mg/consts.mjs';
+import * as lazy from '../client/am/load.mjs';
+import { registry } from '../client/lazy.mjs';
+import { readFileSync } from 'node:fs';
 
 // The arena's clients against a world whose memory is poked into shape: the
 // teams sim isn't needed to read sides, scores and objectives, to draw them,
@@ -112,6 +115,20 @@ test('the kit: a module for every team mode, news routed by its MX codes', () =>
   assert.equal(newsOf(AC.HL_MX_CONTEST), AMC[L.M_HILL]);
   assert.deepEqual([AMC[L.M_CTF].carry, AMC[L.M_ODDBALL].carry], ['flag', 'skull']);
   assert.deepEqual([SIDE, SIDE_C], [['RED', 'BLUE'], [C.RED, C.CYAN]]);
+});
+
+test('the registry a frontend and an AI fighter read (client/am/load.mjs): whole outside a page; a page\'s loads a kit mode\'s module on need, once; none for a Fiesta', async () => {
+  for (const a of L.AM) assert.equal(lazy.AMC[a.mode], AMC[a.mode], a.key);
+  assert.equal(lazy.newsOf(AC.CF_MX_TAKE), AMC[L.M_CTF]);
+  assert.deepEqual([lazy.SIDE, lazy.SIDE_C], [SIDE, SIDE_C]);
+  const r = registry((mode) => { const a = L.AM.find((m) => m.mode === mode); return a && import(`../client/am/${a.key}.mjs`); });
+  assert.equal(r.all[L.M_CTF], undefined, 'nothing loaded before a match needs it');
+  const p = r.need(L.M_CTF);
+  assert.equal(r.need(L.M_CTF), p, 'one import for any number of frames asking');
+  await p;
+  assert.equal(r.all[L.M_CTF], AMC[L.M_CTF]);
+  for (const m of [L.M_FIESTA, L.M_INFECTION, L.M_GUNGAME, L.M_JUGGERNAUT]) assert.equal(r.need(m), undefined, `mode ${m} has no kit`);
+  for (const f of ['arena-game.mjs', 'flight-game.mjs', 'arena-bot.mjs']) assert.doesNotMatch(readFileSync(new URL(`../client/${f}`, import.meta.url), 'utf8'), /from '\.\/am\/index\.mjs'|from '\.\/(arena|flight)-bot\.mjs'/, f);
 });
 
 test('AM_CONSTS: every team mode\'s constants, none named twice, after a layout name or after a minigame\'s; out of layout.mjs\'s namespace', async () => {

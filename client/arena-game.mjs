@@ -19,11 +19,10 @@ import * as AC from '../src/am/consts.mjs';
 import { arenaWord, unpackArena, boxRay, sees } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, PALETTE, project } from './arena-render.mjs';
 import { ENVS, envOf } from './lowpoly.mjs';
-import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
+import { AMC, need, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/load.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Fighter } from './arena-bot.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
@@ -139,7 +138,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else if (BOT) {
-    if (!external) bot = new Fighter(0, (Math.random() * 1e9) | 0, skill);
+    if (!external) bot = new (await import('./arena-bot.mjs')).Fighter(0, (Math.random() * 1e9) | 0, skill); // loaded only for ?bot=1
     on(document, 'keydown', (e) => {
       if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); }
       if (e.code === 'KeyN' && !e.repeat) showGraph = !showGraph;
@@ -606,7 +605,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
     // the team mode's objective: its sprites, glows and beams ahead of everything else's, its waypoints and zone
     const md = view.mode();
-    const kit = AMC[md.mode];
+    const kit = AMC[md.mode] || (need(md.mode), undefined); // a kit mode's module, once it has arrived (client/am/load.mjs)
     if (touchFor && st >= 1 && !!kit?.unarmed !== touchBare) { touchBare = !touchBare; touchFor(touchBare); }
     const out = { solid: [], glow: [], beams: [], markers: [], zone: null, storm: null };
     const playT = h.state === L.H_PLAY ? (h.tick - h.start) * 0.008 + dt : 0;
