@@ -8,9 +8,10 @@
 // ground under it, with what a
 // shooter needs on top: tracers as beams, sprites for blasts, sparks and
 // weapon pads, the team modes' flags and skull, zones painted on the ground
-// for a hill or the territories, and a HUD of rectangles under the text for
-// the gun in your hands, the shield and health bars, the crosshair, the scope
-// and the hit marker. The world goes into client/post.mjs's float texture
+// for a hill or the territories, what you hold in your hands over all of it
+// (client/viewmodel.mjs), and a HUD of rectangles under the text for the
+// shield and health bars, the crosshair, the scope and the hit marker. The
+// world, your hands with it, goes into client/post.mjs's float texture
 // (lights, tracers and blasts past white) and comes out inked, bloomed and
 // smoothed; the HUD is drawn onto that. Fighters and projectiles come straight from shared memory;
 // everything else from the main thread each frame. Nothing here is hashed.
@@ -18,13 +19,12 @@ import { moverBoxes, drawnTick } from './movers.mjs';
 import * as L from '../src/layout.mjs';
 import * as AC from '../src/am/consts.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
-import { BLOCK_RAY_WGSL } from './rider.mjs';
 import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, GROUND_WGSL, BOXES_WGSL, FX_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
-import { VIEWMODEL_WGSL, MAX_VM } from './viewmodel.mjs';
+import { VIEWMODEL_WGSL, MAX_VM, handRect } from './viewmodel.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 
 export const COLS = 80;
@@ -72,11 +72,12 @@ struct U {
   fx: vec4f,      // damage flash (0..1), scope (1), net graph shown (1), crosshair gap (px)
   pred: vec4f,    // extrapolate my projectiles (s); the motion tracker's centre x, y and radius (px)
   map: vec4f,     // boxes, groups, sides (0 none, 1 one against the rest, 2 red and blue), the zones' height band (m)
-  zn: vec4f,      // how many zones, boxes in my hands
+  zn: vec4f,      // how many zones, the entries of what I hold (client/viewmodel.mjs)
   hudv: vec4f,    // the HUD's scale (screen px a HUD px), its left and top (px), the focal length unzoomed (px) (client/lowpoly.mjs)
   storm: vec4f,   // a battle royale's wall: centre x, z, radius, 1 on (0 none)
   snext: vec4f,   // its next circle: centre x, z, radius, 1 shown
   aim: vec4f,     // the reticle off the screen's centre x, y (px); 1 with my own figure drawn (third person, client/chase.mjs); a figure's size, 1 the arena's own 1.8 m (a map's own body: src/arena-view.mjs map().body)
+  hand: vec4f,    // where on the screen what I hold is drawn: x0, y0, x1, y1 (px)
   zones: array<vec4f, ${2 * MAX_ZONE}>, // two a zone, a disc painted on the ground: centre x, z, radius, the height it's at | its colour, how hard it pulses (0..1)
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -92,7 +93,7 @@ struct U {
 @group(0) @binding(10) var<storage, read> graph: array<vec4f>;
 @group(0) @binding(11) var<storage, read> boxes: array<vec4f>;  // two a box: x0, y0, z0, material | x1, y1, z1, 0
 @group(0) @binding(12) var<storage, read> groups: array<vec4f>; // two a group: x0, y0, z0, first box | x1, y1, z1, count
-@group(0) @binding(13) var<storage, read> vm: array<vec4f>;     // what I hold (client/viewmodel.mjs): three a box
+@group(0) @binding(13) var<storage, read> vm: array<vec4f>;     // what I hold (client/viewmodel.mjs): three an entry
 ${ENV_WGSL}@group(0) @binding(14) var<uniform> env: Env;                   // the hour (client/lowpoly.mjs ENVS)
 
 const FOG = 600.0;
@@ -275,7 +276,6 @@ struct SOut {
   @location(5) @interpolate(flat) skin: vec4f, // its skin, and its face (client/rider.mjs PART) + 16 x its flags (PF_*)
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
 };
-${BLOCK_RAY_WGSL}
 ${FIGURE_WGSL}
 const HAIRS = array<vec3f, ${HAIRS.length}>(${HAIRS.map(vec3).join(', ')});
 const EYES = array<vec3f, ${EYES.length}>(${EYES.map(vec3).join(', ')});
@@ -288,18 +288,21 @@ fn avc(a: u32, k: u32) -> vec3f { return AV_PALETTE[(a >> (5u * k)) & 31u]; }
 // A fighter's colours for the figure (client/figure.mjs): its body's skin, or
 // its avatar's six parts; its shirt its seat's colour, or its side's or its
 // role's whatever it wears; hair, eyes and a cut by its slot. A zombie is
-// its green all over and reaches, empty-handed.
+// its green all over and reaches, empty-handed. Evade's and Escape's downed
+// (both PF_DOWN bits) wear what they stood in, on their fronts, no gun.
 fn kitOf(s: SOut) -> Kit {
   var k: Kit;
   let flags = u32(s.skin.w + 0.5) >> 4u;
   let zombie = (flags & ${L.PF_ZOMBIE}u) != 0u;
+  let down = (flags & ${L.PF_DOWN}u) == ${L.PF_DOWN}u;
   let c = s.color.rgb;
   let av = select(0u, s.av, (s.av >> 31u) == 1u && !zombie);
   let sided = u.map.z > 0.5 || (flags & ${L.PF_JUGG}u) != 0u;
   let face = select(u32(s.skin.w + 0.5) & 15u, select(1u, 4u, (av & 0x40000000u) != 0u), av != 0u);
   let h = (u32(s.color.a + 0.5) * 2654435761u) >> 7u;
   k.kind = select(select(0u, 2u, face == 4u), 1u, zombie);
-  k.gun = select(1u, 0u, zombie);
+  k.gun = select(1u, 0u, zombie || down);
+  k.lie = select(0u, 1u, down);
   k.cut = (h >> 5u) % 3u;
   k.skin = select(select(s.skin.rgb, avc(av, 0u), av != 0u), c, zombie);
   k.hair = select(HAIRS[h % ${HAIRS.length}u], c * 0.3, zombie);
@@ -345,6 +348,7 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
   var color = vec4f(1.0);
   var kind = 0u;
   var minpx = 0.8;
+  var lie = false; // a downed fighter, whose quad is its own
   let dt = u.screen.w;
   if (i < ${L.NPLAYER}u) {
     let b = i * ${L.PSIZE}u;
@@ -352,14 +356,28 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     if ((fl & ${L.PF_LIVE}u) == 0u || (fl & ${L.PF_DEAD}u) != 0u || (i == u32(u.misc.x) && u.aim.z < 0.5)) { return o; }
     let vel = vec3f(pf(b, ${L.P_VX}u), pf(b, ${L.P_VY}u), pf(b, ${L.P_VZ}u));
     center = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u) + 0.92 * u.aim.w, pf(b, ${L.P_PZ}u)) + vel * dt;
-    // a camera standing in one (a spectator's, riding the eyes it watches) doesn't see it from inside
-    if (distance(center.xz, u.cam.xz) < 0.7 && abs(center.y - u.cam.y) < 1.4) { return o; }
+    // Evade's and Escape's downed (both PF_DOWN bits) lie on their fronts (client/figure.mjs fgCrawl)
+    let down = (fl & ${L.PF_DOWN}u) == ${L.PF_DOWN}u;
+    // a camera standing in one (a spectator's, riding the eyes it watches) doesn't see it from inside; one lying
+    // down is under any eye, and only a camera down there with it is in it
+    let off = distance(center.xz, u.cam.xz);
+    if (select(off < 0.7 && abs(center.y - u.cam.y) < 1.4, off < 1.2 * u.aim.w && u.cam.y < center.y - 0.2 * u.aim.w, down)) { return o; }
     half = vec2f(1.05, 1.0) * u.aim.w;
     // its figure: heading and aim from its input word (src/arena-view.mjs), legs stepping as fast as it goes, its look's body
     let w = players[(b + ${L.P_IN}u) / 4u];
     let speed = length(vel.xz);
     o.feet = center - vec3f(0.0, 0.92 * u.aim.w, 0.0);
     o.pose = vec4f(f32(w & 0x7ffu) / 2048.0 * 6.2832, (f32((w >> ${L.AW_PITCH}u) & 0x3ffu) - 512.0) / 1024.0 * 3.1416, u.view.w * (3.0 + speed * 0.9), min(speed / 6.0, 1.0));
+    // down, the stride is a crawl's, whole at the 2 m/s a crawl makes, and the quad is round its middle on the ground.
+    // It holds no gun to aim: the pose's pitch is the ground's the way it heads, over 1.6 m, where it is on the
+    // ground and not on a floor over it
+    if (down) {
+      o.pose.w = min(speed / 2.0, 1.0);
+      let hd = vec2f(cos(o.pose.x), sin(o.pose.x)) * 0.8;
+      let rise = hgt(o.feet.x + hd.x, o.feet.z + hd.y) - hgt(o.feet.x - hd.x, o.feet.z - hd.y);
+      o.pose.y = select(0.0, atan(clamp(rise / 1.6, -0.8, 0.8)), abs(o.feet.y - hgt(o.feet.x, o.feet.z)) < 0.4);
+      lie = true;
+    }
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + i] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body] + 16u * fl));
     o.av = players[${L.NPLAYER * L.PSIZE / 4 + 2 * L.NPLAYER}u + i];
@@ -369,17 +387,10 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     else if (u.map.z > 0.5) { color = vec4f(0.3, 0.5, 0.95, 1.0); }
     if ((fl & ${L.PF_ZOMBIE}u) != 0u) { color = vec4f(0.35, 0.95, 0.25, 1.0); }
     if ((fl & ${L.PF_JUGG}u) != 0u) { color = vec4f(1.0, 0.72, 0.15, 1.0); }
-    // a figure's alpha carries its slot, for its hair and eyes (client/figure.mjs); the downed card below takes it back
+    // a figure's alpha carries its slot, for its hair and eyes (client/figure.mjs)
     color.a = f32(i);
     kind = 15u;
     minpx = 1.0;
-    // Evade's downed (both PF_DOWN bits): lying on the ground, pulsing
-    if ((fl & ${L.PF_DOWN}u) == ${L.PF_DOWN}u) {
-      center = center + vec3f(0.0, -0.5, 0.0);
-      half = vec2f(0.92, 0.42);
-      color = vec4f(color.rgb * (0.7 + 0.3 * sin(u.view.w * 6.0)), 1.0);
-      kind = 13u;
-    }
   } else if (i < ${L.NPLAYER + L.NPROJ}u) {
     let j = i - ${L.NPLAYER}u;
     let b = j * ${L.JSIZE}u;
@@ -408,10 +419,33 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     minpx = info.z;
   }
   let pr = project(center);
-  if (pr.z < 0.3 || pr.z > u.screen.z) { return o; }
-  let px = max(half * pr.w, vec2f(minpx, minpx * half.y / half.x));
-  let s = vec2f(pr.x, pr.y) + corner * px;
-  o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, pr.z / u.screen.z, 1.0);
+  var s = vec2f(0.0);
+  if (lie) {
+    // one lying down reaches toward the eye and away as far as to either side: the quad is round the eight corners
+    // of the box it lies in (1.1 m ahead of its hips, 0.95 behind, 0.52 either side, 0.8 high, and as much more
+    // as the ground rises under its length), each corner no nearer the eye than 0.3 m
+    if (pr.z > u.screen.z) { return o; }
+    let f = vec2f(cos(o.pose.x), sin(o.pose.x));
+    let up = abs(sin(o.pose.y));
+    var lo = vec2f(1e9);
+    var hi = vec2f(-1e9);
+    var ahead = false;
+    for (var k = 0u; k < 8u; k++) {
+      let c = vec3f(select(-0.95, 1.1, (k & 1u) != 0u), select(-0.1 - up, 0.8 + 1.1 * up, (k & 2u) != 0u), select(-0.52, 0.52, (k & 4u) != 0u)) * u.aim.w;
+      let r = o.feet + vec3f(f.x * c.x - f.y * c.z, c.y, f.y * c.x + f.x * c.z) - u.cam.xyz;
+      let z = r.x * u.view.x + r.z * u.view.y;
+      let q = vec2f(u.screen.x * 0.5 + (-r.x * u.view.y + r.z * u.view.x) * u.cam.w / max(z, 0.3), u.view.z - r.y * u.cam.w / max(z, 0.3));
+      lo = min(lo, q);
+      hi = max(hi, q);
+      ahead = ahead || z > 0.3;
+    }
+    if (!ahead) { return o; }
+    s = clamp(mix(lo, hi, corner * 0.5 + 0.5), vec2f(-4.0), u.screen.xy + 4.0);
+  } else {
+    if (pr.z < 0.3 || pr.z > u.screen.z) { return o; }
+    s = vec2f(pr.x, pr.y) + corner * max(half * pr.w, vec2f(minpx, minpx * half.y / half.x));
+  }
+  o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, clamp(pr.z / u.screen.z, 0.0, 1.0), 1.0);
   o.uv = corner;
   o.color = color;
   o.kind = kind;
@@ -419,8 +453,13 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
 }
 
 // ---- a fighter's shadow on the ground: an ellipse lying away from the sun from its feet, on the level it
-// stands on, drawn only where the sun gets to (a shadow in a shadow is no darker), multiplied into the frame
-struct HOut { @builtin(position) pos: vec4f, @location(0) @interpolate(flat) feet: vec3f };
+// stands on, drawn only where the sun gets to (a shadow in a shadow is no darker), multiplied into the frame.
+// One lying down (PF_DOWN) is 0.35 m high: its shadow is its own length the way it heads, and reaches a fifth as far.
+struct HOut {
+  @builtin(position) pos: vec4f,
+  @location(0) @interpolate(flat) feet: vec3f,
+  @location(1) @interpolate(flat) lie: vec3f, // the way it heads (cos, sin), and 1 lying down
+};
 @vertex fn vs_shade(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> HOut {
   var o: HOut;
   o.pos = vec4f(2.0, 2.0, 2.0, 1.0);
@@ -432,11 +471,14 @@ struct HOut { @builtin(position) pos: vec4f, @location(0) @interpolate(flat) fee
   o.feet = vec3f(pf(b, ${L.P_PX}u), pf(b, ${L.P_PY}u), pf(b, ${L.P_PZ}u)) + vel * u.screen.w;
   // (in third person its record is where it is drawn already)
   if (i == u32(u.misc.x) && u.aim.z < 0.5) { o.feet = vec3f(u.cam.x, o.feet.y, u.cam.z); }
+  let down = (fl & ${L.PF_DOWN}u) == ${L.PF_DOWN}u;
+  let yaw = f32(players[(b + ${L.P_IN}u) / 4u] & 0x7ffu) / 2048.0 * 6.2832;
+  o.lie = vec3f(cos(yaw), sin(yaw), f32(down));
   // as long as the sun is low, up to four of the figure's heights
   let reach = min(length(SUN.xz) / max(SUN.y, 0.05), 4.0);
-  let pr = project(o.feet - normalize(vec3f(SUN.x, 0.0, SUN.z)) * (0.1 + 0.9 * reach));
+  let pr = project(o.feet - normalize(vec3f(SUN.x, 0.0, SUN.z)) * select(0.1 + 0.9 * reach, 0.18 * reach, down));
   if (pr.z < 0.3 || pr.z > 220.0) { return o; }
-  let s = vec2f(pr.x, pr.y) + CORNERS[v] * (1.1 + 0.95 * reach) * pr.w;
+  let s = vec2f(pr.x, pr.y) + CORNERS[v] * select(1.1 + 0.95 * reach, 1.6 + 0.3 * reach, down) * pr.w;
   o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, 0.5, 1.0);
   return o;
 }
@@ -453,7 +495,13 @@ struct HFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   let s0 = normalize(SUN.xz);
   let reach = min(length(SUN.xz) / max(SUN.y, 0.05), 4.0);
   let q = p.xz - (h.feet.xz - s0 * (0.1 + 0.9 * reach));
-  let e = length(vec2f(dot(q, s0) / (0.3 + 0.9 * reach), dot(q, vec2f(-s0.y, s0.x)) / 0.46));
+  var e = length(vec2f(dot(q, s0) / (0.3 + 0.9 * reach), dot(q, vec2f(-s0.y, s0.x)) / 0.46));
+  if (h.lie.z > 0.5) {
+    // lying down: its length along its heading, its width across, each longer by the sun's reach over it that way
+    let ql = p.xz - (h.feet.xz - s0 * 0.18 * reach);
+    let along = abs(dot(s0, h.lie.xy));
+    e = length(vec2f(dot(ql, h.lie.xy) / (1.02 + 0.18 * reach * along), dot(ql, vec2f(-h.lie.y, h.lie.x)) / (0.44 + 0.18 * reach * (1.0 - along))));
+  }
   if (e > 1.0) { discard; }
   if (hillLit(p + vec3f(0.0, 0.4, 0.0), u.misc.z) < 0.5 || sunlit(p + vec3f(0.0, 0.05, 0.0)) < 0.5) { discard; }
   o.color = vec4f(mix(TONE_SHADE / TONE_LIT, vec3f(1.0), smoothstep(0.86, 1.0, e)), 1.0);
@@ -461,8 +509,8 @@ struct HFrag { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   return o;
 }
 
-// solid splats: 0 a ball, 1 a soldier card, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block,
-// 12 an Evade chaser's face, 13 a downed fighter (the soldier on its side), 14 an Escape terminal, 15 a fighter (figure above)
+// solid splats: 0 a ball, 2 a glowing bolt, 4 a weapon on its pad, 7 a flag, 8 a skull, 10 a crown, 11 a lucky block,
+// 12 an Evade chaser's face, 14 an Escape terminal, 15 a fighter, standing or down (figure above), 16 a crate
 struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
 @fragment fn fs_splat(s: SOut) -> FOut {
   var o: FOut;
@@ -485,25 +533,11 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
   }
   let r2 = dot(s.uv, s.uv);
   var c = s.color.rgb;
-  var uv = s.uv;
-  var kind = s.kind;
-  if (kind == 13u) { uv = vec2f(s.uv.y, s.uv.x); kind = 1u; }
-  switch kind {
+  switch s.kind {
     case 0u: {
       if (r2 > 1.0) { discard; }
       let n = vec3f(s.uv.x, -s.uv.y, sqrt(1.0 - r2));
       c *= 0.45 + 0.6 * max(dot(n, normalize(vec3f(0.3, 0.8, 0.5))), 0.0);
-    }
-    case 1u: { // a soldier: helmet with a gold visor, armoured body, legs
-      let y = uv.y;
-      let head = length(vec2f(uv.x * 1.15, (y + 0.78) * 2.0)) < 0.42;
-      let visor = head && y > -0.86 && y < -0.72 && abs(uv.x) < 0.3;
-      let body = abs(uv.x) < 0.78 - 0.18 * max(y, 0.0) && y > -0.58 && y < 0.25;
-      let legs = y >= 0.25 && abs(abs(uv.x) - 0.3) < 0.2;
-      if (!head && !body && !legs) { discard; }
-      if (visor) { c = vec3f(0.95, 0.72, 0.25); }
-      else if (legs) { c *= 0.65; }
-      c *= 0.7 + 0.3 * (1.0 - abs(uv.x));
     }
     case 2u: {
       if (r2 > 1.0) { discard; }
@@ -665,6 +699,34 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) color: vec4f, @locatio
   return celBeam(b.across, b.color);
 }
 
+// ---- what I hold (client/viewmodel.mjs), from my own eyes at the lens's focal length unzoomed: a quad over where
+// it is on the screen, drawn last into the world's own texture and depth whatever is there, so the post inks its
+// outline and blooms what glows on it as it does anything's, and the HUD goes over it
+${VIEWMODEL_WGSL}
+struct GOut { @builtin(position) pos: vec4f, @location(0) @interpolate(flat) sun: f32 };
+@vertex fn vs_hand(@builtin(vertex_index) v: u32) -> GOut {
+  var o: GOut;
+  let s = mix(u.hand.xy, u.hand.zw, CORNERS[v] * 0.5 + 0.5);
+  o.pos = vec4f(s.x / u.screen.x * 2.0 - 1.0, 1.0 - s.y / u.screen.y * 2.0, 0.0, 1.0);
+  // in a box's shadow or a cliff's as the eye is: found here, once a corner, for every pixel of it
+  o.sun = sunlit(u.cam.xyz);
+  if (o.sun > 0.0) { o.sun = hillLit(u.cam.xyz, u.misc.z); }
+  return o;
+}
+@fragment fn fs_hand(g: GOut) -> TOut {
+  var o: TOut;
+  let h = heldRay(g.pos.xy, u32(u.zn.y), u.hudv.w);
+  if (!h.hit) { discard; }
+  // its normal out of the eye's frame into the world's for the light: the pitch a turn here, as the hands turn with the eyes
+  let fw = normalize(vec3f(u.view.x, (u.view.z - u.screen.y * 0.5) / u.cam.w, u.view.y));
+  let rt = vec3f(-u.view.y, 0.0, u.view.x);
+  var c = h.alb * light(rt * h.n.x + vmCross(rt, fw) * h.n.y + fw * h.n.z, g.sun);
+  c = mix(c, vec3f(0.1, 0.09, 0.2) * (0.5 + c), 0.78 * h.line);
+  o.color = vec4f(mix(c, h.alb * 1.6, h.glow), 1.0);
+  o.depth = h.z / u.screen.z;
+  return o;
+}
+
 // ---- HUD
 var<private> PALETTE: array<vec3f, 8> = array<vec3f, 8>(${PALETTE.map(vec3).join(', ')});
 
@@ -727,7 +789,6 @@ fn cross(d: vec2f, kind: u32, gap: f32) -> bool {
 }
 
 ${HUD_FONT_WGSL}
-${VIEWMODEL_WGSL}
 @fragment fn fs_hud(@builtin(position) q: vec4f) -> @location(0) vec4f {
   let hs = u.hudv.x;
   let c = vec2f(u.screen.x, u.screen.y) * 0.5;
@@ -765,18 +826,13 @@ ${VIEWMODEL_WGSL}
   if (!roundOn && lit(p - vec2i(1, 1))) { return vec4f(0.0, 0.0, 0.0, 0.8); }
   let g = graphPx(p);
   if (g.a > 0.0) { return g; }
-  // rectangles, the last drawn on top: the gun, the bars
+  // rectangles, the last drawn on top: the bars, the tracker's dots, the waypoints
   for (var k = i32(u.hud.y) - 1; k >= 0; k--) {
     let r = rects[2u * u32(k)];
     if (q.x >= r.x && q.x < r.z && q.y >= r.y && q.y < r.w) {
       let col = rects[2u * u32(k) + 1u];
       return col;
     }
-  }
-  // what I hold, under every rect, at the lens's focal length unzoomed
-  if (u.zn.y > 0.0 && q.x > u.screen.x * 0.3 && q.y > u.screen.y * 0.15) {
-    let g = viewModel(q.xy, u32(u.zn.y), u.hudv.w);
-    if (g.a > 0.0) { return g; }
   }
   // the tracker's face, and the sweep going round it
   if (u.pred.w > 0.0 && tr < u.pred.w) {
@@ -811,7 +867,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const errs = info.messages.filter((m) => m.type === 'error');
   if (errs.length) throw new Error('WGSL: ' + errs.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join('; '));
 
-  const ubuf = device.createBuffer({ size: 4 * (52 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 4 * (56 + 8 * MAX_ZONE), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, its look word, its avatar
   const projBuf = storage(L.NPROJ * L.JSIZE);
@@ -838,10 +894,11 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const layout = device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 1, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } },
-      // the bodies, projectiles, sprites and beams are read by the vertex stage, the rest by the fragment's: at most 8 a stage
-      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((b) => ({ binding: b, visibility: b <= 6 ? GPUShaderStage.VERTEX : GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
+      // the bodies, projectiles, sprites and beams are read by the vertex stage, the rest by the fragment's, and the
+      // map's boxes and groups by both (the vertex stage's for the shadow my hands are in, with the heights): at most 8 a stage
+      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((b) => ({ binding: b, visibility: b <= 6 ? GPUShaderStage.VERTEX : b === 11 || b === 12 ? GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT : GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } })),
       { binding: 14, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
   });
@@ -871,12 +928,14 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const splat = pipe('vs_splat', 'fs_splat', { depthWrite: true, depthCompare: 'less' });
   const glow = pipe('vs_splat', 'fs_glow', { depthWrite: false, depthCompare: 'less', blend: add });
   const beam = pipe('vs_beam', 'fs_beam', { depthWrite: false, depthCompare: 'less', blend: add });
+  // what I hold: over whatever the world has there, its own depth written for the post's ink
+  const hand = pipe('vs_hand', 'fs_hand', { depthWrite: true, depthCompare: 'always' });
   // the HUD goes straight onto the finished frame
   const hudPipe = device.createRenderPipeline({
     layout: pl, vertex: { module, entryPoint: 'vs_full' }, fragment: { module, entryPoint: 'fs_hud', targets: [{ format, blend: over }] }, primitive: { topology: 'triangle-list' },
   });
 
-  const uf = new Float32Array(52 + 8 * MAX_ZONE);
+  const uf = new Float32Array(56 + 8 * MAX_ZONE);
   const hud = new Uint32Array(COLS * rows);
   const spriteData = new Float32Array(MAX_SPRITE * 12);
   const beamData = new Float32Array(MAX_BEAM * 12);
@@ -909,6 +968,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
 
     // s: { cam, yaw, pitch, zoom (focal multiplier), time, dt, dtPred, proj, slot,
     //      solid: [{ pos, size, aspect, color: [r,g,b], kind, minpx }] (objectives, pads), glow: [... kind 3, 5, 6, color [r,g,b,a]],
+    //      viewmodel (null, or what I hold: client/viewmodel.mjs gunModel, carryModel),
     //      beams: [{ a, b, width, color: [r,g,b,a] }], rects: [[x0, y0, x1, y1, r, g, b, a]],
     //      crosshair, gap, marker, hurt, scope, text, graph, sides (0 colour by slot, 1 one side against the rest, 2 red and blue by PF_BLUE),
     //      zone (null, or { x, z, r, y, h, color: [r,g,b], pulse }: a disc painted on the terrain and box tops within h of y, any height
@@ -926,15 +986,17 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       const sprites = [...s.solid, ...s.glow].slice(0, MAX_SPRITE);
       const zs = (Array.isArray(s.zone) ? s.zone : s.zone ? [s.zone] : []).slice(0, MAX_ZONE);
       const z = zs[0];
+      const held = s.viewmodel?.length ? s.viewmodel.subarray(0, MAX_VM * 12) : null;
       uf.set([s.cam[0], s.cam[1], s.cam[2], focal, Math.cos(s.yaw), Math.sin(s.yaw), horizon, s.time,
         W, H, FAR, s.dt, s.slot, sprites.length, hmax + 2, Math.min(s.beams.length, MAX_BEAM),
         rows, Math.min(s.rects.length, MAX_RECT), s.crosshair, s.marker, s.hurt, s.scope ? 1 : 0, s.graph ? 1 : 0, s.gap, s.dtPred ?? s.dt, ...(s.tracker || [0, 0, 0]),
-        nbox, ngroup, Number(s.sides) || 0, z ? (z.y === undefined ? 1e9 : z.h ?? 2) : 0, zs.length, s.viewmodel ? Math.min(MAX_VM, s.viewmodel.length / 12) : 0, 0, 0, hs, hudX, hudY, focalFor(W, H)]);
-      if (s.viewmodel?.length) device.queue.writeBuffer(vmBuf, 0, s.viewmodel.subarray(0, MAX_VM * 12));
+        nbox, ngroup, Number(s.sides) || 0, z ? (z.y === undefined ? 1e9 : z.h ?? 2) : 0, zs.length, held ? held.length / 12 : 0, 0, 0, hs, hudX, hudY, focalFor(W, H)]);
+      if (held) device.queue.writeBuffer(vmBuf, 0, held);
       const st = s.storm, sn = st?.next;
       uf.set([st ? st.x : 0, st ? st.z : 0, st ? st.r : 0, st ? 1 : 0, sn ? sn.x : 0, sn ? sn.z : 0, sn ? sn.r : 0, sn ? 1 : 0], 40);
       uf.set([s.aim?.[0] ?? 0, s.aim?.[1] ?? 0, s.own ? 1 : 0, s.size ?? 1], 48);
-      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 52 + 8 * k));
+      uf.set(handRect(held, W, H, focalFor(W, H)), 52);
+      zs.forEach((q, k) => uf.set([q.x, q.z, q.r, q.y ?? 0, ...q.color, q.pulse ?? 0], 56 + 8 * k));
       if (s.graph) device.queue.writeBuffer(graphBuf, 0, s.graph);
       device.queue.writeBuffer(ubuf, 0, uf);
       device.queue.writeBuffer(playerBuf, 0, u8, L.PLAYERS, L.NPLAYER * L.PSIZE);
@@ -972,6 +1034,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       pass.setPipeline(glow);
       const ng = sprites.length - s.solid.length;
       if (ng > 0) pass.draw(6, ng, 0, L.NPLAYER + L.NPROJ + s.solid.length);
+      if (held) { pass.setPipeline(hand); pass.draw(6); }
       pass.end();
       post.finish(enc, (target || ctx.getCurrentTexture()).createView(), (last) => {
         last.setBindGroup(0, bind);

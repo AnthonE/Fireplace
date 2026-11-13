@@ -101,8 +101,9 @@ boxes as plastic with studs on top, metal in panels and rock in strata,
 the fighters as cartoon figures (`client/figure.mjs`) with their shadows on
 the ground, the match's hour its seed's (day, dusk or night:
 [look.md](look.md)), plus tracers as beams, blasts in flat bands, the
-gun in your hands as boxes ray-traced in the HUD pass like the fighters'
-own (`client/viewmodel.mjs`), all at the window's size (`?res=` to set
+gun in your hands as a field of rounded parts marched in the world's pass
+like the fighters' own, lit and inked with the rest
+(`client/viewmodel.mjs`), all at the window's size (`?res=` to set
 one), and a HUD on a 320 x 200 grid scaled to fit the screen and centred
 (`client/lowpoly.mjs` hudFrame, golf's and Dogfight's too): shields and health, a motion tracker that shows enemies
 within 25 m who move or fire (and your own side in yellow, in a team mode),
@@ -315,7 +316,8 @@ prey is on the roof over it). A chaser that reaches you downs you: you crawl
 at 2 m/s, with no gun and no jump. A friend holding still within 2 m of you
 for 3 s gets you up, and your 30 s of bleeding stop while they do; bleed out
 and you watch the others for the rest of the match. A hit stuns a chaser for
-1.2 s, then it ignores hits for 2 s. Survive 3:30 and whoever stands wins;
+1.2 s, then it ignores hits for 2 s. The downed are drawn as the fighter they
+were, on their fronts and crawling ([look.md](look.md)). Survive 3:30 and whoever stands wins;
 nobody standing, the chasers do. Places go standing at the end, then time
 standing, then revives. The chasers are records in `AO`, 48 B each, moved
 serially on the confirmed world after every fighter's own tick; downed is both

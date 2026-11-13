@@ -7,12 +7,13 @@
 // is fixed so the match is the same one. board/board.json's arena and
 // Dogfight views are these. --scenes shoots the arena renderer's own demo
 // page instead (client/arena-render-demo.mjs: fighters held still up close,
-// no sim) into traces/arena-demo-<scene>.png. Frame times mean nothing on a
+// the downed, what the eye holds as hands~<gun>, no sim) into
+// traces/arena-demo-<scene>.png. Frame times mean nothing on a
 // software GPU. --map shoots the arena's views on another map of maps/
 // (packed into build/maps/ as net/play.mjs packs one, laid at run time),
 // into traces/arena-look-<view>-<map>.png: `behind`, `close` and `far` there are
 // the third-person camera's (client/chase.mjs), a bot at the controls.
-//   node tools/arena-shot.mjs [--views track,rim,ships] [--scenes figures,teams,effects [--env dusk]] [--map crossroads] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
+//   node tools/arena-shot.mjs [--views track,rim,ships] [--scenes figures,teams,effects,downed,hands~sniper [--env dusk]] [--map crossroads] [--res 960x600] [--wait 5: seconds of play first] [--tag name]
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { createRequire } from 'node:module';

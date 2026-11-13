@@ -19,7 +19,8 @@ node tools/board.mjs mark couch wrong "the fire outshines the TV"
 in a local room on a fixed seed and a held hour (`track`, `rim`, `sky`,
 `dusk`, `night`, `ships`: a camera held over Box Canyon, or a bot's own;
 `behind`, `close`, `far`: the arena's camera behind a bot, `--map` on another map), or
-on the arena renderer's demo page with no sim (`faces`, `figures`). All run
+on the arena renderer's demo page with no sim (`faces`, `figures`, `downed`,
+`hands`). All run
 Chromium on SwiftShader with `?present=0`,
 so a box with no graphics card draws the real frame (a second or more each).
 Views that share a shooter are shot by one run of it. A new view is a line in
@@ -112,8 +113,30 @@ What stands on it:
   reaches empty-handed; a robot body has a box for a head, a visor and an
   aerial. The colours are what the seven boxes had: a body's skin, an
   avatar's six parts, the seat's or the side's colour on the shirt; hair and
-  eyes come from the slot (10 and 6 colours). Party's riders are still the
-  boxes (`client/rider.mjs`), and so is the gun in your hands.
+  eyes come from the slot (10 and 6 colours). One that is down (Evade's and
+  Escape's, `PF_DOWN`) is the same figure in the same dress on its front
+  (`fgCrawl`): the frame laid over along the ground's rise the way it heads
+  (the heights 0.8 m ahead and behind), the head's end 0.2 rad up, propped
+  on its elbows, the head tipped back 1 rad to look where it goes; at a
+  crawl's 2 m/s one arm reaches as the other pulls and the knee across from
+  it is drawn up. Its shadow is its own length the way it heads. Party's
+  riders are still the boxes (`client/rider.mjs`).
+- **What you hold** (`client/viewmodel.mjs`), the gun in your hands or a
+  carrier's flag, skull or bomb: a second field, 3 to 10 parts in the
+  model's own frame, each a box with rounded edges or a tube along z,
+  narrowing to its front if asked (a blade, a needle), or a cloth with a
+  wave running out along it. It is marched (at most 48 steps) inside the
+  box round its parts, in a quad over the rectangle of the screen that box
+  covers, at the lens's focal length unzoomed, and drawn last in the
+  world's pass over whatever is there, into the same float texture and
+  depth. So it takes the three tones and the hour as a fighter does, the
+  sun's share the eye's own (in a roof's shadow or a cliff's it is in
+  shadow too; found in the vertex stage, six times a frame); the post inks
+  its outline and blooms what is lit on it (a sight, the plasma's prongs,
+  the needles, the sword's blades, the bomb's light: 1.6 times their
+  colour); and the HUD goes over it. Its own shader adds a line a pixel or
+  so wide where two parts meet and halfway round any edge rounded by under
+  a centimetre.
 - **What glows** (`FX_WGSL`): a blast is a spiked burst in three flat bands,
   white-hot inside, breaking up in holes from its rim as it ages; a spark a
   four-pointed glint; a shield or a spawn a ring of dashes; a tracer a white
@@ -127,9 +150,11 @@ turned to it at all, and square to it, a shadow's soft edge drawn in to a
 crisp one. The living room is as it was.
 
 `client/arena-render-demo.html` is the arena's renderer on a memory laid out
-by hand, no sim (`figures`, `faces`, `teams`, `effects`; `?env=` the hour):
-what a match never holds still. `node tools/arena-shot.mjs --scenes
-figures,faces [--env night]` shoots it.
+by hand, no sim (`figures`, `faces`, `teams`, `effects`, `downed`, and
+`hands` for first person: `hands~sniper`, `hands~flag~roof`, a `~` before
+what is held and how; `?env=` the hour, `?t=` the moment): what a match
+never holds still. `node tools/arena-shot.mjs --scenes
+figures,faces,downed,hands~rocket [--env night]` shoots it.
 
 The finish, per frame: the world into an `rgba16float` texture and a linear
 depth; a bloom of what is past 0.92 (the sun, lights, tracers, blasts,
@@ -146,6 +171,17 @@ arena went from 5.3 s to 6.3 s, of Dogfight from 8.5 s to 9.5 s. On the
 same machine idle, the demo's four figures filling the screen from 2.8 m
 draw in 2.1 s, its first frame in 3.9 s (the shader's compile included).
 Not measured: any real GPU.
+
+What moving the gun from the HUD's pass into the world's cost, and the
+downed from a card to the figure: the demo's scenes in CPU seconds a frame
+of the browser's processes (a busy machine stretches those less than the clock;
+`figures`, which neither change touches, read 6.5 before and 6.2 after, so
+5% is noise). First person with the rifle 6.4 to 5.9, the sniper rifle 6.1
+to 5.9, the rocket launcher 6.2 to 6.0, the seeker 6.4 to 5.6, the flag 5.9
+to 5.9: a gun's quad is 7 to 24% of the screen, where the HUD tested every
+box at every pixel of its lower right. `downed`, ten down and five standing
+from 9 m, 6.0 to 6.25, and from 3.6 m 7.6 to 8.5: one lying down costs what
+one standing does, where a card cost nothing.
 
 `tools/board.mjs` is vendored from the Elo Pros agent kit
 (`skills/elo-look/scripts/board.mjs` in elo-pros-launcher): fix it there and copy it

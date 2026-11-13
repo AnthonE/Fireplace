@@ -33,7 +33,7 @@ test('hair and eye colours are colours, enough of them to tell a room apart', ()
 });
 
 test('the arena and golf dress the figure: a body\'s skin, an avatar\'s parts, a slot\'s hair', () => {
-  for (const [f, gun] of [['client/arena-render.mjs', /k\.gun = select\(1u, 0u, zombie\);/], ['client/render.mjs', /k\.gun = 2u;/]]) {
+  for (const [f, gun] of [['client/arena-render.mjs', /k\.gun = select\(1u, 0u, zombie \|\| down\);/], ['client/render.mjs', /k\.gun = 2u;/]]) {
     const src = read(f);
     assert.match(src, /import \{ FIGURE_WGSL, HAIRS, EYES \} from '\.\/figure\.mjs';/, f);
     assert.match(src, /fn kitOf\(s: SOut\) -> Kit \{/, f);
@@ -48,9 +48,44 @@ test('the arena and golf dress the figure: a body\'s skin, an avatar\'s parts, a
   assert.match(read('client/arena-render.mjs'), /k\.kind = select\(select\(0u, 2u, face == 4u\), 1u, zombie\);/);
 });
 
+test('one that is down is the same figure on its front: a crawl\'s rig in the frame laid over, the head tipped back', () => {
+  for (const fn of ['fgCrawl', 'fgSprawl', 'fgFloor', 'fgNod']) assert.match(FIGURE_WGSL, new RegExp(`\\nfn ${fn}\\(`), fn);
+  assert.match(FIGURE_WGSL, /\n  lie: u32, /, 'the kit says which');
+  assert.match(FIGURE_WGSL, /fn fgRig\(pose: vec4f, kit: Kit\) -> Rig \{\n  if \(kit\.lie == 1u\) \{ return fgCrawl\(pose\); \}/);
+  // the tilt and the nod are turns: unit pairs, 0.2 rad and 1 rad
+  const lie = /const LIE_A = 0\.2;\nconst LIE = vec2f\(([\d.]+), ([\d.]+)\);/.exec(FIGURE_WGSL).slice(1).map(Number);
+  const nod = /r\.nod = vec2f\((0\.[\d]+), (0\.[\d]+)\);/.exec(FIGURE_WGSL).slice(1).map(Number);
+  for (const [v, a] of [[lie, 0.2], [nod, 1]]) assert.ok(Math.abs(Math.hypot(...v) - 1) < 1e-4 && Math.abs(Math.atan2(v[1], v[0]) - a) < 1e-3, `${v} is ${a} rad`);
+  // laid over about its hips, 0.85 up the figure and 0.14 off the ground, which fgFloor is under; the ground's own
+  // rise the way it heads (the pose's pitch: it has no gun to aim) is added to the tilt
+  assert.match(FIGURE_WGSL, /let tilt = vec2f\(cos\(LIE_A \+ pose\.y\), sin\(LIE_A \+ pose\.y\)\);\s+up = f \* tilt\.x \+ vec3f\(0\.0, tilt\.y, 0\.0\);\s+front = f \* tilt\.y - vec3f\(0\.0, tilt\.x, 0\.0\);\s+w\.y -= 0\.14;\s+hips = 0\.85;/);
+  assert.match(FIGURE_WGSL, /fn fgFloor\(y: f32\) -> f32 \{ return \(0\.14 \+ \(y - 0\.85\) \* LIE\.y\) \/ LIE\.x; \}/);
+  // standing, nothing is turned: the frame upright, the head's points their own (so a standing figure draws as it did)
+  assert.match(FIGURE_WGSL, /var up = vec3f\(0\.0, 1\.0, 0\.0\);\n  var front = f;/);
+  assert.match(FIGURE_WGSL, /\n  r\.nod = vec2f\(1\.0, 0\.0\);/);
+  assert.match(FIGURE_WGSL, /fn fgNod\(p: vec3f, r: Rig\) -> vec3f \{\n  if \(r\.nod\.y == 0\.0\) \{ return p; \}/);
+  // the arena: both PF_DOWN bits lay it down with empty hands, in the dress it stood in; the card it was is gone
+  const src = read('client/arena-render.mjs');
+  assert.ok(src.includes('let down = (flags & ${L.PF_DOWN}u) == ${L.PF_DOWN}u;'));
+  assert.match(src, /k\.lie = select\(0u, 1u, down\);/);
+  assert.doesNotMatch(src, /kind = 13u|kind == 13u|a soldier/);
+  // its stride a crawl's, whole at 2 m/s; its quad round the sphere it lies in, toward the eye too; its shadow its own length
+  assert.match(src, /if \(down\) \{\n      o\.pose\.w = min\(speed \/ 2\.0, 1\.0\);/);
+  assert.match(src, /o\.pose\.y = select\(0\.0, atan\(clamp\(rise \/ 1\.6, -0\.8, 0\.8\)\), abs\(o\.feet\.y - hgt\(o\.feet\.x, o\.feet\.z\)\) < 0\.4\);/);
+  assert.match(src, /let c = vec3f\(select\(-0\.95, 1\.1, \(k & 1u\) != 0u\), select\(-0\.1 - up, 0\.8 \+ 1\.1 \* up, \(k & 2u\) != 0u\), select\(-0\.52, 0\.52, \(k & 4u\) != 0u\)\) \* u\.aim\.w;/);
+  assert.match(src, /s = clamp\(mix\(lo, hi, corner \* 0\.5 \+ 0\.5\), vec2f\(-4\.0\), u\.screen\.xy \+ 4\.0\);/);
+  assert.match(src, /o\.lie = vec3f\(cos\(yaw\), sin\(yaw\), f32\(down\)\);/);
+  // the modes' modules still mark the downed from the same bits (REVIVE, FINISH)
+  for (const f of ['client/am/evade.mjs', 'client/am/escape.mjs']) assert.match(read(f), /\(fl & L\.PF_DOWN\) === L\.PF_DOWN \? 'down'/, f);
+});
+
 test('the demo page holds fighters still, and the shot tool shoots its scenes', () => {
   const demo = read('client/arena-render-demo.mjs');
   for (const scene of ['figures', 'faces', 'teams', 'effects']) assert.match(demo, new RegExp(`\\n  ${scene}\\(s\\) \\{`), scene);
+  // the downed beside the standing, lying still and crawling
+  assert.match(demo, /\n  downed\(s, near\) \{/);
+  assert.match(demo, /flags: L\.PF_DOWN \}\);/);
+  assert.match(demo, /speed: 2, flags: L\.PF_DOWN,/);
   assert.match(demo, /window\.__demo = \{ ready: true, names: Object\.keys\(SCENES\), shot\(name\) \{/);
   assert.match(read('client/arena-render-demo.html'), /<script type="module" src="\.\/arena-render-demo\.mjs"><\/script>/);
   const tool = read('tools/arena-shot.mjs');

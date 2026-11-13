@@ -6,6 +6,8 @@
 // with elbows out to the gun in its hands, a big head with hair (one of
 // three cuts), two tall eyes and a small mouth. A zombie reaches with empty
 // hands and stares; a robot has a box for a head, a visor and an aerial.
+// One that is down (the arena's Evade and Escape) is the same figure on its
+// front, propped on its elbows with its head up, crawling as it goes.
 // The renderer gives the colours (Kit: a body's skin, an avatar's six parts,
 // a side's shirt) and lights what comes back as it lights anything else.
 // 1.83 m tall, as the blocky one was. Drawing only, like everything here.
@@ -16,12 +18,14 @@ struct Kit {
   kind: u32,  // 0 a person, 1 a zombie, 2 a robot
   gun: u32,   // 0 none, 1 a rifle in both hands, 2 a launcher on the shoulder
   cut: u32,   // the hair: 0 short, 1 long, 2 a tail
+  lie: u32,   // 0 standing, 1 down on its front (fgCrawl)
 };
 // where the joints are this frame
 struct Rig {
   hipL: vec3f, kneeL: vec3f, footL: vec3f, hipR: vec3f, kneeR: vec3f, footR: vec3f,
   shL: vec3f, elL: vec3f, haL: vec3f, shR: vec3f, elR: vec3f, haR: vec3f,
   head: vec3f, gun: vec3f, tail: vec3f, aim: vec2f, bob: f32,
+  nod: vec2f, // the head tipped back about its middle: the angle's cos and sin (1, 0 standing)
 };
 struct Fig { hit: bool, t: f32, z: f32, p: vec3f, n: vec3f, alb: vec3f, glow: vec3f, ink: f32 };
 
@@ -44,9 +48,56 @@ fn fgLeg(hip: vec3f, ph: f32, st: f32) -> array<vec3f, 2> {
   return array<vec3f, 2>(knee, knee + 0.39 * vec3f(0.0, -cos(th - kn), sin(th - kn)));
 }
 
+// Down on its front, in the frame figureRay lays over for it: y still runs
+// from its feet to its head, now along the ground the way it heads, and z
+// from its back to its chest, now into the ground, the head's end 0.2 rad
+// up so the hips rest on the ground and the chest is off it. LIE_A is that
+// tilt, LIE its cos and sin; fgFloor(y) the ground's z under y.
+const LIE_A = 0.2;
+const LIE = vec2f(0.98007, 0.19867);
+fn fgFloor(y: f32) -> f32 { return (0.14 + (y - 0.85) * LIE.y) / LIE.x; }
+// One leg down there: the thigh out from the body's line by a, the shin
+// folded back toward it the more the knee is drawn up, both on the ground.
+fn fgSprawl(hip: vec3f, side: f32, a: f32) -> array<vec3f, 2> {
+  let b = a - 1.9 * (a - 0.22);
+  var knee = hip + 0.39 * vec3f(side * sin(a), -cos(a), 0.0);
+  knee.z = fgFloor(knee.y) - 0.1;
+  var foot = knee + 0.39 * vec3f(side * sin(b), -cos(b), 0.0);
+  foot.z = fgFloor(foot.y) - 0.07;
+  return array<vec3f, 2>(knee, foot);
+}
+// The joints of one that is down: propped on its elbows, forearms ahead,
+// the head up and tipped back to look where it goes. Crawling (pose.w, 0
+// lying still to 1), one arm reaches as the other pulls, and the knee
+// across from the reaching arm is drawn up.
+fn fgCrawl(pose: vec4f) -> Rig {
+  var r: Rig;
+  let sw = pose.w * sin(pose.z);
+  r.bob = 0.0;
+  r.aim = vec2f(1.0, 0.0);
+  r.hipL = vec3f(-0.105, 0.85, 0.0);
+  r.hipR = vec3f(0.105, 0.85, 0.0);
+  let l = fgSprawl(r.hipL, -1.0, 0.22 + 0.7 * max(-sw, 0.0));
+  let rr = fgSprawl(r.hipR, 1.0, 0.22 + 0.7 * max(sw, 0.0));
+  r.kneeL = l[0]; r.footL = l[1];
+  r.kneeR = rr[0]; r.footR = rr[1];
+  r.shL = vec3f(-0.25, 1.26, 0.0);
+  r.shR = vec3f(0.25, 1.26, 0.0);
+  r.elL = vec3f(-0.42, 1.3 + 0.09 * sw, fgFloor(1.3 + 0.09 * sw) - 0.07);
+  r.elR = vec3f(0.42, 1.3 - 0.09 * sw, fgFloor(1.3 - 0.09 * sw) - 0.07);
+  r.haL = vec3f(-0.3, 1.64 + 0.16 * sw, fgFloor(1.64 + 0.16 * sw) - 0.07);
+  r.haR = vec3f(0.3, 1.64 - 0.16 * sw, fgFloor(1.64 - 0.16 * sw) - 0.07);
+  r.head = vec3f(0.03 * sw, 1.53, -0.1);
+  r.nod = vec2f(0.5403, 0.8415);
+  r.tail = r.head + vec3f(0.0, -0.3, -0.26);
+  return r;
+}
+
 // pose: (heading, the aim's pitch (rad, up), the stride's phase, its length 0..1), as the blocky figure's
 fn fgRig(pose: vec4f, kit: Kit) -> Rig {
+  if (kit.lie == 1u) { return fgCrawl(pose); }
   var r: Rig;
+  r.nod = vec2f(1.0, 0.0);
   let ph = pose.z;
   let st = pose.w;
   r.bob = abs(sin(ph)) * 0.035 * st;
@@ -94,6 +145,14 @@ fn fgRig(pose: vec4f, kit: Kit) -> Rig {
   return r;
 }
 
+// p as the head has it: turned about the head's middle by the nod, so its
+// crown comes back and its face up. Standing, p itself.
+fn fgNod(p: vec3f, r: Rig) -> vec3f {
+  if (r.nod.y == 0.0) { return p; }
+  let q = p - r.head;
+  return r.head + vec3f(q.x, q.y * r.nod.x - q.z * r.nod.y, q.y * r.nod.y + q.z * r.nod.x);
+}
+
 // parts: 0 the head, 1 the torso, 2 and 3 the arms (left, right), 4 and 5 the legs, 6 hair, 7 shoes, 8 the gun, 9 hands and neck, 10 the hips
 fn fgMin(o: vec2f, d: f32, m: f32) -> vec2f { return select(o, vec2f(d, m), d < o.x); }
 fn fgMap(p: vec3f, r: Rig, kit: Kit) -> vec2f {
@@ -107,10 +166,12 @@ fn fgMap(p: vec3f, r: Rig, kit: Kit) -> vec2f {
   let q = p - vec3f(0.0, 1.1 + r.bob, 0.0);
   o = fgMin(o, fgBox(vec3f(q.x / (1.0 + 0.6 * q.y), q.y, q.z), vec3f(0.21, 0.2, 0.13), 0.09) * 0.85, 1.0);
   o = fgMin(o, fgCap(p, vec3f(0.0, 1.28 + r.bob, 0.0), r.head - vec3f(0.0, 0.14, 0.0), 0.06), 9.0);
-  let hl = p - r.head;
+  // the head and what grows on it, where the nod has turned them
+  let ph = fgNod(p, r);
+  let hl = ph - r.head;
   if (kit.kind == 2u) {
     o = fgMin(o, fgBox(hl, vec3f(0.22, 0.2, 0.2), 0.05), 0.0);
-    o = fgMin(o, min(fgCap(p, r.head + vec3f(0.11, 0.19, 0.0), r.head + vec3f(0.13, 0.27, 0.0), 0.014), length(hl - vec3f(0.13, 0.28, 0.0)) - 0.03), 8.0);
+    o = fgMin(o, min(fgCap(ph, r.head + vec3f(0.11, 0.19, 0.0), r.head + vec3f(0.13, 0.27, 0.0), 0.014), length(hl - vec3f(0.13, 0.28, 0.0)) - 0.03), 8.0);
   } else {
     o = fgMin(o, length(hl * vec3f(1.0, 0.95, 1.0)) - 0.245, 0.0);
     // hair: a shell over the head, opened over the face under a ragged fringe
@@ -118,7 +179,7 @@ fn fgMap(p: vec3f, r: Rig, kit: Kit) -> vec2f {
     let fringe = 0.095 + 0.055 * abs(fract(hl.x * 7.0 + 0.25) - 0.5) - 0.25 * abs(hl.x);
     dh = max(dh, min(hl.z - 0.05, fringe - hl.y));
     if (kit.cut == 1u) { dh = min(dh, fgBox(hl - vec3f(0.0, -0.2, -0.15), vec3f(0.2, 0.22, 0.075), 0.07)); }
-    if (kit.cut == 2u) { dh = min(dh, fgCap(p, r.head + vec3f(0.0, 0.09, -0.24), r.tail, 0.08)); }
+    if (kit.cut == 2u) { dh = min(dh, fgCap(ph, r.head + vec3f(0.0, 0.09, -0.24), r.tail, 0.08)); }
     o = fgMin(o, dh, 6.0);
   }
   o = fgMin(o, min(fgCap(p, r.shL, r.elL, 0.078), fgCap(p, r.elL, r.haL, 0.066)), 2.0);
@@ -144,15 +205,28 @@ fn fgMap(p: vec3f, r: Rig, kit: Kit) -> vec2f {
 // The figure standing at feet, along the ray from e in unit direction d
 // (fwd the camera's forward, for the depth; pw a pixel's width in metres a
 // metre off): where the ray meets it, the colour there before the light, its
-// normal in the world, and ink where the surface turns from the eye.
+// normal in the world, and ink where the surface turns from the eye. One
+// that is down (kit.lie) lies over the same spot, its hips on it, along a
+// ground that rises pose.y the way it heads.
 fn figureRay(e: vec3f, d: vec3f, fwd: vec3f, pw: f32, feet: vec3f, pose: vec4f, kit: Kit) -> Fig {
   var o: Fig;
   o.hit = false;
   let f = vec3f(cos(pose.x), 0.0, sin(pose.x));
   let side = vec3f(-f.z, 0.0, f.x);
-  let w = e - feet;
-  let lo = vec3f(dot(w, side), w.y, dot(w, f));
-  let ld = vec3f(dot(d, side), d.y, dot(d, f));
+  // the frame's y and z in the world: up and the way it faces, or laid over on its front (fgCrawl)
+  var up = vec3f(0.0, 1.0, 0.0);
+  var front = f;
+  var w = e - feet;
+  var hips = 0.0;
+  if (kit.lie == 1u) {
+    let tilt = vec2f(cos(LIE_A + pose.y), sin(LIE_A + pose.y));
+    up = f * tilt.x + vec3f(0.0, tilt.y, 0.0);
+    front = f * tilt.y - vec3f(0.0, tilt.x, 0.0);
+    w.y -= 0.14;
+    hips = 0.85;
+  }
+  let lo = vec3f(dot(w, side), dot(w, up) + hips, dot(w, front));
+  let ld = vec3f(dot(d, side), dot(d, up), dot(d, front));
   // a sphere round it all
   let oc = lo - vec3f(0.0, 0.95, 0.12);
   let b = dot(oc, ld);
@@ -177,9 +251,9 @@ fn figureRay(e: vec3f, d: vec3f, fwd: vec3f, pw: f32, feet: vec3f, pose: vec4f, 
   o.t = t;
   o.z = t * dot(d, fwd);
   o.p = e + d * t;
-  o.n = normalize(side * n.x + vec3f(0.0, n.y, 0.0) + f * n.z);
+  o.n = normalize(side * n.x + up * n.y + front * n.z);
   o.glow = vec3f(0.0);
-  let hl = p - r.head;
+  let hl = fgNod(p, r) - r.head;
   var c = kit.skin;
   if (part == 1.0) {
     c = kit.torso;
@@ -196,7 +270,7 @@ fn figureRay(e: vec3f, d: vec3f, fwd: vec3f, pw: f32, feet: vec3f, pose: vec4f, 
     c = kit.hair;
     // the ring of light a cartoon's hair has, broken into strands
     let ring = hl.y - 0.135 - 0.014 * sin(atan2(hl.x, hl.z) * 13.0);
-    if (abs(ring) < 0.013 && n.y > 0.25 && hl.z > -0.05) { c = mix(c, vec3f(1.0), 0.35); }
+    if (abs(ring) < 0.013 && n.y * r.nod.x - n.z * r.nod.y > 0.25 && hl.z > -0.05) { c = mix(c, vec3f(1.0), 0.35); }
   } else if (part == 7.0) { c = select(vec3f(0.16, 0.15, 0.24), vec3f(0.92, 0.92, 0.95), p.y < 0.03); }
   else if (part == 8.0) {
     c = select(vec3f(0.17, 0.18, 0.24), vec3f(0.3, 0.42, 0.24), kit.gun == 2u);
@@ -231,7 +305,7 @@ fn figureRay(e: vec3f, d: vec3f, fwd: vec3f, pw: f32, feet: vec3f, pose: vec4f, 
     else if (length(vec2f((abs(hl.x) - 0.155) * 0.8, hl.y + 0.095)) < 0.035) { c = mix(c, vec3f(1.0, 0.5, 0.5), 0.4); }
   }
   // metal all over a robot but its lights
-  if (kit.kind == 2u && part != 8.0) { c = mix(c, vec3f(0.75, 0.8, 0.9), 0.25) * (1.0 + 0.25 * step(0.75, n.y)); }
+  if (kit.kind == 2u && part != 8.0) { c = mix(c, vec3f(0.75, 0.8, 0.9), 0.25) * (1.0 + 0.25 * step(0.75, select(n.y, o.n.y, kit.lie == 1u))); }
   o.alb = c;
   // ink where it turns from the eye, close enough that a line is narrower than the limb
   o.ink = 1.0 - smoothstep(0.3, 0.22, dot(n, -ld)) * (1.0 - smoothstep(0.004, 0.012, pw * t));

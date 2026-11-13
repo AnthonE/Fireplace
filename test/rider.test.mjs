@@ -75,9 +75,9 @@ test('juice: a bump jolts both riders and fades; confetti thrown up falls, turni
   assert.equal(j.cheer(5, 100, [0, 0, 0]), null);
 });
 
-test('the arena draws its fighters as the cartoon figure, with every body\'s skin, and the gun in your hands of the riders\' boxes', () => {
+test('the arena draws its fighters as the cartoon figure, with every body\'s skin, and none of the riders\' boxes', () => {
   const src = readFileSync('client/arena-render.mjs', 'utf8');
-  assert.match(src, /\$\{BLOCK_RAY_WGSL\}/, 'the viewmodel is boxes');
+  assert.doesNotMatch(src, /BLOCK_RAY_WGSL|blockRay/, 'the gun in your hands was the last of them (test/viewmodel.test.mjs)');
   assert.match(src, /\$\{FIGURE_WGSL\}/);
   assert.match(src, /fn kitOf\(s: SOut\) -> Kit/);
   // (the eye brought toward its feet by the figure's size, u.aim.w: 1 unless the map has a body of its own)

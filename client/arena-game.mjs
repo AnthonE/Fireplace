@@ -26,7 +26,7 @@ import { NetGraph } from './netgraph.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
-import { gunBoxes, carryBoxes } from './viewmodel.mjs';
+import { gunModel, carryModel } from './viewmodel.mjs';
 import { chase, aimPoint, steepAim, zoomStep, startView, mapView, viewOf, viewText, CHASE_NEAR } from './chase.mjs';
 import { drawnTick } from './movers.mjs';
 import { bubbleAt } from './chat.mjs';
@@ -667,8 +667,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       const moving = Math.hypot(f.vel[0], f.vel[2]) > 1 && f.ground;
       // a carrier's hands hold what its kit module carries (a flag in the colour of the side it was taken from)
       if (!WATCH && !f.dead && !f.down && !chasing) {
-        inHand = f.carry ? carryBoxes(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], handMotion(now, moving))
-          : gunBoxes(f.weapon, handMotion(now, moving, f.weapon), now - lastShotAt < 50 && f.weapon !== L.W_SWORD);
+        inHand = f.carry ? carryModel(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], handMotion(now, moving))
+          : gunModel(f.weapon, handMotion(now, moving, f.weapon), now - lastShotAt < 50 && f.weapon !== L.W_SWORD);
       }
       // (a mode with nothing to shoot or be shot by, kit.unarmed, has no bars and no tracker: an obby's HUD is its own)
       if (!f.dead && !kit?.unarmed) { const hr = hudRects(f, now); rects.push(...hr.rects); blips = hr.blips; tracker = hr.tracker; }

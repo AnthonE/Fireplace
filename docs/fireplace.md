@@ -233,12 +233,13 @@ sprite's square covers the box's bounding sphere, and each pixel casts its own
 ray at the box, so a box is one quad, exact at any size, with a bevel and an
 ink line on its edges like party's solids. Its pitch rides in the seed, its
 yaw in the roll, and a splay about its front in the alpha with its part (a
-face, a pumpkin's lit grin, metal, a robot's eyes). The arena's fighters are
-the same figure a size up (1.83 m) in its splat shader (`figure`), seven boxes
-tested per pixel: legs stepping with their speed, both arms out holding the gun
-along the aim, a zombie's reaching empty; the body's skin and face come from
-the look word (`looksOf`), the shirt from the tint or the side. Evade's downed
-are still the old card on its side.
+face, a pumpkin's lit grin, metal, a robot's eyes). The arena's fighters wear
+the same bodies on the cartoon's figure (`client/figure.mjs`,
+[look.md](look.md)), 1.83 m: legs stepping with their speed, both arms out
+holding the gun along the aim, a zombie's reaching empty; the body's skin and
+face come from the look word (`looksOf`), the shirt from the tint or the side.
+Evade's and Escape's downed are that figure in the same dress, on its front
+and crawling.
 
 ![Every body, and a crowd of blocky riders walking their balls](p2-blocky.png)
 
