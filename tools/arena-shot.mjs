@@ -7,7 +7,7 @@
 // is fixed so the match is the same one. board/board.json's arena and
 // Dogfight views are these. --scenes shoots the arena renderer's own demo
 // page instead (client/arena-render-demo.mjs: fighters held still up close,
-// the downed, what the eye holds as hands~<gun>, no sim) into
+// the downed, what the eye holds as hands~<gun>, ~scope its scope, no sim) into
 // traces/arena-demo-<scene>.png. Frame times mean nothing on a
 // software GPU. --map shoots the arena's views on another map of maps/
 // (packed into build/maps/ as net/play.mjs packs one, laid at run time),

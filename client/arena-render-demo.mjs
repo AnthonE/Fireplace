@@ -12,7 +12,8 @@
 //     from 3.6 m; downed~over from a reviver's eyes; downed~hill on a hillside, heading up it, down it and across
 //   hands: first person, what the eye holds: hands~ar, ~br, ~magnum, ~sniper, ~shotgun, ~rocket, ~plasma, ~seeker,
 //     ~sword, ~fist, a carrier's ~flag, ~skull and ~bomb; then ~fire (the muzzle's flash), ~roof (under a slab, in
-//     its shadow) and ~side (the light from the left), in any order
+//     its shadow) and ~side (the light from the left), in any order; ~scope looks through the sniper's 5x in its
+//     place (the black past the ring is the terrain pass's own, never traced: client/arena-render.mjs fs_terrain)
 import * as L from '../src/layout.mjs';
 import { createRenderer } from './arena-render.mjs';
 import { gunModel, carryModel } from './viewmodel.mjs';
@@ -164,6 +165,8 @@ const SCENES = {
     const m = { t: s.time, bob: 0, drop: 0, lunge: 0, kick: arg.includes('fire') ? 0.6 : 0 };
     s.viewmodel = CARRIED.includes(held) ? carryModel(held, [0.22, 0.42, 1.0], m) : gunModel(HELD[held], m, arg.includes('fire'));
     s.crosshair = 0;
+    // scoped, as the frontend draws it: the lens at 5x, the ring and its cross, nothing in the hands
+    if (arg.includes('scope')) { s.zoom = 5; s.scope = true; s.viewmodel = null; }
   },
 };
 
