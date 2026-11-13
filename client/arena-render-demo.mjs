@@ -6,12 +6,14 @@
 // in a browser it draws the one in ?scene=, moving; ?env=dusk or night for the hour.
 //   figures: every body (client/looks.mjs), an avatar, a zombie and a juggernaut, standing, running and aiming
 //   faces: four of them from 2.8 m
+//   dressed: hats, worn faces, shirt prints and back items on the figure, from the front and from behind
 //   teams: red and blue facing each other, a flag and a skull between them
 //   effects: blasts, sparks, tracers and bolts over the grass
 import * as L from '../src/layout.mjs';
 import { createRenderer } from './arena-render.mjs';
 import { capturePng, fitSize } from './host.mjs';
-import { BODIES } from './looks.mjs';
+import { BODIES, HATS } from './looks.mjs';
+import { FACES as WORN, SHIRTS, BACKS, packDress } from './dress.mjs';
 import { guestAvatar } from './avatar.mjs';
 
 const q = new URLSearchParams(location.search);
@@ -24,24 +26,27 @@ const SUNWARD = Math.atan2(0.5025, 0.5528);
 const u8 = new Uint8Array(L.PAGES * 65536);
 const dv = new DataView(u8.buffer);
 new Uint16Array(u8.buffer, L.TERRAIN_H, L.GRID * L.GRID).fill(FLOOR * 256);
-const tints = new Uint32Array(L.NPLAYER), looks = new Uint32Array(L.NPLAYER), avatars = new Uint32Array(L.NPLAYER);
+const tints = new Uint32Array(L.NPLAYER), looks = new Uint32Array(L.NPLAYER), avatars = new Uint32Array(L.NPLAYER), dresses = new Uint32Array(L.NPLAYER);
 const text = new Uint32Array(1 << 16);
 
 // Fighter p at (x, z) on the grass, heading yaw (rad), aiming pitch up, moving at speed along its heading.
-function fighter(p, x, z, yaw, { pitch = 0, speed = 0, flags = 0, body = 1, avatar = 0, y = FLOOR } = {}) {
+// hat a key of HATS, face, shirt and back keys of client/dress.mjs's lists, for what it wears
+function fighter(p, x, z, yaw, { pitch = 0, speed = 0, flags = 0, body = 1, avatar = 0, y = FLOOR, hat = '', face = '', shirt = '', back = '' } = {}) {
   const a = L.PLAYERS + p * L.PSIZE;
   dv.setFloat32(a + L.P_PX, x, true); dv.setFloat32(a + L.P_PY, y, true); dv.setFloat32(a + L.P_PZ, z, true);
   dv.setFloat32(a + L.P_VX, Math.cos(yaw) * speed, true); dv.setFloat32(a + L.P_VX + 4, 0, true); dv.setFloat32(a + L.P_VX + 8, Math.sin(yaw) * speed, true);
   const turn = ((Math.round(yaw / (2 * Math.PI) * 2048) % 2048) + 2048) % 2048;
   dv.setUint32(a + L.P_IN, (turn | ((Math.round(pitch / Math.PI * 1024) + 512) << L.AW_PITCH)) >>> 0, true);
   dv.setUint32(a + L.P_FL, L.PF_LIVE | flags, true);
-  looks[p] = body << 16;
+  const at = (list, k) => Math.max(0, list.findIndex((x) => x.key === k));
+  looks[p] = ((body << 16) | (hat ? at(HATS, hat) << 8 : 0)) >>> 0;
   avatars[p] = avatar;
+  dresses[p] = packDress(face ? at(WORN, face) : 0, shirt ? at(SHIRTS, shirt) : 0, back ? at(BACKS, back) : 0);
 }
 function clear() {
   u8.fill(0, L.PLAYERS, L.PLAYERS + L.NPLAYER * L.PSIZE);
   u8.fill(0, L.PROJ, L.PROJ + L.NPROJ * L.JSIZE);
-  tints.fill(0); looks.fill(0); avatars.fill(0);
+  tints.fill(0); looks.fill(0); avatars.fill(0); dresses.fill(0);
 }
 // the camera d metres from (x, y, z) on the sun's side, turned by `round` about it, looking at it
 function look(s, at, d, { round = 0, lift = 0.2, pitch = -0.06 } = {}) {
@@ -76,6 +81,24 @@ const SCENES = {
       fighter(k * 3 + 1, CX + across[0] * o, CX + across[1] * o, SUNWARD + (k - 1.5) * 0.25, { ...r, pitch: k === 0 ? 0.3 : 0 });
     });
     look(s, [CX, FLOOR + 1.35, CX], 2.8, { round: 0.15, lift: 0.1, pitch: 0 });
+  },
+  // what an avatar wears, on the figure: five in front facing the camera, the same five behind turned away to show their backs
+  dressed(s) {
+    const across = [-Math.sin(SUNWARD), Math.cos(SUNWARD)];
+    const cast = [
+      { hat: 'tophat', face: 'cool', shirt: 'stripes', back: 'cape', avatar: guestAvatar(1) },
+      { hat: 'halo', face: 'wink', shirt: 'heart', back: 'wings', avatar: guestAvatar(2) },
+      { hat: 'cone', face: 'stars', shirt: 'star', back: 'pack', avatar: guestAvatar(3) },
+      { hat: 'prop', face: 'cat', shirt: 'chevrons', back: 'jet', avatar: guestAvatar(4) },
+      { hat: 'antlers', face: 'oh', shirt: 'flame', back: '', avatar: guestAvatar(5) },
+    ];
+    cast.forEach((c, k) => {
+      const o = (k - 2) * 1.25;
+      fighter(k, CX + across[0] * o, CX + across[1] * o, SUNWARD + (k - 2) * 0.1, { body: 2, ...c, pitch: 0.1 });
+      const ob = o + 0.62;
+      fighter(8 + k, CX + across[0] * ob - Math.cos(SUNWARD) * 3.4, CX + across[1] * ob - Math.sin(SUNWARD) * 3.4, SUNWARD + Math.PI + 0.35, { body: 2, ...c, speed: k === 1 ? 5 : 0 });
+    });
+    look(s, [CX, FLOOR + 1.35, CX - 0.5], 6.4, { round: 0.12, lift: 1.4, pitch: -0.2 });
   },
   teams(s) {
     s.sides = 2;
@@ -116,7 +139,7 @@ async function main() {
     const s = {
       cam: [CX, FLOOR + 2, CX], yaw: 0, pitch: 0, zoom: 1, time: t, tick: 0, dt: 0, dtPred: 0, proj: L.PROJ, slot: 999,
       solid: [], glow: [], beams: [], rects: [], tracker: null, text, graph: null, marker: 0, hurt: 0, scope: false, sides: 0, zone: null, crosshair: 7, gap: 0,
-      tints, looks, avatars, env: q.get('env') || 'day',
+      tints, looks, avatars, dresses, env: q.get('env') || 'day',
     };
     SCENES[name](s);
     return s;

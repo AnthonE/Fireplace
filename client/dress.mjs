@@ -65,3 +65,12 @@ export function savedDress() {
 export function saveDress(w) {
   try { localStorage.setItem(KEY, String(w >>> 0)); } catch { /* private window: this visit only */ }
 }
+
+// every slot's dress word, from a host (client/host.mjs dress), into one array kept per host: for the arena's and golf's figures
+const DRESSES = new WeakMap();
+export function dressesOf(h) {
+  let t = DRESSES.get(h);
+  if (!t) DRESSES.set(h, (t = new Uint32Array(256)));
+  for (let p = 0; p < 256; p++) t[p] = h.dress ? h.dress(p) : 0;
+  return t;
+}

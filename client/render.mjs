@@ -13,7 +13,7 @@ import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 import { BLOCK_RAY_WGSL } from './rider.mjs';
-import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
+import { FIGURE_WGSL, WEAR_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 
@@ -159,9 +159,11 @@ struct SOut {
   @location(4) @interpolate(flat) pose: vec4f, // a golfer's heading, aim (rad, up), stride's phase and length (0..1); a tree's turn, size, style
   @location(5) @interpolate(flat) skin: vec4f, // a golfer's skin, and its face (client/rider.mjs PART)
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
+  @location(7) @interpolate(flat) wear: vec2u, // a golfer's look's hat and its dress word (client/figure.mjs WEAR_WGSL)
 };
 ${BLOCK_RAY_WGSL}
 ${FIGURE_WGSL}
+${WEAR_WGSL}
 const HAIRS = array<vec3f, ${HAIRS.length}>(${HAIRS.map(vec3).join(', ')});
 const EYES = array<vec3f, ${EYES.length}>(${EYES.map(vec3).join(', ')});
 const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
@@ -189,7 +191,7 @@ fn kitOf(s: SOut) -> Kit {
   k.rarm = select(k.skin, avc(av, 3u), av != 0u);
   k.lleg = select(c * 0.5, avc(av, 4u), av != 0u);
   k.rleg = select(c * 0.5, avc(av, 5u), av != 0u);
-  return k;
+  return wornKit(k, s.wear, false);
 }
 
 // A tree in the rough, of boxes: a trunk under a round top of two (style 0,
@@ -293,6 +295,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + p] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body]));
     o.av = players[${L.NPLAYER * L.PSIZE / 4 + 2 * L.NPLAYER}u + p];
+    o.wear = vec2u((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + p] >> 8u) & 255u, players[${L.NPLAYER * L.PSIZE / 4 + 3 * L.NPLAYER}u + p]);
+    if (wearTall(o.wear)) { center = center + vec3f(0.0, 0.2, 0.0); half = vec2f(1.15, 1.2); }
     // its alpha carries its slot, for its hair and eyes (client/figure.mjs)
     color = vec4f(tintOf(p, slotColor(p)), f32(p));
     kind = 1u;
@@ -599,7 +603,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const ubuf = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const ballBuf = storage(BALL_WORDS * 4);
-  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, look and avatar
+  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 16); // the records, then each slot's tint, look, avatar and dress word
   const projBuf = storage(L.NPROJ * L.JSIZE);
   const flashBuf = storage(MAX_FLASH * 32);
   const hudBuf = storage(COLS * rows * 4);
@@ -701,6 +705,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE, s.tints ?? NO_TINTS);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 4, s.looks ?? NO_LOOKS);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 8, s.avatars ?? NO_AVATARS);
+      device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 12, s.dresses ?? NO_AVATARS);
       device.queue.writeBuffer(projBuf, 0, u8, s.proj ?? L.PROJ, L.NPROJ * L.JSIZE);
       s.flashes.slice(0, MAX_FLASH).forEach((f, k) => flashData.set([f.pos[0], f.pos[1], f.pos[2], 0, f.age, f.size, f.kind, 0], k * 8));
       device.queue.writeBuffer(flashBuf, 0, flashData);
