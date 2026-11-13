@@ -142,9 +142,9 @@ only of your own body), physics sandboxes, open worlds.
    1.3 s on, where it was 46 to 140 s. The 40 s of the first switch into
    Party was not its shaders, which held the GPU process 1.1 s compiled in
    line: it was the TV, sent a frame of the game every page frame, faster
-   than SwiftShader draws them, and it waits for the GPU now. Left: a frame
-   rate on a real laptop GPU, and what compiling costs one (this box has
-   none).
+   than SwiftShader draws them, and it waits for the GPU now. Left, this
+   box having no GPU: what a renderer costs a real one to be
+   compiled (every hash still equal). Then a frame rate on a real laptop GPU.
 6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
    less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
    than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); the
