@@ -7,7 +7,7 @@
 //       open it, priced in PROS: the wallet that is paid and that mints are owed from.
 //       Not before the Fireplace Items collection exists (deploy/solana-items in
 //       Elo Pros), or a buyer pays for what can't be delivered
-//   node tools/shop.mjs --coin <mint> --cap <n> [--symbol FIREPLACE] --write
+//   node tools/shop.mjs --coin <mint> --cap <n> [--symbol FIRE] --write
 //       the coin's landing day, once it is on record: every price in days of the
 //       daily pot's per-player cap n (whole coins), the way oneshot's skins were set
 // Without --write it prints and changes nothing.
@@ -20,7 +20,7 @@ import { isMain } from './main.mjs';
 // the table, one row to an item, in what it costs now
 export function table(shop) {
   const coin = shop.coin ? { coin: shop.coin, cap: shop.cap } : null;
-  const unit = coin ? (shop.symbol || 'FIREPLACE') : 'PROS';
+  const unit = coin ? (shop.symbol || 'FIRE') : 'PROS';
   return SHOP.map((x) => `  ${x.key.padEnd(9)} ${x.kind.padEnd(4)} ${String(priceOf(x, coin || {})).replace(/\B(?=(\d{3})+$)/g, ',').padStart(10)} ${unit}   (${x.marshmallows} marshmallows, ${TIERS[x.tier].days} days of a cap)`).join('\n');
 }
 
@@ -44,7 +44,7 @@ if (isMain(import.meta.url)) {
     const bad = shopProblems(shop);
     if (bad.length) throw new Error(`coin/shop.json would be wrong: ${bad.join('; ')}`);
     if (shop.coin && !shop.payer) throw new Error('the coin needs the shop open first: --payer <wallet>');
-    console.log(shop.payer ? `the shop is open${shop.coin ? ` in ${shop.symbol || 'FIREPLACE'} (${shop.coin}), a cap of ${shop.cap} a day` : ', in PROS'}, paid to ${shop.payer}` : 'the shop is dark: no wallet is named to be paid (--payer)');
+    console.log(shop.payer ? `the shop is open${shop.coin ? ` in ${shop.symbol || 'FIRE'} (${shop.coin}), a cap of ${shop.cap} a day` : ', in PROS'}, paid to ${shop.payer}` : 'the shop is dark: no wallet is named to be paid (--payer)');
     console.log(table(shop));
     if (!argv.includes('--write')) { console.log('\nThat is what it would be. To write it: the same command with --write'); process.exit(0); }
     mkdirSync(dirname(SHOP_FILE), { recursive: true });

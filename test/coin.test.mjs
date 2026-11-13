@@ -50,7 +50,7 @@ test('the sheet is one the create form takes, and each rule refuses what it shou
 
 test('what the sheet welds is what it should be: the game\'s name, a bare ticker, our links, no mayhem', () => {
   assert.equal(sheet.name, 'Fireplace');
-  assert.equal(sheet.symbol, 'FIREPLACE');
+  assert.equal(sheet.symbol, 'FIRE');
   assert.equal(sheet.mayhem_mode, false);
   assert.deepEqual(Object.keys(sheet.links), ['website', 'twitter', 'telegram']);
   assert.ok(sheet.description.includes(`${sheet.symbol} is its coin, paired against PROS`), 'the description says what the coin is');

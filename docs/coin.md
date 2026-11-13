@@ -20,22 +20,22 @@ folder's shape, so it copies over it.
 | | | |
 |---|---|---|
 | ⛔ name | `Fireplace` | the game's name, as the store writes it |
-| ⛔ ticker | `FIREPLACE` | the name, the rule ONESHOT's was picked by; bare, never with a `$` |
+| ⛔ ticker | `FIRE` | short, and the picture is a fire (operator, 2026-11-13); bare, never with a `$` |
 | ⛔ pair | PROS | picked on the create form |
-| ⛔ creator fee | 2% on the sheet | the rate our titles set; ONESHOT's landed at 1%, so read what the form offers |
+| ⛔ creator fee | 1% | pump.fun's most: its Global caps a coin's own creator fee at 100 bps, and refuses 2% |
 | ⛔ mayhem mode | off | it doubles the supply |
 | ⛔ picture | `coin/art/fireplace-coin.png` | draft a, the TV's fire; b and c are beside it |
 | ⛔ banner | `coin/art/fireplace-banner.jpg` | the living room, the title on the right |
 | ⛔ description | below | |
 | ⛔ links | website `https://elopros.com/games/fireplace/`, X `https://x.com/ELOonSOL`, Telegram `https://t.me/eloonsol` | Elo Pros' own |
 | creator | `FF31ZeUkM8T4YVT1dm1XTKsf9HfXcycTAGrPu2Pu6Vkx` | the wallet that created PROS and ONESHOT: it pays the opening in PROS and takes the fee in PROS |
-| opening buy | 100,000,000 on the sheet (10%) | in the create, no bundle; what it costs in PROS is read on the day |
+| opening buy | 50,000,000 (5%) | in the create, no bundle, paid in PROS by Elo Pros' game wallet 1; then split so no wallet holds over 2%: 2% to Fireplace's prize wallet, 2% to its house wallet, 1% stays (operator, 2026-11-13) |
 
 The description:
 
 > Fireplace is a free party game on Elo Pros, in your browser: a living room
 > with a fire going and a TV that plays party minigames, an arena, a dogfight
-> and golf in turn, with a whole crowd in one room. FIREPLACE is its coin,
+> and golf in turn, with a whole crowd in one room. FIRE is its coin,
 > paired against PROS. Play signed in and finish the day's challenges for a
 > share of the daily pot. Every house wallet is listed at
 > elopros.com/tokenomics.html
@@ -209,8 +209,8 @@ needs its screenshots and the kiln's owner to define it once on chain
 
 Before the create, in order; the owner in brackets.
 
-1. [operator] **The calls.** The ticker: `FIREPLACE` here, by the rule
-   ONESHOT's was picked by; `MALLOW` is the other one worth a look, with
+1. [operator] **The calls.** The ticker: `FIRE` (operator, 2026-11-13: short,
+   and the picture is a fire); `MALLOW` is the other one worth a look, with
    draft b as its picture, but then the room's marshmallows and the coin
    share a name without sharing a rate. The picture: a, b or c. The X link:
    Elo Pros' here; ONESHOT's sheet used the developer's own. The creator
