@@ -254,9 +254,13 @@ shell whose own command line contains the name: it kills that shell.
   Grandma's writes out every default. A new colour goes in `COLORS`, the
   shader and CONTRIBUTING.md's table (`test/themes.test.mjs` checks all
   three); `elo.json`'s mods are written from the themes (`node tools/elo.mjs`).
-- A player's look (`client/looks.mjs`: a ball, a hat and a body) is drawing
-  only: the relay carries each slot's word beside the ticks (hello flag 4,
-  `T_LOOK`), never in a tick, record or hash. The lists are append-only (a look's number
+- A player's look (`client/looks.mjs`: a ball, a hat and a body) and dress
+  (`client/dress.mjs`: a worn face, a shirt's print, a back item) are drawing
+  only: the relay carries each slot's words beside the ticks (hello flag 4,
+  `T_LOOK`, the dress in its spare bytes and `T_DRESS`), never in a tick,
+  record or hash. Party's blocky rider and the arena's and golf's cartoon
+  figure (`client/figure.mjs` `WEAR_WGSL`) both wear them: a new piece is
+  drawn on both. The lists are append-only (a look's number
   goes on the wire); look 0 draws exactly as the riders always have, and a new
   pattern or hat style goes in party's shader (`test/looks.test.mjs`
   checks). Achievements (`client/achievements.mjs`)
@@ -290,12 +294,12 @@ shell whose own command line contains the name: it kills that shell.
   `client/achievements.mjs`, written into `elo.json` with the stats and
   append-only like the achievements. The amounts are the house's: no text
   here, a description or a challenge, names one. Tickers are bare, no `$`.
-  The thirteen priced looks are also the shop's items (`client/shop.mjs`,
+  The priced looks and dress pieces are also the shop's items (`client/shop.mjs`,
   `docs/coin.md#skins`): a look's key is its item's key, its place in
   `BADGE_ITEMS` (`net/wire.mjs`, append-only) its bit in a badge word, and
   `elo.json`'s `economy` is written from that table by `tools/elo.mjs` for
   Fireplace's own manifest only, and only once `coin/shop.json` names the
-  wallet that is paid (`tools/shop.mjs`); give a look a `price` and it needs a
+  wallet that is paid (`tools/shop.mjs`); give a piece a `price` and it needs a
   tier there (`test/shop.test.mjs`).
 
 ## Style

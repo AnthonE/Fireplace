@@ -106,6 +106,7 @@ After the welcome, every stream message opens with 16 bytes:
 | avatars | `0x1b` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 avatar word) |
 | names | `0x1c` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · 16 B name, 0 after its last character) |
 | badges | `0x1d` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 badge word) |
+| dress words | `0x20` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 dress word) |
 | chat, client to relay | `0x1e` · 3 B 0 · u16 text bytes · 10 B 0, then a line, UTF-8 |
 | chat | `0x1e` · u8 kind · u16 slot · u16 text bytes · 10 B 0, then the text, UTF-8 |
 
@@ -116,6 +117,14 @@ without them needs nothing more. A look word is the ball in its low byte and
 the hat in the next (`client/looks.mjs`; 0 is the house look). It is drawing
 only: no tick, keyframe, record or hash carries it, and a slot that empties
 goes back to 0.
+
+A dress word rides beside the look (`client/dress.mjs`: a worn face in its low
+six bits, a shirt's print in the next six, a back item in the next six; 0
+wears nothing). A client sends its own in bytes 8 to 11 of its look message,
+so a relay that doesn't know it reads the same look from the same message. A
+client that sets bit 0 of the hello's byte 22 (and flag 4) gets every slot's
+dress word as `0x20` pairs, the table after its welcome and the changes
+after; a client that doesn't never sees one.
 
 Avatars ride the same way. A client that sets hello flag 16 gets every
 signed-in slot's Elo Pros avatar after its welcome, then the ones that

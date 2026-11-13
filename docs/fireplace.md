@@ -217,7 +217,10 @@ as much for a visit); it stays so until purchases live with the wallet on
 Elo Pros ([roadmap.md](roadmap.md)). They are starting to: each priced look is
 also a Fireplace Items NFT for PROS or the game's coin, and a signed-in wallet
 that owns one opens it here in any browser (`client/shop.mjs`, the relay's
-badge bits; [coin.md](coin.md#skins)). A signed-in player's tally is on Elo
+badge bits; [coin.md](coin.md#skins)). Besides the look, the wardrobe dresses
+a blocky rider: a worn face, a shirt's print and a back item (`client/dress.mjs`,
+the dress word beside the look), bought, earned or owned the same way, and the
+arena's and golf's figure wears them too. A signed-in player's tally is on Elo
 Pros too, but the purse is this browser's alone: a second browser has the
 same marshmallows on the board and its own, empty, purse.
 

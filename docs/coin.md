@@ -77,7 +77,7 @@ read at 48 px.
 | pairs against | PROS, on pump.fun's curve and then its pool |
 | how a player gets it | buys it, or plays for it: a share of a daily pot for the day's challenges, on rooms we host, signed in |
 | a game's pay | none. The top three still get marshmallows, and marshmallows are the room's score: they are not the coin, and no rate between the two is posted |
-| what it buys | the thirteen priced looks as owned items, in PROS until it lands ([Skins](#skins)). Marshmallows still buy them into one browser's purse (`client/purse.mjs`) |
+| what it buys | the 26 priced looks and dress pieces as owned items, in PROS until it lands ([Skins](#skins)). Marshmallows still buy them into one browser's purse (`client/purse.mjs`) |
 | the house | never sells it: a prize wallet spends it on players only |
 
 The pot is the house's rule, not the game's: a fixed sum a UTC day, split by
@@ -121,43 +121,58 @@ two signed-in wallets in them, which is already the rule for a rated match
 
 ## Skins
 
-The thirteen looks marshmallows buy (`client/looks.mjs` `price`: six balls, six
-hats and the gold robot) are also sold as owned items, one pass each in the
-Fireplace Items collection on Solana (Metaplex Core, as oneshot's skins are).
-A purchase then follows the wallet to any browser and can be sold on, which a
-marshmallow purse in one browser cannot. Marshmallows keep buying a look into
-this browser; the two are separate doors to one look, and no rate between them
-is posted. A look is still drawing only: no tick, record or hash knows it.
+**One avatar, two drawings** (operator, 2026-11-13: keep the figure). A
+player's avatar is data: the Elo Pros avatar's colours, a ball, a hat and a
+body (the look word, `client/looks.mjs`), and a worn face, a shirt's print and
+a back item (the dress word, `client/dress.mjs`). Party draws it as the blocky
+rider (`client/rider.mjs`); the arena and golf draw it as the cartoon figure
+(`client/figure.mjs`), which now wears the same hat, face, print and back.
+Dogfight's ships wear none of it yet. Three reviewers read every character
+side by side first (`traces/toons-side-by-side.png` from the demo pages): two
+of three kept the figure for its face and outline, and the arena moved from
+seven boxes to the figure on 2026-11-10 (`f1247ba`).
+
+The 26 pieces marshmallows buy (`price`: six balls, six hats, the gold robot,
+five faces, five shirt prints, three back items) are also sold as owned
+items, one pass each in the Fireplace Items collection on Solana (Metaplex
+Core, as oneshot's skins are). A purchase then follows the wallet to any
+browser and can be sold on, which a marshmallow purse in one browser cannot.
+Marshmallows keep buying a piece into this browser; the two are separate
+doors to one piece, and no rate between them is posted (operator, 2026-11-13:
+the shop as built). The flame shirt and the wings are earned and never sold.
+All of it is drawing only: no tick, record or hash knows it.
 
 `client/shop.mjs` is the table, by tier. In PROS now (oneshot's skins were
 50,000 to 1,000,000 PROS before its coin), and with the coin in days of the
 daily pot's per-player cap, the way oneshot's were (gear two days of a maxed
 pot, its top skin twenty):
 
-| tier | PROS | days of the cap | looks |
+| tier | PROS | days of the cap | pieces |
 |---|---|---|---|
-| 0 | 50,000 | 2 | bumblebee, soccer ball, ladybird, party hat, headphones |
-| 1 | 100,000 | 4 | checkers, peppermint, top hat, antlers |
-| 2 | 250,000 | 10 | propeller cap, halo |
-| 3 | 500,000 | 15 | disco ball |
+| 0 | 50,000 | 2 | bumblebee, soccer ball, ladybird, party hat, headphones; the cool, wink and surprised faces; stripes, checks |
+| 1 | 100,000 | 4 | checkers, peppermint, top hat, antlers; the cat face; chevrons, heart, star; the backpack |
+| 2 | 250,000 | 10 | propeller cap, halo; star eyes; the cape |
+| 3 | 500,000 | 15 | disco ball; the jetpack |
 | 4 | 1,000,000 | 20 | gold robot |
 
 The tiers follow the marshmallow prices' order (a test holds it) and are a
-proposal: one table, edit it. `node tools/shop.mjs` prints what each look
+proposal: one table, edit it. `node tools/shop.mjs` prints what each piece
 costs now.
 
-- **The pictures** are Party's own renderer's, one per look and the
+- **The pictures** are Party's own renderer's, one per piece and the
   collection's (`node tools/shop-shots.mjs`, into `coin/art/items/`, 512 px
-  each and 1024 px for the collection), copied into Elo Pros' items kit as
+  each and 1024 px for the collection; a dress piece on Elo Pros' default
+  avatar), copied into Elo Pros' items kit as
   `deploy/solana-items/art/fireplace-<key>.jpg` with the sheet that names the
-  fourteen items, the Pill and these.
+  27 items, the Pill and these.
 - **What a wallet owns reaches the page** through the relay, which already
   reads `GET /api/items/sol/of/<wallet>` at sign-in for the Pill: bit 1 + k of
   the slot's badge word is the shop's item k (`BADGE_ITEMS` in
-  `net/wire.mjs`, [wire.md](wire.md)). The page opens those looks in the
-  wardrobe the way a bought one opens and puts back the one the browser last
-  wore. Nothing is enforced: the relay still passes any look word a client
-  sends, as it does a bought one.
+  `net/wire.mjs`, [wire.md](wire.md); 26 of the word's 31 bits, so past five
+  more the owned list needs a message of its own). The page opens those
+  pieces in the wardrobe the way a bought one opens and puts back what the
+  browser last wore. Nothing is enforced: the relay still passes any look or
+  dress word a client sends, as it does a bought one.
 - **The shop is dark** until `coin/shop.json` names the wallet that is paid,
   and `elo.json` has no `economy` until then (a copy made from this template
   never does): people would pay for what cannot be minted before the
