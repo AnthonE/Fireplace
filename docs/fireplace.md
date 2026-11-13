@@ -394,13 +394,18 @@ node tools/film.mjs plan replays/<file>.qgr          # each game's span
 node tools/film.mjs shoot film/trailer.json --replay replays/<file>.qgr [--stills 2,7.5]
 ```
 
-The house cut was shot on a 960 s room of 64 guests, which went through the
-playlist of the time once (bumper balls, since retired, from 1 s, party from 175 s, the arena's
-Juggernaut from 423 s, party from 612 s, golf from 846 s). On SwiftShader at
-1280 x 720 a second of film took about a minute to draw. A replay is tied to
-the build of `game.wasm` it was recorded on: after a sim change, record again,
-plan it and move the shots. `film/trailer.json`'s times are still that
-replay's, so the next cut records again first.
+The house cut was shot on a 960 s room of 64 guests on the playlist of its
+time, bumper balls, since retired, first. On SwiftShader at 1280 x 720 a
+second of film took about a minute to draw. A replay is tied to the build of
+`game.wasm` it was recorded on, and no two rooms play alike: after a sim
+change, record again, plan it and move the shots. `film/trailer.json`'s
+shots now sit on a room of 64 recorded on today's playlist (2026-11-13:
+party from 1 s, the arena's Zombies from 182 s, party from 243 s, Dogfight's
+Ring Race from 504 s, golf from 603 s, party again from 702 s), a shot of
+Dogfight among them and the marshmallows' on the hold after the arena, 237
+to 243 s. The film itself has not been shot again; the room's replay is not
+kept in the repo, so the next cut still records first and nudges the times
+to its own room.
 
 `film/flex.json` is a second cut, 1920 x 1080, made of rooms recorded side
 by side: `record --start k --port p` starts a room at the playlist's entry k
