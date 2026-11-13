@@ -26,6 +26,7 @@ import { NetGraph } from './netgraph.mjs';
 import { Fighter } from './arena-bot.mjs';
 import { predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
+import { dressesOf } from './dress.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 import { gunBoxes, carryBoxes } from './viewmodel.mjs';
 import { chase, aimPoint, steepAim, zoomStep, startView, mapView, viewOf, viewText, CHASE_NEAR } from './chase.mjs';
@@ -697,7 +698,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone, storm: out.storm,
       crosshair: FIXED || (kit?.unarmed && st >= 1) ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, eye) ? 8 : 0), gap: spread / 30 + kick * 3,
       own: chasing ? ownRec : null, aim: aimAt, size: body.top / Number(L.BODY[1]),
-      tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
+      tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host), dresses: dressesOf(host),
     };
     renderer.frame(u8, last, target);
   }

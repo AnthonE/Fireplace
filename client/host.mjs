@@ -23,6 +23,7 @@ import { parseImpair } from '../net/impair.js';
 import { relayFor, wsForced, room, mapUrl } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { savedLook, wearable, guestLook } from './looks.mjs';
+import { savedDress, wearableDress } from './dress.mjs';
 import { guestAvatar } from './avatar.mjs';
 import { loadTally } from './achievements.mjs';
 import { loadPurse, openSet } from './purse.mjs';
@@ -76,6 +77,9 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   h.set(L.CL_PITCH, 512);
   // this player's look, as this browser keeps it (Fireplace's TV picks it; ?look=<word> for this visit), worn on every page; what it has neither earned nor bought comes off
   h.set(L.CL_LOOK, watch ? 0 : q.has('look') ? Number(q.get('look')) >>> 0 : wearable(savedLook(), openSet(loadTally(), loadPurse())));
+  // the dress word (client/dress.mjs: a worn face, a shirt's print, a back item), kept and worn like the look; ?dress=<word> for this visit
+  h.set(L.CL_DRESS, watch ? 0 : q.has('dress') ? Number(q.get('dress')) >>> 0 : wearableDress(savedDress(), openSet(loadTally(), loadPurse())));
+  h.dress = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) ? h.get(L.CL_DRESS) : h.u32[(L.CL_DRESSES >> 2) + p]) >>> 0;
   // a slot's look word (client/looks.mjs): this player's own as picked, the rest as the relay sent them
   h.look = (p) => (p === h.get(L.CL_SLOT) ? h.get(L.CL_LOOK) : h.u32[(L.CL_LOOKS >> 2) + p]) >>> 0;
   // what a label calls a slot: the name its wallet goes by on Elo Pros, as the relay sent it, or P<n>

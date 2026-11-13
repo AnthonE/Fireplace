@@ -14,7 +14,8 @@ once a fifth, is party's SWISS ROLL now; `BUMPER` is never set without
 `docs/<game>.md` (golf, arena, flight, party, fireplace) and
 `docs/netcode.md`: read the one for whatever you touch. `docs/wire.md` is
 the protocol for writing a client, `docs/hosting.md` the room pool
-(`net/rooms.mjs`), and `docs/roadmap.md` the plan for what comes next.
+(`net/rooms.mjs`), `docs/roadmap.md` the plan for what comes next, and
+`docs/coin.md` the game's coin, ready to create on pump.fun and not created.
 
 ## Commands
 
@@ -41,6 +42,8 @@ node tools/serve.mjs                        # then /client/games.html: the shelf
 node tools/shelf.mjs [--only id,id] [--lines]   # the shelf's pictures (client/shelf/<id>.webp, each tile's own page shot with no GPU) and index.json; packs maps/ into build/maps/
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
 node tools/arena-shot.mjs [--views track,ships] [--scenes figures,faces [--env night]]   # the arena's and Dogfight's views of it alone (a local room on a fixed seed), or the arena renderer's demo page with no sim, into traces/
+node tools/coin.mjs [--check] [--pick a|b|c]   # the coin's sheet (coin/fireplace.json) held to pump.fun's create form, and its pictures drawn into coin/art/ (docs/coin.md)
+node tools/shop.mjs [--payer W | --coin MINT --cap N] [--write]   # the shop's prices, and opening it or moving it to the coin (coin/shop.json, elo.json); node tools/shop-shots.mjs draws its pictures into coin/art/items/
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -251,9 +254,13 @@ shell whose own command line contains the name: it kills that shell.
   Grandma's writes out every default. A new colour goes in `COLORS`, the
   shader and CONTRIBUTING.md's table (`test/themes.test.mjs` checks all
   three); `elo.json`'s mods are written from the themes (`node tools/elo.mjs`).
-- A player's look (`client/looks.mjs`: a ball, a hat and a body) is drawing
-  only: the relay carries each slot's word beside the ticks (hello flag 4,
-  `T_LOOK`), never in a tick, record or hash. The lists are append-only (a look's number
+- A player's look (`client/looks.mjs`: a ball, a hat and a body) and dress
+  (`client/dress.mjs`: a worn face, a shirt's print, a back item) are drawing
+  only: the relay carries each slot's words beside the ticks (hello flag 4,
+  `T_LOOK`, the dress in its spare bytes and `T_DRESS`), never in a tick,
+  record or hash. Party's blocky rider and the arena's and golf's cartoon
+  figure (`client/figure.mjs` `WEAR_WGSL`) both wear them: a new piece is
+  drawn on both. The lists are append-only (a look's number
   goes on the wire); look 0 draws exactly as the riders always have, and a new
   pattern or hat style goes in party's shader (`test/looks.test.mjs`
   checks). Achievements (`client/achievements.mjs`)
@@ -277,6 +284,23 @@ shell whose own command line contains the name: it kills that shell.
   (`test/chat.test.mjs` checks).
 - `elo.json` is Fireplace's manifest for its Elo Pros store row (jobs, mods);
   CONTRIBUTING.md is the outside contributor's guide, pay included.
+- The coin (`docs/coin.md`) is outside every sim, like a look: no tick,
+  record or hash knows it. `coin/fireplace.json` is what pump.fun's create
+  form is typed from, in the shape of Elo Pros' launch kit, and its name,
+  ticker, description, picture and links are welded at the create, so they
+  change there first or never; `tools/coin.mjs` checks it and draws
+  `coin/art/` (`test/coin.test.mjs` holds the doc to the sheet). What a daily
+  pot pays on is the challenges' pool, `CHALLENGES` in
+  `client/achievements.mjs`, written into `elo.json` with the stats and
+  append-only like the achievements. The amounts are the house's: no text
+  here, a description or a challenge, names one. Tickers are bare, no `$`.
+  The priced looks and dress pieces are also the shop's items (`client/shop.mjs`,
+  `docs/coin.md#skins`): a look's key is its item's key, its place in
+  `BADGE_ITEMS` (`net/wire.mjs`, append-only) its bit in a badge word, and
+  `elo.json`'s `economy` is written from that table by `tools/elo.mjs` for
+  Fireplace's own manifest only, and only once `coin/shop.json` names the
+  wallet that is paid (`tools/shop.mjs`); give a piece a `price` and it needs a
+  tier there (`test/shop.test.mjs`).
 
 ## Style
 

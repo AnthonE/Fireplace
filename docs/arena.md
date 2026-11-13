@@ -98,7 +98,8 @@ needles, frags) are checked where things are now.
 renderer (`client/arena-render.mjs`: golf's ray-marched terrain and its
 splats in the cartoon's look golf, the arena and Dogfight share, the map's
 boxes as plastic with studs on top, metal in panels and rock in strata,
-the fighters as cartoon figures (`client/figure.mjs`) with their shadows on
+the fighters as cartoon figures (`client/figure.mjs`, wearing the player's
+hat, worn face, shirt print and back item as Party's rider does: [coin.md](coin.md#skins)) with their shadows on
 the ground, the match's hour its seed's (day, dusk or night:
 [look.md](look.md)), plus tracers as beams, blasts in flat bands, the
 gun in your hands as boxes ray-traced in the HUD pass like the fighters'

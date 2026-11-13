@@ -85,7 +85,7 @@ export const BODIES = [
 ];
 
 // a look's id in a purse (client/purse.mjs): its list and its key, which never change
-export const lookId = (x) => `${x.pattern !== undefined ? 'ball' : x.style !== undefined ? 'hat' : 'body'}:${x.key}`;
+export const lookId = (x) => `${x.slot ?? (x.pattern !== undefined ? 'ball' : x.style !== undefined ? 'hat' : 'body')}:${x.key}`;
 
 // what a card calls one: THE EIGHT BALL, THE CANDY BALL, THE CROWN
 export const lookName = (x) => `THE ${x.pattern === undefined || /BALL$/.test(x.name) ? x.name : `${x.name} BALL`}`;
@@ -203,7 +203,8 @@ export function wearable(w, got) {
 
 // ---- a picture of a look, for the TV's cards (a 2D canvas context)
 const css = (c, k = 1) => `rgb(${c.map((v) => Math.round(Math.min(1, v * k) * 255)).join(',')})`;
-export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0) {
+// dress: the pieces a dress word names (client/dress.mjs dressOf), drawn on a blocky rider, or null
+export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0, dress = null) {
   const L = lookOf(slot, w);
   // the ball
   g.save();
@@ -262,7 +263,7 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0) {
   // a rim, so a dark ball still shows on a dark card
   g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = Math.max(1, r * 0.05);
   g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
-  if (BODIES[L.body].blocky) return drawBlocky(g, cx, cy - r, r, L, t, colorsOf(avatar));
+  if (BODIES[L.body].blocky) return drawBlocky(g, cx, cy - r, r, L, t, colorsOf(avatar), dress);
   // the rider, as the renderers place it on a ball of radius r: a body 0.22 r over its top, a head 0.78 r
   const hr = r * 0.3, hx = cx, hy = cy - r - r * 0.78;
   g.fillStyle = css(L.a, 0.8); g.beginPath(); g.arc(cx, cy - r - r * 0.22, r * 0.34, 0, Math.PI * 2); g.fill(); g.stroke();
@@ -308,8 +309,9 @@ export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0) {
 }
 
 // A blocky rider from the front (client/rider.mjs's sizes, a metre to r), its
-// feet at (cx, top); A its avatar's colours (client/avatar.mjs colorsOf) or null
-function drawBlocky(g, cx, top, r, L, t, A) {
+// feet at (cx, top); A its avatar's colours (client/avatar.mjs colorsOf) or
+// null; D the dress it wears ({ face, shirt, back }, client/dress.mjs) or null
+function drawBlocky(g, cx, top, r, L, t, A, D = null) {
   const B = BODIES[L.body];
   const skin = B.skin || [1, 0.8, 0.66];
   const pants = L.b.map((v) => v * 0.62);
@@ -318,17 +320,50 @@ function drawBlocky(g, cx, top, r, L, t, A) {
   g.lineWidth = Math.max(1, r * 0.025);
   g.strokeStyle = 'rgba(0,0,0,0.55)';
   const rect = (x, y, w, h, c, k = 1) => { g.fillStyle = css(c, k); g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); g.strokeRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
+  const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
+  const X = (x) => cx + x * r, Y = (y) => top - y * r;
+  const fill = (c, path) => { g.fillStyle = c; g.beginPath(); path(); g.fill(); };
+  // what hangs on its back: seen from behind (D.behind) it goes over the rest, from the front only the wings show round it
+  const back = D?.back?.key, behind = !!D?.behind;
+  const wings = () => { for (const k of [-1, 1]) { rect(k < 0 ? -0.86 : 0.5, 0.62, 0.36, 0.5, [0.97, 0.97, 1]); rect(k < 0 ? -1.06 : 0.82, 0.86, 0.24, 0.4, [0.88, 0.9, 1]); } };
+  const onBack = () => {
+    if (back === 'cape') { rect(-0.28, 0.08, 0.56, 0.94, TRIM.BAND); rect(-0.3, 0.96, 0.6, 0.06, [0.95, 0.8, 0.25]); }
+    else if (back === 'pack') { rect(-0.19, 0.52, 0.38, 0.42, [0.85, 0.42, 0.1]); rect(-0.13, 0.55, 0.26, 0.14, [0.55, 0.26, 0.06]); }
+    else if (back === 'jet') { for (const k of [-1, 1]) { rect(k * 0.12 - 0.06, 0.55, 0.12, 0.42, [0.62, 0.66, 0.72]); rect(k * 0.12 - 0.04, 0.4, 0.08, 0.15, [1, 0.55, 0.15]); } rect(-0.18, 0.86, 0.36, 0.05, [0.4, 0.43, 0.48]); }
+    else if (back === 'wings') wings();
+  };
+  if (back === 'wings' && !behind) wings();
   // seen from the front, its right side is on the picture's left
   rect(-0.24, 0, 0.23, 0.5, A ? A.rleg : pants); rect(0.01, 0, 0.23, 0.5, A ? A.lleg : pants);
   rect(-0.25, 0.5, 0.5, 0.5, shirt);
+  // the shirt's print, on the torso's front: u and v across and up it, -1 to 1
+  const v = behind ? undefined : D?.shirt?.variant;
+  if (v !== undefined) {
+    const U = (u) => X(u * 0.25), V = (w) => Y(0.75 + w * 0.25), lite = css(shirt.map((c) => c + (1 - c) * 0.7));
+    if (v === 0) {
+      for (const w of [0.35, -0.65]) px(-0.25, 0.75 + w * 0.25, 0.5, 0.075, lite);
+    } else if (v === 4) {
+      for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) if (((a + b) & 1) === 0) px(-0.25 + a * 0.125, 0.5 + b * 0.125, 0.125, 0.125, lite);
+    } else if (v === 1) fill(css([1, 0.82, 0.2]), () => { g.moveTo(U(0), V(0.85)); g.lineTo(U(0.18), V(0.18)); g.lineTo(U(0.85), V(0)); g.lineTo(U(0.18), V(-0.18)); g.lineTo(U(0), V(-0.85)); g.lineTo(U(-0.18), V(-0.18)); g.lineTo(U(-0.85), V(0)); g.lineTo(U(-0.18), V(0.18)); });
+    else if (v === 2) fill(css([0.9, 0.12, 0.2]), () => { g.arc(U(-0.32), V(0.25), 0.32 * 0.25 * r, 0, Math.PI * 2); g.arc(U(0.32), V(0.25), 0.32 * 0.25 * r, 0, Math.PI * 2); g.moveTo(U(-0.64), V(0.18)); g.lineTo(U(0.64), V(0.18)); g.lineTo(U(0), V(-0.75)); });
+    else if (v === 3) { g.save(); g.strokeStyle = css([0.72, 1, 0.22]); g.lineWidth = Math.max(1, 0.05 * r); for (const w of [0.4, -0.1]) { g.beginPath(); g.moveTo(U(-0.65), V(w - 0.6)); g.lineTo(U(0), V(w)); g.lineTo(U(0.65), V(w - 0.6)); g.stroke(); } g.restore(); }
+    else if (v === 5) { fill(css([1, 0.4, 0.08]), () => { g.moveTo(U(0), V(0.85)); g.quadraticCurveTo(U(0.6), V(-0.2), U(0), V(-0.75)); g.quadraticCurveTo(U(-0.6), V(-0.2), U(0), V(0.85)); }); fill(css([1, 0.88, 0.35]), () => { g.moveTo(U(0), V(0.2)); g.quadraticCurveTo(U(0.3), V(-0.35), U(0), V(-0.65)); g.quadraticCurveTo(U(-0.3), V(-0.35), U(0), V(0.2)); }); }
+  }
+  if (back === 'pack' && !behind) for (const x of [-0.17, 0.12]) px(x, 0.62, 0.05, 0.38, css([0.45, 0.22, 0.05]));
   g.save(); g.translate(0, -sw); rect(-0.49, 0.5, 0.23, 0.5, A ? A.rarm : skin); g.restore();
   g.save(); g.translate(0, sw); rect(0.26, 0.5, 0.23, 0.5, A ? A.larm : skin); g.restore();
   const pumpkin = L.style === STYLE.PUMPKIN;
   const hw = 0.37, hh = 0.345, hy = 1.01;
   rect(-hw / 2, hy, hw, hh, pumpkin ? L.hatColor : A ? A.head : skin);
-  const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
-  // the face
-  if (pumpkin) { px(-0.12, hy + 0.17, 0.07, 0.07, '#ffd860'); px(0.05, hy + 0.17, 0.07, 0.07, '#ffd860'); px(-0.11, hy + 0.06, 0.22, 0.05, '#ffd860'); px(-0.02, hy + 0.3, 0.04, 0.08, '#3c8a2c'); }
+  // the face: a worn one (client/dress.mjs FACES' variant), or the head's own
+  const fv = pumpkin ? undefined : D?.face?.variant;
+  if (behind) onBack();
+  else if (fv === 0) { px(-0.16, hy + 0.15, 0.32, 0.09, '#111'); px(-0.06, hy + 0.06, 0.14, 0.03, '#111'); }
+  else if (fv === 1) { px(-0.1, hy + 0.17, 0.04, 0.07, '#111'); px(0.04, hy + 0.19, 0.08, 0.03, '#111'); px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); }
+  else if (fv === 2) { px(-0.1, hy + 0.18, 0.05, 0.05, '#111'); px(0.05, hy + 0.18, 0.05, 0.05, '#111'); px(-0.035, hy + 0.05, 0.07, 0.07, '#111'); }
+  else if (fv === 3) { px(-0.1, hy + 0.18, 0.04, 0.05, '#111'); px(0.06, hy + 0.18, 0.04, 0.05, '#111'); px(-0.02, hy + 0.12, 0.04, 0.03, '#f28ca0'); for (const k of [-1, 1]) { px(k < 0 ? -0.18 : 0.06, hy + 0.1, 0.12, 0.012, '#111'); px(k < 0 ? -0.18 : 0.06, hy + 0.075, 0.12, 0.012, '#111'); } }
+  else if (fv === 4) { for (const x of [-0.08, 0.08]) { px(x - 0.035, hy + 0.19, 0.07, 0.02, '#ffd633'); px(x - 0.01, hy + 0.165, 0.02, 0.07, '#ffd633'); } px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); }
+  else if (pumpkin) { px(-0.12, hy + 0.17, 0.07, 0.07, '#ffd860'); px(0.05, hy + 0.17, 0.07, 0.07, '#ffd860'); px(-0.11, hy + 0.06, 0.22, 0.05, '#ffd860'); px(-0.02, hy + 0.3, 0.04, 0.08, '#3c8a2c'); }
   else if (A ? A.robot : B.face === 4) { px(-0.13, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(0.05, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(-0.08, hy + 0.06, 0.16, 0.05, css(skin, 0.4)); }
   else { px(-0.1, hy + 0.17, 0.04, 0.07, '#111'); px(0.06, hy + 0.17, 0.04, 0.07, '#111'); px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); px(-0.1, hy + 0.1, 0.03, 0.03, '#111'); px(0.07, hy + 0.1, 0.03, 0.03, '#111'); }
   // the hat

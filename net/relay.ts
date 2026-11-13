@@ -171,6 +171,7 @@ type Slot = {
   avatars?: boolean; // and for its avatars (W.HELLO_AVATARS)
   names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
   badges?: boolean; // and for their badges (W.HELLO_BADGES)
+  dress?: boolean; // and, with its looks, for their dress words (W.HELLO2_DRESS)
   chat?: boolean; // and for the room's chat (W.HELLO_CHAT), in a room that has it
   bucket?: ReturnType<typeof chatBucket>; // its own lines' rate limit
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
@@ -210,6 +211,13 @@ const LOOKS_MS = 250;
 const lookTable = () => [...looks.keys()].filter((p) => looks[p]).map((p) => [p, looks[p]] as [number, number]);
 const sendLooks = (s: Slot, pairs: [number, number][]) => { if (s.looks && pairs.length) s.ctl.write(W.encodeLooks(pairs)).catch(() => {}); };
 const setLook = (p: number, look: number) => { if (looks[p] !== look >>> 0) { looks[p] = look >>> 0; lookDirty.add(p); } };
+// Each slot's dress word (client/dress.mjs: a worn face, a shirt's print, a back item), beside its
+// look and the same way: drawing only, sent to the sessions that asked for looks and for dress.
+const dresses = new Uint32Array(W.NP);
+const dressDirty = new Set<number>();
+const dressTable = () => [...dresses.keys()].filter((p) => dresses[p]).map((p) => [p, dresses[p]] as [number, number]);
+const sendDresses = (s: Slot, pairs: [number, number][]) => { if (s.looks && s.dress && pairs.length) s.ctl.write(W.encodeLooks(pairs, W.T_DRESS)).catch(() => {}); };
+const setDress = (p: number, w: number) => { if (dresses[p] !== w >>> 0) { dresses[p] = w >>> 0; dressDirty.add(p); } };
 // Each signed-in slot's avatar, read off its Elo Pros face (/api/face/{wallet}
 // `avatar`, client/avatar.mjs) when it signs in: drawing only, as a look is,
 // sent to the sessions that asked (W.HELLO_AVATARS) the same way.
@@ -677,7 +685,7 @@ function closeTick(T: number, now: number) {
   for (let p = 0; p < W.NP; p++) {
     const s = slots[p];
     if (!s || T < s.joinTick) continue;
-    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setAvatar(p, 0); setBadge(p, 0); setName(p, ''); continue; }
+    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setDress(p, 0); setAvatar(p, 0); setBadge(p, 0); setName(p, ''); continue; }
     if (s.leaveTick === Infinity && now - Math.max(s.lastRecv, stallEnd) > SILENT_MS) {
       stats.leaves.silent = (stats.leaves.silent || 0) + 1;
       stats.leaveAt.push(Number(((now - E) / 1000).toFixed(2)));
@@ -810,7 +818,7 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, door: d.door, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges, chat: hello!.chat && chatOn && !edge });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, door: d.door, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges, dress: hello!.dress, chat: hello!.chat && chatOn && !edge });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
@@ -826,6 +834,7 @@ async function admit(d: Door) {
   await d.sw.write(W.encodeWelcome({ slot: p, maxDatagram, joinTick, seed: roomSeed, serverTick: Math.floor(serverNow()) + 1, roomStart, token: d.token, watch }));
   log(`${watch ? 'a spectator' : `slot ${p}`} joins at ${joinTick}, room ${roomStart}${d.token ? ' (native)' : ''}`);
   sendLooks(s, lookTable());
+  sendDresses(s, dressTable());
   sendAvatars(s, avatarTable());
   sendBadges(s, badgeTable());
   sendNames(s, nameTable());
@@ -875,7 +884,7 @@ async function admit(d: Door) {
       }
       if (m?.type === W.T_PING) { stats.pongs++; s.ctl.write(W.encodePong(m.nonce, serverNow())).catch(() => {}); }
       if (m?.type === W.T_SYNC && performance.now() - s.lastSync > 1000) sendKey(s, m.reason);
-      if (m?.type === W.T_LOOK && !watch && !gone(s)) setLook(p, m.look ?? 0);
+      if (m?.type === W.T_LOOK && !watch && !gone(s)) { setLook(p, m.look ?? 0); setDress(p, m.dress ?? 0); }
     }
   })().then(() => leave('stream-end'), () => leave('stream-error'));
   s.leave = leave;
@@ -1233,6 +1242,11 @@ setInterval(() => {
     const pairs = [...lookDirty].map((p) => [p, looks[p]] as [number, number]);
     lookDirty.clear();
     for (const s of everyone()) sendLooks(s, pairs);
+  }
+  if (dressDirty.size) {
+    const pairs = [...dressDirty].map((p) => [p, dresses[p]] as [number, number]);
+    dressDirty.clear();
+    for (const s of everyone()) sendDresses(s, pairs);
   }
   if (avatarDirty.size) {
     const pairs = [...avatarDirty].map((p) => [p, avatars[p]] as [number, number]);

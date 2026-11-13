@@ -162,6 +162,8 @@ export const CL_HEARD = NET + 208; // u32 closed ticks heard, by any of them
 // Looks (client/looks.mjs), drawing only: the relay carries them beside the ticks.
 export const CL_LOOK = NET + 212; // u32 this player's look, written by the page; the net worker sends it when it changes
 export const CL_LOOKS = NET + 2048; // u32[256] every slot's look as the relay last sent it (0: the house look)
+export const CL_DRESS = NET + 216; // u32 this player's dress word (client/dress.mjs), written by the page and sent with the look
+export const CL_DRESSES = NET + 5120; // u32[256] every slot's dress word as the relay last sent it (0: nothing worn)
 // Names, drawing only too: each signed-in slot's, as the relay last sent it (net/wire.mjs T_NAMES)
 export const NAME_BYTES = 16; // net/wire.mjs NAME_MAX: the font's characters, 0 after the last
 export const CL_NAMES = NET + 8192; // u8[256 * NAME_BYTES], every slot's name ('' for none: P1, P2, ...)

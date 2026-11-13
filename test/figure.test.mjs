@@ -5,8 +5,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { FIGURE_WGSL, HAIRS, EYES } from '../client/figure.mjs';
-import { BODIES } from '../client/looks.mjs';
+import { FIGURE_WGSL, WEAR_WGSL, HAIRS, EYES } from '../client/figure.mjs';
+import { BODIES, HATS, STYLE } from '../client/looks.mjs';
+import { FACES, SHIRTS, BACKS } from '../client/dress.mjs';
 
 const read = (f) => readFileSync(f, 'utf8');
 
@@ -15,8 +16,8 @@ test('the figure is a field of parts marched once, with a rig a pose moves', () 
   for (const st of ['Kit', 'Rig', 'Fig']) assert.match(FIGURE_WGSL, new RegExp(`\\nstruct ${st} \\{`), st);
   // every part fgMap hands back has a colour in figureRay
   const parts = new Set([...FIGURE_WGSL.matchAll(/fgMin\(o, [^;]*, (\d+)\.0\);/g)].map((m) => Number(m[1])));
-  assert.deepEqual([...parts].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  for (const p of [1, 2, 3, 4, 5, 6, 7, 8, 10]) assert.match(FIGURE_WGSL, new RegExp(`part == ${p}\\.0`), `part ${p} is coloured`);
+  assert.deepEqual([...parts].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  for (const p of [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14]) assert.match(FIGURE_WGSL, new RegExp(`part == ${p}\\.0`), `part ${p} is coloured`);
   // the march is bounded, and its step never longer than the field says
   assert.match(FIGURE_WGSL, /for \(var i = 0; i < 64; i\+\+\) \{\s+let h = fgMap\(lo \+ ld \* t, r, kit\);/);
   assert.match(FIGURE_WGSL, /t \+= h\.x \* 0\.9;/);
@@ -35,7 +36,12 @@ test('hair and eye colours are colours, enough of them to tell a room apart', ()
 test('the arena and golf dress the figure: a body\'s skin, an avatar\'s parts, a slot\'s hair', () => {
   for (const [f, gun] of [['client/arena-render.mjs', /k\.gun = select\(1u, 0u, zombie\);/], ['client/render.mjs', /k\.gun = 2u;/]]) {
     const src = read(f);
-    assert.match(src, /import \{ FIGURE_WGSL, HAIRS, EYES \} from '\.\/figure\.mjs';/, f);
+    assert.match(src, /import \{ FIGURE_WGSL, WEAR_WGSL, HAIRS, EYES \} from '\.\/figure\.mjs';/, f);
+    // what it wears: the shared tables, the kit through them, a dress word a slot uploaded, a taller quad for a standing hat
+    assert.match(src, /\$\{WEAR_WGSL\}/, f);
+    assert.match(src, /return wornKit\(k, s\.wear, (zombie|false)\);/, f);
+    assert.match(src, /s\.dresses \?\? /, f);
+    assert.match(src, /if \(wearTall\(o\.wear\)\) \{/, f);
     assert.match(src, /fn kitOf\(s: SOut\) -> Kit \{/, f);
     assert.match(src, gun, `${f}: what it holds`);
     for (const k of [0, 1, 2, 3, 4, 5]) assert.match(src, new RegExp(`avc\\(av, ${k}u\\)`), `${f}: avatar part ${k}`);
@@ -56,4 +62,31 @@ test('the demo page holds fighters still, and the shot tool shoots its scenes', 
   const tool = read('tools/arena-shot.mjs');
   assert.match(tool, /arena-render-demo\.html\?present=0&res=\$\{res\}/);
   assert.match(tool, /traces\/arena-demo-\$\{name\}/);
+});
+
+test('what a figure wears: a hat, a worn face, a shirt print, a back item, and nothing for the house look', () => {
+  const arr = (name) => new RegExp(`const ${name} = array<u32, (\\d+)>\\(([^)]*)\\);`).exec(WEAR_WGSL);
+  const nums = (m) => m[2].split(',').map((x) => Number(x.trim().replace('u', '')));
+  // the house hat and none draw no hat, so a fighter that picked neither (every bot in a match before this) draws as it did
+  const hat = nums(arr('WEAR_HAT'));
+  assert.equal(hat.length, HATS.length);
+  assert.equal(hat[0], 0, 'the house hat');
+  assert.equal(hat[HATS.findIndex((h) => h.key === 'none')], 0, 'none');
+  HATS.forEach((h, k) => { if (k && h.key !== 'none') assert.equal(hat[k], h.style + 1, h.key); });
+  // every style a hat can have is drawn: in fgHat by its style, the pumpkin as the head itself
+  for (const st of new Set(HATS.slice(1).filter((h) => h.key !== 'none').map((h) => h.style))) {
+    if (st === STYLE.PUMPKIN) assert.match(FIGURE_WGSL, /kit\.hat == 7u && kit\.kind != 1u/);
+    else assert.match(FIGURE_WGSL, new RegExp(`st == ${st}u\\)`), `style ${st}`);
+  }
+  // faces, prints and backs line up with client/dress.mjs's lists, and each is drawn
+  assert.deepEqual(nums(arr('WEAR_FACE')), FACES.map((x) => (x.variant === undefined ? 0 : x.variant + 1)));
+  assert.deepEqual(nums(arr('WEAR_PRINT')), SHIRTS.map((x) => (x.variant === undefined ? 0 : x.variant + 1)));
+  assert.deepEqual(nums(arr('WEAR_BACK')), BACKS.map((x) => ({ pack: 1, cape: 2, jet: 3, wings: 4 })[x.key] ?? 0));
+  for (let v = 1; v <= 5; v++) assert.match(FIGURE_WGSL, new RegExp(`fw == ${v}u`), `face ${v}`);
+  for (let v = 0; v <= 5; v++) assert.match(FIGURE_WGSL, new RegExp(`v == ${v}u`), `print ${v}`);
+  for (let b = 1; b <= 4; b++) assert.match(FIGURE_WGSL, new RegExp(`back == ${b}u`), `back ${b}`);
+  // nothing worn costs nothing: the hat and the back are only marched when there is one
+  assert.match(FIGURE_WGSL, /if \(kit\.hat != 0u && kit\.hat != 7u\) \{/);
+  assert.match(FIGURE_WGSL, /if \(kit\.back != 0u\) \{/);
+  assert.match(read('client/arena-render-demo.mjs'), /\n  dressed\(s\) \{/);
 });

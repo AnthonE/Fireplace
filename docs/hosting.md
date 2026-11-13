@@ -54,7 +54,9 @@ page's own tests on each game it plays, and reports what the game added (the
 counts, the unlocks, the marshmallow board) in one signed call per game to
 `POST /api/gamestats/fireplace/report`. Elo Pros takes the stats `elo.json`
 declares in its `stats` block, which `node tools/elo.mjs` writes from the
-achievements. Ethereum wallets only, which is what Elo Pros keeps stats for.
+achievements, and the day's and the week's challenges count from the same
+reports ([coin.md](coin.md)). A wallet of either chain: Elo Pros keeps a Solana
+wallet's stats as its own, or as the Ethereum wallet's it is linked to.
 If Elo Pros can't be read, that game counts from nothing (it opens fewer
 achievements, never a wrong one) and the wallet is read again at its next.
 `node net/run-elo.mjs` is the gate for both, against a stand-in for Elo Pros.

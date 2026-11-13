@@ -112,8 +112,12 @@ What stands on it:
   reaches empty-handed; a robot body has a box for a head, a visor and an
   aerial. The colours are what the seven boxes had: a body's skin, an
   avatar's six parts, the seat's or the side's colour on the shirt; hair and
-  eyes come from the slot (10 and 6 colours). Party's riders are still the
-  boxes (`client/rider.mjs`), and so is the gun in your hands.
+  eyes come from the slot (10 and 6 colours). It wears what the rider does
+  (`WEAR_WGSL`): the look's hat by style (low ones as a shell over the hair,
+  standing ones on top, a pumpkin as the head), a worn face, a shirt print,
+  a back item; the house hat and none draw no hat, and nothing worn is
+  marched. Party's riders are still the boxes (`client/rider.mjs`), and so is
+  the gun in your hands. The arena demo's `dressed` scene shows them all.
 - **What glows** (`FX_WGSL`): a blast is a spiked burst in three flat bands,
   white-hot inside, breaking up in holes from its rim as it ages; a spark a
   four-pointed glint; a shield or a spawn a ring of dashes; a tracer a white

@@ -11,6 +11,7 @@ import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { epoch, predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
+import { dressesOf } from './dress.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
 export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, sens: SENS = 3, present = true, external = false } = {}) {
@@ -213,7 +214,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     hudText(text, { h, me: tgt || pme || me, slot: tgt ? watched : slot, st, cam, now });
     last = {
       cam, yaw: camYaw, pitch: camPitch, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, cup: h.cup, dir: h.dir,
-      slot: tgt ? watched : slot < 0 ? 999 : slot, myBall: me?.live ? me.ball : tgt ? tgt.ball : -1, nballs: view.nballs, flashes, text, graph: null, tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
+      slot: tgt ? watched : slot < 0 ? 999 : slot, myBall: me?.live ? me.ball : tgt ? tgt.ball : -1, nballs: view.nballs, flashes, text, graph: null, tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host), dresses: dressesOf(host),
     };
     renderer.frame(u8, last, target);
   }

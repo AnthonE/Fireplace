@@ -12,9 +12,11 @@
 // the mouse is free, with PLAY to take the controls again.
 
 import * as L from '../src/layout.mjs';
-import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, drawLook, lookName, lookId, saveLook } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, drawLook, lookName, lookId, saveLook, savedLook, wearable } from './looks.mjs';
+import { FACES, SHIRTS, BACKS, packDress, unpackDress, dressOf, saveDress, savedDress, wearableDress } from './dress.mjs';
 import { ACHIEVEMENTS, loadTally } from './achievements.mjs';
 import { balance, buy, openSet, loadPurse, freshPurse, savePurse } from './purse.mjs';
+import { ownedLooks } from './shop.mjs';
 import { touchWanted } from './touch.mjs';
 
 const CSS = `
@@ -107,6 +109,7 @@ const remembered = (folded) => { try { const v = localStorage.getItem(COLLAPSED)
 const remember = (v) => { try { localStorage.setItem(COLLAPSED, v ? '1' : '0'); } catch { /* this visit only */ } };
 
 // s: what the page knows, read when drawn: look() the word worn, wear(w),
+// dress() the dress word worn and wearDress(d) (client/dress.mjs; without them, no face, shirt or back),
 // got() what this browser holds (purse.mjs openSet: the open achievements and
 // the bought looks), tally(), balance() the marshmallows left to spend,
 // buy(look) which spends them ({ ok, short }), slot(), avatar(),
@@ -134,13 +137,28 @@ export function createWardrobe(s) {
   const plural = (n) => `${n} marshmallow${n === 1 ? '' : 's'}`;
   const priceLine = (x) => { const short = x.price - s.balance(); return `${nice(x.name)}: ${plural(x.price)}.${short > 0 ? ` ${short} more to go.` : ''}`; };
 
-  // a part of the look: its name, a tile an entry, and a line for a shut one's how-to
+  // a part of the look: its name, a tile an entry, and a line for a shut one's how-to. o is what is worn,
+  // { look, dress }: at(o) the part's entry in it, with(o, k) what is worn with entry k instead. A dress piece
+  // shows only on a blocky body, so wearing one on the round rider puts the blocky body on too.
+  const cur = () => ({ look: s.look() >>> 0, dress: s.dress ? s.dress() >>> 0 : 0 });
+  const blocky = (w) => { const l = unpackLook(w); return BODIES[l.body].blocky ? w : packLook(l.ball, l.hat, 1); };
+  const lookPart = (key, label, list, cap, frame, set) => ({ key, label, list, cap, frame,
+    at: (o) => unpackLook(o.look)[key], with: (o, k) => { const l = unpackLook(o.look); return { look: set(l, k), dress: o.dress }; } });
+  const dressPart = (key, label, list, frame, set) => ({ key, label, list, cap: null, frame,
+    at: (o) => unpackDress(o.dress)[key], with: (o, k) => { const d = unpackDress(o.dress); return { look: k ? blocky(o.look) : o.look, dress: set(d, k) }; } });
   const PARTS = [
     // frame: [cy, r] for drawLook in a 40 x 52 tile, so the part fills it: the ball, the head, the whole rider
-    { key: 'ball', label: 'BALL', list: BALLS, cap: 'B', frame: [33, 16], with: (w, k) => { const l = unpackLook(w); return packLook(k, l.hat, l.body); } },
-    { key: 'hat', label: 'HAT', list: HATS, cap: 'H', frame: [90, 30], with: (w, k) => { const l = unpackLook(w); return packLook(l.ball, k, l.body); } },
-    { key: 'body', label: 'BODY', list: BODIES, cap: 'P', frame: [36, 13], with: (w, k) => { const l = unpackLook(w); return packLook(l.ball, l.hat, k); } },
+    lookPart('ball', 'BALL', BALLS, 'B', [33, 16], (l, k) => packLook(k, l.hat, l.body)),
+    lookPart('hat', 'HAT', HATS, 'H', [90, 30], (l, k) => packLook(l.ball, k, l.body)),
+    lookPart('body', 'BODY', BODIES, 'P', [36, 13], (l, k) => packLook(l.ball, l.hat, k)),
+    ...(s.dress ? [
+      // the head close, the chest close, the rider from behind
+      dressPart('face', 'FACE', FACES, [200, 80], (d, k) => packDress(k, d.shirt, d.back)),
+      dressPart('shirt', 'SHIRT', SHIRTS, [131, 60], (d, k) => packDress(d.face, k, d.back)),
+      dressPart('back', 'BACK', BACKS, [68, 21], (d, k) => packDress(d.face, d.shirt, k)),
+    ] : []),
   ];
+  const put = (o) => { const now = cur(); if (o.look !== now.look) s.wear(o.look); if (o.dress !== now.dress) s.wearDress(o.dress); };
   // a part's line: what a shut tile takes, and BUY beside it for the one being tried on, if the purse reaches
   const say = (p, text, t = null) => { p.says.textContent = text; p.buy.hidden = !t || t.x.price > s.balance(); };
   const rest = (p) => (trying?.p === p ? say(p, priceLine(trying.t.x), trying.t) : say(p, ''));
@@ -157,7 +175,7 @@ export function createWardrobe(s) {
       const r = s.buy(t.x);
       if (!r.ok) return rest(p); // the purse fell short since the tile was drawn (another tab spent it)
       tryOn(null);
-      s.wear(p.with(s.look(), t.k));
+      put(p.with(cur(), t.k));
       say(p, `${nice(t.x.name)} is yours.`);
     });
     p.tiles = p.list.map((x, k) => {
@@ -166,7 +184,7 @@ export function createWardrobe(s) {
       const b = el('button', { className: 'wd-tile', type: 'button' }, c, price);
       const t = { b, c, x, k, price };
       b.addEventListener('click', () => {
-        if (isOpen(x, s.got())) { tryOn(null); s.wear(p.with(s.look(), k)); say(p, ''); }
+        if (isOpen(x, s.got())) { tryOn(null); put(p.with(cur(), k)); say(p, ''); }
         else if (x.price) tryOn(trying?.t === t ? null : { p, t }); // a second click takes it off again
         else say(p, `Locked. Earn it: ${nice(about(x))}`);
         b.blur();
@@ -179,7 +197,7 @@ export function createWardrobe(s) {
       return t;
     });
     scroll.append(el('div', { className: 'wd-part' },
-      el('div', { className: 'wd-head' }, el('span', { className: 'wd-label' }, `${p.label} `, cap(p.cap)), p.name),
+      el('div', { className: 'wd-head' }, el('span', { className: 'wd-label' }, `${p.label} `, ...(p.cap ? [cap(p.cap)] : [])), p.name),
       el('div', { className: 'wd-tiles' }, ...p.tiles.map((t) => t.b)), p.hint));
   }
   scroll.append(el('div', { className: 'wd-how' }, mallow(), 'Marshmallows buy the priced ones: the top three of each game in Fireplace win 3, 2 and 1.'));
@@ -220,16 +238,16 @@ export function createWardrobe(s) {
 
   let drawn = '';
   function redraw() {
-    const w = s.look(), got = s.got(), slot = Math.max(0, s.slot()), av = s.avatar();
-    const l = unpackLook(w), th = s.theme?.() ?? { name: '', by: '' }, tally = s.tally();
+    const o = cur(), w = o.look, got = s.got(), slot = Math.max(0, s.slot()), av = s.avatar();
+    const th = s.theme?.() ?? { name: '', by: '' }, tally = s.tally();
     const left = s.balance();
-    const key = `${w}|${[...got].sort()}|${th.name}|${th.by}|${slot}|${av}|${list.hidden}|${left}|${trying ? lookId(trying.t.x) : ''}`;
+    const key = `${w}|${o.dress}|${[...got].sort()}|${th.name}|${th.by}|${slot}|${av}|${list.hidden}|${left}|${trying ? lookId(trying.t.x) : ''}`;
     if (key === drawn) return;
     drawn = key;
     purse.textContent = String(left);
     sees.textContent = trying ? 'Trying it on: only you see it' : 'Everyone in the room sees it';
     for (const p of PARTS) {
-      p.name.textContent = p.list[trying?.p === p ? trying.t.k : l[p.key]].name;
+      p.name.textContent = p.list[trying?.p === p ? trying.t.k : p.at(o)].name;
       if (trying?.p === p) rest(p); // the purse may have changed under it
       for (const t of p.tiles) {
         const open = isOpen(t.x, got), forSale = !open && !!t.x.price;
@@ -237,12 +255,13 @@ export function createWardrobe(s) {
         t.b.classList.toggle('short', forSale && t.x.price > left);
         t.b.classList.toggle('trying', trying?.t === t);
         t.price.hidden = !forSale;
-        t.b.setAttribute('aria-pressed', String(l[p.key] === t.k));
+        t.b.setAttribute('aria-pressed', String(p.at(o) === t.k));
         t.b.setAttribute('aria-label', `${p.label.toLowerCase()}: ${t.x.name.toLowerCase()}${open ? '' : forSale ? ` (${plural(t.x.price)})` : ' (locked)'}`);
         t.b.title = open ? t.x.name : forSale ? `${t.x.name}: ${plural(t.x.price)}` : `${t.x.name}: ${nice(about(t.x))}`;
         const g = t.c.getContext('2d');
         g.clearRect(0, 0, 40, 52);
-        drawLook(g, 20, ...p.frame, slot, p.with(w, t.k), 0, av);
+        const shown = p.with(o, t.k);
+        drawLook(g, 20, ...p.frame, slot, shown.look, 0, av, { ...dressOf(shown.dress), behind: p.key === 'back' });
       }
     }
     themeName.textContent = th.name;
@@ -253,7 +272,7 @@ export function createWardrobe(s) {
       list.replaceChildren(...ACHIEVEMENTS.map((a) => {
         const have = !!tally.got[a.id];
         const [x, of] = a.have?.(tally) ?? [0, 0];
-        const opens = [...BALLS, ...HATS, ...BODIES].filter((y) => y.unlock === a.id).map(lookName);
+        const opens = [...BALLS, ...HATS, ...BODIES, ...FACES, ...SHIRTS, ...BACKS].filter((y) => y.unlock === a.id).map(lookName);
         return el('li', { className: have ? 'got' : '' }, el('i', { className: 'wd-box' }), el('b', { textContent: a.name }),
           el('span', { textContent: nice(a.about) + (!have && of ? ` (${Math.min(x, of)}/${of})` : '') }),
           ...(opens.length ? [el('em', { textContent: `Opens ${opens.map((o) => nice(o)).join(', ')}` })] : []));
@@ -275,7 +294,8 @@ export function createWardrobe(s) {
       redraw();
       const g = me.getContext('2d');
       g.clearRect(0, 0, 150, 150);
-      drawLook(g, 75, 118, 30, Math.max(0, s.slot()), trying ? trying.p.with(s.look(), trying.t.k) : s.look(), now / 1000, s.avatar());
+      const worn = trying ? trying.p.with(cur(), trying.t.k) : cur();
+      drawLook(g, 75, 118, 30, Math.max(0, s.slot()), worn.look, now / 1000, s.avatar(), { ...dressOf(worn.dress), behind: trying?.p.key === 'back' });
     },
     get element() { return panel; },
   };
@@ -289,12 +309,15 @@ export function createWardrobe(s) {
 export function pageWardrobe(h, { canvas, q, watch = false }) {
   if (watch || q.get('bot') === '1' || q.get('watch') === '1') return null;
   const tally = loadTally();
-  let purse = loadPurse(), got = openSet(tally, purse);
+  let purse = loadPurse();
+  // what this slot's wallet owns as items (client/shop.mjs), once the page has signed in
+  const owned = () => ownedLooks(h.badges(h.get(L.CL_SLOT)));
+  let got = openSet(tally, purse, owned()), ownedSeen = owned().join();
   const spend = (x) => {
     purse = freshPurse(purse);
     const r = buy(tally, purse, lookId(x), x.price);
     if (r.ok) { purse = r.purse; savePurse(purse); }
-    got = openSet(tally, purse);
+    got = openSet(tally, purse, owned());
     return r;
   };
   const fullscreen = () => {
@@ -303,9 +326,22 @@ export function pageWardrobe(h, { canvas, q, watch = false }) {
   };
   const w = createWardrobe({
     look: () => h.get(L.CL_LOOK) >>> 0, wear: (x) => { h.set(L.CL_LOOK, x); saveLook(x); }, got: () => got, tally: () => tally,
+    dress: () => h.get(L.CL_DRESS) >>> 0, wearDress: (d) => { h.set(L.CL_DRESS, d); saveDress(d); },
     balance: () => balance(tally, purse), buy: spend,
     slot: () => h.get(L.CL_SLOT), avatar: () => h.avatar(h.get(L.CL_SLOT)), sit: () => canvas.click(), fullscreen,
     keys: false, play: 'PLAY', note: 'or click the game', folded: touchWanted(q),
   });
-  return { frame: (now) => w.frame(!document.pointerLockElement, true, now) };
+  return {
+    frame: (now) => {
+      const o = owned().join();
+      if (o !== ownedSeen) {
+        ownedSeen = o;
+        got = openSet(tally, purse, owned());
+        const w = wearable(savedLook(), got), d = wearableDress(savedDress(), got);
+        if (!q.has('look') && w !== (h.get(L.CL_LOOK) >>> 0)) h.set(L.CL_LOOK, w);
+        if (!q.has('dress') && d !== (h.get(L.CL_DRESS) >>> 0)) h.set(L.CL_DRESS, d);
+      }
+      w.frame(!document.pointerLockElement, true, now);
+    },
+  };
 }

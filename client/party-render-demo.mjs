@@ -5,11 +5,12 @@
 // traces/party-render-<scene>.png; in a browser it draws the one in ?scene=
 // (or flips through them all, a click for the next), moving.
 //   ?orbit=0 holds the camera still
-//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=shop (the ones marshmallows buy, close)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
+//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=shop (the ones marshmallows buy, close)  ?scene=item~ball:bee (one look, close: the shop's pictures)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
 import { createRenderer, Scene, LOOK, SPRITE, COLS, DECAL, ENVS } from './party-render.mjs';
 import { put, C } from './font.mjs';
 import { BALLS, HATS, BODIES, packLook, riderSprites } from './looks.mjs';
 import { rider, EMOTE, EMOTE_S } from './rider.mjs';
+import { FACES, SHIRTS, BACKS, packDress } from './dress.mjs';
 import { createJuice } from './juice.mjs';
 import { DEFAULT as AV_DEFAULT, pack as avPack, guestAvatar } from './avatar.mjs';
 
@@ -41,13 +42,13 @@ function frameState(W, H, HS) {
 }
 
 // A ball and its rider, as the frontends draw them: casters[slot] its shadow, the sprites its picture.
-function ball(s, p, x, y, z, { vel = [0, 0, 0], roll = 0, face, own = false, item = 0, r = 1, look = 0, emote = null, avatar = 0 } = {}) {
+function ball(s, p, x, y, z, { vel = [0, 0, 0], roll = 0, face, own = false, item = 0, r = 1, look = 0, emote = null, avatar = 0, dress = 0 } = {}) {
   const rs = riderSprites(p, look);
   const f = face ?? Math.atan2(vel[2], vel[0]);
   while (s.casters.length <= p) s.casters.push([0, -1000, 0, 0]);
   s.casters[p] = [x, y, z, r];
   s.solid.push({ pos: [x, y + r, z], size: r, color: rs.ball.color, kind: SPRITE.BALL, minpx: 1, vel, roll, seed: rs.ball.seed });
-  rider(s.solid, p, look, { at: [x, y + 2 * r, z], face: f, roll, speed: Math.hypot(vel[0], vel[2]), vy: vel[1], emote, avatar });
+  rider(s.solid, p, look, { at: [x, y + 2 * r, z], face: f, roll, speed: Math.hypot(vel[0], vel[2]), vy: vel[1], emote, avatar, dress });
   if (item) s.solid.push({ pos: [x, y + 2 * r + 1.55, z], size: 0.26, color: [1, 0.85, 0.2, 1], kind: SPRITE.ORB, minpx: 1 });
   if (own) s.solid.push({ pos: [x, y + 2 * r + 1.65, z], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });
 }
@@ -183,6 +184,61 @@ const SCENES = {
       const line = some.map((k) => `${BALLS[k].name} ${BALLS[k].price}`).join('   ');
       put(s.text, COLS, Math.max(0, Math.floor((COLS - line.length) / 2)), row, line, C.GREEN);
     }
+  },
+
+  // one piece close on a plain stage, for the shop's pictures (client/shop.mjs, tools/shop-shots.mjs): item~ball:bee, item~hat:halo,
+  // item~body:goldbot, item~face:cool, item~shirt:star, item~back:cape. A ball on the house rider with no hat, a hat on the house ball,
+  // a body on a ball of its own colour with no hat; a face, a shirt print or a back item on Elo Pros' default avatar, a blocky rider on the house ball.
+  item(s, r, env, view = 'ball:bee') {
+    s.env = env || 'sunset';
+    s.yaw = Math.PI / 2;
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.5, 0.52, 0.56, LOOK.MATTE);
+    const [kind, key] = view.split(':'), none = HATS.findIndex((x) => x.key === 'none');
+    const at = (list) => list.findIndex((x) => x.key === key);
+    const dressed = { face: FACES, shirt: SHIRTS, back: BACKS }[kind];
+    if (!dressed && !['ball', 'hat', 'body'].includes(kind)) throw new Error(`item~${view}: ball:, hat:, body:, face:, shirt: or back: and a key`);
+    if (at(dressed || { ball: BALLS, hat: HATS, body: BODIES }[kind]) < 0) throw new Error(`item~${view}: no such ${kind}`);
+    const look = kind === 'ball' ? packLook(at(BALLS), none, 0) : kind === 'hat' ? packLook(0, at(HATS), 0) : kind === 'body' ? packLook(0, none, at(BODIES)) : packLook(0, none, 1);
+    const dress = kind === 'face' ? packDress(at(FACES)) : kind === 'shirt' ? packDress(0, at(SHIRTS)) : kind === 'back' ? packDress(0, 0, at(BACKS)) : 0;
+    // the camera looks level at the middle of what is for sale: the whole rider for a ball or a body, the head for a hat or a face,
+    // the chest for a shirt, the rider from behind for a back item
+    const [ty, dz, turn] = { hat: [3.0, 2.5, 0.55], face: [2.8, 1.1, 0.35], shirt: [2.35, 1.45, 0.4], back: [2.4, 1.75, Math.PI + 0.45], body: [2.3, 3.8, 0.55] }[kind] || [1.7, 3.6, 0.55];
+    s.cam = [CX, FLOOR + ty + 0.3, CX - dz];
+    s.pitch = -Math.atan2(0.3, dz);
+    ball(s, 0, CX, FLOOR, CX, { r: 0.8, face: -Math.PI / 2 + turn, roll: 0.9, look, dress, avatar: dressed ? AV_DEFAULT : 0 });
+    s.slot = -1;
+    s.mini = null;
+    s.focus = [CX, CX]; s.extent = 12;
+  },
+
+  // the avatar first: five riders on five balls, each in its own Elo Pros avatar and its own dress, on a plain stage
+  avatar(s, r) {
+    s.env = 'sunset';
+    s.yaw = Math.PI / 2; s.pitch = -0.1;
+    s.scene.box(CX, FLOOR - 0.5, CX, 30, 0.5, 30, 0, 0.5, 0.52, 0.56, LOOK.MATTE);
+    s.cam = [CX, FLOOR + 2.7, CX - 8.2];
+    s.pitch = -Math.atan2(0.4, 8.2);
+    const t = s.time / 1000, none = HATS.findIndex((x) => x.key === 'none');
+    const key = (list, k) => list.findIndex((x) => x.key === k);
+    const cast = [
+      { av: AV_DEFAULT, ball: 'bee', hat: 'tophat', face: 'cool', shirt: 'stripes', back: 'cape' },
+      { av: avPack([1, 11, 1, 1, 22, 22]), ball: 'disco', hat: 'halo', face: 'wink', shirt: 'heart', back: 'wings' },
+      { av: avPack([3, 21, 10, 10, 9, 9]), ball: 'soccer', hat: 'cone', face: 'stars', shirt: 'star', back: 'pack' },
+      { av: avPack([4, 25, 14, 19, 16, 23]), ball: 'ladybird', hat: 'prop', face: 'cat', shirt: 'chevrons', back: 'jet' },
+      { av: avPack([2, 17, 18, 18, 21, 21]), ball: 'mint', hat: 'antlers', face: 'oh', shirt: 'flame', back: 'none' },
+    ];
+    cast.forEach((c, k) => {
+      const x = CX + (2 - k) * 2.45;
+      const look = packLook(key(BALLS, c.ball), key(HATS, c.hat), 1);
+      const dress = packDress(key(FACES, c.face), key(SHIRTS, c.shirt), key(BACKS, c.back));
+      // two of them turned away, to show what hangs on their backs
+      const turn = c.back === 'cape' || c.back === 'jet' ? Math.PI + 0.6 : 0.35;
+      ball(s, k, x, FLOOR, CX, { r: 0.8, face: -Math.PI / 2 + turn + 0.15 * Math.sin(t * 0.8 + k), roll: t * 1.2 + k, look, dress, avatar: c.av, vel: [0, 0, 0] });
+    });
+    s.slot = -1;
+    s.mini = null;
+    s.focus = [CX, CX]; s.extent = 14;
+    title(s, r, 'THE AVATAR FIRST', 'A FACE, A SHIRT, A HAT, SOMETHING ON YOUR BACK, AND A BALL TO STAND ON');
   },
 
   // every body a player can pick (client/rider.mjs) in front, standing still, then walking; a crowd of blocky riders behind, each hat on one
@@ -670,7 +726,7 @@ async function main() {
     const s = frameState(W, H, HS);
     s.text = new Uint32Array(COLS * r.rows);
     s.time = time;
-    SCENES[base](s, r, env);
+    SCENES[base](s, r, env, view);
     if (env) s.env = env;
     // ~over: the frontends' view when there is nobody to follow, high over the stage's edge
     if (view === 'over') {
@@ -679,7 +735,7 @@ async function main() {
       s.cam = [s.focus[0] + Math.cos(0.8) * R * 1.3, FLOOR + R * 0.95, s.focus[1] + Math.sin(0.8) * R * 1.3];
     }
     s.time = time;
-    put(s.text, COLS, 1, r.rows - 1, `${base.toUpperCase()}  ${s.env.toUpperCase()}  ${s.scene.count} SOLIDS  ${s.casters.length} CASTERS  ${s.solid.length + s.glow.length} SPRITES`, C.GREY);
+    if (base !== 'item') put(s.text, COLS, 1, r.rows - 1, `${base.toUpperCase()}  ${s.env.toUpperCase()}  ${s.scene.count} SOLIDS  ${s.casters.length} CASTERS  ${s.solid.length + s.glow.length} SPRITES`, C.GREY);
     return s;
   };
   // a frame read back as a PNG (base64), headless Chrome can't composite WebGPU
