@@ -12,7 +12,7 @@ export const FEATURES = {
   sat_float_to_int: true, sign_extension: true, multi_value: true,
 };
 
-// Paths are '/'-separated, as Node's are here and a page's URLs are.
+// Virtual source paths in the browser studio are '/'-separated.
 const dirOf = (p) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.');
 export function joinPath(dir, rel) {
   const out = [];
@@ -25,12 +25,13 @@ export function joinPath(dir, rel) {
 
 // file with its #includes spliced in, each read by read(path) (the path joined
 // to the including file's directory)
-export function includeWith(read, file, seen = new Set()) {
+const relativeInclude = (file, rel) => joinPath(dirOf(file), rel);
+export function includeWith(read, file, seen = new Set(), resolveInclude = relativeInclude) {
   if (seen.has(file)) throw new Error(`include cycle at ${file}`);
   seen.add(file);
   const out = read(file).split('\n').map((line) => {
     const m = line.match(/^\s*#include\s+"([^"]+)"\s*$/);
-    return m ? includeWith(read, joinPath(dirOf(file), m[1]), seen) : line;
+    return m ? includeWith(read, resolveInclude(file, m[1]), seen, resolveInclude) : line;
   });
   seen.delete(file);
   return out.join('\n');
@@ -204,10 +205,10 @@ export function forbid(wat, where = 'source') {
 // The sim's source as the assembler takes it: file read through read(), its
 // conditionals, comments, macros and constants worked, the rules checked. The
 // arena's map (map, from tools/map-compile.mjs's compileSpec) is the caller's.
-export function expandWith(read, file, { DEBUG = false, ARENA = false, FLIGHT = false, BUMPER = false, PARTY = false, layout: lay, macros, map = null }) {
+export function expandWith(read, file, { DEBUG = false, ARENA = false, FLIGHT = false, BUMPER = false, PARTY = false, layout: lay, macros, map = null, resolveInclude }) {
   if (ARENA && !map) throw new Error('the arena builds on a map: pass one');
   const scope = { ...lay, ...lay.PHYS, ...(lay.BPHYS || {}), ...(lay.MG_CONSTS || {}), ...(lay.AM_CONSTS || {}), ...(lay.FLIGHT_CONSTS || {}), DEBUG: DEBUG ? 1 : 0, ...(map ? map.consts : {}) };
-  let src = includeWith(read, file);
+  let src = includeWith(read, file, undefined, resolveInclude);
   // the arena's mode is a layout constant, so #if FIESTA picks its rules at build time
   src = conditionals(src, { DEBUG, ARENA, FLIGHT: ARENA && FLIGHT, BUMPER, PARTY, FIESTA: ARENA && !!lay.FIESTA });
   src = stripComments(src);
