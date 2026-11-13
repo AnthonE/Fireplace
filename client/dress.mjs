@@ -1,8 +1,8 @@
-// What a blocky rider wears besides its ball, hat and body (client/looks.mjs):
+// What a player's figure wears besides its ball, hat and body (client/looks.mjs):
 // a face on its head, a print on its shirt and something on its back. Drawing
 // only, like a look: the relay carries each slot's dress word beside the looks
-// (net/wire.mjs T_DRESS), never in a tick, record or hash. A round rider has
-// no shirt or back to dress, so it wears none of it.
+// (net/wire.mjs T_DRESS), never in a tick, record or hash. Every game's figure
+// wears it (client/figure.mjs).
 //
 // The word: the face in the low six bits, the shirt's print in the next six,
 // the back item in the next six; the rest is spare. 0 wears nothing of it, the
@@ -13,8 +13,8 @@
 // A piece is free, earned (`unlock`, an achievement's id), or bought (`price`,
 // in marshmallows), never two of those, as a look is (looks.mjs isOpen), and a
 // priced one is also an owned item on Elo Pros (client/shop.mjs). `variant` is
-// the face or print the shader draws (rider.mjs PART.FACEWEAR, PART.PRINT);
-// a back item is boxes, by its key (rider.mjs).
+// the face or print the figure draws (client/figure.mjs: the WGSL's and the
+// cards'); a back item is drawn by its key.
 import { isOpen } from './looks.mjs';
 
 const tag = (slot, list) => list.map((x) => ({ ...x, slot }));

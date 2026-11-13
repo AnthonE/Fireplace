@@ -121,16 +121,18 @@ two signed-in wallets in them, which is already the rule for a rated match
 
 ## Skins
 
-**One avatar, two drawings** (operator, 2026-11-13: keep the figure). A
-player's avatar is data: the Elo Pros avatar's colours, a ball, a hat and a
-body (the look word, `client/looks.mjs`), and a worn face, a shirt's print and
-a back item (the dress word, `client/dress.mjs`). Party draws it as the blocky
-rider (`client/rider.mjs`); the arena and golf draw it as the cartoon figure
-(`client/figure.mjs`), which now wears the same hat, face, print and back.
-Dogfight's ships wear none of it yet. Three reviewers read every character
-side by side first (`traces/toons-side-by-side.png` from the demo pages): two
-of three kept the figure for its face and outline, and the arena moved from
-seven boxes to the figure on 2026-11-10 (`f1247ba`).
+**One avatar, one drawing** (operator, 2026-11-13: keep the figure, get rid
+of the block). A player's avatar is data: the Elo Pros avatar's colours, a
+ball, a hat and a body (the look word, `client/looks.mjs`), and a worn face, a
+shirt's print and a back item (the dress word, `client/dress.mjs`). Every game
+draws it as the one cartoon figure (`client/figure.mjs`): party's rider
+standing on its ball (`client/rider.mjs`), the arena's fighter, golf's golfer,
+and the TV's cards and the wardrobe flat (`drawLook`). Dogfight's ships wear
+none of it yet. Three reviewers read every character side by side first
+(`traces/toons-side-by-side.png` from the demo pages): two of three kept the
+figure for its face and outline; the arena moved from seven boxes to the
+figure on 2026-11-10 (`f1247ba`), and party's riders, blocky and round, on
+2026-11-13.
 
 The 26 pieces marshmallows buy (`price`: six balls, six hats, the gold robot,
 five faces, five shirt prints, three back items) are also sold as owned

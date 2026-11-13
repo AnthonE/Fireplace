@@ -1,24 +1,23 @@
 // Looks (client/looks.mjs): a ball, a hat and a body a player picks, drawn
-// beside the sim. The house look must draw exactly as the riders always have; every
+// beside the sim. The house ball must draw exactly as the balls always have; every
 // look the list names must be one the renderers draw; an earned look must
 // name an achievement that exists; and a priced one is bought, never earned
 // too (client/purse.mjs, test/purse.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BALLS, HATS, BODIES, PATTERN, STYLE, TRIM, packLook, unpackLook, riderSprites, slotColor, rgb24, tint, nextOpen, wearable, isOpen, guestLook, lookId, lookName, drawLook, FIRST_LOOK } from '../client/looks.mjs';
-import { rider, BLOCK, PART } from '../client/rider.mjs';
+import { BALLS, HATS, BODIES, PATTERN, STYLE, TRIM, packLook, unpackLook, ballSprite, lookOf, slotColor, rgb24, tint, nextOpen, wearable, isOpen, guestLook, lookId, lookName, FIRST_LOOK } from '../client/looks.mjs';
+import { rider, BLOCK, FIGURE } from '../client/rider.mjs';
+import { drawLook, kitOf } from '../client/figure.mjs';
 import { slotColor as partySlotColor } from '../client/party-game.mjs';
 import { byId } from '../client/achievements.mjs';
 
 const inFont = (s) => [...s].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) <= 95);
 
-test('the house look is the riders as they were: the seat colour, alpha 1, the slot for a seed', () => {
+test('the house ball is the balls as they were: the seat colour, alpha 1, the slot for a seed; its rider\'s shirt the seat\'s', () => {
   for (const p of [0, 1, 37, 255]) {
-    const r = riderSprites(p, 0);
-    assert.deepEqual(r.ball, { color: [...partySlotColor(p), 1], seed: p });
-    assert.deepEqual(r.body.color, [...partySlotColor(p), 1]);
-    assert.deepEqual(r.head.color, [...partySlotColor(p), 1]);
+    assert.deepEqual(ballSprite(p, 0), { color: [...partySlotColor(p), 1], seed: p });
+    assert.deepEqual(kitOf(p, 0).torso, partySlotColor(p));
   }
   assert.equal(tint(0), 0, 'golf and the arena keep the seat colour');
 });
@@ -27,21 +26,22 @@ test('a look word round-trips, and a number this build does not know is the hous
   for (let b = 0; b < BALLS.length; b++) for (let h = 0; h < HATS.length; h++) for (let k = 0; k < BODIES.length; k++) assert.deepEqual(unpackLook(packLook(b, h, k)), { ball: b, hat: h, body: k });
   assert.deepEqual(unpackLook(packLook(200, 201, 202)), { ball: 0, hat: 0, body: 0 });
   assert.deepEqual(unpackLook(0xffffffff), { ball: 0, hat: 0, body: 0 });
-  assert.equal(packLook(3, 2), packLook(3, 2, 0), 'a word from before bodies is the round rider');
+  assert.equal(packLook(3, 2), packLook(3, 2, 0), 'a word from before bodies is body 0');
 });
 
 test('a picked look: 2 + its pattern or style in alpha, the second colour as a seed under 2^24, and a tint with its flag', () => {
   const w = packLook(BALLS.findIndex((b) => b.key === 'candy'), HATS.findIndex((x) => x.key === 'crown'));
-  const r = riderSprites(9, w);
-  assert.equal(r.ball.color[3], 2 + PATTERN.STRIPES);
-  assert.equal(r.head.color[3], 2 + STYLE.CROWN);
-  assert.ok(Number.isInteger(r.ball.seed) && r.ball.seed < 2 ** 24 && Math.fround(r.ball.seed) === r.ball.seed);
-  assert.equal(r.ball.seed, rgb24(BALLS.find((b) => b.key === 'candy').b));
+  const r = ballSprite(9, w);
+  assert.equal(r.color[3], 2 + PATTERN.STRIPES);
+  assert.equal(kitOf(9, w).hat, STYLE.CROWN + 1);
+  assert.ok(Number.isInteger(r.seed) && r.seed < 2 ** 24 && Math.fround(r.seed) === r.seed);
+  assert.equal(r.seed, rgb24(BALLS.find((b) => b.key === 'candy').b));
   assert.equal(tint(w) >>> 24, 1);
   assert.equal(tint(w) & 0xffffff, rgb24(BALLS.find((b) => b.key === 'candy').a));
-  // the cap takes the ball's colour, as it always has
-  assert.deepEqual(riderSprites(9, packLook(2, 0)).head.color, [...BALLS[2].a, 1]);
-  assert.deepEqual(riderSprites(9, packLook(0, 3)).head.color.slice(0, 3), HATS[3].color);
+  // the shirt takes the ball's colour, the hat its own
+  assert.deepEqual(kitOf(9, packLook(2, 0)).torso, BALLS[2].a);
+  assert.deepEqual(kitOf(9, packLook(0, 3)).hatc, HATS[3].color);
+  assert.deepEqual(lookOf(9, packLook(2, 0)).hatColor, BALLS[2].a);
   assert.deepEqual(slotColor(4), partySlotColor(4));
 });
 
@@ -120,46 +120,30 @@ test('locked looks are skipped and taken off', () => {
   assert.equal(nextOpen(HATS, halo - 1, new Set(['hat:halo'])), halo);
 });
 
-test('every pattern and style the lists use is one the party shader draws', () => {
+test('every pattern the lists use is one the party shader draws (a hat\'s style is the figure\'s: test/figure.test.mjs)', () => {
   for (const f of ['client/party-render.mjs']) {
     const src = readFileSync(f, 'utf8');
-    const ball = src.slice(src.indexOf('fn lookBall('), src.indexOf('fn lookHat('));
-    const hat = src.slice(src.indexOf('fn lookHat('), src.indexOf('\n}\n', src.indexOf('fn lookHat(')));
+    const ball = src.slice(src.indexOf('fn lookBall('), src.indexOf('\n}\n', src.indexOf('fn lookBall(')));
     for (const k of ['BEACH', 'STRIPES', 'RIBS', 'EIGHT', 'DOTS', 'CHECKER', 'SWIRL', 'DISCO']) assert.match(ball, new RegExp(`case ${PATTERN[k]}u:`), `${f}: ${k}`);
     assert.match(src, new RegExp(`look == ${2 + PATTERN.METAL}u`), `${f}: METAL`);
     assert.match(src, new RegExp(`look == ${2 + PATTERN.DISCO}u`), `${f}: the disco ball's shine`);
-    for (const k of ['CAP', 'BEANIE', 'BAND', 'HELMET', 'CROWN', 'PUMPKIN', 'TOPHAT', 'CONE', 'HALO', 'ANTLERS', 'PHONES', 'PROP']) assert.match(hat, new RegExp(`case ${STYLE[k]}u:`), `${f}: ${k}`);
-    assert.match(src, new RegExp(`hat == ${2 + STYLE.PUMPKIN}u`), `${f}: the pumpkin's eyes`);
-    // every pattern and style there is has a look that wears it, and nothing but SOLID, METAL and NONE goes undrawn
+    // every pattern there is has a look that wears it, and nothing but SOLID and METAL goes undrawn
     assert.deepEqual(Object.keys(PATTERN).filter((k) => !new RegExp(`case ${PATTERN[k]}u:`).test(ball)), ['SOLID', 'METAL']);
-    assert.deepEqual(Object.keys(STYLE).filter((k) => !new RegExp(`case ${STYLE[k]}u:`).test(hat)), ['NONE']);
   }
   for (const v of Object.values(PATTERN)) assert.ok(BALLS.some((b) => b.pattern === v));
   for (const v of Object.values(STYLE)) assert.ok(HATS.some((h) => h.style === v));
 });
 
-test('a hat that stands off the head is boxes over the round rider too: its two spheres first, as ever, then the hat', () => {
+test('every hat is worn by the figure by its style, the house cap and none as no hat (as the arena draws them); a standing one takes a taller square', () => {
   for (let h = 0; h < HATS.length; h++) {
     const out = [];
-    rider(out, 7, packLook(1, h, 0), { at: [10, 20, 30], face: 0.5, roll: 3 });
-    const rs = riderSprites(7, packLook(1, h, 0));
-    assert.deepEqual(out.slice(0, 2).map((s) => [s.kind, s.size, s.color]), [[1, 0.34, rs.body.color], [8, 0.3, rs.head.color]], HATS[h].key);
-    const boxes = out.slice(2);
-    assert.equal(boxes.length > 0, HATS[h].style >= STYLE.TOPHAT, `${HATS[h].key}: ${boxes.length} boxes`);
-    for (const s of boxes) {
-      assert.equal(s.kind, BLOCK);
-      assert.ok(s.vel.every((v) => v > 0) && [...s.pos, s.roll, s.seed, s.color[3]].every(Number.isFinite));
-      assert.ok((s.color[3] & 15) <= PART.GLOW);
-      // on or over the head (0.3 round, its middle 0.78 over the ball), never down in the body, and within a hand of its sides
-      assert.ok(s.pos[1] > 20.7 && s.pos[1] < 21.75, `${HATS[h].key}: ${s.pos[1] - 20}`);
-      assert.ok(Math.hypot(s.pos[0] - 10, s.pos[2] - 30) < 0.4, HATS[h].key);
-    }
+    rider(out, 7, packLook(1, h, 1), { at: [10, 20, 30], face: 0.5, roll: 3 });
+    const k = out[0].fig.kit;
+    assert.equal(k.hat, h === 0 || HATS[h].style === STYLE.NONE ? 0 : HATS[h].style + 1, HATS[h].key);
+    // (the arena's wearTall: a crown's points and up)
+    assert.equal(out[0].size > 1.6 * out[0].fig.scale, HATS[h].style >= STYLE.CROWN && h !== 0, `${HATS[h].key}: its square`);
+    if (HATS[h].color) assert.deepEqual(k.hatc, HATS[h].color);
   }
-  // the halo is lit, and the propeller turns with the ball
-  const parts = (h, roll) => { const out = []; rider(out, 0, packLook(0, HATS.findIndex((x) => x.key === h), 1), { at: [0, 0, 0], face: 0, roll }); return out; };
-  assert.equal(parts('halo', 0).filter((s) => (s.color[3] & 15) === PART.GLOW).length, 8);
-  const blade = (roll) => parts('prop', roll).find((s) => s.vel[0] > 0.15 && s.vel[1] < 0.01).roll;
-  assert.notEqual(blade(0), blade(1));
 });
 
 test('a card draws every look: each ball, hat and body through drawLook without a miss', () => {
@@ -173,52 +157,42 @@ test('a card draws every look: each ball, hat and body through drawLook without 
     const bare = fills;
     fills = 0;
     drawLook(g, 20, 90, 30, 3, packLook(0, HATS.findIndex((x) => x.style === STYLE.NONE), body), 0.3);
-    if (HATS[h].style !== STYLE.NONE && HATS[h].style !== STYLE.PUMPKIN) assert.ok(bare > fills, `${HATS[h].key} on ${BODIES[body].key}: the hat is drawn`);
+    if (h && HATS[h].style !== STYLE.NONE && HATS[h].style !== STYLE.PUMPKIN) assert.ok(bare > fills, `${HATS[h].key} on ${BODIES[body].key}: the hat is drawn`);
   }
 });
 
-test('the round body draws its rider as the riders always were: a body and a head, two spheres', () => {
-  for (const w of [0, packLook(4, 3)]) {
-    const out = [];
-    rider(out, 7, w, { at: [10, 20, 30], face: 0.5, bob: 0.01 });
-    const rs = riderSprites(7, w);
-    assert.deepEqual(out, [
-      { pos: [10, 20 + 0.22 + 0.01, 30], size: 0.34, color: rs.body.color, kind: 1, minpx: 1 },
-      { pos: [10, 20 + 0.78 + 0.01, 30], size: 0.3, color: rs.head.color, kind: 8, minpx: 1, vel: [Math.cos(0.5), 0, Math.sin(0.5)] },
-    ]);
-  }
-});
-
-test('a blocky body: six boxes standing on the ball, the head with a face, a hat of boxes but none for no hat', () => {
-  const none = HATS.findIndex((x) => x.style === STYLE.NONE);
-  for (let k = 0; k < BODIES.length; k++) {
-    if (!BODIES[k].blocky) continue;
-    for (let h = 0; h < HATS.length; h++) {
+test('every body is the figure on its ball: one sprite, the body\'s skin, a robot\'s head by its face', () => {
+  BODIES.forEach((b, k) => {
+    for (const w of [packLook(0, 0, k), packLook(4, 3, k)]) {
       const out = [];
-      rider(out, 3, packLook(0, h, k), { at: [0, 5, 0], face: 1, roll: 2, speed: 6, vy: 9 });
-      assert.ok(out.every((s) => s.kind === BLOCK && s.vel.every((v) => v > 0) && Math.abs(s.size - Math.hypot(...s.vel)) < 1e-9), `${BODIES[k].key} ${HATS[h].key}`);
-      assert.equal(out.length > 6, h !== none, `${HATS[h].key}: a hat`);
-      assert.ok(out.every((s) => s.pos[1] > 5 && s.pos[1] < 6.7), 'standing on the ball, under two metres');
-      const head = out[5];
-      assert.equal(head.color[3] & 15, HATS[h].style === STYLE.PUMPKIN ? PART.PUMPKIN : BODIES[k].face);
+      rider(out, 7, w, { at: [10, 20, 30], face: 0.5, bob: 0.01 });
+      assert.equal(out.length, 1);
+      assert.equal(out[0].kind, FIGURE);
+      assert.deepEqual(out[0].fig.feet, [10, 20.01, 30]);
+      assert.deepEqual(out[0].fig.kit.skin, b.skin, b.key);
+      assert.equal(out[0].fig.kit.kind, b.face === 4 ? 2 : 0, b.key);
     }
-  }
+  });
 });
 
-test('a browser that never picked is blocky; an AI player in a local room wears only open looks, on a blocky body', () => {
+test('a browser that never picked wears the yellow body, as Elo Pros\' default avatar does; an AI player wears only open looks, never body 0', () => {
   assert.equal(unpackLook(FIRST_LOOK).body, BODIES.findIndex((b) => b.key === 'blocky'));
+  assert.equal(BODIES[unpackLook(FIRST_LOOK).body].name, 'YELLOW');
   for (let p = 0; p < 256; p++) {
     const w = guestLook(p);
     assert.equal(wearable(w, new Set()), w);
-    assert.ok(BODIES[unpackLook(w).body].blocky);
+    assert.ok(unpackLook(w).body > 0);
   }
 });
 
-test('the party renderer draws a box (client/rider.mjs) as sprite kind 12', () => {
+test('the party renderer draws a box (client/block.mjs) as sprite kind 12, a rider (client/rider.mjs) as kind 13, the figure marched', () => {
   assert.equal(BLOCK, 12);
+  assert.equal(FIGURE, 13);
   for (const f of ['client/party-render.mjs']) {
     const src = readFileSync(f, 'utf8');
     assert.match(src, /\$\{BLOCK_WGSL\}/, f);
+    assert.match(src, /\$\{FIGURE_WGSL\}/, f);
     assert.match(src, /case 12u: \{[^]*?blockAt\(/, f);
+    assert.match(src, /case 13u: \{[^]*?figKit\(k\)[^]*?figureRay\(/, f);
   }
 });

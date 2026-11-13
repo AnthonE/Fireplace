@@ -1,13 +1,14 @@
-// The cartoon figure (client/figure.mjs): the arena's fighter and golf's
-// golfer. No GPU here, so what is held is its shape as source: the parts it
-// is made of, the kits the two renderers give it, and the demo page that
-// holds fighters still for tools/arena-shot.mjs --scenes.
+// The cartoon figure (client/figure.mjs): every player in every game, the
+// arena's fighter, golf's golfer and party's rider. No GPU here, so what is
+// held is its shape as source: the parts it is made of, the kits the
+// renderers give it, and the demo page that holds fighters still for
+// tools/arena-shot.mjs --scenes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { FIGURE_WGSL, WEAR_WGSL, HAIRS, EYES } from '../client/figure.mjs';
-import { BODIES, HATS, STYLE } from '../client/looks.mjs';
-import { FACES, SHIRTS, BACKS } from '../client/dress.mjs';
+import { FIGURE_WGSL, WEAR_WGSL, HAIRS, EYES, kitOf, figureKit } from '../client/figure.mjs';
+import { BODIES, HATS, STYLE, packLook } from '../client/looks.mjs';
+import { FACES, SHIRTS, BACKS, packDress, dressOf } from '../client/dress.mjs';
 
 const read = (f) => readFileSync(f, 'utf8');
 
@@ -21,7 +22,7 @@ test('the figure is a field of parts marched once, with a rig a pose moves', () 
   // the march is bounded, and its step never longer than the field says
   assert.match(FIGURE_WGSL, /for \(var i = 0; i < 64; i\+\+\) \{\s+let h = fgMap\(lo \+ ld \* t, r, kit\);/);
   assert.match(FIGURE_WGSL, /t \+= h\.x \* 0\.9;/);
-  // as tall as the blocky figure it replaces (1.35 x 1.355 m), within a hand: the head's crown and the hair over it
+  // 1.83 m tall within a hand (as the arena's fighters always were): the head's crown and the hair over it
   const head = Number(/r\.head = vec3f\(0\.0, ([\d.]+), /.exec(FIGURE_WGSL)[1]);
   const hair = /var dh = length\(hl - vec3f\(0\.0, ([\d.]+), [-\d.]+\)\) - ([\d.]+);/.exec(FIGURE_WGSL);
   const top = head + Number(hair[1]) + Number(hair[2]);
@@ -89,4 +90,35 @@ test('what a figure wears: a hat, a worn face, a shirt print, a back item, and n
   assert.match(FIGURE_WGSL, /if \(kit\.hat != 0u && kit\.hat != 7u\) \{/);
   assert.match(FIGURE_WGSL, /if \(kit\.back != 0u\) \{/);
   assert.match(read('client/arena-render-demo.mjs'), /\n  dressed\(s\) \{/);
+});
+
+test('party\'s riders are the same figure: a kit from JS, and the riding the arena and golf never set, so they draw as they did', () => {
+  assert.match(read('client/party-render.mjs'), /fn figKit\(k: u32\) -> Kit \{/);
+  for (const f of ['act', 'actT', 'air', 'jolt', 'lean']) {
+    assert.match(FIGURE_WGSL, new RegExp(`\\n  ${f}: `), f);
+    for (const g of ['client/arena-render.mjs', 'client/render.mjs']) assert.doesNotMatch(read(g), new RegExp(`k\\.${f} = `), `${g} leaves ${f} at 0`);
+  }
+  // with none of it, the rig keeps its own arms and the march its own frame
+  assert.match(FIGURE_WGSL, /if \(kit\.act != 0u \|\| kit\.air > 0\.0 \|\| kit\.jolt > 0\.0\) \{/);
+  assert.match(FIGURE_WGSL, /if \(kit\.lean != 0\.0\) \{/);
+  // the JS kit wears what the WGSL's tables say for every hat, face, print and back
+  const arr = (name) => new RegExp(`const ${name} = array<u32, \\d+>\\(([^)]*)\\);`).exec(WEAR_WGSL)[1].split(',').map((x) => Number(x.trim().replace('u', '')));
+  const [hat, face, print, back] = ['WEAR_HAT', 'WEAR_FACE', 'WEAR_PRINT', 'WEAR_BACK'].map(arr);
+  HATS.forEach((h, k) => assert.equal(kitOf(0, packLook(0, k, 1)).hat, hat[k], h.key));
+  FACES.forEach((x, k) => assert.equal(figureKit(0, 0, 0, packDress(k)).face, face[k], x.key));
+  SHIRTS.forEach((x, k) => assert.equal(figureKit(0, 0, 0, packDress(0, k)).print, print[k], x.key));
+  BACKS.forEach((x, k) => assert.equal(kitOf(0, 0, 0, dressOf(packDress(0, 0, k))).back, back[k], x.key));
+});
+
+test('the cards draw the figure too: every hat style a hat has, each worn face and print, each back item', () => {
+  const src = read('client/figure.mjs');
+  const cards = src.slice(src.indexOf('export function drawLook('));
+  for (const st of new Set(HATS.slice(1).filter((h) => h.key !== 'none' && h.style !== STYLE.PUMPKIN).map((h) => h.style))) {
+    const k = Object.keys(STYLE).find((n) => STYLE[n] === st);
+    assert.match(cards, new RegExp(`st === STYLE\\.${k}\\)`), k);
+  }
+  assert.match(cards, /const pumpkin = K\.hat === 7/);
+  for (let v = 1; v <= 5; v++) assert.match(cards, new RegExp(`fw === ${v}`), `face ${v}`);
+  for (let v = 0; v <= 5; v++) assert.match(cards, new RegExp(`v === ${v}\\)`), `print ${v}`);
+  for (let b = 1; b <= 4; b++) assert.match(cards, new RegExp(`K\\.back === ${b}`), `back ${b}`);
 });

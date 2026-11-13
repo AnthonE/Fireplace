@@ -188,8 +188,8 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
 - **Minigames in Rust.** A Party minigame's rules may be a Rust crate in
   place of hand-written WAT; Sumo Ring is the first
   ([docs/rust.md](docs/rust.md)).
-- **Elo Pros.** A player signed in with Elo Pros wears the blocky avatar from
-  their profile on the riders and fighters, and the Pill's badge on the
+- **Elo Pros.** A player signed in with Elo Pros wears the avatar's colours from
+  their profile on the riders, fighters and golfers, and the Pill's badge on the
   marshmallow board if their wallet holds one.
 
 ## How it works

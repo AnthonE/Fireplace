@@ -47,7 +47,7 @@ import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
 import { Partier } from './party-bot.mjs';
 import { epoch, predict, corrector, follower, capturePng, listeners } from './host.mjs';
-import { riderSprites } from './looks.mjs';
+import { ballSprite } from './looks.mjs';
 import { rider, emoteOf, withEmote, EMOTE_KEYS } from './rider.mjs';
 import { createJuice } from './juice.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
@@ -411,7 +411,12 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     const out = { scene, solid, glow, beams, decals, casters: extra, paint: null, music: true };
     const t = g.state === L.H_PLAY ? g.t * TICK + dt : 0;
     const pt = g.state === L.H_PLAY ? (ptick - g.start) * TICK : 0;
-    mod.draw?.(view, { tick: g.tick, dt, t, ptick, pt, now, ms, cam, slot, me, pme, view, pview, sound, own: mine ? tgtPos : null }, out);
+    // a ball and its rider the minigame draws itself (one out of play), in slot p's look: ball(p) its sprite's colour and seed,
+    // rider(list, p, opts) its figure as rider() takes opts (client/rider.mjs)
+    const lookFor = (p) => (mod.seatColors ? h.look(p) & ~0xff : h.look(p));
+    const drawBall = (p) => ballSprite(p, lookFor(p));
+    const drawRider = (list, p, o) => rider(list, p, lookFor(p), { avatar: h.avatar(p), dress: h.dress(p), ...o });
+    mod.draw?.(view, { tick: g.tick, dt, t, ptick, pt, now, ms, cam, slot, me, pme, view, pview, sound, own: mine ? tgtPos : null, ball: drawBall, rider: drawRider }, out);
     const tune = g.state === L.H_PLAY && out.music !== false && (mod.music?.(view, ptick) ?? true);
     sound.music(g.state === L.H_PLAY ? (view.dv.getUint32(L.HDR_SEED, true) ^ Math.imul(g.hole + 7, 0x9e3779b9)) >>> 0 : null, tune);
 
@@ -431,12 +436,12 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       const ang = (roll.get(p) || 0) + speed * ms / 1000 / r;
       roll.set(p, ang % (2 * Math.PI * 64));
       // its look (client/looks.mjs); a minigame that marks what is whose by the seat's colour keeps the balls in theirs
-      const lw = mod.seatColors ? h.look(p) & ~0xff : h.look(p);
-      const rs = riderSprites(p, lw);
+      const lw = lookFor(p);
+      const bs = ballSprite(p, lw);
       // the rider faces where the ball does (you: where you look), bobbing a little as it rolls
       const face = own ? yaw / TURN * 2 * Math.PI : src.yaw;
       const bob = Math.abs(Math.sin(ang * 2)) * Math.min(1, speed / 6) * 0.06;
-      if (!mod.drawsBalls) solid.push({ pos: [pos[0], pos[1] + r, pos[2]], size: r, color: rs.ball.color, kind: SPRITE.BALL, minpx: 1, vel: src.vel, roll: ang, seed: rs.ball.seed });
+      if (!mod.drawsBalls) solid.push({ pos: [pos[0], pos[1] + r, pos[2]], size: r, color: bs.color, kind: SPRITE.BALL, minpx: 1, vel: src.vel, roll: ang, seed: bs.seed });
       rider(solid, p, lw, { at: [pos[0], pos[1] + 2 * r, pos[2]], face, roll: ang, speed, vy: src.vel[1], bob, emote: juice.cheer(p, now, [pos[0], pos[1] + 2 * r + 1.5, pos[2]]) ?? emoteOf(emotes, p, lw, now), jolt: juice.jolt(p, now), avatar: h.avatar(p), dress: h.dress(p) });
       if (src.item) solid.push({ pos: [pos[0], pos[1] + 2 * r + 1.55, pos[2]], size: 0.26, color: [...PU_COLOR[src.item], 1], kind: SPRITE.ORB, minpx: 1 });
       if (own) solid.push({ pos: [pos[0], pos[1] + 2 * r + (src.item ? 2.15 : 1.65) + 0.1 * Math.sin(now / 200), pos[2]], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });

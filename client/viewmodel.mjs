@@ -1,11 +1,10 @@
 // What a fighter holds, seen from its own eyes: the gun, or what a carrier
 // carries (a flag, the skull, the bomb), as a handful of boxes in camera
 // space (x right, y up, z ahead, metres from the eye) that the arena's HUD
-// pass ray-traces with the figures' blockRay (client/rider.mjs), so a gun
-// is as blocky as the fighter holding it. Each box is 12 floats: its centre
+// pass ray-traces with blockRay (client/block.mjs), a box a sprite. Each box is 12 floats: its centre
 // and turn (yaw, as blockRay's: its front toward (cos, 0, sin)), its half
 // sizes (across, up, front) and pitch (its front up), its colour and its
-// part (client/rider.mjs PART) times 2 plus how much it glows (0..1).
+// part (client/block.mjs PART) times 2 plus how much it glows (0..1).
 // Drawing only.
 import * as L from '../src/layout.mjs';
 

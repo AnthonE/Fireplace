@@ -159,9 +159,9 @@ s'more, platinum, and for marshmallows bumblebee, soccer ball, ladybird,
 checkers, peppermint, disco ball), fourteen hats (a cap, a beanie, a headband,
 a helmet, none, a pumpkin head, a crown, a flight helmet, and for marshmallows
 a party hat, headphones, a top hat, antlers, a propeller cap, a halo) and six
-bodies (the round
-rider, blocky with yellow, peach or cocoa skin, a robot, and for marshmallows
-a gold robot), listed in
+bodies (tan, yellow,
+peach or cocoa skin, a robot, and for marshmallows a gold robot, each the one
+cartoon figure every game draws), listed in
 `client/looks.mjs`. A look is drawing only. The page writes its word
 (the ball in the low byte, the hat in the next, the body in the third, an
 emote in the top) to `CL_LOOK`, the net worker
@@ -173,22 +173,25 @@ look, so the sims build to the same sha256 with or without them, and
 `tiny-client` and an edge relay, which never ask, never see one. Party
 draws the ball's pattern (beach panels, bands, ribs, a solid, metal,
 an eight ball's spot, twelve spots, checks, a swirl, a disco ball's mirror
-tiles) and the hat on the rider's head, a few lines each in
-their shaders' ball and head cases. A hat from the top hat on stands off the
-head, so it is boxes over it (`standing` in `client/rider.mjs`) on the round
-rider as on the blocky one, with only its foot painted on the round head: a
-halo's ring is lit from inside, and a propeller turns as the ball rolls.
-Golf and the arena tint the golfer and the
-fighter the ball's colour (a team mode's sides still win) and take the body's
-skin and face; their figures wear their own hair, not the look's hat. Look 0 draws exactly
-as the riders always have: the seat's colours, alpha 1, the slot for a seed.
+tiles), a few lines each in its ball shader (`lookBall`). The rider on it is
+the figure every game draws (Bodies, below), and it wears the hat by its style
+(`fgHat` in `client/figure.mjs`): a cap, a beanie, a headband or a helmet as a
+shell over its hair; a crown, a top hat, a party hat, a halo, antlers,
+headphones or a propeller cap on top of it (the halo lit from inside, the
+propeller turning); a pumpkin as the head itself. The house cap and none draw
+no hat. In every game the figure's shirt is the ball's colour (in the arena a
+team mode's sides still win), its trousers that colour darker, its skin and
+face the body's, its hair, eyes and cut its slot's. The house ball draws
+exactly as the balls always have: the seat's colours, alpha 1, the slot for a
+seed.
 Musical Pads and Paint Party mark what is whose by the seat's colour, so their
 balls keep it there (`seatColors`); the hat still shows. The page keeps your
 pick in this browser, and a browser that never picked wears the house colours
-on a blocky rider (`FIRST_LOOK`); every page with a host wears it, not only
-Fireplace's. AI players in a local room wear a look of their own, open ones
-on blocky bodies (`guestLook`), never an earned or a bought one. `client/party-render-demo.html?scene=wardrobe`
-shows every ball and hat, `?scene=shop` the priced ones close, `?scene=blocky` every body, `?scene=outfits` every
+on the yellow body, as Elo Pros' default avatar is (`FIRST_LOOK`); every page
+with a host wears it, not only Fireplace's. AI players in a local room wear a
+look of their own, open ones on any body but the first (`guestLook`), never an
+earned or a bought one. `client/party-render-demo.html?scene=wardrobe`
+shows every ball and hat, `?scene=shop` the priced ones close, `?scene=bodies` every body, `?scene=outfits` every
 hat on one, `?scene=emotes` the emotes.
 
 **Marshmallows buy looks.** A look in `client/looks.mjs` is free, earned
@@ -218,42 +221,46 @@ Elo Pros ([roadmap.md](roadmap.md)). They are starting to: each priced look is
 also a Fireplace Items NFT for PROS or the game's coin, and a signed-in wallet
 that owns one opens it here in any browser (`client/shop.mjs`, the relay's
 badge bits; [coin.md](coin.md#skins)). Besides the look, the wardrobe dresses
-a blocky rider: a worn face, a shirt's print and a back item (`client/dress.mjs`,
-the dress word beside the look), bought, earned or owned the same way, and the
-arena's and golf's figure wears them too. A signed-in player's tally is on Elo
+the figure: a worn face, a shirt's print and a back item (`client/dress.mjs`,
+the dress word beside the look), bought, earned or owned the same way, and
+worn in every game. A signed-in player's tally is on Elo
 Pros too, but the purse is this browser's alone: a second browser has the
 same marshmallows on the board and its own, empty, purse.
 
-**Bodies.** A blocky rider (`client/rider.mjs`) is six boxes and its hat's
-standing on the ball and walking it along: legs that step as it rolls, arms
-that swing against them and go up and out when it flies, a head a size up on
-the rest with a face, the shirt in the ball's colour and the legs in its second
-colour, darker. A box is a sprite of its own kind (12) in both renderers: the
-sprite's square covers the box's bounding sphere, and each pixel casts its own
-ray at the box, so a box is one quad, exact at any size, with a bevel and an
-ink line on its edges like party's solids. Its pitch rides in the seed, its
-yaw in the roll, and a splay about its front in the alpha with its part (a
-face, a pumpkin's lit grin, metal, a robot's eyes). The arena's fighters are
-the same figure a size up (1.83 m) in its splat shader (`figure`), seven boxes
-tested per pixel: legs stepping with their speed, both arms out holding the gun
-along the aim, a zombie's reaching empty; the body's skin and face come from
-the look word (`looksOf`), the shirt from the tint or the side. Evade's downed
+**Bodies.** A player is one cartoon figure in every game (`client/figure.mjs`,
+[look.md](look.md)): a distance field marched per pixel in a square of its
+own, legs with knees that lift as it walks, arms, a big head with hair in one
+of three cuts, two tall eyes and a mouth; a robot body has a box for a head, a
+visor and an aerial. Party's rider (`client/rider.mjs`) is that figure at 0.76
+of its 1.83 m, 1.39 m on a ball 2 m across, as the blocky rider before it
+stood 1.36 m: one sprite of its own kind (13), its record (its feet, its pose,
+its colours, what it wears) in a buffer of its own, `figs`, 14 vec4s a rider
+and 512 a frame. Its legs walk the ball as it rolls, its arms swing against
+them, go up and out when it flies, and are thrown back with the whole of it
+when its ball is hit; an emote moves its arms and turns or hops all of it
+(`act`, `air`, `jolt` and `lean` in the `Kit`, all 0 in the arena and golf).
+It casts its shadow as three spheres (legs, body, head), and its edge is
+smoothed where its ray passed within a pixel and a half of it. A minigame that
+draws a ball out of play draws its rider through `ctx.rider` (Mingle's falling
+through the trapdoors, Red Light's finishers cheering and the caught in
+stone). The arena's fighters are the same figure full size, the gun along the
+aim, a zombie's hands reaching; golf's golfers hold a launcher. Evade's downed
 are still the old card on its side.
 
-![Every body, and a crowd of blocky riders walking their balls](p2-blocky.png)
+![Every body, and a crowd of riders walking their balls](p2-bodies.png)
 
 **Avatars.** A player who signed in with Elo Pros wears the avatar they
 picked on their profile there: one word (`client/avatar.mjs`), six parts
 (head, torso, each arm, each leg) from a 32-colour palette and a face. The
 relay reads it off `/api/face/{wallet}` as the slot signs in and sends it to
 everyone beside the looks (hello flag 16, `T_AVATAR`, `CL_AVATARS`;
-[wire.md](wire.md)). A blocky rider or fighter wears its colours in place of
+[wire.md](wire.md)). The figure wears its colours in place of
 the body's skin and the ball's shirt; the hat and the ball stay the look's,
 and in a team mode the side's colour stays on the shirt. A local room's AI
 players wear avatars of their own (`guestAvatar`); `?avatar=<word>` wears one
 for a visit. `?scene=avatars` on the party demo shows a row.
 
-![Elo Pros avatars on blocky riders](p4-avatars.png)
+![Elo Pros avatars on the riders](p4-avatars.png)
 
 **On a phone.** With a coarse pointer (or `?touch=1`; `?touch=0` never)
 every game puts touch controls over its screen (`client/touch.mjs`): a stick

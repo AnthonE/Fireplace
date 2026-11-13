@@ -239,8 +239,9 @@ shell whose own command line contains the name: it kills that shell.
   Golf's, the arena's and Dogfight's share a cartoon's look (docs/look.md):
   `client/lowpoly.mjs` is the paint (three tones through `cel`/`light`, the
   hills' shadows, the sky, what glows), `client/figure.mjs` the person
-  (the arena's fighter, golf's golfer: a distance field, dressed by each
-  renderer's `kitOf`), `client/post.mjs` the finish (ink from depth,
+  (the arena's fighter, golf's golfer, and party's rider too, in party's own
+  light: a distance field, dressed by each renderer's `kitOf`, party's from
+  JS), `client/post.mjs` the finish (ink from depth,
   bloom, FXAA). The hour (day, dusk, night) is a uniform, `env`: a
   renderer's WGSL names the light as `SUN`, `TONE_LIT`, `HAZE`... and goes
   through `withEnv()`; a match's hour is its seed's (`envOf`), drawing only. Their world's pipelines draw into the post's float texture,
@@ -258,12 +259,16 @@ shell whose own command line contains the name: it kills that shell.
   (`client/dress.mjs`: a worn face, a shirt's print, a back item) are drawing
   only: the relay carries each slot's words beside the ticks (hello flag 4,
   `T_LOOK`, the dress in its spare bytes and `T_DRESS`), never in a tick,
-  record or hash. Party's blocky rider and the arena's and golf's cartoon
-  figure (`client/figure.mjs` `WEAR_WGSL`) both wear them: a new piece is
-  drawn on both. The lists are append-only (a look's number
-  goes on the wire); look 0 draws exactly as the riders always have, and a new
-  pattern or hat style goes in party's shader (`test/looks.test.mjs`
-  checks). Achievements (`client/achievements.mjs`)
+  record or hash. Every game draws a player as one cartoon figure
+  (`client/figure.mjs`): party's rider on its ball (`client/rider.mjs`, sprite
+  kind 13, its record in `figs`), the arena's fighter, golf's golfer, the
+  cards' (`drawLook`, 2D). It wears them through `WEAR_WGSL` and `kitOf`, so a
+  new piece is drawn in `figureRay` and on the cards. The lists are
+  append-only (a look's number goes on the wire); the house ball draws exactly
+  as the balls always have, and a new pattern goes in party's shader
+  (`lookBall`; `test/looks.test.mjs` and `test/figure.test.mjs` check). The
+  riding (`act`, `air`, `jolt`, `lean` in the `Kit`) is 0 in the arena and
+  golf, which then draw as they always have. Achievements (`client/achievements.mjs`)
   test results read from the confirmed world while a game's end is held, and
   are kept in the browser, like the look.
 - A look may have a `price` in marshmallows in place of an `unlock`: the
