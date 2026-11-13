@@ -243,7 +243,7 @@ protocol, for writing a client in any language, and
 
 ```sh
 npm run build                            # every sim; prints each wasm's sha256
-npm test                                 # 1,035 tests, about 24 minutes on 4 cores
+npm test                                 # 1,358 tests, about 33 minutes on 4 cores
 node --test test/party.test.mjs          # one file
 node tools/genfireplace.mjs --bots 12 --ticks 145000 --out logs/fireplace.qgl
 node harness/matrix.mjs --ticks 145000 --log logs/fireplace.qgl --wasm build/fireplace/game.wasm
