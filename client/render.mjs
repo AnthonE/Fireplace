@@ -12,7 +12,7 @@ import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
-import { BLOCK_RAY_WGSL } from './rider.mjs';
+import { BLOCK_RAY_WGSL } from './block.mjs';
 import { FIGURE_WGSL, WEAR_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
@@ -22,7 +22,7 @@ const FAR = 900;
 const MAX_FLASH = 64;
 const MAX_TREE = 4096;
 const NO_TINTS = new Uint32Array(L.NPLAYER); // a page with no looks: every seat its own colour
-const NO_LOOKS = new Uint32Array(L.NPLAYER).fill(0x10000); // nor bodies: everyone blocky
+const NO_LOOKS = new Uint32Array(L.NPLAYER).fill(0x10000); // nor bodies: everyone body 1, as a browser that never picked
 const NO_AVATARS = new Uint32Array(L.NPLAYER); // nor avatars
 // a body's skin and face (client/looks.mjs BODIES) for the golfers' figures
 const SKINS = BODIES.map((b) => b.skin || [1.0, 0.8, 0.66]);
@@ -157,7 +157,7 @@ struct SOut {
   @location(2) @interpolate(flat) kind: u32,
   @location(3) @interpolate(flat) feet: vec3f, // a golfer's or a tree's: where it stands
   @location(4) @interpolate(flat) pose: vec4f, // a golfer's heading, aim (rad, up), stride's phase and length (0..1); a tree's turn, size, style
-  @location(5) @interpolate(flat) skin: vec4f, // a golfer's skin, and its face (client/rider.mjs PART)
+  @location(5) @interpolate(flat) skin: vec4f, // a golfer's skin, and its face (client/looks.mjs BODIES: 1 a person's, 4 a robot's)
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
   @location(7) @interpolate(flat) wear: vec2u, // a golfer's look's hat and its dress word (client/figure.mjs WEAR_WGSL)
 };

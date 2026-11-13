@@ -242,9 +242,9 @@ crediting who made what (every theme is one). Next, in order:
    `/api/face/{wallet}` once the page knows a wallet (below).
 2. Skins. Built: looks (`client/looks.mjs`), a ball, a hat and a body each
    player picks, which the relay carries beside the sim to everyone in the
-   room (hello flag 4), twenty balls, fourteen hats and six bodies (the round
-   rider, three blocky, two robots: `client/rider.mjs`, the arena's fighters the
-   same figure), ten of them earned with the page's achievements
+   room (hello flag 4), twenty balls, fourteen hats and six bodies (four
+   skins and two robots, all of them the one cartoon figure every game draws:
+   `client/figure.mjs`), ten of them earned with the page's achievements
    (`client/achievements.mjs`), thirteen bought with marshmallows, 5 to 150
    each, out of a purse the browser keeps (`client/purse.mjs`: the tally's
    lifetime marshmallows less what was spent), and four emotes in the word's

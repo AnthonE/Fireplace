@@ -5,10 +5,10 @@
 // traces/party-render-<scene>.png; in a browser it draws the one in ?scene=
 // (or flips through them all, a click for the next), moving.
 //   ?orbit=0 holds the camera still
-//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=shop (the ones marshmallows buy, close)  ?scene=item~ball:bee (one look, close: the shop's pictures)  ?scene=blocky (every body, and a crowd of blocky riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
+//   ?scene=looks  ?scene=wardrobe (every ball and hat a player can pick, client/looks.mjs)  ?scene=shop (the ones marshmallows buy, close)  ?scene=item~ball:bee (one look, close: the shop's pictures)  ?scene=bodies (every body, and a crowd of riders)  ?env=night (any scene, another backdrop)  ?scene=crowd~over (seen from high over the edge)  ?res=1280x800  ?present=0
 import { createRenderer, Scene, LOOK, SPRITE, COLS, DECAL, ENVS } from './party-render.mjs';
 import { put, C } from './font.mjs';
-import { BALLS, HATS, BODIES, packLook, riderSprites } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, ballSprite } from './looks.mjs';
 import { rider, EMOTE, EMOTE_S } from './rider.mjs';
 import { FACES, SHIRTS, BACKS, packDress } from './dress.mjs';
 import { createJuice } from './juice.mjs';
@@ -43,11 +43,11 @@ function frameState(W, H, HS) {
 
 // A ball and its rider, as the frontends draw them: casters[slot] its shadow, the sprites its picture.
 function ball(s, p, x, y, z, { vel = [0, 0, 0], roll = 0, face, own = false, item = 0, r = 1, look = 0, emote = null, avatar = 0, dress = 0 } = {}) {
-  const rs = riderSprites(p, look);
+  const bs = ballSprite(p, look);
   const f = face ?? Math.atan2(vel[2], vel[0]);
   while (s.casters.length <= p) s.casters.push([0, -1000, 0, 0]);
   s.casters[p] = [x, y, z, r];
-  s.solid.push({ pos: [x, y + r, z], size: r, color: rs.ball.color, kind: SPRITE.BALL, minpx: 1, vel, roll, seed: rs.ball.seed });
+  s.solid.push({ pos: [x, y + r, z], size: r, color: bs.color, kind: SPRITE.BALL, minpx: 1, vel, roll, seed: bs.seed });
   rider(s.solid, p, look, { at: [x, y + 2 * r, z], face: f, roll, speed: Math.hypot(vel[0], vel[2]), vy: vel[1], emote, avatar, dress });
   if (item) s.solid.push({ pos: [x, y + 2 * r + 1.55, z], size: 0.26, color: [1, 0.85, 0.2, 1], kind: SPRITE.ORB, minpx: 1 });
   if (own) s.solid.push({ pos: [x, y + 2 * r + 1.65, z], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });
@@ -153,7 +153,7 @@ const SCENES = {
     title(s, r, 'EVERY BALL AND HAT', 'YELLOW: EARNED WITH AN ACHIEVEMENT   GREEN: BOUGHT WITH MARSHMALLOWS');
   },
 
-  // close: what marshmallows buy (client/looks.mjs `price`). Each priced hat on a blocky rider, then the priced bodies; in front, the same hats on the round rider, each on a priced ball
+  // close: what marshmallows buy (client/looks.mjs `price`). Each priced hat on a rider of a free body, then the priced bodies; in front, the same hats again, each on a priced ball
   shop(s, r) {
     s.env = 'day';
     s.yaw = Math.PI / 2; s.pitch = -0.24;
@@ -179,7 +179,7 @@ const SCENES = {
     s.slot = -1;
     s.mini = null;
     s.focus = [CX, CX]; s.extent = 16;
-    title(s, r, 'WHAT MARSHMALLOWS BUY', 'EACH HAT ON EITHER BODY; THE BALLS IN FRONT, FROM THE LEFT:');
+    title(s, r, 'WHAT MARSHMALLOWS BUY', 'EACH HAT TWICE; THE BALLS IN FRONT, FROM THE LEFT:');
     for (const [row, some] of [[3, balls.slice(0, 3)], [4, balls.slice(3)]]) {
       const line = some.map((k) => `${BALLS[k].name} ${BALLS[k].price}`).join('   ');
       put(s.text, COLS, Math.max(0, Math.floor((COLS - line.length) / 2)), row, line, C.GREEN);
@@ -188,7 +188,7 @@ const SCENES = {
 
   // one piece close on a plain stage, for the shop's pictures (client/shop.mjs, tools/shop-shots.mjs): item~ball:bee, item~hat:halo,
   // item~body:goldbot, item~face:cool, item~shirt:star, item~back:cape. A ball on the house rider with no hat, a hat on the house ball,
-  // a body on a ball of its own colour with no hat; a face, a shirt print or a back item on Elo Pros' default avatar, a blocky rider on the house ball.
+  // a body on a ball of its own colour with no hat; a face, a shirt print or a back item on Elo Pros' default avatar, on the house ball.
   item(s, r, env, view = 'ball:bee') {
     s.env = env || 'sunset';
     s.yaw = Math.PI / 2;
@@ -202,7 +202,7 @@ const SCENES = {
     const dress = kind === 'face' ? packDress(at(FACES)) : kind === 'shirt' ? packDress(0, at(SHIRTS)) : kind === 'back' ? packDress(0, 0, at(BACKS)) : 0;
     // the camera looks level at the middle of what is for sale: the whole rider for a ball or a body, the head for a hat or a face,
     // the chest for a shirt, the rider from behind for a back item
-    const [ty, dz, turn] = { hat: [3.0, 2.5, 0.55], face: [2.8, 1.1, 0.35], shirt: [2.35, 1.45, 0.4], back: [2.4, 1.75, Math.PI + 0.45], body: [2.3, 3.8, 0.55] }[kind] || [1.7, 3.6, 0.55];
+    const [ty, dz, turn] = { hat: [2.98, 1.15, 0.55], face: [2.78, 0.8, 0.35], shirt: [2.44, 1.05, 0.4], back: [2.4, 1.6, Math.PI + 0.45], body: [2.3, 2.4, 0.55] }[kind] || [1.9, 3.2, 0.55];
     s.cam = [CX, FLOOR + ty + 0.3, CX - dz];
     s.pitch = -Math.atan2(0.3, dz);
     ball(s, 0, CX, FLOOR, CX, { r: 0.8, face: -Math.PI / 2 + turn, roll: 0.9, look, dress, avatar: dressed ? AV_DEFAULT : 0 });
@@ -241,8 +241,8 @@ const SCENES = {
     title(s, r, 'THE AVATAR FIRST', 'A FACE, A SHIRT, A HAT, SOMETHING ON YOUR BACK, AND A BALL TO STAND ON');
   },
 
-  // every body a player can pick (client/rider.mjs) in front, standing still, then walking; a crowd of blocky riders behind, each hat on one
-  blocky(s, r) {
+  // every body a player can pick (client/looks.mjs BODIES) in front, standing still, then walking; a crowd of riders behind, each hat on one
+  bodies(s, r) {
     s.env = 'day';
     s.yaw = Math.PI / 2; s.pitch = -0.28;
     s.cam = [CX, FLOOR + 4.2, CX - 13];
@@ -262,10 +262,10 @@ const SCENES = {
     }
     s.slot = -1;
     s.focus = [CX, CX + 4]; s.extent = 26;
-    title(s, r, 'EVERY BODY', 'ROUND, THE RIDER AS IT WAS; THE REST BLOCKY, WALKING THEIR BALLS');
+    title(s, r, 'EVERY BODY', 'THE ONE FIGURE EVERY GAME DRAWS, WALKING ITS BALL');
   },
 
-  // every emote (keys 1 to 4 in a game), acted out over and over, on blocky riders and the round one
+  // every emote (keys 1 to 4 in a game), acted out over and over, and a rider flying with its arms up
   emotes(s, r) {
     s.env = 'day';
     s.yaw = Math.PI / 2; s.pitch = -0.12;
@@ -278,8 +278,8 @@ const SCENES = {
       ball(s, k, px, FLOOR, CX, { r: 0.7, face: -Math.PI / 2, look: packLook(k + 1, k + 1, 1 + (k % (BODIES.length - 1))), emote: { id: EMOTE[n], t: (t + k * 0.37) % EMOTE_S } });
       label(s, r, [px, FLOOR - 0.35, CX], n, C.WHITE);
     });
-    ball(s, 9, CX - 6.3, FLOOR, CX, { r: 0.7, face: -Math.PI / 2, look: packLook(1, 0, 0), emote: { id: EMOTE.CHEER, t } });
-    label(s, r, [CX - 6.3, FLOOR - 0.35, CX], 'ROUND', C.GREY);
+    ball(s, 9, CX - 4.2, FLOOR + 0.6, CX, { r: 0.7, face: -Math.PI / 2, look: packLook(1, 0, 0), vel: [0, 8, 0] });
+    label(s, r, [CX - 4.2, FLOOR - 0.35, CX], 'FLYING', C.GREY);
     // a winner's confetti (client/juice.mjs), thrown up over the cheer and stepped on to now
     const j = createJuice();
     j.burst([CX + 2.1, FLOOR + 3.4, CX], 90);
@@ -289,7 +289,7 @@ const SCENES = {
     title(s, r, 'EMOTES', 'KEYS 1 TO 4: WAVE, CHEER, DANCE, SPIN');
   },
 
-  // Elo Pros avatars (client/avatar.mjs) on blocky riders: the default, a few picked, a robot; a crowd of AI players' behind
+  // Elo Pros avatars (client/avatar.mjs) on the riders: the default, a few picked, a robot; a crowd of AI players' behind
   avatars(s, r) {
     s.env = 'day';
     s.yaw = Math.PI / 2; s.pitch = -0.2;
@@ -318,7 +318,7 @@ const SCENES = {
     title(s, r, 'ELO PROS AVATARS', 'SIX PARTS FROM A 32-COLOUR PALETTE, AND A FACE');
   },
 
-  // close: every hat on a blocky rider, turning to show its face and its back, seven to a row
+  // close: every hat on a rider, turning to show its face and its back, seven to a row
   outfits(s, r) {
     s.env = 'day';
     s.yaw = Math.PI / 2; s.pitch = -0.24;
@@ -336,7 +336,7 @@ const SCENES = {
     s.slot = -1;
     s.mini = null;
     s.focus = [CX, CX]; s.extent = 16;
-    title(s, r, 'EVERY HAT, BLOCKY', 'YELLOW: EARNED WITH AN ACHIEVEMENT   GREEN: BOUGHT WITH MARSHMALLOWS');
+    title(s, r, 'EVERY HAT', 'YELLOW: EARNED WITH AN ACHIEVEMENT   GREEN: BOUGHT WITH MARSHMALLOWS');
   },
 
   // three floors of hex ice, cracking under the crowd; tiles that went, tiles going

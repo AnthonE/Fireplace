@@ -28,7 +28,8 @@ import { loadTheme, themeList, savedTheme, saveTheme, FALLBACK, DEFAULT } from '
 import { Guest } from './fireplace-bot.mjs';
 import { GOLFER } from './brain.mjs';
 import { readClock } from './clock.mjs';
-import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName, lookId } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, lookName, lookId } from './looks.mjs';
+import { drawLook } from './figure.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult } from './achievements.mjs';
 import { balance, buy, openSet, emptyPurse, loadPurse, freshPurse, savePurse } from './purse.mjs';
 import { ownedLooks } from './shop.mjs';

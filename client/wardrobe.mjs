@@ -12,7 +12,8 @@
 // the mouse is free, with PLAY to take the controls again.
 
 import * as L from '../src/layout.mjs';
-import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, drawLook, lookName, lookId, saveLook, savedLook, wearable } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, isOpen, lookName, lookId, saveLook, savedLook, wearable } from './looks.mjs';
+import { drawLook } from './figure.mjs';
 import { FACES, SHIRTS, BACKS, packDress, unpackDress, dressOf, saveDress, savedDress, wearableDress } from './dress.mjs';
 import { ACHIEVEMENTS, loadTally } from './achievements.mjs';
 import { balance, buy, openSet, loadPurse, freshPurse, savePurse } from './purse.mjs';
@@ -138,14 +139,12 @@ export function createWardrobe(s) {
   const priceLine = (x) => { const short = x.price - s.balance(); return `${nice(x.name)}: ${plural(x.price)}.${short > 0 ? ` ${short} more to go.` : ''}`; };
 
   // a part of the look: its name, a tile an entry, and a line for a shut one's how-to. o is what is worn,
-  // { look, dress }: at(o) the part's entry in it, with(o, k) what is worn with entry k instead. A dress piece
-  // shows only on a blocky body, so wearing one on the round rider puts the blocky body on too.
+  // { look, dress }: at(o) the part's entry in it, with(o, k) what is worn with entry k instead.
   const cur = () => ({ look: s.look() >>> 0, dress: s.dress ? s.dress() >>> 0 : 0 });
-  const blocky = (w) => { const l = unpackLook(w); return BODIES[l.body].blocky ? w : packLook(l.ball, l.hat, 1); };
   const lookPart = (key, label, list, cap, frame, set) => ({ key, label, list, cap, frame,
     at: (o) => unpackLook(o.look)[key], with: (o, k) => { const l = unpackLook(o.look); return { look: set(l, k), dress: o.dress }; } });
   const dressPart = (key, label, list, frame, set) => ({ key, label, list, cap: null, frame,
-    at: (o) => unpackDress(o.dress)[key], with: (o, k) => { const d = unpackDress(o.dress); return { look: k ? blocky(o.look) : o.look, dress: set(d, k) }; } });
+    at: (o) => unpackDress(o.dress)[key], with: (o, k) => { const d = unpackDress(o.dress); return { look: o.look, dress: set(d, k) }; } });
   const PARTS = [
     // frame: [cy, r] for drawLook in a 40 x 52 tile, so the part fills it: the ball, the head, the whole rider
     lookPart('ball', 'BALL', BALLS, 'B', [33, 16], (l, k) => packLook(k, l.hat, l.body)),
@@ -154,7 +153,7 @@ export function createWardrobe(s) {
     ...(s.dress ? [
       // the head close, the chest close, the rider from behind
       dressPart('face', 'FACE', FACES, [200, 80], (d, k) => packDress(k, d.shirt, d.back)),
-      dressPart('shirt', 'SHIRT', SHIRTS, [131, 60], (d, k) => packDress(d.face, k, d.back)),
+      dressPart('shirt', 'SHIRT', SHIRTS, [136, 60], (d, k) => packDress(d.face, k, d.back)),
       dressPart('back', 'BACK', BACKS, [68, 21], (d, k) => packDress(d.face, d.shirt, k)),
     ] : []),
   ];

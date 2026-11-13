@@ -116,8 +116,12 @@ What stands on it:
   (`WEAR_WGSL`): the look's hat by style (low ones as a shell over the hair,
   standing ones on top, a pumpkin as the head), a worn face, a shirt print,
   a back item; the house hat and none draw no hat, and nothing worn is
-  marched. Party's riders are still the boxes (`client/rider.mjs`), and so is
-  the gun in your hands. The arena demo's `dressed` scene shows them all.
+  marched. Party's riders are the same figure at 0.76 of its size standing on
+  their balls (`client/rider.mjs`), marched in party's own sprite pass
+  (kind 13, a record each in `figs`), its arms up in a cheer or a flight and
+  thrown back by a hit (the `Kit`'s `act`, `air`, `jolt` and `lean`, 0 in the
+  arena and golf); the gun in your hands is still boxes (`client/block.mjs`).
+  The arena demo's `dressed` scene and party's `bodies` show them all.
 - **What glows** (`FX_WGSL`): a blast is a spiked burst in three flat bands,
   white-hot inside, breaking up in holes from its rim as it ages; a spark a
   four-pointed glint; a shield or a spawn a ring of dashes; a tracer a white

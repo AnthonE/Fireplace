@@ -2,8 +2,9 @@
 // drawing only, never the sim: the relay carries each slot's look word beside
 // the ticks (net/wire.mjs T_LOOK), so the hashed world is the same bits with or
 // without them, and a room where nobody picked one looks as it always did.
-// Ball 0, hat 0 and body 0 are the house look, the seat's own colours on the
-// round rider.
+// Ball 0, hat 0 and body 0 are the house look: the seat's own colours, no hat.
+// Every game draws the player as one cartoon figure (client/figure.mjs) that
+// wears it: party's rider on its ball, the arena's fighter, golf's golfer.
 //
 // The lists are append-only: a look's number is its place in its list, and
 // that number is what goes on the wire. A number this build doesn't know (a
@@ -16,12 +17,11 @@
 // both. The relay knows neither: the page wears only what it holds.
 
 import * as L from '../src/layout.mjs';
-import { colorsOf } from './avatar.mjs';
 
 // The ball's patterns, as party's renderer draws them (case 0)
 export const PATTERN = { BEACH: 0, STRIPES: 1, RIBS: 2, SOLID: 3, METAL: 4, EIGHT: 5, DOTS: 6, CHECKER: 7, SWIRL: 8, DISCO: 9 };
-// The hat's styles, as the head is drawn (case 8); from the top hat on, a hat
-// stands off the head, so it is boxes on the round rider too (client/rider.mjs)
+// The hat's styles, as the figure wears them (client/figure.mjs fgHat); from
+// the top hat on, a hat stands off the head, over the figure's usual height
 export const STYLE = { CAP: 0, NONE: 1, BEANIE: 2, BAND: 3, HELMET: 4, CROWN: 5, PUMPKIN: 6, TOPHAT: 7, CONE: 8, HALO: 9, ANTLERS: 10, PHONES: 11, PROP: 12 };
 
 // a: the ball's colour (null: the seat's), b: its second colour (null: the
@@ -67,21 +67,23 @@ export const HATS = [
   { key: 'halo', name: 'HALO', style: STYLE.HALO, color: [1.0, 0.86, 0.3], price: 75 },
 ];
 // what a hat wears beside its own colour: a top hat's band, a party hat's
-// stripes and a propeller cap's other panels and blades (rider.mjs's boxes
-// and the cards below; party's shader has its own copies)
+// stripes and a propeller cap's other panels and blade (the cards'
+// client/figure.mjs drawLook; the figure's WGSL has its own copies)
 export const TRIM = { BAND: [0.78, 0.1, 0.14], CREAM: [0.98, 0.95, 0.7], BLUE: [0.2, 0.42, 0.92], YELLOW: [1.0, 0.82, 0.2] };
 
-// The rider's body (client/rider.mjs): the round one the riders have always
-// been, or a blocky figure of boxes, its arms in skin (null: peach) and a face
+// The figure's body (client/figure.mjs): its skin, and its face, 1 a person's
+// or 4 a robot's (a box for a head, a visor, metal all over). The keys are as
+// they were when party's riders were spheres (round) or boxes (the rest): a
+// look's number never changes, and every body is the figure now.
 // on its head (rider.mjs PART). Its shirt is the ball's colour, its legs the
 // second colour's, darker.
 export const BODIES = [
-  { key: 'round', name: 'ROUND', blocky: false },
-  { key: 'blocky', name: 'BLOCKY', blocky: true, skin: [0.96, 0.8, 0.22], face: 1 },
-  { key: 'peach', name: 'BLOCKY PEACH', blocky: true, skin: [1.0, 0.8, 0.66], face: 1 },
-  { key: 'cocoa', name: 'BLOCKY COCOA', blocky: true, skin: [0.55, 0.36, 0.24], face: 1 },
-  { key: 'robot', name: 'ROBOT', blocky: true, skin: [0.62, 0.66, 0.72], face: 4, metal: true },
-  { key: 'goldbot', name: 'GOLD ROBOT', blocky: true, skin: [1.0, 0.66, 0.08], face: 4, metal: true, price: 150 },
+  { key: 'round', name: 'TAN', skin: [0.88, 0.64, 0.46], face: 1 },
+  { key: 'blocky', name: 'YELLOW', skin: [0.96, 0.8, 0.22], face: 1 },
+  { key: 'peach', name: 'PEACH', skin: [1.0, 0.8, 0.66], face: 1 },
+  { key: 'cocoa', name: 'COCOA', skin: [0.55, 0.36, 0.24], face: 1 },
+  { key: 'robot', name: 'ROBOT', skin: [0.62, 0.66, 0.72], face: 4 },
+  { key: 'goldbot', name: 'GOLD ROBOT', skin: [1.0, 0.66, 0.08], face: 4, price: 150 },
 ];
 
 // a look's id in a purse (client/purse.mjs): its list and its key, which never change
@@ -125,18 +127,13 @@ export function lookOf(slot, w = 0, seat = slotColor) {
   return { ball, hat, body, a, b: B.b || seat(slot + 0.5), pattern: B.pattern, hatColor: Hh.color || a, style: Hh.style };
 }
 
-// The sprites' fields for a rider (client/party-render.mjs SPRITE): the ball,
-// the body and the head. color[3] is 1 for the house look (the renderer's old
-// path: beach panels, the seat's colours from the seed, a cap), else 2 + the
-// pattern or the style; a ball's seed is then its second colour, rgb24.
-export function riderSprites(slot, w = 0) {
+// A ball's sprite fields (client/party-render.mjs SPRITE.BALL): color[3] is 1
+// for the house look (beach panels, the seat's colours from the seed), else
+// 2 + the pattern, and the seed its second colour, rgb24. Its rider is the
+// figure (client/rider.mjs).
+export function ballSprite(slot, w = 0) {
   const L = lookOf(slot, w);
-  const { ball, hat } = unpackLook(w);
-  return {
-    ball: ball ? { color: [...L.a, 2 + L.pattern], seed: rgb24(L.b) } : { color: [...L.a, 1], seed: slot },
-    body: { color: [...L.a, 1] },
-    head: { color: [...L.hatColor, hat ? 2 + L.style : 1] },
-  };
+  return unpackLook(w).ball ? { color: [...L.a, 2 + L.pattern], seed: rgb24(L.b) } : { color: [...L.a, 1], seed: slot };
 }
 
 // For renderers that tint a whole player one colour (golf, the arena): the
@@ -170,18 +167,18 @@ export function avatarsOf(h) {
 
 // ---- what this browser picked, and what it has earned (localStorage, like the room's theme)
 const KEY = 'fireplace.look';
-// what a browser that never picked wears: the house colours on a blocky rider
+// what a browser that never picked wears: the house colours on the yellow body, as Elo Pros' default avatar is
 export const FIRST_LOOK = packLook(0, 0, 1);
 export function savedLook() {
   try { const v = localStorage.getItem(KEY); return v === null ? FIRST_LOOK : Number(v) >>> 0; } catch { return FIRST_LOOK; }
 }
 // An AI player's look in a local room (client/local.mjs): any free ball, hat
-// and blocky body (none earned, none bought), picked from its slot so it
-// keeps it all game.
+// and body but the house one (none earned, none bought), picked from its slot
+// so it keeps it all game.
 export function guestLook(p) {
   const open = (list) => list.map((x, k) => (x.unlock || x.price ? -1 : k)).filter((k) => k >= 0);
   const h = Math.imul(p + 1, 0x9e3779b1) >>> 0;
-  const balls = open(BALLS), hats = open(HATS), bodies = open(BODIES).filter((k) => BODIES[k].blocky);
+  const balls = open(BALLS), hats = open(HATS), bodies = open(BODIES).filter((k) => k > 0);
   return packLook(balls[h % balls.length], hats[(h >>> 8) % hats.length], bodies[(h >>> 16) % bodies.length]);
 }
 export function saveLook(w) {
@@ -201,187 +198,4 @@ export function wearable(w, got) {
   return packLook(isOpen(BALLS[ball], got) ? ball : 0, isOpen(HATS[hat], got) ? hat : 0, isOpen(BODIES[body], got) ? body : 0);
 }
 
-// ---- a picture of a look, for the TV's cards (a 2D canvas context)
-const css = (c, k = 1) => `rgb(${c.map((v) => Math.round(Math.min(1, v * k) * 255)).join(',')})`;
-// dress: the pieces a dress word names (client/dress.mjs dressOf), drawn on a blocky rider, or null
-export function drawLook(g, cx, cy, r, slot, w, t = 0, avatar = 0, dress = null) {
-  const L = lookOf(slot, w);
-  // the ball
-  g.save();
-  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.clip();
-  g.fillStyle = css(L.a); g.fillRect(cx - r, cy - r, 2 * r, 2 * r);
-  const spin = (t * 0.6) % 1;
-  if (L.pattern === PATTERN.BEACH) {
-    const pw = 2 * r / 3;
-    for (let k = -3; k < 3; k++) {
-      g.fillStyle = [css(L.a), css([0.85, 0.85, 0.85]), css(L.b)][(k + 3) % 3];
-      g.fillRect(cx - r + k * pw + spin * 3 * pw, cy - r, pw + 1, 2 * r);
-    }
-    g.fillStyle = css([0.85, 0.85, 0.85]); g.fillRect(cx - r, cy - r, 2 * r, r * 0.28); g.fillRect(cx - r, cy + r * 0.72, 2 * r, r * 0.28);
-  } else if (L.pattern === PATTERN.STRIPES) {
-    g.fillStyle = css(L.b);
-    for (let k = 1; k < 5; k += 2) g.fillRect(cx - r, cy - r + k * (2 * r / 5), 2 * r, 2 * r / 5);
-  } else if (L.pattern === PATTERN.RIBS) {
-    g.fillStyle = css(L.b);
-    for (let k = 0; k < 8; k += 2) g.fillRect(cx - r + ((k + spin * 2) % 8) * (r / 4), cy - r, r / 8, 2 * r);
-  } else if (L.pattern === PATTERN.METAL) {
-    g.fillStyle = css(L.a, 1.25); g.fillRect(cx - r * 0.6, cy - r * 0.7, r * 0.35, r * 0.35);
-  } else if (L.pattern === PATTERN.EIGHT) {
-    g.fillStyle = css(L.b); g.beginPath(); g.arc(cx + r * 0.15, cy - r * 0.1, r * 0.45, 0, Math.PI * 2); g.fill();
-    const px = Math.max(1, Math.round(r * 0.12));
-    const EIGHT = [7, 5, 7, 5, 7]; // the font's 8, three pixels a row
-    EIGHT.forEach((row, y) => { for (let x = 0; x < 3; x++) if ((row >> (2 - x)) & 1) { g.fillStyle = '#111'; g.fillRect(cx + r * 0.15 - 1.5 * px + x * px, cy - r * 0.1 - 2.5 * px + y * px, px, px); } });
-  } else if (L.pattern === PATTERN.DOTS) {
-    // a spot facing you and five round it, turning
-    g.fillStyle = css(L.b);
-    const spot = (x, y, k) => { g.beginPath(); g.ellipse(cx + x * r, cy + y * r, r * 0.3 * k, r * 0.3, 0, 0, Math.PI * 2); g.fill(); };
-    spot(0, 0, 1);
-    for (let k = 0; k < 5; k++) { const a = (k / 5 + spin * 0.2) * Math.PI * 2; spot(Math.cos(a) * 0.86, Math.sin(a) * 0.86, 0.8); }
-  } else if (L.pattern === PATTERN.CHECKER) {
-    g.fillStyle = css(L.b);
-    const q = r / 2;
-    for (let y = -2; y < 2; y++) for (let x = -3; x < 3; x++) if ((x + y) & 1) g.fillRect(cx + (x + spin * 2) * q, cy + y * q, q + 0.5, q + 0.5);
-  } else if (L.pattern === PATTERN.SWIRL) {
-    // six arms from the middle, bent as they go
-    g.fillStyle = css(L.b);
-    for (let k = 0; k < 6; k += 2) {
-      g.beginPath(); g.moveTo(cx, cy);
-      for (let i = 0; i <= 8; i++) { const d = (i / 8) * r * 1.1, a = ((k + spin * 2) / 6) * Math.PI * 2 + (i / 8) * 1.2; g.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d); }
-      for (let i = 8; i >= 0; i--) { const d = (i / 8) * r * 1.1, a = ((k + 1 + spin * 2) / 6) * Math.PI * 2 + (i / 8) * 1.2; g.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d); }
-      g.fill();
-    }
-  } else if (L.pattern === PATTERN.DISCO) {
-    // mirror tiles, each its own grey, a few catching the light
-    const q = r / 3;
-    for (let y = -3; y < 3; y++) for (let x = -3; x < 3; x++) {
-      const h = (Math.imul(x * 7 + y * 13 + 40, 0x9e3779b1) >>> 24) / 255;
-      g.fillStyle = h > 0.86 ? '#fff' : css(h > 0.6 ? L.b : L.a, 0.55 + 0.6 * h);
-      g.fillRect(cx + x * q + 0.5, cy + y * q + 0.5, q - 1, q - 1);
-    }
-  }
-  g.restore();
-  // a rim, so a dark ball still shows on a dark card
-  g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = Math.max(1, r * 0.05);
-  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
-  if (BODIES[L.body].blocky) return drawBlocky(g, cx, cy - r, r, L, t, colorsOf(avatar), dress);
-  // the rider, as the renderers place it on a ball of radius r: a body 0.22 r over its top, a head 0.78 r
-  const hr = r * 0.3, hx = cx, hy = cy - r - r * 0.78;
-  g.fillStyle = css(L.a, 0.8); g.beginPath(); g.arc(cx, cy - r - r * 0.22, r * 0.34, 0, Math.PI * 2); g.fill(); g.stroke();
-  g.fillStyle = L.style === STYLE.PUMPKIN ? css(L.hatColor) : css([1, 0.8, 0.66]);
-  g.beginPath(); g.arc(hx, hy, hr, 0, Math.PI * 2); g.fill();
-  g.fillStyle = css(L.hatColor);
-  if (L.style === STYLE.CAP) g.fillRect(hx - hr, hy - hr, 2 * hr, hr * 0.7);
-  else if (L.style === STYLE.BEANIE) g.fillRect(hx - hr, hy - hr * 1.1, 2 * hr, hr);
-  else if (L.style === STYLE.BAND) g.fillRect(hx - hr, hy - hr * 0.6, 2 * hr, hr * 0.35);
-  else if (L.style === STYLE.HELMET) { g.fillRect(hx - hr, hy - hr * 1.05, 2 * hr, hr * 1.1); g.fillRect(hx - hr, hy, hr * 0.35, hr * 0.8); }
-  else if (L.style === STYLE.CROWN) for (let k = 0; k < 3; k++) g.fillRect(hx - hr + k * hr * 0.75, hy - hr * 1.5, hr * 0.5, hr * 0.9);
-  else if (L.style === STYLE.PUMPKIN) { g.fillStyle = '#3c8a2c'; g.fillRect(hx - hr * 0.12, hy - hr * 1.35, hr * 0.24, hr * 0.45); }
-  else if (L.style === STYLE.TOPHAT) {
-    g.fillRect(hx - hr * 1.15, hy - hr * 0.85, hr * 2.3, hr * 0.22); g.fillRect(hx - hr * 0.75, hy - hr * 1.95, hr * 1.5, hr * 1.15);
-    g.fillStyle = css(TRIM.BAND); g.fillRect(hx - hr * 0.75, hy - hr * 1.1, hr * 1.5, hr * 0.25);
-  } else if (L.style === STYLE.CONE) {
-    const tri = (y0, y1, c) => { const w = (y) => hr * 0.7 * (1 - (y - 0.65) / 1.5); g.fillStyle = c; g.beginPath(); g.moveTo(hx - w(y0), hy - hr * y0); g.lineTo(hx + w(y0), hy - hr * y0); g.lineTo(hx + w(y1), hy - hr * y1); g.lineTo(hx - w(y1), hy - hr * y1); g.fill(); };
-    tri(0.65, 1.15, css(L.hatColor)); tri(1.15, 1.65, css(TRIM.CREAM)); tri(1.65, 2.15, css(L.hatColor));
-    g.fillStyle = css(TRIM.CREAM); g.beginPath(); g.arc(hx, hy - hr * 2.2, hr * 0.2, 0, Math.PI * 2); g.fill();
-  } else if (L.style === STYLE.HALO) {
-    g.save(); g.strokeStyle = css(L.hatColor, 1.15); g.lineWidth = Math.max(1.5, hr * 0.2);
-    g.beginPath(); g.ellipse(hx, hy - hr * 1.5, hr * 0.8, hr * 0.24, 0, 0, Math.PI * 2); g.stroke(); g.restore();
-  } else if (L.style === STYLE.ANTLERS) {
-    g.save(); g.strokeStyle = css(L.hatColor); g.lineWidth = Math.max(1.5, hr * 0.2); g.lineCap = 'round';
-    for (const k of [-1, 1]) {
-      g.beginPath(); g.moveTo(hx + k * hr * 0.35, hy - hr * 0.9); g.lineTo(hx + k * hr * 0.85, hy - hr * 1.9);
-      g.moveTo(hx + k * hr * 0.6, hy - hr * 1.4); g.lineTo(hx + k * hr * 0.3, hy - hr * 1.85);
-      g.moveTo(hx + k * hr * 0.85, hy - hr * 1.9); g.lineTo(hx + k * hr * 1.2, hy - hr * 2.05); g.stroke();
-    }
-    g.restore();
-  } else if (L.style === STYLE.PHONES) {
-    g.save(); g.strokeStyle = css(L.hatColor, 0.35); g.lineWidth = Math.max(1.5, hr * 0.2);
-    g.beginPath(); g.arc(hx, hy, hr * 1.08, Math.PI, Math.PI * 2); g.stroke(); g.restore();
-    g.fillRect(hx - hr * 1.3, hy - hr * 0.35, hr * 0.42, hr * 0.8); g.fillRect(hx + hr * 0.88, hy - hr * 0.35, hr * 0.42, hr * 0.8);
-  } else if (L.style === STYLE.PROP) {
-    g.fillRect(hx - hr, hy - hr, hr * 0.7, hr * 0.65); g.fillStyle = css(TRIM.BLUE); g.fillRect(hx - hr * 0.3, hy - hr, hr * 0.65, hr * 0.65);
-    g.fillStyle = css(TRIM.YELLOW); g.fillRect(hx + hr * 0.35, hy - hr, hr * 0.65, hr * 0.65);
-    g.fillRect(hx - hr * 0.08, hy - hr * 1.4, hr * 0.16, hr * 0.4); g.fillRect(hx - hr * 0.95, hy - hr * 1.55, hr * 1.9, hr * 0.17);
-  }
-  g.fillStyle = L.style === STYLE.PUMPKIN ? '#ffd860' : '#111';
-  g.fillRect(hx - hr * 0.45, hy - hr * 0.1, hr * 0.22, hr * 0.28);
-  g.fillRect(hx + hr * 0.23, hy - hr * 0.1, hr * 0.22, hr * 0.28);
-}
-
-// A blocky rider from the front (client/rider.mjs's sizes, a metre to r), its
-// feet at (cx, top); A its avatar's colours (client/avatar.mjs colorsOf) or
-// null; D the dress it wears ({ face, shirt, back }, client/dress.mjs) or null
-function drawBlocky(g, cx, top, r, L, t, A, D = null) {
-  const B = BODIES[L.body];
-  const skin = B.skin || [1, 0.8, 0.66];
-  const pants = L.b.map((v) => v * 0.62);
-  const shirt = A ? A.torso : L.a;
-  const sw = Math.sin(t * 2) * 0.03 * r; // the arms, swinging a little
-  g.lineWidth = Math.max(1, r * 0.025);
-  g.strokeStyle = 'rgba(0,0,0,0.55)';
-  const rect = (x, y, w, h, c, k = 1) => { g.fillStyle = css(c, k); g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); g.strokeRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
-  const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(cx + x * r, top - (y + h) * r, w * r, h * r); };
-  const X = (x) => cx + x * r, Y = (y) => top - y * r;
-  const fill = (c, path) => { g.fillStyle = c; g.beginPath(); path(); g.fill(); };
-  // what hangs on its back: seen from behind (D.behind) it goes over the rest, from the front only the wings show round it
-  const back = D?.back?.key, behind = !!D?.behind;
-  const wings = () => { for (const k of [-1, 1]) { rect(k < 0 ? -0.86 : 0.5, 0.62, 0.36, 0.5, [0.97, 0.97, 1]); rect(k < 0 ? -1.06 : 0.82, 0.86, 0.24, 0.4, [0.88, 0.9, 1]); } };
-  const onBack = () => {
-    if (back === 'cape') { rect(-0.28, 0.08, 0.56, 0.94, TRIM.BAND); rect(-0.3, 0.96, 0.6, 0.06, [0.95, 0.8, 0.25]); }
-    else if (back === 'pack') { rect(-0.19, 0.52, 0.38, 0.42, [0.85, 0.42, 0.1]); rect(-0.13, 0.55, 0.26, 0.14, [0.55, 0.26, 0.06]); }
-    else if (back === 'jet') { for (const k of [-1, 1]) { rect(k * 0.12 - 0.06, 0.55, 0.12, 0.42, [0.62, 0.66, 0.72]); rect(k * 0.12 - 0.04, 0.4, 0.08, 0.15, [1, 0.55, 0.15]); } rect(-0.18, 0.86, 0.36, 0.05, [0.4, 0.43, 0.48]); }
-    else if (back === 'wings') wings();
-  };
-  if (back === 'wings' && !behind) wings();
-  // seen from the front, its right side is on the picture's left
-  rect(-0.24, 0, 0.23, 0.5, A ? A.rleg : pants); rect(0.01, 0, 0.23, 0.5, A ? A.lleg : pants);
-  rect(-0.25, 0.5, 0.5, 0.5, shirt);
-  // the shirt's print, on the torso's front: u and v across and up it, -1 to 1
-  const v = behind ? undefined : D?.shirt?.variant;
-  if (v !== undefined) {
-    const U = (u) => X(u * 0.25), V = (w) => Y(0.75 + w * 0.25), lite = css(shirt.map((c) => c + (1 - c) * 0.7));
-    if (v === 0) {
-      for (const w of [0.35, -0.65]) px(-0.25, 0.75 + w * 0.25, 0.5, 0.075, lite);
-    } else if (v === 4) {
-      for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) if (((a + b) & 1) === 0) px(-0.25 + a * 0.125, 0.5 + b * 0.125, 0.125, 0.125, lite);
-    } else if (v === 1) fill(css([1, 0.82, 0.2]), () => { g.moveTo(U(0), V(0.85)); g.lineTo(U(0.18), V(0.18)); g.lineTo(U(0.85), V(0)); g.lineTo(U(0.18), V(-0.18)); g.lineTo(U(0), V(-0.85)); g.lineTo(U(-0.18), V(-0.18)); g.lineTo(U(-0.85), V(0)); g.lineTo(U(-0.18), V(0.18)); });
-    else if (v === 2) fill(css([0.9, 0.12, 0.2]), () => { g.arc(U(-0.32), V(0.25), 0.32 * 0.25 * r, 0, Math.PI * 2); g.arc(U(0.32), V(0.25), 0.32 * 0.25 * r, 0, Math.PI * 2); g.moveTo(U(-0.64), V(0.18)); g.lineTo(U(0.64), V(0.18)); g.lineTo(U(0), V(-0.75)); });
-    else if (v === 3) { g.save(); g.strokeStyle = css([0.72, 1, 0.22]); g.lineWidth = Math.max(1, 0.05 * r); for (const w of [0.4, -0.1]) { g.beginPath(); g.moveTo(U(-0.65), V(w - 0.6)); g.lineTo(U(0), V(w)); g.lineTo(U(0.65), V(w - 0.6)); g.stroke(); } g.restore(); }
-    else if (v === 5) { fill(css([1, 0.4, 0.08]), () => { g.moveTo(U(0), V(0.85)); g.quadraticCurveTo(U(0.6), V(-0.2), U(0), V(-0.75)); g.quadraticCurveTo(U(-0.6), V(-0.2), U(0), V(0.85)); }); fill(css([1, 0.88, 0.35]), () => { g.moveTo(U(0), V(0.2)); g.quadraticCurveTo(U(0.3), V(-0.35), U(0), V(-0.65)); g.quadraticCurveTo(U(-0.3), V(-0.35), U(0), V(0.2)); }); }
-  }
-  if (back === 'pack' && !behind) for (const x of [-0.17, 0.12]) px(x, 0.62, 0.05, 0.38, css([0.45, 0.22, 0.05]));
-  g.save(); g.translate(0, -sw); rect(-0.49, 0.5, 0.23, 0.5, A ? A.rarm : skin); g.restore();
-  g.save(); g.translate(0, sw); rect(0.26, 0.5, 0.23, 0.5, A ? A.larm : skin); g.restore();
-  const pumpkin = L.style === STYLE.PUMPKIN;
-  const hw = 0.37, hh = 0.345, hy = 1.01;
-  rect(-hw / 2, hy, hw, hh, pumpkin ? L.hatColor : A ? A.head : skin);
-  // the face: a worn one (client/dress.mjs FACES' variant), or the head's own
-  const fv = pumpkin ? undefined : D?.face?.variant;
-  if (behind) onBack();
-  else if (fv === 0) { px(-0.16, hy + 0.15, 0.32, 0.09, '#111'); px(-0.06, hy + 0.06, 0.14, 0.03, '#111'); }
-  else if (fv === 1) { px(-0.1, hy + 0.17, 0.04, 0.07, '#111'); px(0.04, hy + 0.19, 0.08, 0.03, '#111'); px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); }
-  else if (fv === 2) { px(-0.1, hy + 0.18, 0.05, 0.05, '#111'); px(0.05, hy + 0.18, 0.05, 0.05, '#111'); px(-0.035, hy + 0.05, 0.07, 0.07, '#111'); }
-  else if (fv === 3) { px(-0.1, hy + 0.18, 0.04, 0.05, '#111'); px(0.06, hy + 0.18, 0.04, 0.05, '#111'); px(-0.02, hy + 0.12, 0.04, 0.03, '#f28ca0'); for (const k of [-1, 1]) { px(k < 0 ? -0.18 : 0.06, hy + 0.1, 0.12, 0.012, '#111'); px(k < 0 ? -0.18 : 0.06, hy + 0.075, 0.12, 0.012, '#111'); } }
-  else if (fv === 4) { for (const x of [-0.08, 0.08]) { px(x - 0.035, hy + 0.19, 0.07, 0.02, '#ffd633'); px(x - 0.01, hy + 0.165, 0.02, 0.07, '#ffd633'); } px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); }
-  else if (pumpkin) { px(-0.12, hy + 0.17, 0.07, 0.07, '#ffd860'); px(0.05, hy + 0.17, 0.07, 0.07, '#ffd860'); px(-0.11, hy + 0.06, 0.22, 0.05, '#ffd860'); px(-0.02, hy + 0.3, 0.04, 0.08, '#3c8a2c'); }
-  else if (A ? A.robot : B.face === 4) { px(-0.13, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(0.05, hy + 0.17, 0.08, 0.05, '#5ff4ff'); px(-0.08, hy + 0.06, 0.16, 0.05, css(skin, 0.4)); }
-  else { px(-0.1, hy + 0.17, 0.04, 0.07, '#111'); px(0.06, hy + 0.17, 0.04, 0.07, '#111'); px(-0.08, hy + 0.08, 0.16, 0.03, '#111'); px(-0.1, hy + 0.1, 0.03, 0.03, '#111'); px(0.07, hy + 0.1, 0.03, 0.03, '#111'); }
-  // the hat
-  const c = L.hatColor, top2 = hy + hh;
-  if (L.style === STYLE.CAP) { rect(-0.2, top2 - 0.06, 0.4, 0.12, c); rect(-0.2, top2 - 0.07, 0.48, 0.035, c, 0.85); }
-  else if (L.style === STYLE.BEANIE) { rect(-0.2, top2 - 0.1, 0.4, 0.17, c); rect(-0.21, top2 - 0.12, 0.42, 0.06, c, 0.7); rect(-0.04, top2 + 0.07, 0.08, 0.06, c, 0.7); }
-  else if (L.style === STYLE.BAND) rect(-0.19, top2 - 0.14, 0.38, 0.07, c);
-  else if (L.style === STYLE.HELMET) { rect(-0.21, top2 - 0.06, 0.42, 0.12, c); rect(-0.21, hy - 0.02, 0.05, top2 - hy - 0.04, c); rect(0.16, hy - 0.02, 0.05, top2 - hy - 0.04, c); }
-  else if (L.style === STYLE.CROWN) { rect(-0.2, top2 - 0.02, 0.4, 0.09, c); for (const x of [-0.2, -0.04, 0.12]) rect(x, top2 + 0.07, 0.08, 0.08, c); }
-  else if (L.style === STYLE.TOPHAT) { rect(-0.25, top2 - 0.01, 0.5, 0.04, c); rect(-0.16, top2 + 0.03, 0.32, 0.25, c); rect(-0.16, top2 + 0.03, 0.32, 0.055, TRIM.BAND); }
-  else if (L.style === STYLE.CONE) { rect(-0.14, top2, 0.28, 0.09, c); rect(-0.1, top2 + 0.09, 0.2, 0.09, TRIM.CREAM); rect(-0.06, top2 + 0.18, 0.12, 0.09, c); rect(-0.04, top2 + 0.27, 0.08, 0.07, TRIM.CREAM); }
-  else if (L.style === STYLE.HALO) rect(-0.2, top2 + 0.09, 0.4, 0.045, c, 1.15);
-  else if (L.style === STYLE.ANTLERS) {
-    rect(-0.19, top2 - 0.01, 0.38, 0.03, c, 0.6);
-    for (const k of [-1, 1]) { const m = (x, w) => (k < 0 ? -x - w : x); rect(m(0.09, 0.045), top2 + 0.02, 0.045, 0.17, c); rect(m(0.135, 0.11), top2 + 0.12, 0.11, 0.04, c); rect(m(0.205, 0.04), top2 + 0.16, 0.04, 0.1, c); }
-  } else if (L.style === STYLE.PHONES) { rect(-0.2, top2, 0.4, 0.035, c, 0.35); rect(-0.245, hy + 0.08, 0.06, 0.17, c); rect(0.185, hy + 0.08, 0.06, 0.17, c); }
-  else if (L.style === STYLE.PROP) {
-    rect(-0.2, top2 - 0.05, 0.14, 0.11, c); rect(-0.06, top2 - 0.05, 0.12, 0.11, TRIM.BLUE); rect(0.06, top2 - 0.05, 0.14, 0.11, TRIM.YELLOW);
-    rect(-0.015, top2 + 0.06, 0.03, 0.06, TRIM.YELLOW); rect(-0.19, top2 + 0.12, 0.38, 0.03, TRIM.YELLOW);
-  }
-}
+// A picture of a look, for the TV's cards and the wardrobe: client/figure.mjs drawLook.

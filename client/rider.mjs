@@ -1,186 +1,18 @@
-// A rider on a ball, as party's frontend draws it: the round one
-// (a body and a head, two spheres, as the riders have always been) or a blocky
-// one, a figure of boxes standing on the ball and walking it along: legs that
-// step as it rolls, arms that swing against them and go up when it flies, a
-// head with a face, a hat of boxes. Its body is the look's third byte
-// (client/looks.mjs BODIES). Drawing only, like the rest of a look.
+// A rider on a ball, as party's frontend draws it: the cartoon figure every
+// game draws its players as (client/figure.mjs), standing on its ball and
+// walking it along, its legs stepping as it rolls, its arms swinging against
+// them and going up as it flies, thrown back when its ball is hit, acting out
+// an emote. Its body (the look's third byte, client/looks.mjs BODIES), its
+// Elo Pros avatar and its dress dress it as they dress the arena's fighter and
+// golf's golfer. Drawing only, like the rest of a look.
 //
-// A box is a sprite of kind BLOCK: the sprite's square covers the box's
-// bounding sphere and each pixel casts its own ray at the box (blockAt below),
-// so a box costs one quad and is exact at any size, with a bevel and an ink
-// line on its edges like party's solids. Its fields: pos the centre, size the
-// bounding radius, vel the half sizes (across, up, front), roll its yaw (the
-// front toward (cos, 0, sin)), seed its pitch (turned about its across axis,
-// a hanging limb's foot going forward), color.a its part (PART) plus 16 times
-// its splay, turned about its front first (a twentieth of a radian a step,
-// 64 none: a hanging arm's hand going out to its right).
-import { lookOf, unpackLook, riderSprites, BODIES, STYLE, TRIM } from './looks.mjs';
-import { colorsOf } from './avatar.mjs';
-import { FACES, SHIRTS, BACKS, unpackDress } from './dress.mjs';
+// A rider is one sprite of kind FIGURE: the sprite's square covers it and each
+// pixel marches its ray through the figure (figureRay), the figure's record
+// (`fig`: where its feet are, its pose and its kit) in a buffer of its own.
+import { figureKit, RIDE } from './figure.mjs';
 
-export const BLOCK = 12; // the sprite kind, the same in both renderers
-// what a box's faces show: 0 plain plastic, 1 a head's face, 2 a pumpkin's lit face and ribs, 3 metal, 4 a robot's face, 5 lit from inside (a halo),
-// 6 a worn face (a head's front: cool, wink, surprised, cat, star-eyed), 7 a shirt's print on a torso's front
-export const PART = { PLAIN: 0, FACE: 1, PUMPKIN: 2, METAL: 3, ROBOT: 4, GLOW: 5, FACEWEAR: 6, PRINT: 7 };
-// A part from FACEWEAR up carries a variant in the code's high bits where a limb carries its splay: which worn face
-// (client/dress.mjs FACES' `variant`) or which shirt print, 0 to 127. A box's code is its part, and 16 times its splay or variant.
-export const partCode = (part, variant = 0) => part + 16 * variant;
-
-// A box's pixel, in WGSL any renderer can declare (the arena's fighters too):
-// blockRay casts a ray from e along unit d at a box, fwd the camera's forward
-// axis and focal its focal length (px), for the view depth z and a pixel's
-// width there. n is the world normal, bent over the bevel; cover is the
-// edge's coverage where the face beyond it turns away (the silhouette, for
-// alpha to coverage); ink darkens every edge; glow is light of its own (a
-// pumpkin's grin, a robot's eyes).
-export const BLOCK_RAY_WGSL = /* wgsl */ `
-struct Block { hit: bool, t: f32, z: f32, p: vec3f, n: vec3f, alb: vec3f, cover: f32, ink: f32, glow: vec3f, shine: f32 };
-fn blkBox(p: vec2f, c: vec2f, h: vec2f) -> bool { return abs(p.x - c.x) < h.x && abs(p.y - c.y) < h.y; }
-fn blkDisc(p: vec2f, c: vec2f, r: f32) -> bool { return length(p - c) < r; }
-fn blockRay(e: vec3f, d: vec3f, fwd: vec3f, focal: f32, ctr: vec3f, h: vec3f, yaw: f32, pitch: f32, code: u32, c: vec3f) -> Block {
-  var b: Block;
-  b.hit = false;
-  let part = code & 15u;
-  let hi = code >> 4u;                                       // a limb's splay (64 none), or a worn face's or a print's variant
-  let splay = select((f32(hi) - 64.0) * 0.05, 0.0, part >= 6u);
-  let f0 = vec3f(cos(yaw), 0.0, sin(yaw));
-  let a0 = vec3f(-f0.z, 0.0, f0.x);
-  let up = vec3f(0.0, cos(pitch), 0.0) - f0 * sin(pitch);
-  let ax = a0 * cos(splay) + up * sin(splay);                // across
-  let ay = up * cos(splay) - a0 * sin(splay);                // up, tipped and splayed
-  let az = f0 * cos(pitch) + vec3f(0.0, sin(pitch), 0.0);     // the front
-  let o = e - ctr;
-  let ol = vec3f(dot(o, ax), dot(o, ay), dot(o, az));
-  let dl = vec3f(dot(d, ax), dot(d, ay), dot(d, az));
-  let inv = 1.0 / select(dl, vec3f(1e-6), abs(dl) < vec3f(1e-6));
-  let t1 = (-h - ol) * inv;
-  let t2 = (h - ol) * inv;
-  let tn = min(t1, t2);
-  let tf = max(t1, t2);
-  let tin = max(max(tn.x, tn.y), tn.z);
-  let tout = min(min(tf.x, tf.y), tf.z);
-  if (tin > tout || tin <= 0.0) { return b; }
-  b.hit = true;
-  b.t = tin;
-  b.z = tin * dot(d, fwd);
-  b.p = e + d * tin;
-  var nl = vec3f(0.0, 0.0, -sign(dl.z));
-  if (tin == tn.x) { nl = vec3f(-sign(dl.x), 0.0, 0.0); } else if (tin == tn.y) { nl = vec3f(0.0, -sign(dl.y), 0.0); }
-  let q = ol + dl * tin;
-  let pw = b.z / focal;                                      // a pixel, in metres there
-  let bw = min(0.03, min(min(h.x, h.y), h.z) * 0.3);          // the bevel
-  b.cover = 1.0;
-  b.ink = 1.0;
-  var bent = nl;
-  for (var i = 0; i < 3; i++) {
-    if (nl[i] != 0.0) { continue; }
-    let e = h[i] - abs(q[i]);
-    let s = sign(q[i]);
-    if (dl[i] * s > 0.0) { b.cover = min(b.cover, clamp(e / pw + 0.5, 0.0, 1.0)); } // the face over this edge turns away
-    b.ink = min(b.ink, mix(0.45, 1.0, smoothstep(pw * 0.4, pw * 1.6, e)));
-    var tilt = vec3f(0.0);
-    tilt[i] = s;
-    bent += tilt * (1.0 - smoothstep(0.0, bw, e)) * 0.8;
-  }
-  b.n = normalize(ax * bent.x + ay * bent.y + az * bent.z);
-  b.alb = c;
-  b.glow = vec3f(0.0);
-  b.shine = 1.0;
-  let front = nl.z > 0.5;
-  let fu = q.x / h.x;
-  let fv = q.y / h.y;
-  switch part {
-    case 1u: { // a face: two eyes and a smile
-      if (front) {
-        let ex = vec2f(abs(fu) - 0.36, fv - 0.15) / vec2f(0.11, 0.2);
-        let sm = length(vec2f(fu, (fv - 0.1) * 1.15));
-        if (dot(ex, ex) < 1.0 || (abs(sm - 0.5) < 0.075 && fv < -0.05 && abs(fu) < 0.48)) { b.alb = vec3f(0.02); }
-      }
-    }
-    case 2u: { // a pumpkin: ribs round it, and a face lit from inside
-      let along = select(q.z / h.z, fu, abs(nl.z) > 0.5);
-      if (abs(nl.y) < 0.5) { b.alb = c * (0.72 + 0.28 * abs(cos(along * 3.1416 * 1.5))); }
-      if (front) {
-        let eye = abs(abs(fu) - 0.38) + abs(fv - 0.22) < 0.17 && fv < 0.3;
-        let grin = fv < -0.2 && fv > -0.55 + 0.25 * abs(fu) * abs(fu) && abs(fu) < 0.6 && !(fract(fu * 2.5 + 0.25) < 0.22 && fv > -0.3);
-        if (eye || grin) { b.alb = vec3f(0.0); b.glow = vec3f(1.6, 0.9, 0.25); }
-      }
-    }
-    case 3u: { b.shine = 2.5; } // metal
-    case 4u: { // a robot's face: two lit eyes, a grille
-      b.shine = 2.0;
-      if (front) {
-        let ey = abs(abs(fu) - 0.36) < 0.16 && abs(fv - 0.18) < 0.1;
-        if (ey) { b.alb = vec3f(0.0); b.glow = vec3f(0.3, 1.6, 1.8); }
-        if (fv < -0.3 && fv > -0.6 && abs(fu) < 0.45) { b.alb = c * select(0.35, 0.8, fract(fu * 5.0) < 0.5); }
-      }
-    }
-    case 5u: { b.glow = c * 1.1; b.shine = 2.0; } // lit from inside
-    case 6u: { // a worn face, by variant: 0 cool, 1 wink, 2 surprised, 3 cat, 4 star-eyed
-      if (front) {
-        let p = vec2f(fu, fv);
-        let smile = abs(length(vec2f(fu, (fv - 0.1) * 1.15)) - 0.5) < 0.075 && fv < -0.05 && abs(fu) < 0.48;
-        var ink = false;
-        if (hi == 0u) {
-          ink = blkBox(p, vec2f(0.0, 0.17), vec2f(0.68, 0.16)) || (abs(fv + 0.3 - 0.18 * fu) < 0.055 && abs(fu) < 0.4);
-        } else if (hi == 1u) {
-          ink = blkDisc(p, vec2f(-0.36, 0.17), 0.13) || blkBox(p, vec2f(0.36, 0.15), vec2f(0.17, 0.045)) || smile;
-        } else if (hi == 2u) {
-          ink = blkDisc(p, vec2f(-0.36, 0.2), 0.12) || blkDisc(p, vec2f(0.36, 0.2), 0.12) || blkDisc(p, vec2f(0.0, -0.34), 0.15);
-        } else if (hi == 3u) {
-          let wx = abs(fu);
-          ink = blkDisc(p, vec2f(-0.36, 0.2), 0.1) || blkDisc(p, vec2f(0.36, 0.2), 0.1)
-            || (wx > 0.3 && wx < 0.95 && (abs(fv + 0.08 - 0.22 * (wx - 0.3)) < 0.022 || abs(fv + 0.2 + 0.05 * (wx - 0.3)) < 0.022));
-          if (abs(fu) + abs(fv + 0.02) < 0.11) { b.alb = vec3f(1.0, 0.55, 0.65); }
-        } else {
-          let q = vec2f(abs(fu) - 0.36, fv - 0.17);
-          if (sqrt(abs(q.x)) + sqrt(abs(q.y)) < 0.62) { b.alb = vec3f(1.0, 0.85, 0.2); b.glow = vec3f(1.1, 0.8, 0.15); }
-          ink = smile;
-        }
-        if (ink) { b.alb = vec3f(0.02); }
-      }
-    }
-    case 7u: { // a shirt's print on a torso's front, by variant: 0 stripes, 1 star, 2 heart, 3 chevrons, 4 checks, 5 flame
-      if (front) {
-        let lite = mix(c, vec3f(1.0), 0.7);
-        if (hi == 0u) {
-          if (fract(fv * 2.0 + 0.5) < 0.45) { b.alb = lite; }
-        } else if (hi == 1u) {
-          if (sqrt(abs(fu)) + sqrt(abs(fv)) < 0.95) { b.alb = vec3f(1.0, 0.82, 0.2); }
-        } else if (hi == 2u) {
-          let x = fu * 1.15;
-          let y = (fv + 0.1) * 1.15;
-          let a = x * x + y * y - 1.0;
-          if (a * a * a - x * x * y * y * y < 0.0) { b.alb = vec3f(0.9, 0.12, 0.2); }
-        } else if (hi == 3u) {
-          if (abs(fu) < 0.7 && (abs(fv - (0.4 - 0.9 * abs(fu))) < 0.1 || abs(fv - (-0.1 - 0.9 * abs(fu))) < 0.1)) { b.alb = vec3f(0.72, 1.0, 0.22); }
-        } else if (hi == 4u) {
-          if (((i32(floor(fu * 2.0 + 2.0)) + i32(floor(fv * 2.0 + 2.0))) & 1) == 0) { b.alb = lite; }
-        } else {
-          // a teardrop that rounds at the foot and licks to a point, its edge a little wavy
-          let t = (fv + 0.8) / 1.65;
-          let w = 0.56 * pow(clamp(1.0 - t, 0.0, 1.0), 0.7) * smoothstep(0.0, 0.2, t) * (0.85 + 0.15 * sin(t * 15.0 + fu * 4.0));
-          if (t > 0.0 && abs(fu) < w) {
-            b.alb = vec3f(1.0, 0.4, 0.08);
-            b.glow = vec3f(0.55, 0.16, 0.02);
-            if (abs(fu) < w * 0.5 && t < 0.62) { b.alb = vec3f(1.0, 0.88, 0.35); b.glow = vec3f(0.7, 0.5, 0.1); }
-          }
-        }
-      }
-    }
-    default: {}
-  }
-  return b;
-}
-`;
-// The same for party's sprites, from the pixel px and the
-// renderer's own camera (u.cam, u.fwd, u.right, u.up, u.screen).
-export const BLOCK_WGSL = BLOCK_RAY_WGSL + /* wgsl */ `
-fn blockAt(px: vec2f, ctr: vec3f, h: vec3f, yaw: f32, pitch: f32, code: u32, c: vec3f) -> Block {
-  let d = normalize(u.fwd.xyz * u.cam.w + u.right.xyz * (px.x - u.screen.x * 0.5) + u.up.xyz * (u.screen.y * 0.5 - px.y));
-  return blockRay(u.cam.xyz, d, u.fwd.xyz, u.cam.w, ctr, h, yaw, pitch, code, c);
-}
-`;
+export { BLOCK } from './block.mjs';
+export const FIGURE = 13; // the sprite kind in party's renderer
 
 // Emotes: the look word's top byte, its low four bits the emote and its high
 // four a count, so the same emote twice is a new word (the relay passes a
@@ -202,192 +34,43 @@ export function emoteOf(seen, p, w, now) {
   return id && now - at < EMOTE_S * 1000 ? { id, t: (now - at) / 1000 } : null;
 }
 
-const PEACH = [1.0, 0.8, 0.66];
-// how far under a round head's crown a standing hat's foot sits (m): where the head is as wide as the foot
-const ROUND_SINK = { [STYLE.TOPHAT]: 0.07, [STYLE.CONE]: 0.05, [STYLE.ANTLERS]: 0.05, [STYLE.PROP]: 0.01 };
-const madd = (a, v, k) => [a[0] + v[0] * k, a[1] + v[1] * k, a[2] + v[2] * k];
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
-const scale = (c, k) => c.map((v) => v * k);
-// an angle as the same turn within half a turn of 0 (a splay's code holds only that)
-const turnHalf = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
+const COLOURS = ['skin', 'hair', 'torso', 'larm', 'rarm', 'lleg', 'rleg', 'eye', 'hatc'];
+// a kit turned to stone: each colour a grey as light as it was (Red Light's caught)
+const stone = (k) => ({ ...k, ...Object.fromEntries(COLOURS.map((c) => { const l = 0.3 + 0.35 * (0.3 * k[c][0] + 0.59 * k[c][1] + 0.11 * k[c][2]); return [c, [l, l, l * 1.06]]; })) });
 
-// Push a rider's sprites onto out (a renderer's solid list). at is the top of
+// Push a rider's sprite onto out (a renderer's solid list). at is the top of
 // its ball, face its heading (radians: the front toward (cos, 0, sin)), roll
 // how far the ball has turned (radians: the legs step with it), speed its
 // speed over the ground and vy its climb (m/s, the arms go up in the air), bob
 // a little lift as it rolls, emote what it is acting out ({ id, t }: EMOTES,
 // seconds in) or null, jolt how hard its ball was just hit (0..1: thrown back,
 // arms out; client/juice.mjs), avatar the player's Elo Pros avatar word
-// (client/avatar.mjs: a blocky rider wears its colours and face) or 0, dress its
-// dress word (client/dress.mjs: a worn face, a shirt's print and a back item on a
-// blocky rider; a round one wears none) or 0.
-export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob = 0, emote = null, jolt = 0, avatar = 0, dress = 0 }) {
-  const { body } = unpackLook(w);
-  const B = BODIES[body];
+// (client/avatar.mjs) or 0, dress its dress word (client/dress.mjs) or 0, grey
+// true for one turned to stone.
+export function rider(out, slot, w, { at, face, roll = 0, speed = 0, vy = 0, bob = 0, emote = null, jolt = 0, avatar = 0, dress = 0, grey = false }) {
   const e = emote && emote.t < EMOTE_S ? emote : null;
   const et = e ? e.t : 0, ek = e ? e.id : 0;
-  // what an emote does to the whole rider: a hop, a turn
+  // what an emote does to the whole rider: a hop, a sway, a turn
   if (ek === EMOTE.CHEER) bob += 0.14 * Math.abs(Math.sin(et * 7));
   if (ek === EMOTE.DANCE) { bob += 0.05 * Math.abs(Math.sin(et * 9)); face += 0.45 * Math.sin(et * 4.5); }
   if (ek === EMOTE.SPIN) face += Math.min(1, et / 1.6) * Math.PI * 4;
   bob += 0.12 * jolt;
-  const L = lookOf(slot, w);
-  const f = [Math.cos(face), 0, Math.sin(face)];
-  const side = [-f[2], 0, f[0]];
-  const up = [0, 1, 0];
-  const box = (ctr, h, color, part = 0, pitch = 0, splay = 0, yaw = face, variant = 0) => out.push({ pos: ctr, size: Math.hypot(h[0], h[1], h[2]), color: [color[0], color[1], color[2], part >= PART.FACEWEAR ? partCode(part, variant) : part + 16 * (Math.round(turnHalf(splay) / 0.05) + 64)], kind: BLOCK, minpx: 0.5, vel: h, roll: yaw, seed: pitch });
-  // A hat that stands off the head (STYLE.TOPHAT on), in boxes, on either
-  // body: mid the head's centre, top how far over it the hat sits, wide the
-  // head's half width, k the hat's size. A piece is put at (up from the
-  // hat's foot, forward, to its right), all times k.
-  const standing = (mid, top, wide, k) => {
-    const c = L.hatColor;
-    const at = (u, fw = 0, a = 0) => madd(madd(madd(mid, up, top + u * k), f, fw * k), side, a * k);
-    const put = (ctr, h, color, part, pitch, splay, yaw) => box(ctr, h.map((v) => v * k), color, part, pitch, splay, yaw);
-    if (st === STYLE.TOPHAT) {
-      put(at(0.012), [0.21, 0.012, 0.2], c);
-      put(at(0.124), [0.14, 0.1, 0.135], c);
-      put(at(0.046), [0.146, 0.022, 0.141], TRIM.BAND);
-    } else if (st === STYLE.CONE) {
-      // five tiers, narrowing, striped, and a bobble
-      for (let i = 0; i < 5; i++) put(at(0.026 + i * 0.052), [0.125 - i * 0.024, 0.026, 0.125 - i * 0.024], i & 1 ? TRIM.CREAM : c);
-      put(at(0.284), [0.034, 0.024, 0.034], TRIM.CREAM);
-    } else if (st === STYLE.HALO) {
-      // a ring of eight over the head, each lit from inside
-      for (let i = 0; i < 8; i++) {
-        const a = i * Math.PI / 4;
-        put(at(0.15, 0.15 * Math.cos(a), 0.15 * Math.sin(a)), [0.07, 0.018, 0.026], c, PART.GLOW, 0, 0, face + a);
-      }
-    } else if (st === STYLE.ANTLERS) {
-      // each a beam leaning out, a tine off its middle leaning in, another off its tip
-      for (const s of [-1, 1]) {
-        put(at(0.09, 0, s * 0.1335), [0.02, 0.1, 0.02], c, 0, 0, -s * 0.45);
-        put(at(0.134, 0, s * 0.1095), [0.015, 0.05, 0.015], c, 0, 0, s * 0.5);
-        put(at(0.2016, 0, s * 0.2107), [0.015, 0.045, 0.015], c, 0, 0, -s);
-      }
-    } else if (st === STYLE.PHONES) {
-      // a cup on each ear, at the head's own width
-      for (const s of [-1, 1]) box(madd(mid, side, s * (wide + 0.02 * k)), [0.03 * k, 0.07 * k, 0.065 * k], c);
-    } else if (st === STYLE.PROP) {
-      // a stalk, and a blade that turns as the ball rolls
-      put(at(0.03), [0.012, 0.03, 0.012], TRIM.YELLOW);
-      put(at(0.066), [0.15, 0.006, 0.028], TRIM.YELLOW, 0, 0, 0, face + roll * 2);
-      put(at(0.07), [0.022, 0.012, 0.022], c);
-    }
-  };
-  const st = L.style;
-  if (!B.blocky) {
-    const rs = riderSprites(slot, w);
-    out.push({ pos: [at[0], at[1] + 0.22 + bob, at[2]], size: 0.34, color: rs.body.color, kind: 1, minpx: 1 });
-    out.push({ pos: [at[0], at[1] + 0.78 + bob, at[2]], size: 0.3, color: rs.head.color, kind: 8, minpx: 1, vel: [Math.cos(face), 0, Math.sin(face)] });
-    // a standing hat's boxes over the round head (0.3 across at its middle), sunk to where the head is as wide as the hat's foot; the rest is painted on it (party's lookHat)
-    if (st >= STYLE.TOPHAT) standing([at[0], at[1] + 0.78 + bob, at[2]], 0.3 - (ROUND_SINK[st] ?? 0), 0.3, 1.45);
-    return;
-  }
-  // a limb hung from its pivot, hang metres down to its centre, swung by pitch and splayed (blockAt's frame)
-  const limb = (pivot, h, hang, [pitch, splay], color, part = 0) => {
-    const u0 = [-f[0] * Math.sin(pitch), Math.cos(pitch), -f[2] * Math.sin(pitch)];
-    const ay = [u0[0] * Math.cos(splay) - side[0] * Math.sin(splay), u0[1] * Math.cos(splay), u0[2] * Math.cos(splay) - side[2] * Math.sin(splay)];
-    box(madd(pivot, ay, -hang), h, color, part, pitch, splay);
-  };
   const stride = clamp01(speed / 6);
-  const step = Math.sin(roll * 1.6) * 0.8 * stride;
-  const air = e ? 0 : clamp01((Math.abs(vy) - 4) / 4);
-  const wave = Math.sin(roll * 3 + slot) * 0.25 * air;
-  // an arm's [pitch, splay] on side k (-1 its left, 1 its right): stepping, up and out in the air, or the emote's
-  const arm = (k) => {
-    if (ek === EMOTE.WAVE) return k > 0 ? [0.25, 2.55 + 0.4 * Math.sin(et * 12)] : [0, -0.08];
-    if (ek === EMOTE.CHEER) return [0.25, k * (2.6 + 0.2 * Math.sin(et * 14 + k))];
-    if (ek === EMOTE.DANCE) return [0.35, k * (0.5 + 1.6 * (0.5 + 0.5 * Math.sin(et * 9 + (k > 0 ? 0 : Math.PI))))];
-    if (ek === EMOTE.SPIN) return [0, k * 1.55];
-    return [-step * k * (1 - air) + 0.3 * air, k * (0.06 + (2.3 + wave) * air)];
-  };
-  const leg = (k) => (ek === EMOTE.DANCE ? [0.4 * Math.sin(et * 9) * k, k * 0.12] : [step * k, 0]);
-  const y0 = at[1] + bob;
-  const base = [at[0], y0, at[2]];
-  const A = colorsOf(avatar);
-  const skin = B.skin || PEACH, shirt = A ? A.torso : L.a, pants = scale(L.b, 0.62);
-  const skinPart = B.metal && !A ? PART.METAL : PART.PLAIN;
-  // a part's colour: the avatar's, else the look's
-  const legC = (k) => (A ? (k > 0 ? A.rleg : A.lleg) : pants);
-  const armC = (k) => (A ? (k > 0 ? A.rarm : A.larm) : skin);
-  // legs from the hips, stepping
-  for (const k of [-1, 1]) limb(madd(madd(base, up, 0.5), side, 0.125 * k), [0.12, 0.25, 0.12], 0.25, leg(k), legC(k));
-  // the torso, leaning into its speed, in the shirt's print if it wears one
-  const D = unpackDress(dress >>> 0), print = SHIRTS[D.shirt], tc = madd(madd(base, up, 0.75), f, 0.03 * stride - 0.06 * jolt), tp = 0.1 * stride - 0.35 * jolt;
-  box(tc, [0.25, 0.25, 0.125], shirt, print.variant === undefined ? 0 : PART.PRINT, tp, 0, face, print.variant ?? 0);
-  // arms from the shoulders, against the legs, up in the air
-  for (const k of [-1, 1]) {
-    const [pitch, splay] = arm(k);
-    limb(madd(madd(base, up, 0.92), side, 0.375 * k), [0.12, 0.25, 0.12], 0.17, [pitch - 0.6 * jolt, splay + k * 1.5 * jolt], armC(k), skinPart);
-  }
-  // what hangs on its back: up from the torso's centre, out from its back face, to its right
-  const onBack = (u, d, a = 0) => madd(madd(madd(tc, up, u), f, -(0.125 + d)), side, a);
-  const run = Math.max(stride, air);
-  switch (BACKS[D.back].key) {
-    case 'pack':
-      box(onBack(-0.02, 0.085), [0.17, 0.2, 0.085], [0.85, 0.42, 0.1], 0, tp);
-      box(onBack(-0.12, 0.175), [0.12, 0.07, 0.02], [0.55, 0.26, 0.06], 0, tp);
-      for (const k of [-1, 1]) box(madd(madd(tc, up, 0.1), side, 0.13 * k), [0.025, 0.15, 0.135], [0.45, 0.22, 0.05], 0, tp);
-      break;
-    case 'cape': {
-      // from the shoulders, streaming back with speed and in the air
-      const sway = 0.1 + 0.55 * stride + 0.5 * air + 0.06 * Math.sin(roll * 2.5 + slot);
-      limb(madd(madd(tc, up, 0.23), f, -0.14), [0.22, 0.29, 0.012], 0.29, [-sway, 0], TRIM.BAND);
-      box(madd(madd(tc, up, 0.24), f, 0.0), [0.26, 0.025, 0.14], [0.95, 0.8, 0.25], PART.METAL, tp);
-      break;
-    }
-    case 'jet':
-      for (const k of [-1, 1]) {
-        box(onBack(0.0, 0.07, 0.11 * k), [0.055, 0.2, 0.055], [0.62, 0.66, 0.72], PART.METAL, tp);
-        box(onBack(-0.25 - 0.03 * run, 0.07, 0.11 * k), [0.035, 0.035 + 0.06 * run, 0.035], [1.0, 0.55, 0.15], PART.GLOW, tp);
-      }
-      box(onBack(0.07, 0.035), [0.17, 0.03, 0.02], [0.4, 0.43, 0.48], PART.METAL, tp);
-      break;
-    case 'wings':
-      // two panels from the shoulder blades, up and out, beating in the air
-      for (const k of [-1, 1]) {
-        const beat = air * 0.35 * Math.sin(roll * 9 + (k > 0 ? 0 : 0.5));
-        const pivot = madd(madd(madd(tc, up, 0.18), f, -0.15), side, 0.08 * k);
-        limb(pivot, [0.09, 0.28, 0.012], -0.28, [0, -k * (0.55 + beat)], [0.97, 0.97, 1.0]);
-        limb(madd(pivot, side, 0.23 * k), [0.07, 0.2, 0.012], -0.2, [0, -k * (0.95 + beat)], [0.88, 0.9, 1.0]);
-      }
-      break;
-    default: break;
-  }
-  // the head, a size up on the rest (as such figures have it), and its hat
-  const hs = 1.15;
-  const hc = madd(base, up, 1.01 + 0.15 * hs);
-  const pumpkin = st === STYLE.PUMPKIN;
-  const worn = FACES[D.face];
-  box(hc, [0.16 * hs, 0.15 * hs, 0.15 * hs], pumpkin ? L.hatColor : A ? A.head : skin,
-    pumpkin ? PART.PUMPKIN : worn.variant !== undefined ? PART.FACEWEAR : A ? (A.robot ? PART.ROBOT : PART.FACE) : B.face, 0, 0, face, worn.variant ?? 0);
-  const at3 = (u, fw, a = 0) => madd(madd(madd(hc, up, u * hs), f, fw * hs), side, a * hs);
-  const hat3 = (ctr, h, color, part) => box(ctr, h.map((v) => v * hs), color, part);
-  const hcol = L.hatColor;
-  if (st === STYLE.CAP) {
-    hat3(at3(0.12, 0), [0.17, 0.05, 0.16], hcol);
-    hat3(at3(0.085, 0.22), [0.15, 0.015, 0.07], scale(hcol, 0.85));
-  } else if (st === STYLE.BEANIE) {
-    hat3(at3(0.14, 0), [0.175, 0.075, 0.165], hcol);
-    hat3(at3(0.08, 0), [0.18, 0.025, 0.17], scale(hcol, 0.7));
-    hat3(at3(0.24, 0), [0.04, 0.03, 0.04], scale(hcol, 0.7));
-  } else if (st === STYLE.BAND) {
-    hat3(at3(0.09, 0), [0.165, 0.03, 0.156], hcol);
-  } else if (st === STYLE.HELMET) {
-    hat3(at3(0.05, -0.03), [0.185, 0.145, 0.155], hcol);
-    hat3(at3(0.196, -0.03), [0.03, 0.006, 0.156], scale(hcol, 0.3));
-  } else if (st === STYLE.CROWN) {
-    hat3(at3(0.19, 0), [0.17, 0.04, 0.16], hcol, PART.METAL);
-    for (const a of [-1, 1]) for (const b of [-1, 1]) hat3(at3(0.27, 0.125 * b, 0.135 * a), [0.035, 0.04, 0.035], hcol, PART.METAL);
-    hat3(at3(0.19, 0.163), [0.03, 0.025, 0.006], [0.85, 0.04, 0.06]);
-  } else if (pumpkin) {
-    hat3(at3(0.2, 0), [0.03, 0.05, 0.03], [0.12, 0.3, 0.06]);
-  } else if (st >= STYLE.TOPHAT) {
-    // what a standing hat has on a box of a head and not on a round one: the band it hangs from, a cap's panels
-    if (st === STYLE.ANTLERS) hat3(at3(0.16, 0), [0.165, 0.012, 0.03], scale(hcol, 0.6));
-    if (st === STYLE.PHONES) hat3(at3(0.165, 0), [0.19, 0.016, 0.03], scale(hcol, 0.35));
-    if (st === STYLE.PROP) [hcol, TRIM.BLUE, TRIM.YELLOW].forEach((c, i) => hat3(at3(0.17, 0, (i - 1) * 0.113), [0.0565, 0.04, 0.165], c));
-    standing(hc, (st === STYLE.PROP ? 0.21 : 0.15) * hs, 0.16 * hs, hs);
-  }
+  const kit = grey ? stone(figureKit(slot, w, avatar, dress)) : figureKit(slot, w, avatar, dress);
+  // a standing hat or wings reach over its usual height: a taller square
+  const tall = kit.hat > 5 || kit.back === 4;
+  const feet = [at[0], at[1] + bob, at[2]];
+  out.push({
+    pos: [feet[0], feet[1] + (tall ? 1.1 : 0.95) * RIDE, feet[2]], size: (tall ? 1.65 : 1.5) * RIDE, color: [1, 1, 1, 1], kind: FIGURE, minpx: 1,
+    fig: {
+      feet, scale: RIDE,
+      // its heading, its aim (level), and its legs: walking the ball as it rolls, or stepping in place to a dance
+      pose: [face, 0, ek === EMOTE.DANCE ? et * 9 : roll * 1.6, ek === EMOTE.DANCE ? 0.45 : stride],
+      act: ek, actT: et, air: e ? 0 : clamp01((Math.abs(vy) - 4) / 4), jolt,
+      // leaning into its speed, thrown back by a hit
+      lean: 0.1 * stride - 0.35 * jolt,
+      kit,
+    },
+  });
 }

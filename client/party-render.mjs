@@ -7,20 +7,23 @@
 // (matte, plastic, ice, metal, hazard stripes, glow, paint, checker, wood,
 // rubber), a rounded bevel and a soft ink line on its edges. One shadow map
 // from the sun covers the action's square (s.focus, s.extent): the solids and
-// the balls cast into it (a ball and its rider as spheres) and everything
+// the balls cast into it (a ball, and its rider as three spheres) and everything
 // samples it soft, the sea included; the sun on a solid or a ball falls in
 // two flat steps with a crisp shadow edge, as the other games' light does. Decals are flat glowing rings and discs.
 // The paint layer is a grid of colour indices over the floor, uploaded when
 // its version changes. The balls are impostors (beach-ball stripes
-// turning as they roll, an ink outline, a rider), with its orbs, rockets and
+// turning as they roll, an ink outline), each with its rider, the cartoon
+// figure every game draws its players as (client/figure.mjs, marched per
+// pixel in a square of its own, its record in figs), and its orbs, rockets and
 // flashes, and coins and bombs besides; beams, the HUD's 3x5 font, rects and
 // the net graph. The minimap is the stage drawn from above each
 // frame into a small texture with every caster as a dot. Nothing loops over
 // solids per pixel. Nothing here is hashed.
 import * as L from '../src/layout.mjs';
 import { GRAPH_N, GRAPH_PANELS } from './netgraph.mjs';
-import { BLOCK, BLOCK_WGSL } from './rider.mjs';
-import { TRIM } from './looks.mjs';
+import { BLOCK, BLOCK_WGSL } from './block.mjs';
+import { FIGURE } from './rider.mjs';
+import { FIGURE_WGSL, RIDE } from './figure.mjs';
 import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 
 export const COLS = 80;
@@ -29,6 +32,8 @@ export const MAX_BEAM = 256;
 export const MAX_RECT = 64;
 export const MAX_DECAL = 1024;
 export const MAX_CASTER = 1024;
+export const MAX_FIG = 512;  // riders a frame (sprites of kind FIGURE)
+const FIG_V = 14;            // vec4s a rider's record
 export const MAX_BIG = 4; // lines of big text (s.big)
 export const BIG_CHARS = 32; // characters a big line
 const BIG_WORDS = 4 + BIG_CHARS / 4;
@@ -39,8 +44,8 @@ const MAP_N = 512;
 const MASK_N = 512;
 const FLAKES = 4000;
 
-// sprite kinds: solid 0 a ball, 1 a rider's body, 2 an orb, 6 the arrow over you, 7 a rocket, 8 a rider's head, 9 a crumb,
-// 10 a spinning coin, 11 a bomb, 12 a box (client/rider.mjs); glowing 3 a flash, 4 a ring, 5 a spark
+// sprite kinds: solid 0 a ball, 2 an orb, 6 the arrow over you, 7 a rocket, 9 a crumb, 10 a spinning coin, 11 a bomb,
+// 12 a box (client/block.mjs), 13 a rider (client/rider.mjs); glowing 3 a flash, 4 a ring, 5 a spark
 // Where world point q lands on the screen, as the shader's project() puts it:
 // [x, y, metres ahead of the eye]. s: { cam, yaw, pitch }, as frame()'s. For
 // what the HUD pins to a ball (a line of chat over it).
@@ -52,7 +57,7 @@ export function project(s, W, H, q) {
   const k = focal / Math.max(z, 0.01);
   return [W / 2 + (-r[0] * sy + r[2] * cy) * k, H / 2 - (-r[0] * sp * cy + r[1] * cp - r[2] * sp * sy) * k, z];
 }
-export const SPRITE = { BALL: 0, BODY: 1, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, HEAD: 8, CRUMB: 9, COIN: 10, BOMB: 11, BLOCK };
+export const SPRITE = { BALL: 0, ORB: 2, FLASH: 3, RING: 4, SPARK: 5, ARROW: 6, ROCKET: 7, CRUMB: 9, COIN: 10, BOMB: 11, BLOCK, FIGURE };
 export const SHAPE = { BOX: 0, CYL: 1, HEX: 2, SPHERE: 3 };
 // The looks, and what their two parameters a and b do (0 takes the default):
 //   MATTE    paint with a little grain
@@ -236,6 +241,8 @@ struct U {
 @group(0) @binding(9) var<storage, read> graph: array<vec4f>;
 @group(0) @binding(10) var<storage, read> decals: array<vec4f>; // three a decal: pos, radius | width, kind, 0, 0 | colour
 @group(0) @binding(11) var<storage, read> palette: array<vec4f>; // the paint layer's 256 colours
+@group(0) @binding(12) var<storage, read> figs: array<vec4f>;    // ${FIG_V} a rider: feet, scale | pose | act, its time, air, jolt | lean, kind, cut, hat |
+                                                                 // face, print, back, 0 | skin, hair, torso, larm, rarm, lleg, rleg, eye, hat's colour
 @group(1) @binding(0) var shadowMap: texture_depth_2d;
 @group(1) @binding(1) var shadowCmp: sampler_comparison;
 @group(1) @binding(2) var mask: texture_2d<f32>;                 // r: a ball's contact shade, g: the code of the y it sits at
@@ -570,17 +577,18 @@ fn cheeseCut(m: MOut) -> bool {
   let b = solids[4u * i + 1u];
   return toLight(a.xyz + toWorld(p * b.xyz, b.w, rollOf(a.w)));
 }
-// a ball, then its rider's body and head, as spheres
+// a ball, then its rider (the figure at RIDE, standing on it) as three spheres: its legs, its body, its head
 @vertex fn vs_shadow_ball(@location(0) p: vec3f, @location(1) n: vec3f, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
-  let k = ii / 3u;
-  let part = ii % 3u;
+  let k = ii / 4u;
+  let part = ii % 4u;
   let c = casters[k];
   let r = abs(c.w);
   if (r == 0.0 || c.y < -500.0 || (part > 0u && (c.w < 0.0 || u.misc.w < 0.5))) { return vec4f(2.0, 2.0, 2.0, 1.0); }
   var ctr = vec3f(c.x, select(c.y, c.y + r, c.w > 0.0), c.z);
   var rad = r;
-  if (part == 1u) { ctr.y = c.y + 2.0 * r + 0.22; rad = 0.34; }
-  if (part == 2u) { ctr.y = c.y + 2.0 * r + 0.78; rad = 0.3; }
+  if (part == 1u) { ctr.y = c.y + 2.0 * r + 0.42 * ${RIDE}; rad = 0.2 * ${RIDE}; }
+  if (part == 2u) { ctr.y = c.y + 2.0 * r + 1.08 * ${RIDE}; rad = 0.3 * ${RIDE}; }
+  if (part == 3u) { ctr.y = c.y + 2.0 * r + 1.57 * ${RIDE}; rad = 0.27 * ${RIDE}; }
   return toLight(ctr + p * rad);
 }
 
@@ -1044,47 +1052,37 @@ fn lookBall(pattern: u32, m: vec3f, a: vec3f, b: vec3f) -> vec3f {
   }
   return o;
 }
-fn lookHat(style: u32, n: vec3f, f: vec3f, side: vec3f, c: vec3f, skin: vec3f) -> vec3f {
-  let a = atan2(dot(n, side), dot(n, f)) / 6.2832 + 0.5; // round the head, 0..1
-  var o = skin;
-  switch style {
-    case 0u: { if (n.y > 0.45 || (n.y > 0.3 && dot(n, f) > 0.25)) { o = c; } } // a cap
-    case 2u: { if (n.y > 0.12) { o = select(c, c * 0.7, n.y < 0.3); } } // a beanie, its brim turned up
-    case 3u: { if (n.y > 0.28 && n.y < 0.5) { o = c; } } // a headband
-    case 4u: { // a helmet, open at the face, a stripe over the top
-      if (n.y > -0.1 && !(dot(n, f) > 0.5 && n.y < 0.45)) { o = select(c, c * 0.3, abs(dot(n, side)) < 0.1 && n.y > 0.35); }
-    }
-    case 5u: { // a crown: points all round, a red stone at the front
-      let zig = abs(fract(a * 5.0) * 2.0 - 1.0);
-      if (n.y > 0.3 && n.y < 0.5 + 0.32 * zig) { o = c; }
-      if (dot(n, normalize(f + vec3f(0.0, 0.7, 0.0))) > 0.985) { o = vec3f(0.85, 0.04, 0.06); }
-    }
-    case 6u: { // a pumpkin for a head: ribs, a stalk and a lit grin
-      o = c * (0.75 + 0.25 * abs(sin(a * 6.2832 * 4.0)));
-      if (n.y > 0.92) { o = vec3f(0.12, 0.3, 0.06); }
-      if (dot(n, f) > 0.7 && n.y < -0.12 && n.y > -0.4 && abs(dot(n, side)) < 0.45) { o = vec3f(1.6, 0.9, 0.25); }
-    }
-    // From here a hat stands off the head, in boxes over it (client/rider.mjs standing): only its foot is painted
-    case 7u: { if (n.y > 0.7) { o = c; } } // a top hat: the crown of the head, under its brim
-    case 8u: { if (n.y > 0.8) { o = c; } } // a party hat's
-    case 9u: {} // a halo touches nothing
-    case 10u: { if (n.y > 0.25 && abs(dot(n, f)) < 0.09) { o = c * 0.6; } } // antlers: the band they stand on, ear to ear
-    case 11u: { // headphones: the band over the top, and the head under each cup
-      if (n.y > 0.1 && abs(dot(n, f)) < 0.11) { o = c * 0.35; }
-      if (abs(dot(n, side)) > 0.9) { o = c; }
-    }
-    case 12u: { // a propeller cap: six panels in three colours
-      if (n.y > 0.42) {
-        let seg = u32(floor(a * 6.0)) % 3u;
-        o = select(select(lin(vec3f(${TRIM.YELLOW.map((v) => v.toFixed(3)).join(', ')})), lin(vec3f(${TRIM.BLUE.map((v) => v.toFixed(3)).join(', ')})), seg == 1u), c, seg == 0u);
-      }
-    }
-    default: {}
-  }
+${BLOCK_WGSL}
+${FIGURE_WGSL}
+// rider k's kit (client/figure.mjs Kit) from its record; its colours are sRGB, as every colour figureRay hands back,
+// made linear together after (lin(f.alb))
+fn figKit(k: u32) -> Kit {
+  var o: Kit;
+  let a = figs[k + 2u];
+  let b = figs[k + 3u];
+  let c = figs[k + 4u];
+  o.act = u32(a.x + 0.5);
+  o.actT = a.y;
+  o.air = a.z;
+  o.jolt = a.w;
+  o.lean = b.x;
+  o.kind = u32(b.y + 0.5);
+  o.cut = u32(b.z + 0.5);
+  o.hat = u32(b.w + 0.5);
+  o.face = u32(c.x + 0.5);
+  o.print = u32(c.y + 0.5);
+  o.back = u32(c.z + 0.5);
+  o.skin = figs[k + 5u].xyz;
+  o.hair = figs[k + 6u].xyz;
+  o.torso = figs[k + 7u].xyz;
+  o.larm = figs[k + 8u].xyz;
+  o.rarm = figs[k + 9u].xyz;
+  o.lleg = figs[k + 10u].xyz;
+  o.rleg = figs[k + 11u].xyz;
+  o.eye = figs[k + 12u].xyz;
+  o.hatc = figs[k + 13u].xyz;
   return o;
 }
-
-${BLOCK_WGSL}
 // glossy, as the balls are: the sun's highlight and the sky in it, more at a grazing angle
 fn gloss(c: vec3f, n: vec3f, power: f32, k: f32) -> vec3f {
   let v = -u.fwd.xyz;
@@ -1132,28 +1130,6 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
       let ao = mix(0.55, 1.0, smoothstep(-0.9, 0.2, n.y));
       c = gloss(shade(alb, n, sh, ao), n, 60.0, 0.5 * shine * (0.35 + 0.65 * sh)) * ink;
     }
-    case 1u: { // a rider's body, in its colour
-      c = gloss(shade(c * 0.8, n, shadowAt(surf, n), 1.0), n, 20.0, 0.2) * ink;
-    }
-    case 8u: { // a rider's head: skin, a cap in its colour, two eyes looking where the ball faces; or a look's hat (alpha 2 + its style)
-      let f = normalize(vec3f(s.vel.x, 0.0, s.vel.z) + vec3f(1e-5, 0.0, 0.0));
-      let side = vec3f(-f.z, 0.0, f.x);
-      var alb = lin(vec3f(1.0, 0.8, 0.66));
-      let hat = u32(s.color.a + 0.5);
-      if (hat <= 1u) {
-        if (n.y > 0.45 || (n.y > 0.3 && dot(n, f) > 0.25)) { alb = c; }
-      } else {
-        alb = lookHat(hat - 2u, n, f, side, c, alb);
-      }
-      for (var k = -1; k <= 1; k += 2) {
-        let eye = normalize(f * 0.86 + side * 0.4 * f32(k) + vec3f(0.0, 0.1, 0.0));
-        let dd = dot(n, eye);
-        if (hat == 8u) { if (dd > 0.96) { alb = vec3f(1.6, 0.9, 0.25); } continue; } // a pumpkin's eyes, lit from inside
-        if (dd > 0.955) { alb = vec3f(0.95); }
-        if (dd > 0.985) { alb = vec3f(0.02); }
-      }
-      c = gloss(shade(alb, n, shadowAt(surf, n), 1.0), n, 30.0, 0.15) * ink;
-    }
     case 2u: { // an orb: tinted glass glowing from inside, a white ? in it
       var g = c * (0.6 + 0.6 * h) + gloss(vec3f(0.0), n, 80.0, 1.0);
       let q = vec2i(floor((s.uv / 0.75 + vec2f(0.75, 1.0)) * vec2f(2.0, 2.5)));
@@ -1168,13 +1144,28 @@ struct FOut { @location(0) color: vec4f, @builtin(frag_depth) depth: f32 };
     case 9u: { // a crumb, in its colour
       c = shade(c, n, 1.0, 1.0) * ink;
     }
-    case 12u: { // a box: a blocky rider's limb, head or hat (client/rider.mjs)
+    case 12u: { // a box: confetti (client/block.mjs)
       let b = blockAt(s.pos.xy, s.ctr, s.vel, s.info.w, s.info.z, u32(s.color.a + 0.5), c);
       if (!b.hit) { discard; }
       cover = b.cover;
       z = b.z;
       let sh = shadowAt(b.p, b.n);
       c = (gloss(shade(b.alb, b.n, sh, 0.85 + 0.15 * b.n.y), b.n, 40.0, 0.25 * b.shine * (0.35 + 0.65 * sh)) + b.glow) * b.ink;
+    }
+    case 13u: { // a rider: the figure (client/figure.mjs) at its scale about its feet, the pixel's ray brought to its size
+      let k = u32(s.info.z + 0.5) * ${FIG_V}u;
+      let a = figs[k];
+      let sc = a.w;
+      let d = normalize(u.fwd.xyz * u.cam.w + u.right.xyz * (s.pos.x - u.screen.x * 0.5) + u.up.xyz * (u.screen.y * 0.5 - s.pos.y));
+      let kit = figKit(k);
+      let f = figureRay(a.xyz + (u.cam.xyz - a.xyz) / sc, d, u.fwd.xyz, 1.0 / (u.cam.w * sc), a.xyz, figs[k + 1u], kit);
+      if (!f.hit && f.cover <= 0.0) { discard; }
+      cover = f.cover;
+      z = f.z * sc;
+      let p = a.xyz + (f.p - a.xyz) * sc;
+      let sh = shadowAt(p, f.n);
+      let shine = select(0.1, 0.35, kit.kind == 2u); // a robot's metal shines
+      c = (gloss(shade(lin(f.alb), f.n, sh, 0.85 + 0.15 * f.n.y), f.n, 30.0, shine * (0.35 + 0.65 * sh)) + f.glow * 1.3) * mix(0.3, 1.0, f.ink);
     }
     case 10u: { // a coin: gold, spinning about the up axis, a raised rim and a star
       let spin = u.fwd.w * 3.2 + s.info.z * 1.7 + s.info.w;
@@ -1454,6 +1445,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
   const graphBuf = storage(GRAPH_PANELS * GRAPH_N * 16);
   const decalBuf = storage(MAX_DECAL * 48);
   const paletteBuf = storage(256 * 16);
+  const figBuf = storage(MAX_FIG * FIG_V * 16);
   device.queue.writeBuffer(fontBuf, 0, fontAll);
   const vbuf = device.createBuffer({ size: MESH.vertices.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
   const ibuf = device.createBuffer({ size: MESH.indices.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
@@ -1477,7 +1469,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
   const g0Layout = device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: VERT | FRAG, buffer: { type: 'uniform' } },
-      ...[[1, VERT | FRAG], [2, VERT], [3, VERT], [4, VERT], [5, VERT], [6, FRAG], [7, FRAG], [8, FRAG], [9, FRAG], [10, VERT], [11, FRAG]]
+      ...[[1, VERT | FRAG], [2, VERT], [3, VERT], [4, VERT], [5, VERT], [6, FRAG], [7, FRAG], [8, FRAG], [9, FRAG], [10, VERT], [11, FRAG], [12, FRAG]]
         .map(([binding, visibility]) => ({ binding, visibility, buffer: { type: 'read-only-storage' } })),
     ],
   });
@@ -1498,7 +1490,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
     g0 = device.createBindGroup({
       layout: g0Layout,
       entries: [{ binding: 0, resource: { buffer: ubuf } },
-        ...[solidBuf, orderBuf, casterBuf, spriteBuf, beamBuf, rectBuf, hudBuf, fontBuf, graphBuf, decalBuf, paletteBuf].map((buffer, k) => ({ binding: 1 + k, resource: { buffer } }))],
+        ...[solidBuf, orderBuf, casterBuf, spriteBuf, beamBuf, rectBuf, hudBuf, fontBuf, graphBuf, decalBuf, paletteBuf, figBuf].map((buffer, k) => ({ binding: 1 + k, resource: { buffer } }))],
     });
   };
   const makeG1 = () => {
@@ -1578,6 +1570,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
   let order = new Uint32Array(cap * 2), vis = new Uint8Array(cap), keyZ = new Float32Array(cap);
   const casterData = new Float32Array(MAX_CASTER * 4);
   const spriteData = new Float32Array(MAX_SPRITE * 16);
+  const figData = new Float32Array(MAX_FIG * FIG_V * 4);
   const beamData = new Float32Array(MAX_BEAM * 12);
   const rectData = new Float32Array(MAX_RECT * 8);
   const decalData = new Float32Array(MAX_DECAL * 12);
@@ -1751,13 +1744,29 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
         uf.set([pt.origin[0], pt.origin[1], 1 / pt.size, pt.n], 88);
       }
 
-      // sprites, solid ones first, then what glows
-      let ns = 0;
+      // sprites, solid ones first, then what glows; a rider's record (p.fig, client/rider.mjs) into figs, its seed its place there
+      let ns = 0, nf = 0;
+      const putFig = (f) => {
+        if (nf >= MAX_FIG) return false;
+        const o = nf * FIG_V * 4, k = f.kit, D = figData;
+        D[o] = f.feet[0]; D[o + 1] = f.feet[1]; D[o + 2] = f.feet[2]; D[o + 3] = f.scale;
+        D.set(f.pose, o + 4);
+        D[o + 8] = f.act; D[o + 9] = f.actT; D[o + 10] = f.air; D[o + 11] = f.jolt;
+        D[o + 12] = f.lean; D[o + 13] = k.kind; D[o + 14] = k.cut; D[o + 15] = k.hat;
+        D[o + 16] = k.face; D[o + 17] = k.print; D[o + 18] = k.back; D[o + 19] = 0;
+        [k.skin, k.hair, k.torso, k.larm, k.rarm, k.lleg, k.rleg, k.eye, k.hatc].forEach((c, i) => {
+          const at = o + 20 + 4 * i;
+          D[at] = c[0]; D[at + 1] = c[1]; D[at + 2] = c[2]; D[at + 3] = 0;
+        });
+        nf++;
+        return true;
+      };
       const putSprite = (p) => {
+        if (p.fig && !putFig(p.fig)) return;
         const c = p.color, v = p.vel, o = ns * 16;
         spriteData[o] = p.pos[0]; spriteData[o + 1] = p.pos[1]; spriteData[o + 2] = p.pos[2]; spriteData[o + 3] = p.size;
         spriteData[o + 4] = c[0]; spriteData[o + 5] = c[1]; spriteData[o + 6] = c[2]; spriteData[o + 7] = c[3] ?? 1;
-        spriteData[o + 8] = p.kind; spriteData[o + 9] = p.aspect ?? 1; spriteData[o + 10] = p.minpx ?? 1; spriteData[o + 11] = p.seed ?? 0;
+        spriteData[o + 8] = p.kind; spriteData[o + 9] = p.aspect ?? 1; spriteData[o + 10] = p.minpx ?? 1; spriteData[o + 11] = p.fig ? nf - 1 : p.seed ?? 0;
         spriteData[o + 12] = v ? v[0] : 0; spriteData[o + 13] = v ? v[1] : 0; spriteData[o + 14] = v ? v[2] : 0; spriteData[o + 15] = p.roll ?? 0;
         ns++;
       };
@@ -1795,6 +1804,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
       if (acc) q.writeBuffer(orderBuf, 0, order, 0, acc);
       if (nc) q.writeBuffer(casterBuf, 0, casterData, 0, nc * 4);
       if (ns) q.writeBuffer(spriteBuf, 0, spriteData, 0, ns * 16);
+      if (nf) q.writeBuffer(figBuf, 0, figData, 0, nf * FIG_V * 4);
       if (nd) q.writeBuffer(decalBuf, 0, decalData, 0, nd * 12);
       if (nb) q.writeBuffer(beamBuf, 0, beamData, 0, nb * 12);
       if (nr) q.writeBuffer(rectBuf, 0, rectData, 0, nr * 8);
@@ -1828,7 +1838,7 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
         if (nc) {
           pass.setPipeline(shadowBall);
           const m = MESH.parts.sphereLo;
-          pass.drawIndexed(m.count, nc * 3, m.first, 0, 0);
+          pass.drawIndexed(m.count, nc * 4, m.first, 0, 0);
         }
         pass.end();
       }
