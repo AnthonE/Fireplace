@@ -177,9 +177,10 @@ export function savedLook() {
 }
 // An AI player's look in a local room (client/local.mjs): any free ball, hat
 // and blocky body (none earned, none bought), picked from its slot so it
-// keeps it all game.
-export function guestLook(p) {
-  const open = (list) => list.map((x, k) => (x.unlock || x.price ? -1 : k)).filter((k) => k >= 0);
+// keeps it all game. any: from the whole lists, earned and bought too (a
+// film's "guests": "shop").
+export function guestLook(p, any = false) {
+  const open = (list) => list.map((x, k) => (!any && (x.unlock || x.price) ? -1 : k)).filter((k) => k >= 0);
   const h = Math.imul(p + 1, 0x9e3779b1) >>> 0;
   const balls = open(BALLS), hats = open(HATS), bodies = open(BODIES).filter((k) => BODIES[k].blocky);
   return packLook(balls[h % balls.length], hats[(h >>> 8) % hats.length], bodies[(h >>> 16) % bodies.length]);

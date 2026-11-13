@@ -2,6 +2,7 @@
 // Fireplace's trailer, filmed from a replay on a box with no GPU.
 //
 //   node tools/film.mjs record [--seconds 900] [--bots 64] [--seed 7] [--start k] [--port 4533]   # a room of guests, saved as a replay in replays/
+//   node tools/film.mjs bake [--seconds 900] [--bots 64] [--seed 7] [--start k] [--until "ARENA BATTLE ROYALE"]   # the same room with no relay or clock, its plan as it goes
 //   node tools/film.mjs plan REPLAY.qgr                                     # what was on, second by second
 //   node tools/film.mjs shoot CUT.json [--stills 2,7.5] [--to 12] [--replay R.qgr]   # draw the cut: an mp4, or stills
 //   node tools/film.mjs shoot CUT.json --part 2/6 ... then join CUT.json      # the same in parts, each kept on disk as it's done
@@ -38,7 +39,8 @@
 //   "room": true; "pre" is its unseen run-in, 1 s by default. "score": a tune
 //   key (client/sound.mjs) laid under the whole cut, the rooms' own music off:
 //   a cut faster than a round. "guests": true dresses every seat as a local
-//   room's AI players are (a replay keeps no looks). "gres": "WxH" draws golf,
+//   room's AI players are (a replay keeps no looks); "shop" from the whole
+//   wardrobe, priced looks and dress included. "gres": "WxH" draws golf,
 //   the arena and Dogfight at that size (a box with no GPU ray-traces them
 //   slowly at the film's), scaled up smoothly. Its beat is 1.024 s (117 bpm), and every shot
 //   ends on its frame, so shots in whole beats stay on it.
@@ -59,6 +61,7 @@ const LOCAL_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const DENO = existsSync('.tools/deno') ? '.tools/deno' : 'deno';
 
 if (cmd === 'record') await record();
+else if (cmd === 'bake') await bake();
 else if (cmd === 'plan' && arg) await plan(arg);
 else if (cmd === 'shoot' && arg) await shoot({ ...JSON.parse(readFileSync(arg, 'utf8')), ...(opt('replay', '') ? { replay: opt('replay', '') } : {}) });
 else if (cmd === 'join' && arg) await join(JSON.parse(readFileSync(arg, 'utf8')));
@@ -93,6 +96,86 @@ async function record() {
   console.error(`\n${made.length ? made.map((f) => `replays/${f}`).join('\n') : 'no replay was written'}`);
 }
 
+// The room record makes, played on this box with no relay and no clock: the
+// same guests (client/fireplace-bot.mjs, a skill about 0.6 each), joining a
+// few ticks apart, their words landing LAG ticks after the world they saw;
+// each tick coded as the relay codes it and stepped on its referee, whose
+// interval hashes go in the file. The relay's own record of such a room would
+// differ only in when each word landed. A room of 32 bakes about fifty times
+// faster than it plays, and the same flags give the same file, so a seed can be looked for:
+// it prints what comes on as it goes, and --until "<what>" (a line as it
+// prints them, e.g. "PARTY FALL BALL play" or "DOGFIGHT RING RACE") stops it
+// --seconds after that first comes on, or gives up (no file) if it never does.
+async function bake() {
+  const LAG = 8;
+  const { Referee } = await import('../net/referee.mjs');
+  const W = await import('../net/wire.mjs');
+  const L = await import('../src/layout.mjs');
+  const { View } = await import('../src/view.mjs');
+  const { modeName } = await import('../src/arena-view.mjs');
+  const { modeName: flightName } = await import('../src/flight-view.mjs');
+  const { Guest } = await import('../client/fireplace-bot.mjs');
+  const { GOLFER } = await import('../client/brain.mjs');
+  const { encodeReplay } = await import('../net/replay.mjs');
+  if (!existsSync('build/fireplace/game.wasm')) execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
+  const bytes = readFileSync('build/fireplace/game.wasm');
+  const seed = Number(seedOf()) >>> 0;
+  const seconds = Number(opt('seconds', 900));
+  const until = opt('until', '');
+  let ends = until ? Infinity : seconds * TICK;
+  let r = (seed ^ 0x9e3779b9) >>> 0; // the guests' own seeds and skills, from the room's
+  const rand = () => { r = (Math.imul(r ^ (r >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0; return r / 2 ** 32; };
+  const guests = Array.from({ length: Number(opt('bots', 64)) }, (_, k) => ({
+    g: new Guest(k, (rand() * 1e9) | 0, Math.max(0.1, Math.min(1, 0.6 + (rand() - 0.5) * 0.4)), GOLFER), join: k * 3, queue: [] }));
+  const ref = await Referee.create(bytes);
+  ref.reset(seed);
+  const view = new View(ref.u8.buffer);
+  const base = new W.TickBase();
+  const STATES = ['idle', 'countdown', 'play', 'over'];
+  const now = () => {
+    const g = view.dv.getUint32(L.FP_GAME, true);
+    const s = view.dv.getUint32(L.HDR_SEED, true);
+    const fly = g === L.G_FLIGHT && flightName(s >>> 24 === L.FORCE_MODE ? (s >>> 16) & 0xff : L.M_FIESTA).name;
+    const name = g === L.G_ARENA ? `ARENA ${modeName(s) ?? L.MODES[0].name}` : fly ? (fly.includes('DOGFIGHT') ? fly : `DOGFIGHT ${fly}`)
+      : g === L.G_PARTY ? `PARTY ${L.MINIGAMES[view.dv.getUint32(L.PG_GAME, true)]?.name}` : L.GAMES[g];
+    return `${name} ${STATES[view.hole().state] ?? view.hole().state}`;
+  };
+  let prev = new Uint32Array(W.NP);
+  const ticks = [], hashes = [];
+  let line = '';
+  const t0 = Date.now();
+  for (let t = 0; t < ends; t++) {
+    const cur = new Uint32Array(W.NP), events = [];
+    for (const p of guests) {
+      if (t < p.join) continue;
+      if (t === p.join) events.push({ slot: p.g.slot, kind: W.EV_JOIN });
+      p.queue.push(p.g.think(view, t + LAG, 2 * LAG));
+      cur[p.g.slot] = p.queue.length > LAG ? p.queue.shift() : 0;
+    }
+    const parts = W.encodeTick(events, prev, cur);
+    prev = cur;
+    ticks.push(parts);
+    const d = base.apply(parts);
+    const iv = ref.step({ ev: d.events, w: d.words });
+    if (iv) hashes.push([iv.tick, iv.hash]);
+    if (t % TICK === 0) {
+      const l = now();
+      if (l !== line) console.log(`${(t / TICK).toFixed(0).padStart(5)} s  ${l}`);
+      if (until && ends === Infinity && l.includes(until)) ends = t + seconds * TICK;
+      line = l;
+      if (t % (60 * TICK) === 0) process.stderr.write(`\rbake: ${t / TICK} s of the room in ${((Date.now() - t0) / 1000).toFixed(0)} s `);
+      if (until && ends === Infinity && view.dv.getUint16(L.FP_COUNT + 2, true) > (Number(opt('start', 0)) || 0) + 6) {
+        console.error(`\nbake: no ${until} in the first six games`);
+        return;
+      }
+    }
+  }
+  mkdirSync('replays', { recursive: true });
+  const file = `replays/${seed.toString(16).padStart(8, '0')}-bake-${guests.length}.qgr`;
+  writeFileSync(file, await encodeReplay({ prefix: await W.wasmPrefix(bytes), seed, roomStart: 1000, from: 1000, ticks, hashes }));
+  console.error(`\n${file}: ${(ticks.length / TICK).toFixed(0)} s, ${hashes.length} interval hashes, in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+}
+
 async function open({ replay, res = '960x540', gres = '', film = 1, theme = '', music = true, guests = false }) {
   if (!existsSync('build/fireplace/game.wasm')) execFileSync(process.execPath, ['tools/asm.mjs'], { stdio: 'inherit' });
   const require = createRequire(import.meta.url);
@@ -105,7 +188,7 @@ async function open({ replay, res = '960x540', gres = '', film = 1, theme = '', 
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   page.on('pageerror', (e) => console.error('page error:', e.message));
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.error('page:', m.text()); });
-  const q = new URLSearchParams({ replay: `/${relative(ROOT, resolve(replay))}`, film: String(film), present: '0', res, ...(theme ? { theme } : {}), ...(music ? {} : { music: '0' }), ...(guests ? { guests: '1' } : {}), ...(gres ? { gres } : {}) });
+  const q = new URLSearchParams({ replay: `/${relative(ROOT, resolve(replay))}`, film: String(film), present: '0', res, ...(theme ? { theme } : {}), ...(music ? {} : { music: '0' }), ...(guests ? { guests: guests === 'shop' ? 'shop' : '1' } : {}), ...(gres ? { gres } : {}) });
   await page.goto(`http://127.0.0.1:${port}/client/fireplace.html?${q}`);
   await page.waitForFunction(() => window.__film || window.__qa?.error, null, { timeout: 120000 });
   const err = await page.evaluate(() => window.__qa?.error);
@@ -146,7 +229,7 @@ async function shoot(cut) {
   const rooms = new Map();
   const roomOf = async (replay) => {
     if (!rooms.has(replay)) {
-      const r = await open({ replay, res: cut.res || `${W}x${H}`, film: Math.ceil(total + 2), theme: cut.theme, music: cut.score === undefined, guests: !!cut.guests, gres: cut.gres });
+      const r = await open({ replay, res: cut.res || `${W}x${H}`, film: Math.ceil(total + 2), theme: cut.theme, music: cut.score === undefined, guests: cut.guests, gres: cut.gres });
       rooms.set(replay, { ...r, tick: 0, span: null });
     }
     return rooms.get(replay);

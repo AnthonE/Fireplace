@@ -1,0 +1,26 @@
+{
+ "replay": "replays/f100002e-bake-32.qgr",
+ "out": "film/out/fireplace-whats-new.mp4",
+ "size": [1920, 1080],
+ "fps": 30,
+ "theme": "grandma",
+ "guests": "shop",
+ "score": 20,
+ "fade": 0.6,
+ "gres": "960x540",
+ "shots": [
+  { "replay": "replays/f100002e-bake-32.qgr", "couch": 4.096, "caption": "NEW IN FIREPLACE" },
+  { "replay": "replays/f100002e-bake-32.qgr", "sit": 3.072 },
+  { "replay": "replays/f100002e-bake-32.qgr", "at": 66, "len": 3.072, "caption": "FALL BALL\nSHOVE GIANT BALLS INTO THE GOAL" },
+  { "replay": "replays/f100007f-bake-32.qgr", "at": 43, "len": 2.048, "caption": "MINI GOLF\nEVERY BALL THE GOLF BALL" },
+  { "replay": "replays/f1020037-bake-32.qgr", "at": 40, "len": 2.048, "caption": "RELAY RACE\nCARRY THE BATON PAST THE POSTS" },
+  { "replay": "replays/f100008b-bake-32.qgr", "at": 14, "len": 2.048, "caption": "ROUND UP\nHERD THE SHEEP INTO YOUR PEN" },
+  { "replay": "replays/f100007f-bake-32.qgr", "at": 114.5, "len": 2.048, "caption": "TUG O' WAR\nPULL THEM INTO THE MUD" },
+  { "replay": "replays/f100008b-bake-32.qgr", "at": 108, "len": 2.048, "caption": "RUSH HOUR\nCROSS THE STREET AND BACK AGAIN" },
+  { "replay": "replays/f1020037-bake-32.qgr", "at": 239.6, "len": 3.072, "caption": "LONG JUMP\nLAND ON THE SAND" },
+  { "replay": "replays/f100007f-bake-32.qgr", "at": 139.5, "len": 2.048, "caption": "NEW LOOKS\nBOUGHT WITH MARSHMALLOWS" },
+  { "replay": "replays/f100002e-bake-32.qgr", "at": 307.2, "len": 3.072, "caption": "THE ARENA\nBATTLE ROYALE" },
+  { "replay": "replays/f1020037-bake-32.qgr", "at": 312, "len": 3.072, "caption": "DOGFIGHT\nRING RACE" },
+  { "replay": "replays/f1020037-bake-32.qgr", "back": 5.12, "caption": "53 MINIGAMES\nFIREPLACE IN YOUR BROWSER" }
+ ]
+}

@@ -23,7 +23,7 @@ import { parseImpair } from '../net/impair.js';
 import { relayFor, wsForced, room, mapUrl } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { savedLook, wearable, guestLook } from './looks.mjs';
-import { savedDress, wearableDress } from './dress.mjs';
+import { savedDress, wearableDress, guestDress } from './dress.mjs';
 import { guestAvatar } from './avatar.mjs';
 import { loadTally } from './achievements.mjs';
 import { loadPurse, openSet } from './purse.mjs';
@@ -94,9 +94,15 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   h.chat = createChat({ q, label: h.label, me: () => h.get(L.CL_SLOT), live: (p) => h.view.player(p).live,
     send: (text) => { if (h.net && h.local === false && !q.get('replay')) h.net.postMessage({ say: text }); } });
   // a replay keeps no looks (the relay never records them): with ?guests=1 every
-  // seat is dressed as a local room's AI players are, from its slot (the film's "guests")
-  if (q.get('replay') && q.get('guests') === '1') {
-    for (let p = 0; p < L.NPLAYER; p++) { h.u32[(L.CL_LOOKS >> 2) + p] = guestLook(p); h.u32[(L.CL_AVATARS >> 2) + p] = guestAvatar(p); }
+  // seat is dressed as a local room's AI players are, from its slot (the film's
+  // "guests"); with ?guests=shop from the whole wardrobe, priced pieces and dress too
+  if (q.get('replay') && (q.get('guests') === '1' || q.get('guests') === 'shop')) {
+    const shop = q.get('guests') === 'shop';
+    for (let p = 0; p < L.NPLAYER; p++) {
+      h.u32[(L.CL_LOOKS >> 2) + p] = guestLook(p, shop);
+      h.u32[(L.CL_AVATARS >> 2) + p] = guestAvatar(p);
+      if (shop) h.u32[(L.CL_DRESSES >> 2) + p] = guestDress(p);
+    }
   }
   // the prediction's own instance: it writes only PRED
   h.px = (await WebAssembly.instantiate(module, { env: { mem: memory } })).exports;

@@ -28,7 +28,7 @@ node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.w
 node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
 node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-chat.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
-node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
+node tools/film.mjs record | bake | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists; bake: a room with no relay)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
 node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the kit's copies, each on its own wasm; node net/run-kit-rooms.mjs is its gate
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)

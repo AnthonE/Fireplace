@@ -389,6 +389,7 @@ to -14 LUFS. Captions are drawn in the games' font.
 
 ```sh
 node tools/film.mjs record --seconds 960 --bots 64   # a replay in replays/
+node tools/film.mjs bake --start 0 --seed 46 --bots 32 --seconds 400   # the same with no relay, its plan as it goes
 node tools/film.mjs plan replays/<file>.qgr          # each game's span
 node tools/film.mjs shoot film/trailer.json --replay replays/<file>.qgr [--stills 2,7.5]
 ```
@@ -416,6 +417,30 @@ Mole, Balloon Bash, Egg Raid, Bowling; the first round is drawn from the seed
 alone, whoever joins), the camera on P1. At 1920 x 1080 a frame took about
 3.5 s to draw and keep, so its 984 frames were shot as four parts at once
 (`shoot --part k/4`, then `join`), about an hour in all on this 4-core box.
+
+`bake` makes the room `record` makes with no relay and no clock: the same
+guests (`client/fireplace-bot.mjs`), joining three ticks apart, each word
+landing 8 ticks after the world it saw, every tick coded as the relay codes it
+and stepped on its referee, whose interval hashes go in the file. A 400 s room
+of 32 guests baked in 8 s here, and the same flags give the same file, so a
+shot's room can be looked for: it prints what comes on as it goes, and
+`--until "<line>"` plays on to that line and `--seconds` past it. The arena's and
+Dogfight's modes are drawn from the room's PRNG as the game before them ends,
+so only a room played that far knows them: of 180 rooms of 32 baked from
+entry 0, 15 reached Battle Royale; of 178 from entry 2, 37 reached Ring Race.
+
+`film/whats-new.json` shows what came after the fifth wave in 36 beats:
+Party's sixth and seventh waves (Fall Ball, Mini Golf, Relay Race, Round Up,
+Tug o' War, Rush Hour, Long Jump), the arena's Battle Royale, Dogfight's Ring
+Race and the shop's looks, `"guests": "shop"` dressing every seat from the
+whole wardrobe, priced looks and dress included. Its four rooms of 32 were
+baked: `--start 0 --seed 46` (Fall Ball, then Battle Royale from 295 s),
+`--start 2 --seed 55` (Relay Race, Long Jump at 201 s, Ring Race from 303 s),
+`--start 0 --seed 127` (Mini Golf, Tug o' War from 86 s) and `--start 0 --seed
+139` (Round Up, Rush Hour from 90 s). The camera is on P1, so each shot sits
+where P1 is in it: Long Jump on one of its runs (it jumps every 7 s or so), and
+Battle Royale before 319 s, when P1 is out and the view goes to the grey of
+the dead.
 
 A signed-in player goes by the name their wallet has on Elo Pros, in every
 game's labels and the marshmallow board; the relay looks it up and sends it

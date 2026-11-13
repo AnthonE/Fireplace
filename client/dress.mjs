@@ -57,6 +57,15 @@ export function wearableDress(w, got) {
   return packDress(isOpen(FACES[d.face], got) ? d.face : 0, isOpen(SHIRTS[d.shirt], got) ? d.shirt : 0, isOpen(BACKS[d.back], got) ? d.back : 0);
 }
 
+// A film's guest dressed from the whole wardrobe (its "guests": "shop"), picked
+// from its slot as looks.mjs guestLook picks: about one in four of each piece
+// left off, so not every rider wears everything.
+export function guestDress(p) {
+  const h = Math.imul(p + 3, 0xc2b2ae35) >>> 0;
+  const pick = (list, k) => (((h >>> (k + 6)) & 3) === 0 ? 0 : 1 + ((h >>> k) % (list.length - 1)));
+  return packDress(pick(FACES, 0), pick(SHIRTS, 8), pick(BACKS, 16));
+}
+
 // ---- what this browser picked (localStorage, with the look)
 const KEY = 'fireplace.dress';
 export function savedDress() {
