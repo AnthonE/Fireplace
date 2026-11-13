@@ -11,7 +11,7 @@
 ;; The floor is all that's solid: a disc whose rim (MP_RIMA, MP_RIMB, MP_RIMT
 ;; in PG_H) starts closing in MP_SHRINK0 ticks after the claim that set it, so
 ;; ground on either bank is a function of its own tick and header, exact while
-;; the prediction runs less than MP_SHRINK0 ahead of the confirmed world. The
+;; the prediction runs up to MP_SHRINK0 ahead of the confirmed world. The
 ;; pads are laid out from $rand as the music starts, a whole song before they
 ;; light (PG_S); nothing solid, they matter only to the claim, the confirmed
 ;; world's, like any bump.
