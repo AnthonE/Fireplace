@@ -140,8 +140,9 @@ only of your own body), physics sandboxes, open worlds.
 6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
    less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
    than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); the
-   arena's and flight's pages load Party's constants through `layout.mjs`'s
-   `MG_CONSTS` (26 KB gzipped).
+   ~~arena's and flight's pages load Party's constants through `layout.mjs`'s
+   `MG_CONSTS`~~ (done: they are `src/mg/consts.mjs`'s, which no page loads;
+   128 KB gzipped by the time they went).
 7. People playing it. Everything so far is played by bots.
 
 ## Bringing maps and games in
@@ -341,9 +342,11 @@ do yet, and each names what it would need first; the first is built.
    balls, and sends the changed files in through GitHub's upload page. An
    unchanged minigame builds to `npm run build`'s bytes; a build takes about
    5 s on SwiftShader's machine (`net/run-pages.mjs` checks all of it on a
-   static host). Next: a new minigame from the page (the lists `tools/new-mg.mjs`
-   appends to), the AI and the drawing reading the edited constants, and
-   Claude in the page, paid from Elo Pros credits ("make the ice
+   static host). The edited constants reach the AI balls and the drawing as
+   they reach the sim: the check and the play load the minigame's client
+   module on them. Next: a new minigame from the page (the lists
+   `tools/new-mg.mjs` appends to), the client module's own code edited there
+   too, and Claude in the page, paid from Elo Pros credits ("make the ice
    slipperier"): the same edit loop with a model in it.
 2. **Bring your own bot.** The referee already runs a wasm it didn't build
    with one import, a shared memory. A bot is the same: a module that reads

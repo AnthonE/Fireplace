@@ -203,6 +203,13 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
+- A page fetches a minigame's or a kit mode's client module as its round or
+  match comes up (`client/mg/load.mjs`, `client/am/load.mjs`, on
+  `client/lazy.mjs`): frontends and bots read those registries, never the
+  lists (`index.mjs`), import a bot only for `?bot=1`, and draw or play
+  without a module for the frames before it arrives. Outside a page the
+  registries are whole from the start, so a bot's words stay a function of
+  its seed and the world.
 - The room is a relay's (`client/net.mjs`; `client/transport.mjs` opens its
   WebTransport, or where the browser has none, or with `?ws=1`, the relay's
   WebSocket door, `--ws-port`, found by `client/kit.mjs` `wsDoor`): one named, or on a copy's

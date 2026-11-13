@@ -52,7 +52,13 @@ party and flight's Dogfight in one module: `tools/asm.mjs` expands each
 exactly as its own build is (the arena on Box Canyon, flight on Skyways, each
 its own passive segment), puts its every identifier under a prefix (`$g.`,
 `$a.`, `$p.`, `$f.`) and makes its exports internal, and appends `src/fireplace.wat`.
-That sends every export to the game on now (the header's `FP_GAME`) and runs
+A function that is the same code in two games (the hash, the snapshot, the
+prediction, the ball's phases; most of the arena's fighter, which Dogfight is
+built on) is kept once (`mergeTwins`, `tools/asm-core.mjs`): the same text
+with the prefixes out, calling the same in turn and reading the same data.
+That is 488 of 1,873 functions, and the wasm goes from 833 KB to 770 KB (279
+KB to 261 KB gzipped); every instruction a game runs is what it was.
+`src/fireplace.wat` sends every export to the game on now (the header's `FP_GAME`) and runs
 the playlist at the end of each tick. The games are a list, `FP_SETS` in
 `src/layout.mjs`: each entry names its prefix and build flags, its world's
 generators, how players join it (one by one, or a round laid out at once),
@@ -310,7 +316,7 @@ the TV, six a page. They are this browser's record, not the room's: signing in
 with Elo Pros, and the referee's standings as their evidence, come next
 (`docs/roadmap.md`).
 
-**Results.** `test/fireplace.test.mjs` (12 tests): the prefixer; the games'
+**Results.** `test/fireplace.test.mjs` (14 tests): the prefixer; `mergeTwins`; the games'
 list (`FP_SETS`, a retired entry only its name, a page row for each); one
 module with every export; the playlist on the debug build from party
 round to party again, the room coming and going (each game's matches:
