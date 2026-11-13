@@ -171,7 +171,8 @@ shell whose own command line contains the name: it kills that shell.
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
   meeting (`$f_collide`) touch two records, so they are confirmed-only.
 - Fireplace (`src/fireplace.wat`): each game is its own build under a prefix
-  (`tools/asm.mjs` `prefixed()`), listed in `FP_SETS` (`src/layout.mjs`: its
+  (`tools/asm.mjs` `prefixed()`; a function two games hold alike is kept
+  once, `mergeTwins`), listed in `FP_SETS` (`src/layout.mjs`: its
   flags, world, join, input word, matches, score, seed), from which the `fp`
   macros write the playlist's game-by-game code; a new game is an entry there
   and a row in `client/fireplace.mjs`'s `PAGES`. Numbers are append-only: a
