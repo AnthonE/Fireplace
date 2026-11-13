@@ -93,7 +93,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   const { sw, sr } = t;
   const tHello = epoch();
   const resume = back && !watch ? back.slot : -1;
-  await sw.write(W.encodeHello({ maxDatagram: t.maxDatagram, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names, chat }));
+  await sw.write(W.encodeHello({ maxDatagram: t.maxDatagram, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names, chat, dress: looks }));
   const head = await sr.read(4);
   if (head[0] === W.T_REJECT) throw new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected');
   const wb = new Uint8Array(32);
@@ -118,15 +118,17 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   self.postMessage({ welcome });
   // a new session's room: no looks until the relay sends its table; ours goes now and on each change
   u32.fill(0, L.CL_LOOKS >> 2, (L.CL_LOOKS >> 2) + L.NPLAYER);
+  u32.fill(0, L.CL_DRESSES >> 2, (L.CL_DRESSES >> 2) + L.NPLAYER);
   u8.fill(0, L.CL_NAMES, L.CL_NAMES + L.NPLAYER * L.NAME_BYTES);
   u32.fill(0, L.CL_AVATARS >> 2, (L.CL_AVATARS >> 2) + L.NPLAYER);
   u32.fill(0, L.CL_BADGES >> 2, (L.CL_BADGES >> 2) + L.NPLAYER);
-  let lookSent = -1;
+  let lookSent = -1, dressSent = -1;
   const sendLook = () => {
-    const w = rd(L.CL_LOOK) >>> 0;
-    if (!looks || welcome.watch || w === lookSent) return;
+    const w = rd(L.CL_LOOK) >>> 0, d = rd(L.CL_DRESS) >>> 0;
+    if (!looks || welcome.watch || (w === lookSent && d === dressSent)) return;
     lookSent = w;
-    sw.write(W.encodeLook(w)).catch(() => {});
+    dressSent = d;
+    sw.write(W.encodeLook(w, d)).catch(() => {});
   };
   sendLook();
   signin = ({ message, signature }) => { sw.write(W.encodeSignin(message, signature)).catch(() => {}); };
@@ -179,6 +181,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
       if (!m) break;
       if (m.type === W.T_PONG) { seen.pongs++; onPong(m); }
       if (m.type === W.T_LOOK) for (const [p, w] of m.looks) if (p < L.NPLAYER) u32[(L.CL_LOOKS >> 2) + p] = w;
+      if (m.type === W.T_DRESS) for (const [p, w] of m.dresses) if (p < L.NPLAYER) u32[(L.CL_DRESSES >> 2) + p] = w;
       if (m.type === W.T_NAMES) for (const [p, n] of m.names) if (p < L.NPLAYER) writeName(u8, p, n);
       if (m.type === W.T_AVATAR) for (const [p, w] of m.avatars) if (p < L.NPLAYER) u32[(L.CL_AVATARS >> 2) + p] = w;
       if (m.type === W.T_BADGE) for (const [p, w] of m.badges) if (p < L.NPLAYER) u32[(L.CL_BADGES >> 2) + p] = w;

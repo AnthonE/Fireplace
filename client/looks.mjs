@@ -85,7 +85,7 @@ export const BODIES = [
 ];
 
 // a look's id in a purse (client/purse.mjs): its list and its key, which never change
-export const lookId = (x) => `${x.pattern !== undefined ? 'ball' : x.style !== undefined ? 'hat' : 'body'}:${x.key}`;
+export const lookId = (x) => `${x.slot ?? (x.pattern !== undefined ? 'ball' : x.style !== undefined ? 'hat' : 'body')}:${x.key}`;
 
 // what a card calls one: THE EIGHT BALL, THE CANDY BALL, THE CROWN
 export const lookName = (x) => `THE ${x.pattern === undefined || /BALL$/.test(x.name) ? x.name : `${x.name} BALL`}`;
