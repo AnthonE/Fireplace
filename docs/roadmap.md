@@ -33,14 +33,24 @@ site's front door, which still opens the living room, choosing between the
 room and the shelf.
 
 What a page downloads: every file it fetched in its first 15 s in headless
-Chrome (its modules, workers, themes and wasm), each gzipped:
+Chrome in a local room with AI players (its modules, workers, themes and
+wasm), each gzipped:
 
 | Page | Files | Gzipped |
 | --- | --- | --- |
-| `client/party.html` | 137 | 778 KB (wasm 88 KB; the 46 minigames' client modules are most of the files) |
-| `client/fireplace.html` | 158 | 1,037 KB (wasm 254 KB: the four games, Box Canyon and Skyways) |
-| `client/arena.html` | 106 | 387 KB (wasm 59 KB) |
-| `client/flight.html` | 104 | 412 KB (wasm 107 KB, most of it Skyways) |
+| `client/party.html` | 66 | 324 KB (wasm 100 KB; the round's minigame, its client module and constants, 5 to 17 KB) |
+| `client/fireplace.html` | 87 | 604 KB (wasm 255 KB: the four games, Box Canyon and Skyways) |
+| `client/arena.html` | 69 | 294 KB (wasm 62 KB) |
+| `client/flight.html` | 65 | 302 KB (wasm 109 KB, most of it Skyways) |
+| `client/golf.html` | 62 | 203 KB (wasm 8 KB) |
+| `client/games.html` | 61 | 499 KB (the tiles' pictures are most of it) |
+
+A page fetches a minigame's or a kit mode's module when its round or match
+comes up, and Fireplace the next game's frontend while this one plays
+(`client/mg/load.mjs`, `client/am/load.mjs`); every minigame's constants
+left `layout.mjs`, which every page and worker loads. Before both, with 53
+minigames, the same six were 916 KB (166 files), 1,247 KB (197), 487 KB,
+496 KB, 328 KB and 627 KB.
 
 No textures, models, sound files or fonts: sounds are synthesized, the HUD's
 text is the system's sans drawn into an atlas at startup, every shape is

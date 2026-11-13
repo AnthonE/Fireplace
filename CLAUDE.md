@@ -242,6 +242,12 @@ shell whose own command line contains the name: it kills that shell.
   `test/studio.test.mjs` holds the page's build to `npm run build`'s bytes.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
+  A renderer's pipelines are made by `client/pipelines.mjs` `compile()`
+  (`createRenderPipelineAsync`, each drawn with once), never
+  `createRenderPipeline` in line, and a frontend exports `warm(host, opts)`
+  beside `mount`: it makes the renderer on the host (`host.renderer()`), so
+  Fireplace readies the game after this one while this one plays. The TV
+  sends a game no frame while three are still to be drawn.
   Golf's, the arena's and Dogfight's share a cartoon's look (docs/look.md):
   `client/lowpoly.mjs` is the paint (three tones through `cel`/`light`, the
   hills' shadows, the sky, what glows), `client/figure.mjs` the person
