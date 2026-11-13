@@ -41,11 +41,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // the preprocessor, the checks and the prefixer are tools/asm-core.mjs's, which a page runs too
 export { FEATURES, conditionals, stripComments, splitArgs, expandMacros, constants, forbid, prefixed };
 
-export const include = (file) => includeWith((p) => readFileSync(p, 'utf8'), resolve(file));
+const diskInclude = (file, rel) => join(dirname(file), rel);
+export const include = (file) => includeWith((p) => readFileSync(p, 'utf8'), resolve(file), undefined, diskInclude);
 export function expand(file, { ARENA = false, FLIGHT = false, layout: lay = layout, macros = makeMacros, map = null, ...flags } = {}) {
   // flight flies its own map (src/flight.mjs FLIGHT_MAP), the arena Box Canyon unless told otherwise
   if (ARENA && !map) map = compileMap(FLIGHT ? mapDir(lay.FLIGHT_CONSTS?.FLIGHT_MAP) : mapDir());
-  return expandWith((p) => readFileSync(p, 'utf8'), resolve(file), { ...flags, ARENA, FLIGHT, layout: lay, macros, map });
+  return expandWith((p) => readFileSync(p, 'utf8'), resolve(file), { ...flags, ARENA, FLIGHT, layout: lay, macros, map, resolveInclude: diskInclude });
 }
 
 export async function assemble(wat, name = 'game.wat', opts = {}) {

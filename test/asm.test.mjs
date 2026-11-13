@@ -1,8 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { splitArgs, expandMacros, constants, conditionals, forbid, stripComments, assemble } from '../tools/asm.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { include, expand, splitArgs, expandMacros, constants, conditionals, forbid, stripComments, assemble } from '../tools/asm.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import * as L from '../src/layout.mjs';
+
+test('disk includes follow the including file, even outside the working directory', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'fireplace asm-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'parts'));
+  const entry = join(dir, 'main.wat');
+  writeFileSync(entry, '(module\n#include "parts/body.wat"\n)');
+  writeFileSync(join(dir, 'parts', 'body.wat'), '#include "../value.wat"');
+  writeFileSync(join(dir, 'value.wat'), '(func (result i32) (i32.const 7))');
+  const expected = '(module\n(func (result i32) (i32.const 7))\n)';
+  assert.equal(include(entry), expected);
+  assert.equal(expand(entry), expected);
+  writeFileSync(join(dir, 'value.wat'), '#include "./main.wat"');
+  assert.throws(() => include(entry), /include cycle/);
+});
 
 test('splitArgs keeps groups and @(expr) whole', () => {
   assert.deepEqual(splitArgs('f32 @(PX + 4) (local.get $i)'), ['f32', '@(PX + 4)', '(local.get $i)']);
