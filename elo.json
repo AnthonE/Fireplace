@@ -533,5 +533,11 @@
     "sha256": "a18a79bb95444f0e059d21b355485a5f1363bf6180bb38b1200818e5f41e43a9",
     "entry": "index.html",
     "frame": false
-  }
+  },
+  "server_keys": [
+    {
+      "id": "relay",
+      "pub": "P73u4MFPGkw7xKsr58FvRD6o4Y4S8iGxaTuaue6/DpM="
+    }
+  ]
 }
