@@ -25,15 +25,18 @@ Everything is little-endian.
 | | |
 | --- | --- |
 | a tick | 8 ms (`TICK_US` 8000) |
-| bundles | every 2 ticks (`SEND_EVERY`), carrying the newest 4 closed ticks (`NB`) |
+| bundles | every 2 ticks (`SEND_EVERY`), carrying the newest 4 closed ticks (`NB`), and up to 8 (`NB_DEEP`) while they fit in one datagram |
 | players | 256 slots (`NP`) |
 | a server tick | counts from the relay's start; a room's sim began at server tick `room_start`, so sim tick k is server tick `room_start + k` |
 
 Tick T closes at the relay's deadline for it. A word for T that arrives after
 that is late, and the relay repeats that player's last word instead (with the
 jump bit cleared and the shot counter unchanged, so a late word never fires).
-So send each tick's word a one-way trip ahead, plus a margin: the input lead.
-The bundle trailer's `slack` tells you how early your words land.
+It marks the tick a slot's words turn into repeats, and the tick they are its
+own again (events `EV_LATE` and `EV_ONTIME`, below), so a sim can tell a
+repeat from a word sent. So send each tick's word a one-way trip ahead, plus
+a margin: the input lead. The bundle trailer's `slack` tells you how early
+your words land, and its `late` how many have been repeated.
 
 ## Transports
 
@@ -63,8 +66,8 @@ unchanged. `ws://` unless the relay was given a certificate (`--ws-cert`,
 and reliable, so a datagram is never lost, only late: a lost packet holds up
 everything behind it, then it all lands at once. Acks, repairs and resyncs
 work as they do on datagrams and have nothing to do: an ack shows no hole, so
-no repair is sent. Each tick still comes twice (a bundle carries the newest
-four, every second tick), the second copy skipped.
+no repair is sent. Each tick still comes two to four times (a bundle carries
+the newest four to eight, every second tick), the later copies skipped.
 
 Closing the stream (the WebSocket itself, there) is how you leave. A relay
 that hears no datagram from a player for 2 s takes them as gone.
@@ -247,7 +250,7 @@ ne EG0 | ne x (slot 8, kind 2) | nc EG0 | nc x (gap EG0 | yaw? pitch? high? 3 x 
 
 | term | meaning |
 | --- | --- |
-| kind | 1 join, 2 leave |
+| kind | 1 join, 2 leave; 3 late, 0 on time (the relay's marks) |
 | gap | slots skipped since the last change (the first counts from slot 0) |
 | the yaw delta | wraps at 2^14 |
 | zz | zigzag: 0, -1, 1, -2, ... to 0, 1, 2, 3, ... |
@@ -257,6 +260,16 @@ ne EG0 | ne x (slot 8, kind 2) | nc EG0 | nc x (gap EG0 | yaw? pitch? high? 3 x 
 A tick too big for one datagram is cut by slot into parts of at most 1,000
 bytes. Each part is coded the same way, its first gap counting from slot 0
 again, and the events go in part 0.
+
+The relay's marks are events too. A slot gets `late` (3) in the first tick it
+closes with that slot's word repeated, and `on time` (0) in the first tick a
+word of its own makes it in again; a slot is either, so it never gets both in
+one tick. The arena's and Dogfight's sims act on them: each of their words
+carries a bit of an 8-tick frame (the view lag, a reload, a pickup), and a
+repeated word carries the tick before's bit, so a frame with a repeat in it
+is dropped whole. Golf's and party's ignore them. A client must feed them in
+with the rest (below), or its arena world parts from the room's at the first
+late word.
 
 Keep the 256 words the next tick is coded against, and apply ticks strictly in
 order (lockstep does anyway). After a keyframe, those words are each live
@@ -269,8 +282,9 @@ player's last input in the keyframe's region.
 The bundle trailer is: u32 in_ack · i16 slack (1/16 ms; negative means your words were late) · u8 late · u8 flags.
 
 - **Arrival:** a tick has arrived once all its parts have, from any datagrams.
-- **Bundles:** a bundle may span several datagrams, each with the same trailer.
+- **Bundles:** the newest 4 ticks, in as many datagrams as they need, each with the same trailer; or up to 8 when those fit in one, so a tick rides in four bundles in a row and a burst of loss up to 48 ms long loses none of them.
 - **in_ack:** the newest tick through which the relay has all your words.
+- **late:** how many of your words the relay has repeated in place of yours, since you joined, mod 256. It moves with the bundle that closed them: when it moves, an arena frame you sent over those ticks was dropped, so send it again (`src/arena-view.mjs` `FrameLog`).
 
 ## Into the world
 
@@ -278,7 +292,7 @@ The bundle trailer is: u32 in_ack · i16 slack (1/16 ms; negative means your wor
 grows. Call `init(seed)` with the welcome's seed. To step a closed tick:
 
 1. Write its inbox:
-   - for each join or leave, in order, a 16-byte record at `0x1010 + 16i`: byte 4 kind (5 join, 6 leave), byte 5 slot, the rest 0;
+   - for each join, leave or mark, in order, a 16-byte record at `0x1010 + 16i`: byte 4 kind (5 join, 6 leave, 7 late, 8 on time), byte 5 slot, the rest 0;
    - then an input record per changed word: kind 4, the slot, the word as u32 at byte 8;
    - the record count, as u32, at `0x1000`.
 2. Call `step()`.

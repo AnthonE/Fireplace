@@ -83,7 +83,14 @@ pickup request. The word sits on golf's fields (yaw low, pitch, then a high
 byte of the bits that change least), which wire v4 codes tightest, and a
 frame goes only when there is news (a request, the lag 2 ticks off, or a
 second gone), so between them a still player's word doesn't change and
-costs nothing. Hitscan shots are lag-compensated inside the
+costs nothing. A word that reaches the relay too late is closed as the last
+one repeated, which carries the tick before's bit of the frame: a lag of 18
+read as 2 or 22, a reload or a pickup nobody pressed. So the relay marks the
+ticks a slot's words turn into repeats and back ([wire.md](wire.md)), the
+sim drops whole any frame a repeat fell in (`AL_STALE`, beside the lag in
+`A_LAG`), and the sender, whose bundles count its repeated words, sends that
+frame again (`FrameLog`): a dropped reload starts a round trip late, and
+nothing nobody sent ever lands. Hitscan shots are lag-compensated inside the
 lockstep: the sim keeps where every fighter stood after each of the last 32
 ticks (in the balls' place in the region, so it is hashed and in every
 keyframe), and a shot is checked against the targets where the shooter saw

@@ -3,10 +3,15 @@
 // the last 9.6 s:
 //   IN / OUT  bytes a second down, by kind (bundles, repairs, keyframes and
 //             fills, stacked), and up (a line)
-//   REPAIRED  the share of ticks heard that needed a repair; LAG, from an input
-//             to the confirmed world: the lead and the delay, in ms
-//   LEAD      the input lead and the playout delay, in ticks (client/clock.mjs);
-//             a spectator sends no inputs, so its LAG is the delay alone
+//   LATE      what went wrong: this session's words the relay closed without
+//             (it repeated the last one; red, from the top), the share of
+//             ticks heard that needed a repair (orange, from the base), and
+//             each freeze of the confirmed world (a tinted column: the world
+//             stood further behind the playout clock than a frontend
+//             extrapolates it, the next tick missing), the last 2 s counted
+//   LEAD      the input lead and the playout delay, in ticks (client/clock.mjs),
+//             and their sum in ms, from an input to the confirmed world; a
+//             spectator sends no inputs, so its sum is the delay alone
 //   SYNC      each interval hash sent to the relay (green), and each keyframe:
 //             a join (blue), a resync for a hole or a stall (purple), a desync (red)
 // The net worker counts the bytes and ticks in shared memory (L.CL_RX_*);
@@ -42,7 +47,8 @@ export class NetGraph {
   // interval hashes sent and keyframes restored, as client/main.mjs keeps them.
   sample(now, hashes, keys) {
     if (now - this.at < STEP_MS) return;
-    const c = { bundle: this.get(L.CL_RX_BUNDLE), repair: this.get(L.CL_RX_REPAIR), stream: this.get(L.CL_RX_STREAM), up: this.get(L.CL_TX), heard: this.get(L.CL_HEARD), repaired: this.get(L.CL_REPAIRS) };
+    const c = { bundle: this.get(L.CL_RX_BUNDLE), repair: this.get(L.CL_RX_REPAIR), stream: this.get(L.CL_RX_STREAM), up: this.get(L.CL_TX), heard: this.get(L.CL_HEARD), repaired: this.get(L.CL_REPAIRS),
+      late: this.get(L.CL_LATE), freezes: this.get(L.CL_FREEZES), frozen: this.get(L.CL_FROZEN) };
     if (this.prev) {
       const s = (now - this.at) / 1000;
       const d = (k) => ((c[k] - this.prev[k]) >>> 0) / s;
@@ -51,6 +57,7 @@ export class NetGraph {
       this.cols.push({
         bundle: d('bundle'), repair: d('repair'), stream: d('stream'), up: d('up'),
         heard: (c.heard - this.prev.heard) >>> 0, repaired: (c.repaired - this.prev.repaired) >>> 0,
+        late: (c.late - this.prev.late) >>> 0, freezes: (c.freezes - this.prev.freezes) >>> 0, frozen: Math.min(1, ((c.frozen - this.prev.frozen) >>> 0) / (now - this.at)),
         lead: this.watch ? 0 : this.f32[L.CL_LEAD >> 2], delay: this.f32[L.CL_DELAY >> 2], hash: hashes.length > this.seenHashes ? 1 : 0, key,
       });
       if (this.cols.length > GRAPH_N) this.cols.shift();
@@ -70,23 +77,25 @@ export class NetGraph {
     const sLead = nice(Math.max(16, ...cols.map((c) => Math.max(c.lead, c.delay))));
     const share = (c) => (c.heard ? c.repaired / c.heard : 0);
     const sRep = nice(Math.max(0.05, ...cols.map(share)));
+    const sLate = nice(Math.max(4, ...cols.map((c) => c.late)));
     cols.forEach((c, k) => {
       const col = GRAPH_N - n + k;
       const at = (panel) => 4 * (panel * GRAPH_N + col);
       data.set([c.bundle / sIn, c.repair / sIn, c.stream / sIn, c.up / sIn], at(0));
-      data[at(1)] = share(c) / sRep;
+      data.set([share(c) / sRep, c.late / sLate, c.freezes || c.frozen ? Math.max(0.2, c.frozen) : 0], at(1));
       data.set([c.lead / sLead, c.delay / sLead], at(2));
       data.set([c.hash, c.key], at(3));
     });
     const last = cols[n - 1] || { bundle: 0, repair: 0, stream: 0, up: 0, lead: 0, delay: 0 };
     const recent = cols.slice(-20);
-    const heard = recent.reduce((a, c) => a + c.heard, 0), repaired = recent.reduce((a, c) => a + c.repaired, 0);
+    const sum = (k) => recent.reduce((a, c) => a + c[k], 0);
+    const heard = sum('heard'), repaired = sum('repaired'), late = sum('late'), freezes = sum('freezes');
     let x = GRAPH_COL;
     const say = (y, s, c) => { put(x, y, s, c); x += s.length; };
     const row = (y, parts) => { x = GRAPH_COL; for (const [s, c] of parts) say(y, s, c); };
     row(2, [['IN ', C.GREEN], [kb(last.bundle + last.repair + last.stream), C.WHITE], [' OUT ', C.CYAN], [kb(last.up), C.WHITE], [` KB/S <${kb(sIn)}`, C.GREY]]);
-    row(6, [['REPAIRED ', C.ORANGE], [`${heard ? (100 * repaired / heard).toFixed(1) : '0.0'}%`, C.WHITE], ['  LAG ', C.GREY], [`${Math.round((last.lead + last.delay) * 8)}MS`, C.WHITE]]);
-    row(10, [['LEAD ', C.YELLOW], [last.lead.toFixed(1), C.WHITE], [' DELAY ', C.CYAN], [last.delay.toFixed(1), C.WHITE], [` <${sLead}`, C.GREY]]);
+    row(6, [['LATE ', C.RED], [`${late}`, late ? C.WHITE : C.GREY], [' FROZE ', C.PURPLE], [`${freezes}`, freezes ? C.WHITE : C.GREY], [' REP ', C.ORANGE], [`${heard ? (100 * repaired / heard).toFixed(1) : '0.0'}%`, C.WHITE]]);
+    row(10, [['LEAD ', C.YELLOW], [last.lead.toFixed(1), C.WHITE], [' DELAY ', C.CYAN], [last.delay.toFixed(1), C.WHITE], [` =${Math.round((last.lead + last.delay) * 8)}MS`, C.GREY]]);
     row(14, [['SYNC ', C.GREEN], [`${this.seenHashes} HASHES `, C.WHITE], [`${this.desyncs} DESYNC`, this.desyncs ? C.RED : C.GREY]]);
     return data;
   }

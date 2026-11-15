@@ -202,13 +202,47 @@ export function predict(h, slot, live) {
   return -1;
 }
 
+// What the netcode did to this page, for the gates: its words the relay
+// closed without, the confirmed world's freezes and the ms they lasted, and
+// the prediction's corrections (client/host.mjs corrector) past 10 cm.
+export function netStats(h) {
+  const c = h.corrections || { n: 0, big: 0, max: 0 };
+  return { late: h.get(L.CL_LATE) >>> 0, freezes: h.get(L.CL_FREEZES) >>> 0, frozenMs: h.get(L.CL_FROZEN) >>> 0, corrections: c.n, bigCorrections: c.big, maxCorrection: Number(c.max.toFixed(3)) };
+}
+
+// For the gates, in the arena and Dogfight: whether the view lag the confirmed
+// world holds for this page's fighter is one its frames sent in the last 3 s
+// (CL_LAGSENT). A frame some of whose words the relay closed without, the
+// last word repeated in their place, could decode to a lag never sent.
+export function lagCheck(h) {
+  const sent = []; // [ms, lag]: each value CL_LAGSENT took, the one in effect 3 s ago the oldest kept
+  const c = { frames: 0, wrong: 0, episodes: 0, worst: 0 };
+  let matched = false, was = false;
+  c.update = (me, now) => {
+    const v = h.get(L.CL_LAGSENT);
+    if (!sent.length || sent.at(-1)[1] !== v) sent.push([now, v]);
+    while (sent.length > 1 && sent[1][0] < now - 3000) sent.shift();
+    if (!me?.live) { was = false; return; }
+    const ok = sent.some(([, l]) => l === me.lag);
+    matched ||= ok;
+    if (!matched) return;
+    c.frames++;
+    if (!ok) { c.wrong++; if (!was) c.episodes++; c.worst = Math.max(c.worst, Math.abs(me.lag - v)); }
+    was = !ok;
+  };
+  c.stats = () => ({ frames: c.frames, wrong: c.wrong, episodes: c.episodes, worst: c.worst });
+  return c;
+}
+
 // Corrections ease in: where this rebuild puts the newest tick the last one
 // also predicted, against where that one put it, goes into a render-only
-// offset that decays over 100 ms. A jump past 4 m (a respawn) snaps.
+// offset that decays over 100 ms. A jump past 4 m (a respawn) snaps. Each
+// one past 10 cm is counted on the host (netStats), and past 50 cm as big.
 export function corrector(h) {
   const { u32, f32 } = h;
   let track = new Map();
   const c = { off: [0, 0, 0] };
+  const seen = h.corrections ||= { n: 0, big: 0, max: 0 };
   c.update = (n, ms) => {
     const now = new Map();
     for (let i = 0; i < n; i++) { const o = (L.PTRACK >> 2) + 4 * i; now.set(u32[o + 3], [f32[o], f32[o + 1], f32[o + 2]]); }
@@ -217,8 +251,12 @@ export function corrector(h) {
     if (t >= 0) {
       const a = track.get(t), b = now.get(t);
       const d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-      if (Math.hypot(...d) > 4) c.off = [0, 0, 0];
-      else c.off = c.off.map((v, k) => v + d[k]);
+      const m = Math.hypot(...d);
+      if (m > 4) c.off = [0, 0, 0];
+      else {
+        c.off = c.off.map((v, k) => v + d[k]);
+        if (m > 0.1) { seen.n++; if (m > 0.5) seen.big++; seen.max = Math.max(seen.max, m); }
+      }
     }
     if (n) track = now;
     const f = Math.exp(-ms / 100);

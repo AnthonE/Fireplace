@@ -2,13 +2,15 @@
 // keys and mouse (or its bot) write: golf's layout, or the arena's with its
 // presses and its frame. The net worker (client/net.mjs) sends these words to
 // the relay; the local room (client/local.mjs) closes its ticks with them.
-// sampler() returns sample(t), called once per tick in order.
+// sampler() returns sample(t), called once per tick in order, and
+// sample.lost(a, b): server ticks a..b held a word the relay repeated, so a
+// frame sent over them goes again (src/arena-view.mjs FrameLog).
 //   arena: the arena's words always; fireplace: the arena's while it or Dogfight
 //   is the game on (FP_GAME in the confirmed world), else golf's
 import * as W from '../net/wire.mjs';
 import * as L from '../src/layout.mjs';
 import { readClock } from './clock.mjs';
-import { arenaWord, arenaFrame, frameDue } from '../src/arena-view.mjs';
+import { arenaWord, arenaFrame, frameDue, FrameLog } from '../src/arena-view.mjs';
 
 const epoch = () => performance.timeOrigin + performance.now();
 
@@ -23,8 +25,9 @@ export function sampler({ memory, roomStart, arena = false, fireplace = false })
   const sent = { [L.CL_MELEE]: rd(L.CL_MELEE), [L.CL_GREN]: rd(L.CL_GREN), [L.CL_RELOAD]: rd(L.CL_RELOAD), [L.CL_USE]: rd(L.CL_USE) };
   let frame = 0;
   const lastFrame = {}; // the last frame sent: its lag and tick
+  const frames = new FrameLog();
   const take = (a) => { if (((rd(a) - sent[a]) | 0) > 0) { sent[a]++; return true; } return false; };
-  return (t) => {
+  const sample = (t) => {
     const armed = fireplace ? rd(L.FP_GAME) === L.G_ARENA || rd(L.FP_GAME) === L.G_FLIGHT : arena;
     // an automatic held: a shot asked for every tick, so it fires as fast as it can
     if (armed && rd(L.CL_AUTO) && ((rd(L.CL_PRESSES) - sentPresses) | 0) <= 0) Atomics.store(i32, L.CL_PRESSES >> 2, sentPresses + 1);
@@ -43,11 +46,17 @@ export function sampler({ memory, roomStart, arena = false, fireplace = false })
     if ((st & 7) === 0) {
       // the view lag: this word's tick less the confirmed tick on screen now
       const lag = Math.round(t - readClock(i32, f64, L.CL_PLAY, epoch()) + 1);
-      const reload = take(L.CL_RELOAD), use = take(L.CL_USE);
-      frame = frameDue(lastFrame, st, lag, reload || use) ? arenaFrame({ lag, reload, use }) : 0;
+      // a frame the room dropped goes again, its requests with it
+      const redo = frames.take();
+      const reload = take(L.CL_RELOAD) || !!redo?.reload, use = take(L.CL_USE) || !!redo?.use;
+      frame = frameDue(lastFrame, st, lag, reload || use || !!redo) ? arenaFrame({ lag, reload, use }) : 0;
+      frames.add(st, frame);
+      if (frame) Atomics.store(i32, L.CL_LAGSENT >> 2, (frame >> L.AF_LAG_SHIFT) & L.LAG_MAX);
       Atomics.store(i32, L.CL_FRAME >> 2, frame);
     }
     return arenaWord({ yaw: rd(L.CL_YAW), pitch: rd(L.CL_PITCH), move: mv & 15, jump: (mv >> 4) & 1, shot: sentPresses & 3,
       melee: sent[L.CL_MELEE] & 1, gren: sent[L.CL_GREN] & 1, slot: rd(L.CL_WEAPON), serial: (frame >> (st & 7)) & 1 });
   };
+  sample.lost = (a, b) => frames.lost(a - roomStart, b - roomStart);
+  return sample;
 }

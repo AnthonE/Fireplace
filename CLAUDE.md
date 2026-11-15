@@ -27,6 +27,7 @@ node --test test/party.test.mjs      # one file
 node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.wasm   # Node, Deno, Chrome x JIT tiers x 1/2/4 threads
 node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
 node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-chat.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
+node net/run-arena.mjs --impair wifi --bot-impair wifi   # the same over net/impair.js's home Wi-Fi (fades, stalls); the report has each page's late words, freezes, corrections
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
@@ -192,7 +193,11 @@ shell whose own command line contains the name: it kills that shell.
   area is cleared first, so two maps never mix.
 - Inputs are one u32 word per player per tick (golf's layout in
   `src/view.mjs`; the arena's in `arena-view.mjs`; party reuses golf's).
-  Keep fields that rarely change still: wire v4 codes deltas.
+  Keep fields that rarely change still: wire v4 codes deltas. A word that
+  comes too late is closed as the slot's last one repeated, and the relay
+  marks the ticks a slot's words turn into repeats and back (`EV_LATE`,
+  `EV_ONTIME`): a field spread over several ticks (the arena's frame) must
+  drop what a repeat fell in (`AL_STALE`) and be sent again (`FrameLog`).
 
 ## Clients
 

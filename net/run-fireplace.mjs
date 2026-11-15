@@ -9,7 +9,7 @@
 // round the relay to every page. Screenshots go to traces/. --start k starts
 // the playlist at its entry k (layout.mjs FP_START, through the relay's seed),
 // and the gate wants that entry's game played.
-//   node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 360] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--res 1280x800] [--start k]
+//   node net/run-fireplace.mjs [--bots 15] [--chrome 1] [--seconds 360] [--impair delay=60,jitter=10,loss=0.05 | wifi] [--bot-impair the same, for the bot host] [--shots 1] [--res 1280x800] [--start k]
 //                              [--port 4433: the relay's, its native door the next]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -24,6 +24,7 @@ const nbots = Number(opt('bots', 15));
 const chrome = Number(opt('chrome', 1));
 const seconds = Number(opt('seconds', 360));
 const impair = opt('impair', '');
+const botImpair = opt('bot-impair', ''); // the bot host's sessions too (net/impair.js; `wifi` is a preset)
 const shots = opt('shots', '1') !== '0';
 const port = Number(opt('port', 4433));
 const start = opt('start', '') === '' ? null : Number(opt('start', ''));
@@ -42,7 +43,7 @@ const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-t
 await new Promise((ok) => setTimeout(ok, 1500));
 const botsPath = 'traces/fireplace.bots.json';
 rmSync(botsPath, { force: true });
-const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--fireplace', '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
+const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--fireplace', ...(botImpair ? ['--impair', botImpair] : []), '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
   { stdio: ['ignore', 'inherit', 'inherit'] }) : null;
 const botsDone = bots ? new Promise((ok) => bots.once('exit', ok)) : null;
 
@@ -57,7 +58,7 @@ const pages = [];
 const lookOf = (k) => packLook(1 + (k % (BALLS.length - 1)), 1 + (k % (HATS.length - 1)));
 // software WebGPU here, so the page draws at golf's 320 x 200 unless asked for more (--res 1280x800)
 const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', res: opt('res', '320x200') });
-const report = { bots: nbots, chrome, seconds, impair: impair || 'none', start: start ?? 0, screenshots: [], errors: [] };
+const report = { bots: nbots, chrome, seconds, impair: impair || 'none', botImpair: botImpair || 'none', start: start ?? 0, screenshots: [], errors: [] };
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(0);
 try {
@@ -83,7 +84,7 @@ try {
   }
   process.stderr.write('\n');
   const end = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.state())));
-  report.chromeState = end.map((s) => ({ slot: s.slot, game: s.gameName, games: s.games, mallows: s.mallows, behind: s.clState !== 2, look: s.look, relayLooks: s.relayLooks }));
+  report.chromeState = end.map((s) => ({ net: s.net, slot: s.slot, game: s.gameName, games: s.games, mallows: s.mallows, behind: s.clState !== 2, look: s.look, relayLooks: s.relayLooks }));
   report.chromeHashes = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.hashes.length)));
 } finally {
   await browser.close();

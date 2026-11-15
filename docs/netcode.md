@@ -31,7 +31,7 @@ writing a client of your own, and [hosting.md](hosting.md) runs rooms.
   first tick that differs and which slice and field it was in.
 - `net/relay.ts` is the relay: one isolate owns the QUIC sessions, an 8 ms
   clock from a fixed epoch, and the bundles (the newest four ticks every second
-  tick, with a per-recipient trailer). Each closed tick is coded once, as the
+  tick, eight while they fit one datagram, with a per-recipient trailer). Each closed tick is coded once, as the
   input words that changed since the tick before, each a delta from that
   player's last word, bit-packed (`net/wire.mjs`, wire v4); bundles, repairs,
   fills and the record all carry ticks in that form. It records every closed tick from the room's
@@ -68,7 +68,7 @@ writing a client of your own, and [hosting.md](hosting.md) runs rooms.
 - `client/` is the browser game on three threads over one shared memory. The
   net worker owns the session (WebTransport, or the WebSocket door below) and two clocks (`client/clock.mjs`): the
   predicted one, the server's tick plus an input lead sized from the relay's
-  jitter, on which it samples one input word a tick; and the playout clock,
+  jitter (`client/lead.mjs`), on which it samples one input word a tick; and the playout clock,
   2 ticks plus the p95 jitter of first arrivals behind the earliest, run up to
   3% fast or slow. It acks every tick and unpacks keyframes. The sim worker
   steps confirmed ticks to the playout clock, restores keyframes, reports
@@ -273,6 +273,90 @@ Not done:
 - **Trusting a resume.** A standby gives a held slot to whoever asks for it
   first, as a relay already gives a free slot to whoever joins. A ticket the
   relays share would bind a slot to its player.
+
+## When the link misbehaves
+
+The gates used to impair a link one way only: each datagram lost on its
+own, each jittered evenly. A home link's trouble has other shapes, and
+`net/impair.js` has them now: `burst` (loss in fades of that many ms on
+average, each way on its own), `stall` and `stallEvery` (nothing gets through
+either way until a stall ends, then it all lands in order) and `stepAt` and
+`stepTo` (the round trip changes, a route or a network changing). The `wifi`
+preset is 50 ms round trip, 10 ms jitter, 2% of the time faded 40 ms at a
+time, and a 150 ms stall every 10 s: a model of a home link, not a
+measurement of one. A page takes it as `?impair=wifi`, the bot host as
+`--impair wifi`, and the online gates as `--impair` for their Chrome pages
+and `--bot-impair` for their bots. Old options draw from the generator as
+they did, so a seed's datagrams fare as they always have.
+
+What a page sees, it shows and reports. The net graph's second strip is
+LATE (red, from the top: this session's words the relay closed without,
+from each bundle trailer's count), FROZE (a tinted column: the confirmed
+world further behind the playout clock than a frontend extrapolates it,
+`FREEZE_TICKS`, 3, with the next tick missing) and the share repaired
+(orange, from the base). `netStats` (`client/host.mjs`) gives the same to
+every page's state hook with the prediction's corrections past 10 cm and
+50 cm, and the gates write them into their reports. The arena's and
+Dogfight's pages also check that the view lag their confirmed world holds
+is one their frames sent (`lagCheck`).
+
+Measured with the arena gate on `wifi` (5 AI fighters and Chrome, all on it,
+60 s; one run each side of the changes below, the fades at random):
+
+| the page | before | after |
+| --- | --- | --- |
+| its words the relay repeated | 249 | 141 |
+| freezes of the confirmed world, and their length | 22, 1.96 s | 16, 1.51 s |
+| the prediction's corrections past 10 cm (past 50 cm; the largest) | 8 (2; 1.20 m) | 1 (1; 0.80 m) |
+| frames drawn with a view lag no frame sent (its worst, ticks off) | 32 (18) | 0 |
+| repair datagrams, the whole room | 106 | 53 |
+| per session, down | 3.7 KB/s | 6.9 KB/s |
+
+Every interval hash agreed both times (353 of 353). What changed:
+
+- **A late word inside a frame.** The relay closes a tick whose word came
+  too late with the slot's last word, repeated. The arena's word carries an
+  8-tick frame a bit a tick (the view lag, a reload, a pickup), so the
+  repeat carried the tick before's bit: a frame of lag 18 read as 2, 16 or
+  22, a reload or a pickup nobody pressed, or, after a stall, lag 31 with
+  both. A wrong lag stayed until the next frame, up to a second, and a shot
+  lag-compensated by it missed what the shooter saw. Now the relay marks
+  the tick a slot's words turn into repeats and the tick they are its own
+  again (`EV_LATE`, `EV_ONTIME`: the tick code's two unused event kinds,
+  [wire.md](wire.md)), the arena drops whole any frame a repeat fell in
+  (`AL_STALE`), and the sender, whose bundle trailers count its repeated
+  words, sends that frame again (`FrameLog`). In 1,500 frames with 2,751
+  words late in bursts (`test/arena-late.test.mjs`), the marks took 689
+  frames as dropped and no lag or reload anyone didn't send; without them
+  the same words gave 360 lags and 170 reloads nobody sent. Golf's and
+  party's builds ignore the marks and stay bit for bit what they were.
+  `tools/genarena.mjs --late 0.004` writes a match with late words in it
+  as the relay closes them (953 frames dropped in 20,000 ticks), and the
+  determinism matrix plays it in every configuration.
+- **Two bundles a tick.** A bundle carried the newest 4 ticks, so each tick
+  rode in two bundles 16 ms apart, and a fade of two bundles lost it until a
+  repair came a round trip later; the world stood still meanwhile. A model
+  of fades with a mean of 30 ms at 2% loss put that at 15 freezes a minute.
+  A bundle now carries up to 8 ticks while they fit one datagram
+  (`bundleTicks`), each tick in four bundles, and the model's 15 are 3.4.
+  Most rooms fit 8: 256 golfers' 145 B bundles become about 270 B, 64
+  fighters moving their aim every tick (513 B) about 1,010 B of the 1,161.
+  A room whose ticks average past 140 B keeps to 4, cut across datagrams as
+  before. (The tables above were measured with two bundles a tick.)
+- **The lead's slow climb.** The input lead moved at most 0.04 ticks a
+  bundle either way, so after the round trip grew the words landed late for
+  a second or more. It now runs up at a tick a bundle when words land late,
+  by what they were late by plus its margin (at most 6 ticks at once), and
+  gives a raise back if the first word sampled with all of it lands with
+  the raise to spare: a stall, over by the time its words land, which no
+  lead saves (`client/lead.mjs`). On a model link (`test/lead.test.mjs`), a
+  one-way step from 25 to 75 ms left 28 words late where the old way left
+  155; a 150 ms stall every 5 s cost 0.8 ticks of lead on average where
+  keeping each raise would have cost 2.5.
+
+Left: what remains of the freezes is the fades and stalls themselves, longer
+than the playout delay (2 ticks and the p95 jitter) covers; a delay sized
+for them would add their length to every remote player's lag all the time.
 
 ## Measured
 

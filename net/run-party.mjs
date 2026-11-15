@@ -9,7 +9,7 @@
 // the forced minigame (with --mg), and Chrome kept up without an error.
 // Screenshots go to traces/party-<key>-<s>s.png (traces/party-<s>s.png for
 // the rotation).
-//   node net/run-party.mjs [--mg k] [--bots 15] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--every 4] [--res 1280x800]
+//   node net/run-party.mjs [--mg k] [--bots 15] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05 | wifi] [--bot-impair the same, for the bot host] [--shots 1] [--every 4] [--res 1280x800]
 //                          [--port 4433: the relay's, its native door the next]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -24,6 +24,7 @@ const nbots = Number(opt('bots', 15));
 const chrome = Number(opt('chrome', 1));
 const seconds = Number(opt('seconds', 60));
 const impair = opt('impair', '');
+const botImpair = opt('bot-impair', ''); // the bot host's sessions too (net/impair.js; `wifi` is a preset)
 const shots = opt('shots', '1') !== '0';
 const every = Number(opt('every', 4));
 const mgArg = opt('mg', null);
@@ -44,7 +45,7 @@ const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-t
 await new Promise((ok) => setTimeout(ok, 1500));
 const botsPath = 'traces/party.bots.json';
 rmSync(botsPath, { force: true });
-const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--party', '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
+const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--party', ...(botImpair ? ['--impair', botImpair] : []), '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
   { stdio: ['ignore', 'inherit', 'inherit'] }) : null;
 const botsDone = bots ? new Promise((ok) => bots.once('exit', ok)) : null;
 
@@ -59,7 +60,7 @@ const pages = [];
 // software WebGPU here, so the page draws at golf's 320 x 200 unless asked for more (--res 1280x800)
 const res = opt('res', '320x200');
 const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', res });
-const report = { bots: nbots, chrome, seconds, mg: mg === null ? 'rotation' : MINIGAMES[mg]?.name, impair: impair || 'none', screenshots: [], errors: [] };
+const report = { bots: nbots, chrome, seconds, mg: mg === null ? 'rotation' : MINIGAMES[mg]?.name, impair: impair || 'none', botImpair: botImpair || 'none', screenshots: [], errors: [] };
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(0);
 const STATES = ['idle', 'countdown', 'play', 'over'];
@@ -85,7 +86,7 @@ try {
   }
   process.stderr.write('\n');
   const end = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.state())));
-  report.chromeState = end.map((s) => ({ fps: s.fps, slot: s.slot, pts: s.me?.pts, wins: s.me?.wins, kos: s.me?.kos, rounds: s.me?.rounds, behind: s.clState !== 2, feed: s.feed, round: s.round.round, game: s.name }));
+  report.chromeState = end.map((s) => ({ net: s.net, fps: s.fps, slot: s.slot, pts: s.me?.pts, wins: s.me?.wins, kos: s.me?.kos, rounds: s.me?.rounds, behind: s.clState !== 2, feed: s.feed, round: s.round.round, game: s.name }));
   report.chromeHashes = await Promise.all(pages.map((p) => p.evaluate(() => window.__qa.hashes.length)));
 } finally {
   await browser.close();

@@ -498,7 +498,10 @@ fn graphPx(p: vec2i) -> vec4f {
     if (f < v.x + v.y) { return vec4f(PALETTE[6], 0.9); }
     if (f < v.x + v.y + v.z) { return vec4f(PALETTE[7], 0.9); }
   } else if (k == 1) {
+    // repairs from the base, late words from the top, a freeze tinting its column
     if (f < v.x) { return vec4f(PALETTE[6], 0.9); }
+    if (f > 1.0 - v.y) { return vec4f(PALETTE[2], 1.0); }
+    if (v.z > 0.0) { return vec4f(PALETTE[7], 0.3 + 0.6 * v.z); }
   } else if (k == 2) {
     if (abs(f - v.x) < near) { return vec4f(PALETTE[1], 1.0); }
     if (abs(f - v.y) < near) { return vec4f(PALETTE[5], 1.0); }
