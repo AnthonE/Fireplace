@@ -95,6 +95,10 @@ async function run({ module, memory, netPort, threads = 1 }) {
   }
 
   const hashes = []; // interval hashes closed since the last post, for the runs
+  // Freezes: the world further behind the playout clock than a frontend
+  // extrapolates it, with the next tick missing (a hole waiting on its repair,
+  // or nothing here yet), counted once it has first caught up after the join.
+  let caught = false, frozen = false, frozenMs = 0, lastLoop = epoch();
   function loop() {
     const now = epoch();
     const play = readClock(i32, f64, L.CL_PLAY, now);
@@ -131,6 +135,13 @@ async function run({ module, memory, netPort, threads = 1 }) {
         self.postMessage({ sync: why, next, newest, after, behind: target - k });
       }
     }
+    const behind = play - next;
+    if (behind <= L.FREEZE_TICKS) caught = true;
+    const stuck = caught && behind > L.FREEZE_TICKS && !store.has(next);
+    if (stuck && !frozen) Atomics.add(i32, L.CL_FREEZES >> 2, 1);
+    if (stuck) { frozenMs += now - lastLoop; set(L.CL_FROZEN, Math.round(frozenMs)); }
+    frozen = stuck;
+    lastLoop = now;
     set(L.CL_QUEUED, store.size);
     set(L.CL_STATE, target - k > 16 ? 1 : 2);
     setTimeout(loop, k < target && store.has(welcome.roomStart + k) ? 0 : 1);

@@ -208,6 +208,7 @@ class Session {
     this.parts = new W.Parts();
     this.words = new Map(); // server tick -> the word sent for it
     this.lead = 3;
+    this.lateSeen = 0; // the relay's count of this session's words it closed without (a u8), as the last bundle had it
     this.lastBundleT = -1;
     this.inAck = 0;
     this.seq = 0;
@@ -405,8 +406,13 @@ class Session {
     if (d.type !== W.T_BUNDLE || newest <= this.lastBundleT) return;
     // a bundle in several datagrams carries one trailer on each: once, with its newest tick
     this.stats.bundles++;
+    const since = this.lastBundleT;
     this.lastBundleT = newest;
     this.inAck = Math.max(this.inAck, d.trailer.inAck);
+    // some word since the last bundle was the relay's repeat: an arena frame over it goes again
+    const late = (d.trailer.late - this.lateSeen) & 255;
+    this.lateSeen = d.trailer.late;
+    if (late && world.started) this.bot.lost?.(Math.max(since + 1, this.joinTick) - world.roomStart, newest - world.roomStart);
     // net/bot.mjs: a small continuous nudge of the lead toward the target slack
     this.lead = Math.max(1, Math.min(40, this.lead + 0.02 * (TARGET_SLACK - d.trailer.slack) / W.TICK_MS));
   }

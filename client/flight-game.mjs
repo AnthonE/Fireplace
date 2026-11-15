@@ -30,7 +30,7 @@ import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
 import { Pilot } from './flight-bot.mjs';
-import { predict, corrector, capturePng, listeners } from './host.mjs';
+import { predict, corrector, lagCheck, capturePng, listeners } from './host.mjs';
 import { tintsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
@@ -183,6 +183,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       serial: (get(L.CL_FRAME) >> ((next - room) & 7)) & 1 });
   };
   const corr = corrector(host);
+  const lagChk = lagCheck(host);
 
   // ---- what happened: FX into bolts, blasts, the feed and sounds
   const text = new Uint32Array(COLS * renderer.rows);
@@ -452,8 +453,9 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     }
     const ceiling = view.dv.getFloat32(L.MAP_CEILING, true) || 200;
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
     me = slot >= 0 ? view.ship(slot) : null;
+    if (st === 2) lagChk.update(me, now);
     pme = null;
     let tgt = null;
     if (WATCH && st >= 1) {
@@ -775,7 +777,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     frame,
     unmount() { off(); touch?.remove(); held.clear(); set(L.CL_MOVE, 0); set(L.CL_AUTO, 0); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
     capture: (scale = 2) => (last ? capturePng(renderer, u8, last, scale) : null),
-    state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, aim: [get(L.CL_YAW), get(L.CL_PITCH)], keys: get(L.CL_MOVE), rolls: get(L.CL_MELEE), error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((x) => x.text), team: me?.team ?? -1 }),
+    state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, aim: [get(L.CL_YAW), get(L.CL_PITCH)], keys: get(L.CL_MOVE), rolls: get(L.CL_MELEE), error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((x) => x.text), team: me?.team ?? -1, lagCheck: lagChk.stats() }),
     get locked() { return locked; },
   };
 }

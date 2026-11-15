@@ -7,7 +7,7 @@
 // go to traces/. --mode k forces every match to mode k (layout.mjs
 // FLIGHT_MODES: 0 a free-for-all, 4 Team Slayer, 3 Juggernaut, 15 Ring Race) through the
 // relay's seed, and the gate wants it played; in a team mode, both sides dealt pilots.
-//   node net/run-flight.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05] [--shots 1] [--mode k] [--res 320x200: the page's]
+//   node net/run-flight.mjs [--bots 5] [--chrome 1] [--seconds 60] [--impair delay=60,jitter=10,loss=0.05 | wifi] [--bot-impair the same, for the bot host] [--shots 1] [--mode k] [--res 320x200: the page's]
 //                           [--port 4433: the relay's, its native door the next]
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -22,6 +22,7 @@ const nbots = Number(opt('bots', 5));
 const chrome = Number(opt('chrome', 1));
 const seconds = Number(opt('seconds', 60));
 const impair = opt('impair', '');
+const botImpair = opt('bot-impair', ''); // the bot host's sessions too (net/impair.js; `wifi` is a preset)
 const shots = opt('shots', '1') !== '0';
 const mode = opt('mode', '') === '' ? null : Number(opt('mode', ''));
 const seed = mode === null ? 7 : forcedSeed(mode);
@@ -41,7 +42,7 @@ const relay = spawn(DENO, ['run', '--unstable-net', '-A', '--v8-flags=--single-t
 await new Promise((ok) => setTimeout(ok, 1500));
 const botsPath = `traces/${tag}.bots.json`;
 rmSync(botsPath, { force: true });
-const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--flight', '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
+const bots = nbots ? spawn(process.execPath, ['net/bot-host.mjs', '--flight', ...(botImpair ? ['--impair', botImpair] : []), '--relay', `127.0.0.1:${port + 1}`, '--bots', String(nbots), '--seconds', String(seconds + 10), '--quiet', '--out', botsPath],
   { stdio: ['ignore', 'inherit', 'inherit'] }) : null;
 const botsDone = bots ? new Promise((ok) => bots.once('exit', ok)) : null;
 
@@ -54,7 +55,7 @@ const browser = await chromium.launch({
 });
 const pages = [];
 const q = new URLSearchParams({ bot: '1', present: '0', url: `https://127.0.0.1:${port}/`, hash, impair, net: opt('net', '0'), skill: '0.9', res: opt('res', '320x200') });
-const report = { bots: nbots, chrome, seconds, impair: impair || 'none', mode: mode === null ? 'rotation' : modeName(mode).name, seed, screenshots: [], kills: [], errors: [] };
+const report = { bots: nbots, chrome, seconds, impair: impair || 'none', botImpair: botImpair || 'none', mode: mode === null ? 'rotation' : modeName(mode).name, seed, screenshots: [], kills: [], errors: [] };
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(0);
 try {
@@ -79,7 +80,7 @@ try {
   }
   process.stderr.write('\n');
   const end = await Promise.all(pages.map((p) => p.evaluate(() => window.__qf.state())));
-  report.chromeState = end.map((s) => ({ slot: s.slot, kills: s.me?.kills, deaths: s.me?.deaths, behind: s.clState !== 2, feed: s.feed, mode: s.mode?.mode, match: s.match?.hole,
+  report.chromeState = end.map((s) => ({ net: s.net, lagCheck: s.lagCheck, slot: s.slot, kills: s.me?.kills, deaths: s.me?.deaths, behind: s.clState !== 2, feed: s.feed, mode: s.mode?.mode, match: s.match?.hole,
     jugg: s.me?.jugg, points: s.me?.points, team: s.team, score: s.mode?.score, target: s.mode?.target, teamWin: s.mode?.teamWin, teamN: s.mode?.teamN }));
   report.chromeHashes = await Promise.all(pages.map((p) => p.evaluate(() => window.__qf.hashes.length)));
 } finally {

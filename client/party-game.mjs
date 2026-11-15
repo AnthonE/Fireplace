@@ -276,7 +276,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     const g = view.party();
     const mod = MG[g.game] || MG[0];
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - g.tick)) * TICK;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - g.tick)) * TICK;
     me = slot >= 0 ? view.partier(slot) : null;
     pme = null;
     if (external) yaw = get(L.CL_YAW);

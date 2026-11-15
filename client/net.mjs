@@ -21,6 +21,7 @@ import { sampler } from './input.mjs';
 import { writeName } from './looks.mjs';
 import { cleanLine } from '../net/chat.mjs';
 import { openWebTransport, openWebSocket } from './transport.mjs';
+import { Lead } from './lead.mjs';
 
 const epoch = () => performance.timeOrigin + performance.now();
 
@@ -155,11 +156,12 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
     sBase = m.serverTick + rtt / 2 / W.TICK_MS;
     sEpoch = now;
     lead = rtt / 2 / W.TICK_MS + W.SEND_EVERY + 1;
+    leadCtl = null; // the controller starts again from this, at the next bundle
     publishPred(now);
   };
 
   // what this worker has seen, for the runs
-  const seen = { transport: t.kind, pongs: 0, keys: 0, fills: 0, bundles: 0, repairs: 0, rtt: bestRtt, ctlError: '', holes: [], gaps: [] };
+  const seen = { transport: t.kind, pongs: 0, keys: 0, fills: 0, bundles: 0, repairs: 0, late: 0, rtt: bestRtt, ctlError: '', holes: [], gaps: [] };
   const repairedAt = new Map(); // tick -> repair datagrams that carried it, the last 512 ticks
   const seenTimer = setInterval(() => self.postMessage({ seen: { ...seen, rtt: bestRtt, lead } }), 1000);
   // The control stream: keyframes (unpacked here), the fills after them, pongs.
@@ -211,6 +213,8 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   // the input slots sampled into one word a tick (client/input.mjs)
   const sample = sampler({ memory, roomStart: welcome.roomStart, arena, fireplace });
   let inAck = 0, lastBundleT = -1, seq = 0;
+  // the relay's count of this session's words it closed without (a u8 that wraps), as the last bundle had it
+  let lateSeen = 0;
   const dw = t.dw;
   const send = () => {
     const first = Math.max(inAck, lastBundleT, welcome.joinTick - 1) + 1;
@@ -263,7 +267,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   const offsets = new Float64Array(256);
   let nOff = 0;
   let play = { base: welcome.serverTick - 8, epoch: t0, rate: 1 };
-  const slacks = [];
+  let leadCtl = null; // the lead's controller, from the first bundle on
   const arrived = (t, now) => { offsets[nOff++ & 255] = serverTick(now) - (t + 1); };
   const steer = (now) => {
     const n = Math.min(nOff, 256);
@@ -318,14 +322,20 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
     // a bundle that needed several datagrams stamps the same trailer on each: take it once, with its newest tick
     if (newestHere <= lastBundleT) return;
     const b = d.trailer;
+    const since = lastBundleT;
     lastBundleT = newestHere;
     inAck = Math.max(inAck, b.inAck);
+    const late = (b.late - lateSeen) & 255;
+    lateSeen = b.late;
+    // some word since the last bundle was the relay's repeat: an arena frame over it was dropped, and goes again
+    if (late) { seen.late += late; Atomics.add(i32, L.CL_LATE >> 2, late); sample.lost(Math.max(since + 1, welcome.joinTick), newestHere); }
     // The lead: the relay's slack (how early our words land) toward its own
-    // jitter plus a send interval, at most 0.02 ticks a tick (2% fast or slow).
-    slacks.push(b.slack);
-    if (slacks.length > 128) slacks.shift();
-    const target = pct(slacks, 0.5) - pct(slacks, 0.05) + W.SEND_EVERY * W.TICK_MS + 4;
-    lead = Math.max(1, Math.min(60, lead + Math.max(-0.04, Math.min(0.04, 0.0025 * (target - b.slack)))));
+    // jitter plus a send interval, down 2% slow at most, up fast when words
+    // land late (client/lead.mjs). The pings' lead seeds it on the first bundle.
+    leadCtl ||= new Lead(lead);
+    lead = leadCtl.update(b.slack, newestHere, serverTick(now));
+    seen.raises = leadCtl.raises;
+    seen.givenBack = leadCtl.givenBack;
     publishPred(now);
     f32[L.CL_PING >> 2] = b.slack;
   }

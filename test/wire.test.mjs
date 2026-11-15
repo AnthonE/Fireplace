@@ -282,3 +282,25 @@ test('chat: a hello asks for it, a line goes up with its text, the relay sends l
   assert.equal(await W.readControl(sr), null);
   assert.deepEqual(W.CHAT, { LINE: 0, OPEN: 1, LISTEN: 2, OFF: 3 });
 });
+
+test('bundles: the newest NB ticks always, and up to NB_DEEP while they fit one datagram', () => {
+  const tick = (t, bytes) => ({ tick: t, parts: [new Uint8Array(bytes).fill(t & 255)] });
+  // a small room's ticks: all eight in one datagram, each tick in four bundles a row
+  const small = Array.from({ length: W.NB_DEEP }, (_, k) => tick(100 + k, 30));
+  assert.deepEqual(W.bundleTicks(small).map((t) => t.tick), small.map((t) => t.tick));
+  const one = W.encodeTicks(W.T_BUNDLE, W.bundleTicks(small), W.MAX_DATAGRAM);
+  assert.equal(one.length, 1);
+  assert.deepEqual(W.decodeTicks(one[0]).entries.map((e) => e.tick), small.map((t) => t.tick));
+  // ticks of 200 B: five fit a datagram (16 + 5 x 204 = 1,036 of 1,161)
+  const mid = Array.from({ length: W.NB_DEEP }, (_, k) => tick(100 + k, 200));
+  assert.deepEqual(W.bundleTicks(mid).map((t) => t.tick), [103, 104, 105, 106, 107]);
+  assert.equal(W.encodeTicks(W.T_BUNDLE, W.bundleTicks(mid)).length, 1);
+  // a smaller datagram limit carries fewer, never fewer than NB
+  assert.equal(W.bundleTicks(mid, 900).length, W.NB);
+  // ticks too big for one datagram even at NB: the newest NB, cut across datagrams as ever
+  const big = Array.from({ length: W.NB_DEEP }, (_, k) => tick(100 + k, 600));
+  assert.deepEqual(W.bundleTicks(big).map((t) => t.tick), [104, 105, 106, 107]);
+  assert.ok(W.encodeTicks(W.T_BUNDLE, W.bundleTicks(big)).length > 1);
+  // the room's first ticks: what there is
+  assert.deepEqual(W.bundleTicks(small.slice(0, 2)).map((t) => t.tick), [100, 101]);
+});

@@ -4,7 +4,7 @@
 //   ?bot=1 hands the controls to an AI ball (client/party-bot.mjs)
 //   ?watch=1 spectates; ?url=, ?hash=, ?impair=, ?sens=, ?res=, ?hud=, ?music=0 as golf's
 //   ?wasm=blob:... plays a build the studio made in this origin (client/studio.html), in a local room
-import { createHost, fitSize } from './host.mjs';
+import { createHost, fitSize, netStats } from './host.mjs';
 import { pageWardrobe } from './wardrobe.mjs';
 import { mount } from './party-game.mjs';
 
@@ -22,7 +22,7 @@ async function main() {
   const h = await createHost({ wasm: built || '../build/party/game.wasm', q, watch: q.get('watch') === '1', kind: built ? 'party' : '' });
   const game = await mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.8), sens: Number(q.get('sens') || 3),
     hud: Number(q.get('hud')) || 0, present: q.get('present') !== '0', showGraph: q.get('net') === '1' });
-  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), transport: h.transport }), capture: game.capture, chat: h.chat };
+  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), transport: h.transport, net: netStats(h) }), capture: game.capture, chat: h.chat };
   note.remove();
   // your look, while the mouse is free (client/wardrobe.mjs); not in the studio's frame, where a build is tried
   const wardrobe = pageWardrobe(h, { canvas, q, watch: !!built });

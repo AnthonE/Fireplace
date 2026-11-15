@@ -5,7 +5,7 @@
 //   there, for looking over the map; ?url=, ?hash=, ?impair=, ?sens=, ?res= as golf's
 //   ?map=<name> a map the site publishes (build/maps/<name>.qgmap), ?map=<url> any packed map;
 //   the line along the bottom offers to take it online (client/online.mjs)
-import { createHost, fitSize } from './host.mjs';
+import { createHost, fitSize, netStats } from './host.mjs';
 import { pageWardrobe } from './wardrobe.mjs';
 import { onlineLine } from './online.mjs';
 import { mount } from './flight-game.mjs';
@@ -32,7 +32,7 @@ async function main() {
       await new Promise((ok) => setTimeout(ok, 50));
     }
   }
-  window.__qf = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool(), transport: h.transport }), capture: game.capture, chat: h.chat, ready: true, shot };
+  window.__qf = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool(), transport: h.transport, net: netStats(h) }), capture: game.capture, chat: h.chat, ready: true, shot };
   note.remove();
   const wardrobe = pageWardrobe(h, { canvas, q, watch: !!fixed }); // your look while the mouse is free (client/wardrobe.mjs), none on a fixed camera
   const loop = (now) => { requestAnimationFrame(loop); game.frame(now); wardrobe?.frame(now); };

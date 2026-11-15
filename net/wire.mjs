@@ -4,7 +4,8 @@
 // Input word (32 bits): yaw b0-13 | pitch b14-23 | move b24-27 (forward, back, left, right) | jump b28 | shot counter b29-30 | weapon b31
 //
 // A closed tick, as everything after the relay carries it (bundles, repairs,
-// fills, the relay's record, the referee): the joins and leaves, then only the
+// fills, the relay's record, the referee): the joins and leaves (and the
+// relay's marks, EV_LATE and EV_ONTIME, below), then only the
 // input words that changed since the tick before, each against that slot's
 // previous word (0 for a slot nobody held), bit-packed most significant bit first:
 //   ne EG0 | ne x (slot 8, kind 2) | nc EG0 | nc x (gap EG0 | yaw? pitch? high? 3 x 1
@@ -29,7 +30,8 @@
 //
 // Ticks datagrams, server to client: a bundle, every second tick, carries the
 // newest NB ticks in as many datagrams as their parts need, each with the
-// recipient's trailer; a repair carries ticks a client's acks lack:
+// recipient's trailer, and up to NB_DEEP when they fit in one (bundleTicks);
+// a repair carries ticks a client's acks lack:
 //   0 u8 0x02 bundle, 0x03 repair | 1 u8 n | 2 u16 0 | 4 u32 from
 //   | n x (u8 tick - from | u8 part << 4 | parts | u16 bytes | the part)
 //   | a bundle's trailer: u32 in_ack | i16 slack (1/16 ms, negative = late) | u8 late | u8 flags
@@ -153,11 +155,18 @@ export const BADGE_ITEM_MASK = ((1 << BADGE_ITEMS.length) - 1) << 1;
 export const SYNC = { JOIN: 0, HOLE: 1, BEHIND: 2, DESYNC: 3 };
 export const EV_JOIN = 1;
 export const EV_LEAVE = 2;
+// The relay's marks, at the tick a slot's words change kind: from it they are
+// the slot's last word repeated (its words came too late, or not at all), or
+// its own again. A sim may act on them (the arena drops a frame with a
+// repeated word in it, layout.mjs AL_STALE); a slot gets one at most a tick.
+export const EV_LATE = 3;
+export const EV_ONTIME = 0;
 
 export const TICK_US = 8000;
 export const TICK_MS = TICK_US / 1000;
 export const SEND_EVERY = 2;
 export const NB = 4;
+export const NB_DEEP = 8; // the most a bundle carries, when they fit one datagram
 export const NP = 256;
 export const PART_MAX = 1000; // bytes of one part of a tick: one fits any datagram with its headers and a trailer
 export const MAX_DATAGRAM = 1161; // quinn's worst case on a 1,200-byte path, minus the session prefix
@@ -371,6 +380,23 @@ export class TickBase {
     }
     return { events, words };
   }
+}
+
+// What a bundle carries, of the newest ticks [{ tick, parts }] (oldest first,
+// NB_DEEP of them): the newest NB however many datagrams they need, and older
+// ones while the bundle still fits one datagram of `max` bytes. Each tick then
+// rides in four bundles rather than two, so a fade of loss up to 48 ms long
+// (three bundles) loses none of them, where two bundles in a row lost one;
+// a room whose ticks are big keeps to NB, as it always has.
+export function bundleTicks(ticks, max = MAX_DATAGRAM) {
+  let n = 0, bytes = 16;
+  for (let k = ticks.length - 1; k >= 0; k--) {
+    const b = ticks[k].parts.reduce((a, p) => a + 4 + p.length, 0);
+    if (n >= NB && bytes + b > max) break;
+    bytes += b;
+    n++;
+  }
+  return ticks.slice(ticks.length - n);
 }
 
 // Ticks datagrams: ticks [{ tick, parts }], consecutive or not, packed in order

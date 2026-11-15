@@ -288,7 +288,7 @@ async function main() {
     }
     // the playout clock says how far past the newest stepped tick to draw the confirmed world
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
     me = slot >= 0 ? view.player(slot) : null;
     pme = null;
     // a spectator rides with a live player, through their eyes

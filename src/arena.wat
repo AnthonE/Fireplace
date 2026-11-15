@@ -916,19 +916,41 @@
   (!put u8 @(PLAYERS + A_RELOAD) (local.get $pb) (i32.const 0))
   (!put u8 @(PLAYERS + A_BURST) (local.get $pb) (i32.const 0)))
 
+;; The relay's mark for slot a (EV_LATE with on 1, EV_ONTIME with 0), at the
+;; start of the tick it names: from here its words are the last real one
+;; repeated, or its own again (AL_LATE). The confirmed world only: the
+;; prediction's own words are taken to arrive.
+(func $a_late (param $r i32) (param $on i32)
+  (local $pb i32) (local $lag i32)
+  (local.set $pb (i32.shl (i32.load8_u offset=5 (local.get $r)) (i32.const 6)))
+  (if (i32.eqz (i32.and (!at u8 @(PLAYERS + P_FL) (local.get $pb)) (i32.const @PF_LIVE))) (then (return)))
+  (local.set $lag (i32.and (!at u8 @(PLAYERS + A_LAG) (local.get $pb)) (i32.const @(255 ^ AL_LATE))))
+  (!put u8 @(PLAYERS + A_LAG) (local.get $pb) (select (i32.or (local.get $lag) (i32.const @AL_LATE)) (local.get $lag) (local.get $on))))
+
 ;; The frame's bit for this tick (bit tick & 7 of b31): a whole frame, if one
-;; was sent, sets the view lag and asks for a reload or a pickup.
+;; was sent, sets the view lag and asks for a reload or a pickup. A word the
+;; relay repeated in place of one that came too late carries the bit of the
+;; tick before, so a frame with one in it (AL_STALE, from AL_LATE in the
+;; confirmed world) is dropped whole; the sender sends it again.
 (func $a_frame (param $pb i32) (param $d i32) (param $in i32)
-  (local $idx i32) (local $fr i32) (local $w i32) (local $slot i32) (local $mag i32)
+  (local $idx i32) (local $fr i32) (local $w i32) (local $slot i32) (local $mag i32) (local $lag i32)
   (local.set $idx (i32.and (i32.load offset=@HDR_TICK (local.get $d)) (i32.const 7)))
   (local.set $fr (i32.or (!at u8 @(PLAYERS + A_FRAME) (local.get $pb))
                          (i32.shl (i32.shr_u (local.get $in) (i32.const @AW_SERIAL)) (local.get $idx))))
+  (local.set $lag (!at u8 @(PLAYERS + A_LAG) (local.get $pb)))
+  (if (i32.and (i32.eqz (local.get $d)) (i32.ne (i32.and (local.get $lag) (i32.const @AL_LATE)) (i32.const 0)))
+    (then
+      (local.set $lag (i32.or (local.get $lag) (i32.const @AL_STALE)))
+      (!put u8 @(PLAYERS + A_LAG) (local.get $pb) (local.get $lag))))
   (if (i32.ne (local.get $idx) (i32.const 7))
     (then (!put u8 @(PLAYERS + A_FRAME) (local.get $pb) (local.get $fr)) (return)))
   (!put u8 @(PLAYERS + A_FRAME) (local.get $pb) (i32.const 0))
+  (if (i32.and (local.get $lag) (i32.const @AL_STALE))
+    (then (!put u8 @(PLAYERS + A_LAG) (local.get $pb) (i32.and (local.get $lag) (i32.const @(255 ^ AL_STALE)))) (return)))
   ;; no frame this time: nothing new
   (if (i32.eqz (i32.and (local.get $fr) (i32.const @AF_SENT))) (then (return)))
-  (!put u8 @(PLAYERS + A_LAG) (local.get $pb) (i32.and (i32.shr_u (local.get $fr) (i32.const @AF_LAG_SHIFT)) (i32.const @LAG_MAX)))
+  (!put u8 @(PLAYERS + A_LAG) (local.get $pb)
+    (i32.or (i32.and (local.get $lag) (i32.const @AL_LATE)) (i32.and (i32.shr_u (local.get $fr) (i32.const @AF_LAG_SHIFT)) (i32.const @LAG_MAX))))
   (if (i32.and (local.get $fr) (i32.const @AF_USE))
     (then (!put u8 @(PLAYERS + A_ACT) (local.get $pb) (i32.or (!at u8 @(PLAYERS + A_ACT) (local.get $pb)) (i32.const @AB_USE)))))
   (if (i32.and (i32.ne (i32.and (local.get $fr) (i32.const @AF_RELOAD)) (i32.const 0))
@@ -1148,7 +1170,7 @@
 ;; The tick slot p (of bank d) saw the others at: this tick less its view lag.
 (func $a_seen (param $p i32) (param $d i32) (result i32)
   (i32.sub (i32.load offset=@HDR_TICK (local.get $d))
-           (!at u8 @(PLAYERS + A_LAG) (i32.add (i32.shl (local.get $p) (i32.const 6)) (local.get $d)))))
+           (i32.and (!at u8 @(PLAYERS + A_LAG) (i32.add (i32.shl (local.get $p) (i32.const 6)) (local.get $d))) (i32.const @LAG_MAX))))
 
 ;; A ray from (ox, oy, oz) along the unit (dx, dy, dz), out to `range`, against
 ;; the ground, the map's boxes and every live fighter but p where it stood at tick rt: the
