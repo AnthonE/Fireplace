@@ -51,7 +51,7 @@ async function connect(args) {
       // a relay that's down, or not holding the room yet, mid-failover: the next
       if (!back || epoch() - lostAt > FAILOVER_MS) {
         Atomics.store(new Int32Array(args.memory.buffer), L.CL_STATE >> 2, 3);
-        self.postMessage({ error: String(err?.stack || err) });
+        self.postMessage({ error: String(err?.stack || err), reject: !!err?.reject });
         return;
       }
     }
@@ -71,6 +71,10 @@ const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.mi
 // of a session that went away, to resume. Returns this session's, once it ends.
 // failover: a relay silent for SILENT_MS is gone (a dead one's QUIC session would idle for far longer)
 const SILENT_MS = 1500;
+// One relay silent for GONE_MS has let this session go: it drops a player it hasn't heard from in 2 s
+// (net/relay.ts SILENT_MS), a phone's page out of view the usual one, and the close it sends may not end
+// the datagrams here before QUIC's idle timeout. The session ends, and the page joins again (client/host.mjs).
+const GONE_MS = 3000;
 // arena: the arena's input words (src/layout.mjs), with its frames; fireplace:
 // the arena's while it or Dogfight is the game on (FP_GAME in the confirmed world), else golf's
 // looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK), and for its avatars (W.HELLO_AVATARS: CL_AVATARS)
@@ -96,7 +100,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   const resume = back && !watch ? back.slot : -1;
   await sw.write(W.encodeHello({ maxDatagram: t.maxDatagram, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names, chat, dress: looks }));
   const head = await sr.read(4);
-  if (head[0] === W.T_REJECT) throw new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected');
+  if (head[0] === W.T_REJECT) throw Object.assign(new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected'), { reject: true });
   const wb = new Uint8Array(32);
   wb.set(head, 0);
   wb.set(await sr.read(28), 4);
@@ -244,7 +248,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
     // how late this 4 ms timer runs: a starved worker samples, sends and acks late
     if (now - lastTimer > 50) seen.gaps.push(Math.round(now - lastTimer));
     lastTimer = now;
-    if (failover && now - heardAt > SILENT_MS) { try { t.close(); } catch { /* gone */ } }
+    if (now - heardAt > (failover ? SILENT_MS : GONE_MS)) { try { t.close(); } catch { /* gone */ } }
     sendLook();
     if (welcome.watch) {
       const t = Math.floor(serverTick(now));

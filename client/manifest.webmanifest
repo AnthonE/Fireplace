@@ -1,0 +1,9 @@
+{
+  "name": "Fireplace",
+  "short_name": "Fireplace",
+  "description": "A roomful of games, come and go as you like",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#070504",
+  "theme_color": "#070504"
+}

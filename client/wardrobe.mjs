@@ -102,6 +102,8 @@ const el = (tag, props = {}, ...kids) => {
   return e;
 };
 const keyCap = (k) => el('kbd', { textContent: k });
+// a phone's (client/touch.mjs): no keys to name, a tap for a click
+const TOUCH = typeof location !== 'undefined' && touchWanted(new URLSearchParams(location.search));
 const noCap = () => '';
 const nice = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const COLLAPSED = 'fireplace.wardrobe.closed';
@@ -118,7 +120,7 @@ const remember = (v) => { try { localStorage.setItem(COLLAPSED, v ? '1' : '0'); 
 // no room row), sit(), fullscreen(). keys: false on a page whose keys are the
 // game's, so no key is named; play: the big button's word; folded: see remembered
 export function createWardrobe(s) {
-  const cap = s.keys === false ? noCap : keyCap;
+  const cap = s.keys === false || TOUCH ? noCap : keyCap;
   if (!document.getElementById('wardrobe-css')) document.head.append(el('style', { id: 'wardrobe-css', textContent: CSS }));
   const dpr = Math.min(2, devicePixelRatio || 1);
   const canvasOf = (w, h) => { const c = el('canvas', { width: w * dpr, height: h * dpr }); c.getContext('2d').scale(dpr, dpr); return c; };
@@ -223,7 +225,7 @@ export function createWardrobe(s) {
   const play = el('button', { className: 'wd-play', type: 'button', textContent: s.play || 'SIT DOWN AND PLAY' });
   play.addEventListener('click', () => s.sit());
   const keys = el('div', { className: 'wd-keys' });
-  const full = el('button', { className: 'wd-btn wd-full', type: 'button', style: 'margin-top:8px;width:100%' }, 'FULLSCREEN ', keyCap('F'));
+  const full = el('button', { className: 'wd-btn wd-full', type: 'button', style: 'margin-top:8px;width:100%' }, 'FULLSCREEN ', ...(TOUCH ? [] : [keyCap('F')]));
   full.addEventListener('click', () => { s.fullscreen(); full.blur(); });
   const foot = el('div', { className: 'wd-foot' }, play, keys, full);
   const panel = el('div', { id: 'wardrobe', hidden: true }, scroll, foot);
@@ -288,8 +290,8 @@ export function createWardrobe(s) {
       if (!shown || closed) return;
       play.hidden = !couch;
       keys.replaceChildren(...(s.note ? [s.note]
-        : couch ? ['or click the TV, or press ', keyCap('Enter')]
-        : ['Click the room to take the controls again']));
+        : couch ? (TOUCH ? ['or tap the TV'] : ['or click the TV, or press ', keyCap('Enter')])
+        : [TOUCH ? 'Tap the room to take the controls again' : 'Click the room to take the controls again']));
       redraw();
       const g = me.getContext('2d');
       g.clearRect(0, 0, 150, 150);
@@ -328,7 +330,7 @@ export function pageWardrobe(h, { canvas, q, watch = false }) {
     dress: () => h.get(L.CL_DRESS) >>> 0, wearDress: (d) => { h.set(L.CL_DRESS, d); saveDress(d); },
     balance: () => balance(tally, purse), buy: spend,
     slot: () => h.get(L.CL_SLOT), avatar: () => h.avatar(h.get(L.CL_SLOT)), sit: () => canvas.click(), fullscreen,
-    keys: false, play: 'PLAY', note: 'or click the game', folded: touchWanted(q),
+    keys: false, play: 'PLAY', note: TOUCH ? 'or tap the game' : 'or click the game', folded: touchWanted(q),
   });
   return {
     frame: (now) => {

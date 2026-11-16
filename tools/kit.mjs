@@ -2,7 +2,8 @@
 // Fireplace as a starter kit: the first run in a copy of this repo made with
 // GitHub's "Use this template". init gives the copy its own game's name, so it
 // no longer says it is Fireplace: the page's title and the TV's title card
-// (client/kit.json), package.json, the README's heading, and elo.json, reset
+// (client/kit.json), the name a phone gives its home screen's icon
+// (client/manifest.webmanifest), package.json, the README's heading, and elo.json, reset
 // to a manifest for the new game (GAME-REPO.md in the Elo Pros docs: its
 // slug, a listing, the page's address on GitHub Pages, the room themes as its
 // mods; no wallet, no price, no jobs). Running it again with the same
@@ -45,6 +46,13 @@ export function slugOf(name) {
 export function repoOf(url) {
   const m = String(url || '').trim().match(/github\.com[:/]([A-Za-z0-9][\w.-]*)\/([\w.-]+?)(?:\.git)?\/?$/);
   return m ? `${m[1]}/${m[2]}` : null;
+}
+
+// a name short enough to sit under a home screen's icon: its first words, 12 characters at most
+export function shortName(name) {
+  const words = name.trim().split(/\s+/);
+  while (words.length > 1 && words.join(' ').length > 12) words.pop();
+  return words.join(' ').slice(0, 12);
 }
 
 // where GitHub Pages serves owner/name's site
@@ -105,6 +113,10 @@ export function plan(name, { root = ROOT, slug, repo, blurb, tagline, force = fa
   const { repo: _home, ...kit } = JSON.parse(read('client/kit.json'));
   const mine = repo && !HOME.test(repo) ? { repo } : {};
   out['client/kit.json'] = JSON.stringify({ ...kit, name, ...(tagline !== undefined ? { tagline } : {}), ...mine }, null, 2) + '\n';
+
+  // what a phone names the pages added to its home screen (client/mobile.mjs)
+  const app = JSON.parse(read('client/manifest.webmanifest'));
+  out['client/manifest.webmanifest'] = JSON.stringify({ ...app, name, short_name: shortName(name), ...(tagline !== undefined ? { description: tagline } : {}) }, null, 2) + '\n';
 
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   out['client/fireplace.html'] = read('client/fireplace.html').replace(/<title>[^<]*<\/title>/, `<title>${esc(name)}</title>`);

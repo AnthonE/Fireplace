@@ -4,7 +4,8 @@
 // in slot 0 and AI players in the slots after, and hands each to the sim
 // worker coded as the relay codes it (net/wire.mjs encodeTick). Nothing
 // crosses the network and nobody else can join.
-//   in:  { local: { kind, bots, seed }, memory, prefix, simPort, watch, arena, fireplace } once, then { leave }
+//   in:  { local: { kind, bots, seed }, memory, prefix, simPort, watch, arena, fireplace } once, then { leave },
+//        and { pause: true | false }: a phone's page out of view (client/host.mjs), the room held still till it's back
 //   kind: the AI players' brain, by the page's game (fireplace, arena, flight,
 //   party, golf; none for any other); a spectator (watch) has only them in the room.
 // Tick T closes when the room's clock passes T + 1, with the word sampled for
@@ -27,8 +28,10 @@ const LEAD = 2;
 const DELAY = 3;
 
 let stop = () => {};
+let pause = (_on) => {};
 self.onmessage = (e) => {
   if (e.data.leave) { stop(); return; }
+  if (e.data.pause !== undefined) { pause(e.data.pause); return; }
   run(e.data).catch((err) => {
     Atomics.store(new Int32Array(e.data.memory.buffer), L.CL_STATE >> 2, 3);
     self.postMessage({ error: String(err?.stack || err) });
@@ -73,7 +76,7 @@ async function run({ local: { kind = '', bots = 0, seed }, memory, simPort, watc
     guests.push(g);
   }
 
-  const t0 = epoch();
+  let t0 = epoch();
   const welcome = { watch, slot: me, seed, roomStart: 0, joinTick: 0, serverTick: 0 };
   Atomics.store(i32, L.CL_ROOM >> 2, 0);
   Atomics.store(i32, L.CL_SLOT >> 2, me);
@@ -100,7 +103,21 @@ async function run({ local: { kind = '', bots = 0, seed }, memory, simPort, watc
   let closed = 0; // the next tick to close
   let prev = new Uint32Array(W.NP);
   const clock = (now) => (now - t0) / W.TICK_MS;
+  // Held still: no tick closes; on again, the room's start moves on by the pause and the clocks with it, so the
+  // world goes on from where it stood rather than running through every tick it missed at once.
+  let pausedAt = -1;
+  pause = (on) => {
+    if (on && pausedAt < 0) pausedAt = epoch();
+    if (!on && pausedAt >= 0) {
+      const now = epoch();
+      t0 += now - pausedAt;
+      pausedAt = -1;
+      writeClock(i32, f64, L.CL_PLAY, clock(now) - DELAY, now);
+      writeClock(i32, f64, L.CL_PRED, clock(now) + LEAD, now);
+    }
+  };
   const timer = setInterval(() => {
+    if (pausedAt >= 0) return;
     const s = clock(epoch());
     if (me >= 0) {
       while (nextTick <= Math.floor(s + LEAD)) {

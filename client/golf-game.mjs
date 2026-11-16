@@ -31,6 +31,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const aim = () => { set(L.CL_YAW, Math.round(yaw) & 0x3fff); set(L.CL_PITCH, Math.round(pitch)); };
   const setWeapon = (w) => { if (w !== weapon) sound.weapon(); weapon = w; set(L.CL_WEAPON, w); };
   let locked = document.pointerLockElement === lockTarget;
+  // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+  const TOUCH = !WATCH && !BOT && touchWanted(host.q);
   let touch = null; // the touch controls, on a phone
   let watched = -1;
   let specYaw = 0; // a spectator's camera, easing round to the way the one it watches faces
@@ -46,8 +48,6 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     on(document, 'keydown', (e) => { if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); } });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
-    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
-    const TOUCH = touchWanted(host.q);
     if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
@@ -77,12 +77,14 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); });
+    // FIRE fires as it's let go, so a drag on it lines the shot up first
     if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
       look: (dx, dy) => { yaw += dx * touchScale(SENS) * SENS; pitch = Math.max(16, Math.min(1008, pitch - dy * touchScale(SENS) * SENS / 8)); aim(); },
       buttons: [
-        { label: 'FIRE', tap: () => set(L.CL_PRESSES, get(L.CL_PRESSES) + 1) },
+        { label: 'FIRE', up: () => set(L.CL_PRESSES, get(L.CL_PRESSES) + 1) },
         { label: 'JUMP', code: 'Space' },
-        { label: 'SWAP', tap: () => setWeapon(weapon ^ 1) },
+        { label: () => (weapon ? 'ROCKET' : 'GRENADE'), tap: () => setWeapon(weapon ^ 1) },
+        { label: 'BOARD', small: true, aim: false, lit: () => held.has('Tab'), tap: () => { if (held.has('Tab')) held.delete('Tab'); else held.add('Tab'); } },
       ] });
   }
 

@@ -153,6 +153,8 @@ export function createPost(device, { W, H, format, far, inkReach = 170, inkStren
   return {
     // what the world's pass draws into
     sceneView, depthView,
+    // its textures given back (a renderer made again at another size, client/mobile.mjs)
+    destroy() { for (const t of [scene, depth, ldr, ...mips]) t.destroy(); ubuf.destroy(); },
     // The rest of the frame, after the world's pass has ended: into `view`
     // (the canvas's texture, or a capture's), and over it whatever `over`
     // draws in the same pass (the HUD: a pipeline of `format` with no depth).

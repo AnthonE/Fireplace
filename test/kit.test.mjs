@@ -13,7 +13,7 @@ import { withGenerated, readMaps } from '../tools/elo.mjs';
 import { readThemes } from '../tools/themes.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const FILES = ['elo.json', 'package.json', 'README.md', 'CONTRIBUTING.md', 'client/kit.json', 'client/fireplace.html', 'client/room.html', 'client/themes'];
+const FILES = ['elo.json', 'package.json', 'README.md', 'CONTRIBUTING.md', 'client/kit.json', 'client/manifest.webmanifest', 'client/fireplace.html', 'client/room.html', 'client/themes'];
 
 // the files init touches, as a fresh copy of Fireplace has them (whatever
 // this repo is called by now: in a copy, init has already run here)
@@ -62,7 +62,7 @@ test("init gives a copy its own game's name and manifest, and a second run chang
   const read = (f) => readFileSync(join(dir, f), 'utf8');
   try {
     const first = init('Snow Fort Party', { repo: 'KidDev/snow-fort', root: dir });
-    assert.deepEqual(Object.keys(first.edits).sort(), ['CONTRIBUTING.md', 'README.md', 'client/fireplace.html', 'client/kit.json', 'client/room.html', 'elo.json', 'package.json']);
+    assert.deepEqual(Object.keys(first.edits).sort(), ['CONTRIBUTING.md', 'README.md', 'client/fireplace.html', 'client/kit.json', 'client/manifest.webmanifest', 'client/room.html', 'elo.json', 'package.json']);
     const elo = JSON.parse(read('elo.json'));
     assert.equal(elo.game, 'snow-fort-party');
     assert.equal(elo.elo, 1);
@@ -77,6 +77,7 @@ test("init gives a copy its own game's name and manifest, and a second run chang
     assert.equal(JSON.parse(read('package.json')).name, 'snow-fort-party');
     assert.equal(JSON.parse(read('client/kit.json')).name, 'Snow Fort Party');
     assert.equal(JSON.parse(read('client/kit.json')).repo, 'KidDev/snow-fort', "the copy's maps go to its own repo, not Fireplace's");
+    assert.deepEqual([JSON.parse(read('client/manifest.webmanifest')).name, JSON.parse(read('client/manifest.webmanifest')).short_name], ['Snow Fort Party', 'Snow Fort'], 'a phone names its home screen icon for the copy');
     assert.deepEqual(elo.tools.map((t) => [t.id, t.url]), [['map-editor', 'https://snow-fort-party.scryward.online/client/map-editor.html'], ['studio', 'https://snow-fort-party.scryward.online/client/studio.html']], "the store links the copy's own map editor and studio");
     assert.match(read('client/fireplace.html'), /<title>Snow Fort Party<\/title>/);
     assert.match(read('client/room.html'), /<title>Snow Fort Party Room<\/title>/);
