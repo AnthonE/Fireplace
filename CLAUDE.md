@@ -31,6 +31,7 @@ node net/run-arena.mjs --impair wifi --bot-impair wifi   # the same over net/imp
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
+node net/run-touch.mjs [--device "iPhone 14 landscape"]   # every page played with fingers (CDP touch) as a phone has it; the page put away and back
 node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the kit's copies, each on its own wasm; node net/run-kit-rooms.mjs is its gate
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
@@ -210,6 +211,18 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
+- On a phone (a coarse pointer, `?touch=1`) a frontend's input is
+  `client/touch.mjs`: a stick into its own held keys, a drag into its own
+  mouse look, buttons named for what they do and shown while they do it
+  (`show`, `label` and `lit` read the world a few times a second, as the HUD
+  does, and change nothing in it), so a frontend's TOUCH path writes the same
+  input slots its keys do. A HUD
+  line that names a key or the mouse says it a phone's way there
+  (`touchWords`). `client/mobile.mjs` is the page's half: held still, the
+  whole screen and the wake lock on the first touch, the upright card, and
+  `fitted`/`refit`, which mount a frontend again on a fresh renderer when the
+  window settles at another size (renderers take their size once, at
+  creation; `destroy()` frees it). `net/run-touch.mjs` is its gate.
 - The room is a relay's (`client/net.mjs`; `client/transport.mjs` opens its
   WebTransport, or where the browser has none, or with `?ws=1`, the relay's
   WebSocket door, `--ws-port`, found by `client/kit.mjs` `wsDoor`): one named, or on a copy's

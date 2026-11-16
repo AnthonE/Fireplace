@@ -883,6 +883,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
 
   return {
     rows, width: W, height: H, hudScale: hs, hudX, hudY,
+    // the frame's textures given back, for one made again at another size (client/mobile.mjs)
+    destroy() { post.destroy(); },
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
       const hf = new Float32Array(512 * 512);

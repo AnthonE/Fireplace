@@ -28,13 +28,15 @@ import { guestAvatar } from './avatar.mjs';
 import { loadTally } from './achievements.mjs';
 import { loadPurse, openSet } from './purse.mjs';
 import { createChat } from './chat.mjs';
+import { touchWanted } from './touch.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
 
-// A canvas's size: the window's own resolution (up to `max`), or ?res=WxH.
-export function fitSize(q, max = [1600, 1000]) {
+// A canvas's size: the window's own resolution (up to `max`), at scale of it (client/mobile.mjs's, for a slow
+// phone), or ?res=WxH.
+export function fitSize(q, max = [1600, 1000], scale = 1) {
   if (q.has('res')) return q.get('res').split('x').map(Number);
-  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const dpr = Math.min(devicePixelRatio || 1, 2) * scale;
   const w = innerWidth * dpr, h = innerHeight * dpr;
   const k = Math.min(1, max[0] / w, max[1] / h);
   return [Math.max(320, Math.round(w * k)), Math.max(200, Math.round(h * k))];
@@ -125,8 +127,10 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
         const m = e.data;
         if (m.error && relay?.pool && !h.welcome) { local(m.error.split('\n')[0]); return; }
         if (m.error) h.error = m.error.split('\n')[0];
-        // a new session (a failover's included) is signed in to nothing yet
-        if (m.welcome) { h.welcome = m.welcome; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); h.chat.reset(); }
+        if (m.reject) h.refused = true;
+        if (m.error || m.closed) { ended = true; rejoin(); }
+        // a new session (a failover's and a rejoin's included) is signed in to nothing yet
+        if (m.welcome) { h.welcome = m.welcome; ended = false; tries = 0; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); h.chat.reset(); }
         if (m.chat) h.chat.heard(m.chat);
         if (m.transport) h.transport = m.transport;
         if (m.replay) h.replay = m.replay;
@@ -155,8 +159,33 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       h.set(L.CL_STATE, 0);
       open(null);
     };
+    // A session the relay let in can end under the page: a phone's page out of view goes quiet and the relay lets
+    // its slot go 2 s on (net/relay.ts SILENT_MS), and so does a network that drops. Once the page is in view it
+    // joins again, a new player on the same relay: both workers made afresh, the world from the join's keyframe,
+    // tried again less often each time it fails. A refusal (the room full, another build) stays as it is.
+    // (ended: the net worker said its session is over; CL_STATE can't say, the sim worker writes it as it steps)
+    let tries = 0, waiting = 0, gone = false, ended = false;
+    function rejoin() {
+      if (!relay || replay || h.local || h.refused || gone || waiting || document.hidden || !h.welcome || !ended) return;
+      waiting = setTimeout(() => {
+        waiting = 0;
+        if (gone || document.hidden || !ended) return;
+        tries++;
+        h.net.terminate();
+        h.sim.terminate();
+        h.error = '';
+        h.set(L.CL_STATE, 0);
+        open(relay);
+      }, Math.min(8000, 400 * 2 ** Math.min(tries, 4)));
+    }
+    document.addEventListener('visibilitychange', () => {
+      rejoin();
+      // a local room on a phone is held still while its page is out of view (client/local.mjs pause)
+      if (h.local && touchWanted(q)) h.net.postMessage({ pause: document.hidden });
+    });
     open(relay);
-    addEventListener('pagehide', () => h.net.postMessage({ leave: true }));
+    addEventListener('pagehide', () => { gone = true; h.net.postMessage({ leave: true }); });
+    addEventListener('pageshow', (e) => { if (e.persisted) { gone = false; rejoin(); } });
   };
   // Sign in with the player's wallet through the Elo Pros web SDK (window.Elo),
   // on the nonce the relay handed out; the relay checks it and answers.

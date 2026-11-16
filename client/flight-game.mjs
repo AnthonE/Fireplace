@@ -83,6 +83,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (left) setTimeout(writeKeys, 170);
   };
   let locked = document.pointerLockElement === lockTarget;
+  // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+  const TOUCH = !WATCH && !BOT && touchWanted(host.q);
   let touch = null; // the touch controls, on a phone
   let watched = -1;
   let showGraph = graphOn;
@@ -112,8 +114,6 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
-    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
-    const TOUCH = touchWanted(host.q);
     if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
@@ -161,15 +161,16 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); if (e.code === 'Space') charging = false; writeKeys(); });
     on(window, 'blur', () => { held.clear(); trigger = false; charging = false; writeKeys(); set(L.CL_AUTO, 0); });
+    // the stick is the throttle (up boosts, down brakes) and the sideways keys; ROLL rolls the way it leans, right
+    // when it doesn't; a drag on FIRE or CHARGE aims the nose as it fires or charges
     if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
       look: (dx, dy) => look({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
       buttons: [
         { label: 'FIRE', hold: (on) => { if (on) press(L.CL_PRESSES); trigger = on; if (!on) set(L.CL_AUTO, 0); } },
         { label: 'CHARGE', hold: (on) => { charging = on; writeKeys(); } },
         { label: 'BOMB', tap: () => press(L.CL_GREN) },
-        { label: 'BOOST', code: 'ShiftLeft' },
-        { label: 'ROLL L', tap: () => roll(true) },
-        { label: 'ROLL R', tap: () => roll(false) },
+        { label: 'ROLL', spot: 4, tap: () => roll(held.has('KeyA')) }, // (above the radar, not on it)
+        { label: 'BOARD', small: true, aim: false, lit: () => held.has('Tab'), tap: () => { if (held.has('Tab')) held.delete('Tab'); else held.add('Tab'); } },
       ] });
   }
 
@@ -678,7 +679,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (h.state === L.H_COUNT) {
       centre(4, `${mn.name}  STARTS IN ${Math.ceil(left / 125)}`, C.YELLOW); centre(5, mn.rules, C.WHITE);
       if (team >= 0) centre(7, WATCH ? `WATCHING P${slot + 1} ON ${SIDE[team]}  < >` : `YOU FLY FOR ${SIDE[team]}`, SIDE_C[team]);
-      if (!WATCH && !BOT) centre(9, 'MOUSE AIMS  CLICK LASERS  HOLD RIGHT TO CHARGE  W BOOST  S BRAKE  Q E ROLL  G BOMB', C.GREY);
+      if (!WATCH && !BOT) centre(9, TOUCH ? 'DRAG AIMS  FIRE LASERS  HOLD CHARGE  STICK UP BOOSTS  DOWN BRAKES' : 'MOUSE AIMS  CLICK LASERS  HOLD RIGHT TO CHARGE  W BOOST  S BRAKE  Q E ROLL  G BOMB', C.GREY);
     }
     if (h.state === L.H_PLAY) centre(0, clock(left), left < 30 * 125 ? C.RED : C.WHITE);
     const who = WATCH ? host.label(slot) : 'YOU';

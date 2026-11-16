@@ -233,6 +233,16 @@ bot host and edge relays. 1.5 s without a datagram counts as quiet, since a
 dead QUIC peer would idle for far longer. An edge given several upstreams
 follows the next one in the same way.
 
+A page with one relay calls its session over after 3 s without a datagram:
+the relay has let the slot go by then (2 s without an input does that), and
+its close may not end Chrome's datagrams before QUIC's idle timeout. The
+usual cause is a phone that put the page away, which stops its workers. Once
+the page is in view it joins again by itself, a new player from the join's
+keyframe, its net and sim workers made afresh (`client/host.mjs`), trying
+again 0.4 s on, then less often, to 8 s apart; a refusal (the room full,
+another build) stays as it was. `node net/run-touch.mjs` holds a page's
+workers 4 s in a relay's room and sees it back in play on a new session.
+
 The same record is the replay. A relay started with `--replays` writes each
 room to a file when it ends: the closed ticks as the wire codes them, plus the
 referee's interval hashes. A file plays in the page (`?replay=`) and in

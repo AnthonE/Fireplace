@@ -35,7 +35,10 @@ fighter's eyes to behind it, as far as 12 m, and in again; C switches
 between the two (third person, below). While the mouse is free (before the first
 click, or after Esc), the wardrobe (`client/wardrobe.mjs`, as on Fireplace's
 couch) picks your ball, hat and body, and PLAY takes the controls again; on a
-phone it waits folded under a YOUR LOOK button. `?bot=1` hands your slot to an
+phone it waits folded under a YOUR LOOK button, and the controls are a
+stick, a drag and buttons ([fireplace.md](fireplace.md), On a phone): FIRE
+under the thumb, a drag on it aiming as it fires, JUMP, MELEE, and RELOAD,
+FRAG, SWAP and PICK UP while each does something. `?bot=1` hands your slot to an
 AI fighter; `?watch=1` spectates. More fighters for a running room (up to 255, one
 process, one shared copy of the world):
 `node net/bot-host.mjs --arena --relay 127.0.0.1:4434 --bots 50 [--skill 0.6] [--slips]`.
@@ -514,8 +517,8 @@ health bars, no tracker, no crosshair. Where the bars were, the course as a
 bar, a cell a stage and the finish's last, with your run's clock under it;
 in the top right the room, six of it, by how far along each is (a
 finisher's time in green, you always among them); the board (Tab, and at
-the end) has STAGE, FALLS and TIME. On a phone the buttons are JUMP and
-VIEW.
+the end) has STAGE, FALLS and TIME. On a phone the buttons are JUMP, VIEW
+and BOARD.
 
 ```sh
 node net/play.mjs --arena --map obby

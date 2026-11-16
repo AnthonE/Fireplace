@@ -263,14 +263,61 @@ for a visit. `?scene=avatars` on the party demo shows a row.
 ![Elo Pros avatars on the riders](p4-avatars.png)
 
 **On a phone.** With a coarse pointer (or `?touch=1`; `?touch=0` never)
-every game puts touch controls over its screen (`client/touch.mjs`): a stick
-wherever the left thumb lands, which holds W, A, S and D in the game's own
-keys; a drag anywhere else to look, through the game's own mouse look as if
-the pointer were locked; and round buttons on the right, the first and
-biggest in the corner (jump in party, fire in the arena,
-golf and Dogfight). The couch's keys are the wardrobe's buttons.
+every game puts touch controls over its screen (`client/touch.mjs`). The
+left thumb's stick lands wherever it touches down in the left 45% of the
+screen and follows the thumb past its 58 px rim, holding W, A, S and D in the
+game's own keys: eight equal directions, 45 degrees each, nothing in its
+middle fifth. A ring shows where it usually goes until a thumb has used it.
+A drag anywhere else looks, through the game's own mouse look as if the
+pointer were locked, a drag across 1.2 screens a whole turn. The buttons sit
+in the bottom right corner, the first and biggest under the thumb (fire in
+the arena, Dogfight and golf, hop in party) and the rest in two rings round
+it, clear of the HUD's bottom rows (the arena's guns, golf's distances,
+Dogfight's radar). A drag that starts on a button turns the view too, so
+one thumb fires and aims at once; golf's FIRE fires as it is let go, the
+shot lined up first. A button is there while it does something: the arena's
+RELOAD with a gun that reloads (lit with the magazine empty), FRAG while you
+have one, SWAP with a second gun, PICK UP on a pad with a gun you don't
+carry, SCOPE for a gun with one. Party's use button is named for what it
+does (the power-up held, or the minigame hint's CLICK TO..., SLAP, THROW,
+BARK; NEXT to watch another ball once you are out) and is gone where there
+is nothing to click. What is pressed now and then goes down the left edge,
+small: the board (a switch), the arena's view and scope, and the settings
+(⚙: how fast a drag turns, 0.4 to 2.5 times; whether up looks down; a buzz
+on each press; the whole screen in or out), kept in this browser. What a
+HUD says about a key or the mouse it says a phone's way there (TAP TO
+SLAP, HOLD HOP TO CHARGE), and the couch's keys are the wardrobe's buttons.
 
-![Party on a phone: the stick, the drag, the buttons](p5-phone.png)
+The page around them (`client/mobile.mjs`) holds still: no pinch or
+double-tap zoom, no pull to refresh, nothing picked up by a long press. The
+end of the first touch on the game (only a person's gesture may start these)
+wakes the sound, takes the whole screen turned sideways where the browser
+can (Android's Chrome; `?fullscreen=0` never by itself), and keeps the screen
+awake while the page is in view. An iPhone's Safari gives a page no whole
+screen; added to the home screen (Share, Add to Home Screen), a page opens
+with no browser round it (`client/manifest.webmanifest`). Held upright, a
+card asks for the phone sideways, with PLAY UPRIGHT to stay. Whenever the
+window settles at a size more than 6% off the canvas's (turned, the whole
+screen in or out), the game is drawn at the new size: its frontend mounted
+again on a renderer made for it, and in Fireplace the room and the TV's
+pictures with it. A game drawn at under 40 frames a second for 2.5 s is
+drawn at 0.8 of the size, and then 0.64.
+
+A phone that puts the page away (another app, the screen off) stops it,
+workers and all, and a relay that hears nothing from a player for 2 s lets
+the slot go. The page calls a session over once it has heard nothing for
+3 s, and, in view again, joins again by itself: a new player in the same
+room, from the join's keyframe (`client/host.mjs`), less often each time it
+fails; a room that turned it away stays as it was. A local room is held
+still while a phone's page is away (`client/local.mjs`), so the AI players
+don't play on without you. `node net/run-touch.mjs` plays every page with
+fingers, two at once, in Chrome as a phone has it, and checks the confirmed
+world: the stick's keys and the player moving, the drag's turn at either
+look speed, each big button's job and the aim on it, the card and the game
+drawn again upright and back, Fireplace sat down by its button, and the
+page put away and back, in a local room and a relay's.
+
+![Party on a phone: the stick under a thumb, the buttons named for the minigame](p5-phone.png)
 
 **The font.** Every game's text and the TV's is a bold sans with a dark
 outline (`client/hudfont.mjs`): the 3x5 font's 64 characters drawn again at

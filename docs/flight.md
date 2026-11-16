@@ -26,7 +26,10 @@ charge shot and let go to fire it, once the bar under the boost meter is
 full; it homes on the ship nearest your nose. W or Shift boosts, S or Ctrl
 brakes, from one meter. Q and E barrel-roll left and right (or A or D
 twice quickly); a roll turns lasers away. G, B or the middle button drops
-a bomb. Tab the board, F fullscreen, N the net graph. `?bot=1` hands your
+a bomb. Tab the board, F fullscreen, N the net graph. On a phone the stick
+is the throttle (up boosts, down brakes) and a drag aims; FIRE and CHARGE aim
+as they are dragged, and ROLL rolls the way the stick leans
+([fireplace.md](fireplace.md), On a phone). `?bot=1` hands your
 ship to an AI pilot; `?watch=1` spectates; `?cam=x,y,z,yaw,pitch` holds a
 camera anywhere. More pilots for a running room:
 `node net/bot-host.mjs --flight --relay 127.0.0.1:4434 --bots 50`.

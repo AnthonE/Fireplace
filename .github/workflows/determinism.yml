@@ -271,6 +271,39 @@ jobs:
           name: themes
           path: traces/themes/
 
+  touch:
+    # every page played with fingers as a phone has it (net/run-touch.mjs), on an Android phone's screen and an iPhone's
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: unzip, for setup-deno; openssl, for the relay
+        run: apt-get update && apt-get install -y --no-install-recommends unzip openssl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.7
+      - run: npm ci
+      - run: npm i --no-save playwright-core@1.56.1
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - name: Touch on a phone (the stick, the drag and the buttons on every page, turned upright and back; the page put away and back, a local room held still and a relay's joined again)
+        run: |
+          node net/run-touch.mjs --no-build
+          node net/run-touch.mjs --no-build --device "iPhone 14 landscape" --only party,arena,fireplace
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: touch
+          path: |
+            traces/touch*.png
+            traces/touch*.json
+
   online:
     # the online gates: a relay, a referee, hundreds of bots through its native door, every hash checked
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork

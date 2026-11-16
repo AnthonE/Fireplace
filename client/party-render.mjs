@@ -1600,6 +1600,8 @@ export async function createRenderer(canvas, { present = true, hudScale = 2, dev
 
   return {
     rows, width: W, height: H, hudScale: hs, hudX, device,
+    // the frame's textures given back, for one made again at another size (client/mobile.mjs)
+    destroy() { colorMs.destroy(); depth.destroy(); },
     // s: { cam: [x, y, z], yaw, pitch, time (s), slot (-1 none),
     //      env: 'day' | 'sunset' | 'night' | 'snow' (a change eases in over half a second),
     //      focus: [x, z] (or [x, y, z]), extent (m): the square the shadow map and the balls' contact shade cover,
