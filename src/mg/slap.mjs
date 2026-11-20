@@ -7,7 +7,7 @@
 // 15 s); a fall costs a point, and the fallen are back on a pad on a small
 // island 2 s on. Each ball's glove is rolled per round: classic, heavy,
 // quick or long. Most points at 90 s wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The main island: SL_R0 m plus SL_RK times the root of the balls in, at most SL_RMAX.
 export const SL_R0 = 9;

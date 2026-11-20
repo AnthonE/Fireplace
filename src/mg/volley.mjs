@@ -8,7 +8,7 @@
 // side's fourth touch in a row; the scorer serves it again after VB_PAUSE.
 // First to the target, or the most at the clock; a draw stands.
 
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // Each half is VB_AREA m² for each ball of the bigger side, at least
 // VB_AMIN: VB_HX m deep and twice that wide, to VB_HXMAX deep, then wider.

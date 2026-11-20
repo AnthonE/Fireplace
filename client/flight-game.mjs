@@ -25,11 +25,10 @@ import { flightWord, modeName } from '../src/flight-view.mjs';
 import { unpackArena } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, project, basis } from './flight-render.mjs';
 import { ENVS, envOf } from './lowpoly.mjs';
-import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
+import { AMC, need, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/load.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Pilot } from './flight-bot.mjs';
 import { predict, corrector, lagCheck, capturePng, listeners } from './host.mjs';
 import { tintsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
@@ -51,12 +50,16 @@ function standing(m, o, teamWin = 0) {
   return o.kills * 65536 - o.deaths;
 }
 
+// The renderer, made once a page and the host's (client/host.mjs renderer()):
+// by the first mount, or ahead of it, as Fireplace does for the game after the
+// one on, so its pipelines are compiled before the room gets there.
+export const warm = (host, { canvas, present = true }) => host.renderer('flight', () => createRenderer(canvas, { present, device: host.device }));
+
 export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, skill = 0.7, sens: SENS = 3, fixed: FIXED = null, present = true, showGraph: graphOn = false, external = false } = {}) {
   const { u8, i32, f32, f64, view, pview, set, get, press, sound, memory, hashes, keys } = host;
   const WATCH = host.watch || !!FIXED;
   const W = canvas.width, H = canvas.height;
-  const renderer = host.renderers.get('flight') || await createRenderer(canvas, { present, device: host.device });
-  host.renderers.set('flight', renderer);
+  const renderer = await warm(host, { canvas, present });
   const { on, off } = listeners();
   const epoch = () => performance.timeOrigin + performance.now();
 
@@ -107,7 +110,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else if (BOT) {
-    if (!external) bot = new Pilot(0, (Math.random() * 1e9) | 0, skill);
+    if (!external) bot = new (await import('./flight-bot.mjs')).Pilot(0, (Math.random() * 1e9) | 0, skill); // loaded only for ?bot=1
     on(document, 'keydown', (e) => {
       if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); }
       if (e.code === 'KeyN' && !e.repeat) showGraph = !showGraph;
@@ -600,6 +603,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     }
     // engine trails: the nearest ships' last half second
     const md = view.mode();
+    if (!AMC[md.mode]) need(md.mode); // a team match's module, fetched as it comes up (client/am/load.mjs)
     const trailNear = [];
     for (let p = 0; p < L.NPLAYER; p++) {
       const b = L.PLAYERS + p * L.PSIZE;

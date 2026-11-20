@@ -9,7 +9,7 @@
 // belts running back toward the start and bumper posts. The first over the
 // line cuts the clock to GC_LATE; placed by finishing order, the rest by how
 // far down the course they are at the end. Bumps on, without the kick.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const GC_LEN = 15000; // 120 s
 export const GC_LATE = 3750; // 30 s after the first ball home the round ends

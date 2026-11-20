@@ -11,7 +11,7 @@
 // FA_REDROP later. A ball that falls off is down FA_DOWN, then drops back in
 // on its own side. Most goals at the clock wins; a draw stands.
 
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The pitch: FA_A0 m² plus FA_AK for each ball up to FA_NK and FA_AK2 for each
 // past, FA_ASP times as long as wide.

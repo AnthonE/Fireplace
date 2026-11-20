@@ -4,7 +4,7 @@
 // karts drive into them (PG_SCORE). A kart hit by a rocket, a POW, a stomp or
 // a MEGA kart spins out and drops coins for anyone; holding drift (Space)
 // through a turn charges a mini-turbo. Most coins at the time wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const KT_H0 = 16; // the floor's half-width: KT_H0 m plus KT_HK times the root of the balls in, at most KT_HMAX
 export const KT_HK = 2.4;

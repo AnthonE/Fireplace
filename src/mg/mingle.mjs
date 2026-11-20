@@ -6,7 +6,7 @@
 // is out (if no room holds it, a room over it keeps its deepest). The doors
 // open again and the rooms shove everyone back out. Rooms close for good as
 // the crowd thins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const MI_LEN = 22500; // 180 s
 export const MI_IDLE = 0.975; // rolling drag a tick with no keys: a brake for stopping in a room

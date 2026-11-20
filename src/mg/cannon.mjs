@@ -5,7 +5,7 @@
 // cannonball knocks what it meets along its own path. Volleys grow and come
 // closer together; from CN_LOBFROM some shots are lobbed onto a marked ring
 // and roll on from there; from CN_CRUMBLE the rim crumbles in. Last ball on wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const CN_S = 2; // a tile's circumradius, m (pointy-top hexes, axial q, r)
 export const CN_R0 = 16; // the platform: CN_R0 m plus CN_RK times the root of the balls in, at most CN_RMAX

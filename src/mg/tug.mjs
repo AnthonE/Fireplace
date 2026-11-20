@@ -14,7 +14,7 @@
 // after it is down.
 // Hop the pit to knock the other side's holders off the rope: they hold fast
 // along it but not across. Literal numbers only: the sim reads them through
-// layout.mjs's MG_CONSTS, the client imports this file itself.
+// consts.mjs's MG_CONSTS, the client imports this file itself.
 export const TW_LEN = 15000; // 120 s
 // The stage: two decks TW_GAP apart across the pit, each TW_D0 m plus TW_DK
 // times the root of the balls in long (x) and TW_W0 plus TW_WK times it in

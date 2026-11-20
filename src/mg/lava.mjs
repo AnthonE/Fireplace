@@ -9,7 +9,7 @@
 // is out. The first to touch the crown wins; the rest place by the order
 // they touched it, then the climbers by the height they reached, then the
 // lava's victims, the last to go first.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const LV_LEN = 15000; // 120 s at most: the lava is over the summit well before
 export const LV_RT = 14; // m: the tower's radius, its top the summit

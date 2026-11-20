@@ -153,6 +153,22 @@ try {
   const played = await (await studio.waitForSelector('#play iframe')).contentFrame();
   await played.waitForFunction(() => window.__qa?.error || window.__qa?.hashes?.length > 2, null, { timeout: 60000 }).catch(() => {});
   report.studio.played = await played.evaluate(() => (window.__qa?.error ? { error: window.__qa.error } : { hashes: window.__qa?.hashes?.length ?? 0, game: window.__qa?.state?.().game })).catch((e) => ({ error: String(e) }));
+  // an edited number reaches what draws the minigame, not only the sim: the platform's last radius from 9 m to 5,
+  // played again; the frame's registry holds a module that is not the served one, and one made the same way has the 5
+  await studio.evaluate(() => { const st = window.__studio.st; st.consts = st.consts.replace('export const SW_RMIN = 9;', 'export const SW_RMIN = 5;'); return window.__studio.play(); });
+  await studio.waitForFunction(() => /consts=/.test(document.querySelector('#play iframe')?.src || '') && window.__studio.st.built?.consts.includes('SW_RMIN = 5'), null, { timeout: 60000 }).catch(() => {});
+  const edited = await (await studio.waitForSelector('#play iframe')).contentFrame();
+  await edited.waitForFunction(() => window.__qa?.error || window.__qa?.hashes?.length > 2, null, { timeout: 60000 }).catch(() => {});
+  report.studio.edited = await edited.evaluate(async () => {
+    if (window.__qa?.error) return { error: window.__qa.error };
+    const { MG, variantSource } = await import('./mg/load.mjs');
+    const served = await import('./mg/sweep.mjs');
+    const base = new URL('./mg/sweep.mjs', location.href);
+    const blob = URL.createObjectURL(new Blob([variantSource(await (await fetch(base)).text(), base, 'sweep', new URLSearchParams(location.search).get('consts'))], { type: 'text/javascript' }));
+    const made = await import(blob);
+    const mg = Number(new URLSearchParams(location.search).get('mg'));
+    return { hashes: window.__qa?.hashes?.length ?? 0, own: !!MG[mg] && MG[mg] !== served.default, key: MG[mg]?.key, rim: [served.rimOf(20, served.dropsAt(1e9)), made.rimOf(20, made.dropsAt(1e9))] };
+  }).catch((e) => ({ error: String(e) }));
   // the way back to the shelf, on the living room and on a game's page
   const backOf = (p) => p.evaluate(() => document.getElementById('shelf-link')?.getAttribute('href') || '').catch(() => '');
   report.back = { fireplace: await backOf(page), party: await backOf(party) };
@@ -247,6 +263,7 @@ const gate = {
   studioBuildsAsNpm: !!report.studio?.same,
   studioChecks: !!report.studio?.checked?.splitEqual && report.studio.checked.scored > 0,
   studioPlays: (report.studio?.played?.hashes ?? 0) > 2,
+  studioPlaysOnItsNumbers: (report.studio?.edited?.hashes ?? 0) > 2 && report.studio.edited.own && report.studio.edited.key === 'sweep' && String(report.studio.edited.rim) === '9,5',
   shelfListsEverything: !!report.shelf && !report.shelf.error && report.shelf.missing.length === 0
     && report.shelf.counts.minigame === L.MINIGAMES.length && report.shelf.counts.mode === L.MODES.length + L.FLIGHT_MODES.length && report.shelf.unlined.length === 0,
   shelfHasItsPictures: report.shelf?.pictures > 0 && report.shelf.picturesServed,

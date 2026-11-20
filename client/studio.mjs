@@ -7,14 +7,19 @@
 // repo, which makes the pull request; CI runs the rest of the bar there.
 // Drafts are kept in this browser (localStorage), a minigame each.
 //
-// The sim is the only thing the edit reaches: the minigame's client module
-// (client/mg/<key>.mjs: its drawing and the AI's sense of it) imports the
-// constants as this site serves them, so what the edited numbers move, the
-// AI and the drawing don't know of until the change is merged.
+// The edited numbers reach all three readers: the sim (the worker's build,
+// arrays through (!tab) too), and in the check and the play the minigame's
+// client module, its drawing and the AI balls' sense of the stage, loaded on
+// those numbers in place of the served ones (client/mg/load.mjs withConsts).
+// The module's own code is the site's: an edit to client/mg/<key>.mjs is a
+// pull request's.
+//
+// The code box is client/code-editor.mjs: Monaco from a CDN over a textarea.
 import * as L from '../src/layout.mjs';
+import { codeEditor } from './code-editor.mjs';
 
 const $ = (id) => document.getElementById(id);
-const text = $('text'), panel = $('panel'), foot = $('foot'), playBox = $('play');
+const panel = $('panel'), foot = $('foot'), playBox = $('play');
 const DRAFT = 'fireplace-studio:';
 const q = new URLSearchParams(location.search);
 
@@ -26,10 +31,20 @@ const st = {
   wat: '', consts: '', rust: false,
   built: null, // { bytes, debug, ms, size, wat, consts } of the last good build
   buildError: '', checked: null, checkError: '', busy: '',
-  blobUrl: '',
+  blobUrl: '', constsUrl: '',
 };
 
 const say = (s) => { foot.textContent = s; };
+
+// every edit lands in the draft of the file shown; Ctrl+Enter builds
+const code = codeEditor($('text'), {
+  onChange(value) {
+    if (st.tab === 'wat') st.wat = value; else st.consts = value;
+    save();
+    render();
+  },
+  onBuild: () => build(),
+});
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
 const hint = (s) => el('p', { className: 'hint', textContent: s });
 // a minigame's name as a person reads it: THIN ICE -> Thin Ice
@@ -94,8 +109,7 @@ function showTab(tab) {
   try { localStorage.setItem(TAB, tab); } catch { /* this visit only */ }
   $('tab-wat').classList.toggle('on', tab === 'wat');
   $('tab-consts').classList.toggle('on', tab === 'consts');
-  text.value = tab === 'wat' ? st.wat : st.consts;
-  text.readOnly = st.rust;
+  code.show(`${st.key}.${tab}`, tab === 'wat' ? st.wat : st.consts, { language: tab === 'wat' ? 'wat' : 'javascript', readOnly: st.rust });
   const g = L.MINIGAMES[st.mg];
   $('tab-hint').textContent = tab === 'consts'
     ? `${st.rust ? 'Read only here: this minigame is written in Rust. ' : ''}Each line is one setting: how long a round is, how fast, how big. Change a number, then press play. (src/mg/${g ? g.key : ''}.mjs)`
@@ -130,7 +144,7 @@ async function check() {
   if (stale() && !(await build())) return;
   st.busy = 'check';
   render();
-  const m = await ask({ check: { debug: st.built.debug, mg: st.mg, ticks: 24000, bots: 12 } });
+  const m = await ask({ check: { debug: st.built.debug, mg: st.mg, consts: st.built.consts, ticks: 24000, bots: 12 } });
   st.busy = '';
   if (m.error) { st.checkError = m.error; st.checked = null; say('the check failed'); }
   else { st.checkError = ''; st.checked = m.checked; say(m.checked.splitEqual && m.checked.scored && m.checked.rounds ? 'the check passed' : 'the check found something'); }
@@ -141,7 +155,7 @@ function stopPlay() {
   const go = el('button', { className: 'primary big', textContent: '▶ play it here' });
   go.onclick = () => play();
   playBox.replaceChildren(el('div', { className: 'start' }, go, el('span', { textContent: 'Your minigame, as it is in the editor, against AI balls. Click the game to steer.' })));
-  if (st.blobUrl) { URL.revokeObjectURL(st.blobUrl); st.blobUrl = ''; }
+  for (const k of ['blobUrl', 'constsUrl']) if (st[k]) { URL.revokeObjectURL(st[k]); st[k] = ''; }
 }
 
 async function play() {
@@ -151,7 +165,9 @@ async function play() {
   st.blobUrl = URL.createObjectURL(new Blob([st.built.bytes], { type: 'application/wasm' }));
   // the studio's own ?present=, ?res=, ?bot= and ?music= go on to the game it plays
   const pass = ['present', 'res', 'bot', 'music'].filter((k) => q.has(k)).map((k) => `&${k}=${encodeURIComponent(q.get(k))}`).join('');
-  const src = `./party.html?mg=${st.mg}&bots=${q.get('bots') || 7}${pass}&wasm=${encodeURIComponent(st.blobUrl)}`;
+  // the constants it was built on go too, for what draws the minigame and for its AI balls (client/mg/load.mjs withConsts)
+  st.constsUrl = URL.createObjectURL(new Blob([st.built.consts], { type: 'text/javascript' }));
+  const src = `./party.html?mg=${st.mg}&bots=${q.get('bots') || 7}${pass}&wasm=${encodeURIComponent(st.blobUrl)}&consts=${encodeURIComponent(st.constsUrl)}`;
   const frame = el('iframe', { src, allow: 'cross-origin-isolated; fullscreen; gamepad', title: 'your minigame' });
   playBox.replaceChildren(frame);
   frame.focus();
@@ -252,23 +268,13 @@ async function main() {
   pick.onchange = () => open(pick.value);
   $('tab-wat').onclick = () => showTab('wat');
   $('tab-consts').onclick = () => showTab('consts');
-  text.oninput = () => {
-    if (st.tab === 'wat') st.wat = text.value; else st.consts = text.value;
-    save();
-    render();
-  };
-  // a tab key types two spaces, as the files are indented
-  text.onkeydown = (e) => {
-    if (e.key === 'Tab' && !e.shiftKey && !text.readOnly) { e.preventDefault(); document.execCommand('insertText', false, '  '); }
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); build(); }
-  };
   $('play-btn').onclick = play;
   $('send').onclick = sendIn;
   stopPlay();
   const first = q.get('mg') && L.MINIGAMES.some((m) => m.key === q.get('mg')) ? q.get('mg') : L.MINIGAMES[0].key;
   pick.value = first;
   await open(first);
-  window.__studio = { st, build, check, play, open };
+  window.__studio = { st, build, check, play, open, code };
 }
 
 main().catch((e) => { say(String(e?.message || e)); });

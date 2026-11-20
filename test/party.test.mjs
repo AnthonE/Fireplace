@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { newParty, partyBytes, wasmBytes, arenaBytes, fireplaceBytes, scriptedParty, predicted } from './helpers.mjs';
 import { View, partyWord, hexAt, hexCentre, seed, hash32, PLAT_Y, B_RAD } from '../src/party-view.mjs';
 import { replay, parseLog, decodeTrace } from '../harness/core.mjs';
@@ -8,6 +9,9 @@ import { expandMacros } from '../tools/asm.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { playParty, partySeed } from '../tools/genparty.mjs';
 import { MG } from '../client/mg/index.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
+import * as lazy from '../client/mg/load.mjs';
+import { registry, PAGE } from '../client/lazy.mjs';
 import * as L from '../src/layout.mjs';
 import * as MC from '../src/mg/thinice.mjs'; // TI_*: the minigame's own constants
 
@@ -63,7 +67,7 @@ test('the layout: the header between golf\'s and Fireplace\'s, the state between
   assert.deepEqual(L.MINIGAMES.map((m) => m.prefix), ['ti', 'cc', 'sw', 'rl', 'bo', 'wl', 'mp', 'kh', 'hp', 'cr', 'pp', 'rc', 'fc', 'tg', 'sb', 'tt', 'lv', 'gf', 'dr', 'ho', 'pn', 'lt', 'mz', 'be', 'cn', 'jr', 'gb', 'gc', 'sg', 'ss', 'kt', 'nd', 'sl', 'tr', 'py', 'mi', 'hc', 'db', 'vb', 'so', 'su', 'ch', 'wm', 'bl', 'eg', 'bw', 'fa', 'tw', 'pt', 'ry', 'rh', 'lj', 'hd']);
   assert.equal(MC.TI_FX_CRACK, L.FX_MG + 4 * L.MG_THINICE);
   // every minigame's FX kinds are literals in its .mjs: each in its own block of four, FX_MG + 4 * its id
-  for (const [k, v] of Object.entries(L.MG_CONSTS)) {
+  for (const [k, v] of Object.entries(MG_CONSTS)) {
     const m = /^([A-Z]{2})_FX_/.exec(k);
     if (!m) continue;
     const id = L.MINIGAMES.findIndex((g) => g.prefix === m[1].toLowerCase());
@@ -77,11 +81,15 @@ test('MG_CONSTS: every minigame\'s constants, none named twice or after a layout
     for (const [k, v] of Object.entries(await import(`../src/mg/${m.key}.mjs`))) {
       assert.ok(!seen.has(k), `${k} in ${m.key} and ${seen.get(k)}`);
       assert.ok(!(k in L), `${k} in ${m.key} and layout.mjs`);
-      assert.deepEqual(L.MG_CONSTS[k], v);
+      assert.deepEqual(MG_CONSTS[k], v);
       seen.set(k, m.key);
     }
   }
-  assert.equal(Object.keys(L.MG_CONSTS).length, seen.size);
+  assert.equal(Object.keys(MG_CONSTS).length, seen.size);
+  // nor does layout.mjs import them: every page and worker loads it, and a
+  // minigame's constants come with its own client module
+  assert.ok(!('MG_CONSTS' in L));
+  assert.doesNotMatch(readFileSync(new URL('../src/layout.mjs', import.meta.url), 'utf8'), /from '\.\/mg\//);
   // past about 1,020 exports V8 keeps a module namespace as a dictionary, and
   // every L.NAME read in the bot host, the relay and a page's frame slows 14 times
   assert.ok(Object.keys(L).length < 800, `layout.mjs exports ${Object.keys(L).length} names`);
@@ -421,6 +429,31 @@ test('a room of scripted balls into the rotation replays to the same hash on eve
   const a = await replay({ bytes, log: parsed, ticks: 6000, threads: 1, tag: 'p1' });
   const b = await replay({ bytes, log: parsed, ticks: 6000, threads: 4, tag: 'p4', startWorkers });
   assert.deepEqual([...decodeTrace(a.trace).tickHashes], [...decodeTrace(b.trace).tickHashes]);
+});
+
+test('the registry a frontend and an AI ball read (client/mg/load.mjs): whole from the start outside a page; a page\'s holds nothing until a round needs it, one import however many frames ask, the module the list holds', async () => {
+  assert.equal(PAGE, false);
+  assert.equal(lazy.MG.length, L.NMG);
+  MG.forEach((m, k) => assert.equal(lazy.MG[k], m, L.MINIGAMES[k].key));
+  assert.equal(lazy.need(L.MG_GLASS), undefined, 'nothing to wait for here');
+  // a page's, as load.mjs makes it
+  const r = registry((id) => L.MINIGAMES[id] && import(`../client/mg/${L.MINIGAMES[id].key}.mjs`));
+  assert.equal(r.all[L.MG_GLASS], undefined, 'nothing loaded before a round needs it');
+  const p = r.need(L.MG_GLASS);
+  assert.equal(r.need(L.MG_GLASS), p, 'one import for any number of frames asking');
+  await p;
+  assert.equal(r.all[L.MG_GLASS], MG[L.MG_GLASS]);
+  assert.equal(r.need(L.MG_GLASS), p);
+  assert.equal(r.need(L.NMG), undefined, 'no module past the list');
+  assert.deepEqual(Object.keys(r.all), [String(L.MG_GLASS)], 'and no other fetched');
+  // a fetch that fails leaves the registry as it was, quietly
+  const warn = console.warn; let said = 0; console.warn = () => { said++; };
+  const bad = registry(() => Promise.reject(new Error('offline')));
+  await bad.need(3);
+  console.warn = warn;
+  assert.deepEqual([bad.all[3], said], [undefined, 1]);
+  // and neither the frontend nor the AI ball imports the list: a page that did would fetch all of them
+  for (const f of ['party-game.mjs', 'party-bot.mjs', 'fireplace.mjs', 'party.mjs']) assert.doesNotMatch(readFileSync(new URL(`../client/${f}`, import.meta.url), 'utf8'), /from '\.\/mg\/index\.mjs'|from '\.\/(party|fireplace)-bot\.mjs'/, f);
 });
 
 test('every minigame has a client module: its id, key and name as the layout has them, a backdrop, a hint the HUD can show, a brain', () => {

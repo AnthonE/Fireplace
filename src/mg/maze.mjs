@@ -4,7 +4,7 @@
 // open and others shut, their tops flashing MZ_WARN ticks ahead. The first
 // onto the pad wins; the rest place by the order they got there, then by
 // how far they were along the maze's paths from the middle at the end.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const MZ_C = 5; // m, a cell's side
 export const MZ_HT = 0.35; // m, half a hedge's thickness: 4.3 m clear between two

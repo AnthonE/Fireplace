@@ -12,7 +12,7 @@
 // BW_SWEEP later and a fresh ten stand BW_DOWN after that. Off the deck's end
 // or down a gutter a ball drops into the pit and is back on its lane's
 // approach. Most points wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const BW_LEN = 11250; // 90 s
 export const BW_DOUBLE = 1875; // the last 15 s pay double

@@ -6,7 +6,7 @@
 // the round goes; from TT_CHAIN0 a tilt may swing straight over to the other
 // side without levelling. The slope pulls a ball down it; from TT_CR0 the
 // edges crumble in. Off the table and you're out; the last ball on wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const TT_H0 = 6; // the table's half-width: TT_H0 m plus TT_HK times the root of the balls in, at most TT_HMAX
 export const TT_HK = 2;

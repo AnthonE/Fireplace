@@ -222,7 +222,7 @@
         "node",
         "tools/arena-shot.mjs",
         "--scenes",
-        "faces,figures"
+        "faces,figures,downed,hands"
       ],
       "png": "traces/arena-demo-faces.png",
       "refs": [],
@@ -241,7 +241,7 @@
         "node",
         "tools/arena-shot.mjs",
         "--scenes",
-        "faces,figures"
+        "faces,figures,downed,hands"
       ],
       "png": "traces/arena-demo-figures.png",
       "refs": [],
@@ -249,6 +249,44 @@
         "src": "arena-render-demo.html?present=0&res=960x600",
         "api": "__demo",
         "shot": "figures"
+      }
+    },
+    {
+      "id": "downed",
+      "name": "Fighters down",
+      "what": "every body standing with one down beside it from 9 m, four more crawling behind and a stunned hunter in front (Evade's and Escape's PF_DOWN)",
+      "take": "the same fighter, on its front: its hair, skin and shirt read lying down as standing",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--scenes",
+        "faces,figures,downed,hands"
+      ],
+      "png": "traces/arena-demo-downed.png",
+      "refs": [],
+      "page": {
+        "src": "arena-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "downed"
+      }
+    },
+    {
+      "id": "hands",
+      "name": "The gun in your hands",
+      "what": "first person with the assault rifle, three fighters 7 m off, by day",
+      "take": "a drawn gun, not boxes: three tones, an ink outline, the sight lit; the crosshair and the fighters clear of it",
+      "shoot": [
+        "node",
+        "tools/arena-shot.mjs",
+        "--scenes",
+        "faces,figures,downed,hands"
+      ],
+      "png": "traces/arena-demo-hands.png",
+      "refs": [],
+      "page": {
+        "src": "arena-render-demo.html?present=0&res=960x600",
+        "api": "__demo",
+        "shot": "hands"
       }
     }
   ]

@@ -29,8 +29,9 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import wabtInit from 'wabt';
-import { FEATURES, includeWith, conditionals, stripComments, splitArgs, expandMacros, constants, forbid, expandWith, assembleWith, canonicalWith, prefixed } from './asm-core.mjs';
+import { FEATURES, includeWith, conditionals, stripComments, splitArgs, expandMacros, constants, forbid, expandWith, assembleWith, canonicalWith, prefixed, mergeTwins } from './asm-core.mjs';
 import * as layout from '../src/layout.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 import { makeMacros } from '../src/macros.mjs';
 import { pathToFileURL } from 'node:url';
 import { isMain } from './main.mjs';
@@ -39,13 +40,14 @@ import { compileMap, mapDir } from './map.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // the preprocessor, the checks and the prefixer are tools/asm-core.mjs's, which a page runs too
-export { FEATURES, conditionals, stripComments, splitArgs, expandMacros, constants, forbid, prefixed };
+export { FEATURES, conditionals, stripComments, splitArgs, expandMacros, constants, forbid, prefixed, mergeTwins };
 
 export const include = (file) => includeWith((p) => readFileSync(p, 'utf8'), resolve(file));
 export function expand(file, { ARENA = false, FLIGHT = false, layout: lay = layout, macros = makeMacros, map = null, ...flags } = {}) {
   // flight flies its own map (src/flight.mjs FLIGHT_MAP), the arena Box Canyon unless told otherwise
   if (ARENA && !map) map = compileMap(FLIGHT ? mapDir(lay.FLIGHT_CONSTS?.FLIGHT_MAP) : mapDir());
-  return expandWith((p) => readFileSync(p, 'utf8'), resolve(file), { ...flags, ARENA, FLIGHT, layout: lay, macros, map });
+  // the minigames' constants are not the layout's own (src/mg/consts.mjs): a caller's layout may bring its own
+  return expandWith((p) => readFileSync(p, 'utf8'), resolve(file), { ...flags, ARENA, FLIGHT, layout: lay.MG_CONSTS ? lay : { ...lay, MG_CONSTS }, macros, map });
 }
 
 export async function assemble(wat, name = 'game.wat', opts = {}) {
@@ -89,7 +91,8 @@ export function fireplaceWat({ DEBUG = false, layout: lay = layout, macros = mak
   const maps = { arena: map, flight: flightMap };
   const games = lay.FP_PLAYS.map((k) => lay.FP_SETS[k]).map((g) => prefixed(expand(join(src, 'game.wat'), { DEBUG, ...g.flags, layout: lay, macros, map: g.map ? maps[g.map] : null }), g.prefix));
   const fp = expand(join(src, 'fireplace.wat'), { DEBUG, layout: lay, macros });
-  const wat = `(module\n  (import "env" "mem" (memory ${lay.PAGES} ${lay.PAGES} shared))\n${games.join('\n')}\n${fp}\n)\n`;
+  // what two games hold alike is kept once (tools/asm-core.mjs mergeTwins)
+  const { wat } = mergeTwins(`(module\n  (import "env" "mem" (memory ${lay.PAGES} ${lay.PAGES} shared))\n${games.join('\n')}\n${fp}\n)\n`, lay.FP_PLAYS.map((k) => lay.FP_SETS[k].prefix));
   forbid(wat);
   return wat;
 }

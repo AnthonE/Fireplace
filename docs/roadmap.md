@@ -33,14 +33,24 @@ site's front door, which still opens the living room, choosing between the
 room and the shelf.
 
 What a page downloads: every file it fetched in its first 15 s in headless
-Chrome (its modules, workers, themes and wasm), each gzipped:
+Chrome in a local room with AI players (its modules, workers, themes and
+wasm), each gzipped:
 
 | Page | Files | Gzipped |
 | --- | --- | --- |
-| `client/party.html` | 137 | 778 KB (wasm 88 KB; the 46 minigames' client modules are most of the files) |
-| `client/fireplace.html` | 158 | 1,037 KB (wasm 254 KB: the four games, Box Canyon and Skyways) |
-| `client/arena.html` | 106 | 387 KB (wasm 59 KB) |
-| `client/flight.html` | 104 | 412 KB (wasm 107 KB, most of it Skyways) |
+| `client/party.html` | 66 | 324 KB (wasm 100 KB; the round's minigame, its client module and constants, 5 to 17 KB) |
+| `client/fireplace.html` | 87 | 604 KB (wasm 255 KB: the four games, Box Canyon and Skyways) |
+| `client/arena.html` | 69 | 294 KB (wasm 62 KB) |
+| `client/flight.html` | 65 | 302 KB (wasm 109 KB, most of it Skyways) |
+| `client/golf.html` | 62 | 203 KB (wasm 8 KB) |
+| `client/games.html` | 61 | 499 KB (the tiles' pictures are most of it) |
+
+A page fetches a minigame's or a kit mode's module when its round or match
+comes up, and Fireplace the next game's frontend while this one plays
+(`client/mg/load.mjs`, `client/am/load.mjs`); every minigame's constants
+left `layout.mjs`, which every page and worker loads. Before both, with 53
+minigames, the same six were 916 KB (166 files), 1,247 KB (197), 487 KB,
+496 KB, 328 KB and 627 KB.
 
 No textures, models, sound files or fonts: sounds are synthesized, the HUD's
 text is the system's sans drawn into an atlas at startup, every shape is
@@ -134,14 +144,23 @@ only of your own body), physics sandboxes, open worlds.
    - Fireplace taking one (its playlist builds each game's world itself).
 4. Fireplace: a vote for the next game, then a board between games (dice,
    stars, coins) over the minigames.
-5. Pipelines compiled before a Fireplace switch: on SwiftShader the first
-   switch into Party held the page's GPU about 40 s while its shaders
+5. ~~Pipelines compiled before a Fireplace switch~~: done
+   ([fireplace.md](fireplace.md), "A switch"). The next game's renderer is
+   made while this one plays, its pipelines compiled off the GPU process's
+   main thread and each drawn with once; at a switch the mount takes 3 to
+   13 ms and on SwiftShader the next game's first frame is drawn 0.6 to
+   1.3 s on, where it was 46 to 140 s. The 40 s of the first switch into
+   Party was not its shaders, which held the GPU process 1.1 s compiled in
+   line: it was the TV, sent a frame of the game every page frame, faster
+   than SwiftShader draws them, and it waits for the GPU now. Left, this
+   box having no GPU: what a renderer costs a real one to be
    compiled (every hash still equal). Then a frame rate on a real laptop GPU.
 6. Smaller debts: Musical Pads' ground is exact only while the prediction runs
    less than 125 ticks ahead (the host predicts up to 201), Seesaws' less
    than 256 (its ring is written 256 ticks ahead, `PRED_MAX` is 256); the
-   arena's and flight's pages load Party's constants through `layout.mjs`'s
-   `MG_CONSTS` (26 KB gzipped).
+   ~~arena's and flight's pages load Party's constants through `layout.mjs`'s
+   `MG_CONSTS`~~ (done: they are `src/mg/consts.mjs`'s, which no page loads;
+   128 KB gzipped by the time they went).
 7. People playing it. Everything so far is played by bots.
 
 ## Bringing maps and games in
@@ -342,9 +361,11 @@ do yet, and each names what it would need first; the first is built.
    balls, and sends the changed files in through GitHub's upload page. An
    unchanged minigame builds to `npm run build`'s bytes; a build takes about
    5 s on SwiftShader's machine (`net/run-pages.mjs` checks all of it on a
-   static host). Next: a new minigame from the page (the lists `tools/new-mg.mjs`
-   appends to), the AI and the drawing reading the edited constants, and
-   Claude in the page, paid from Elo Pros credits ("make the ice
+   static host). The edited constants reach the AI balls and the drawing as
+   they reach the sim: the check and the play load the minigame's client
+   module on them. Next: a new minigame from the page (the lists
+   `tools/new-mg.mjs` appends to), the client module's own code edited there
+   too, and Claude in the page, paid from Elo Pros credits ("make the ice
    slipperier"): the same edit loop with a model in it.
 2. **Bring your own bot.** The referee already runs a wasm it didn't build
    with one import, a shared memory. A bot is the same: a module that reads

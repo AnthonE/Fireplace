@@ -59,7 +59,7 @@ test('the shared light is three tones, and the hills shade the ground', async ()
     assert.match(read(f), /let c = celGlow\(s\.uv, s\.kind, s\.color, u\.\w+\.w\);/, f);
     assert.match(read(f), /return celBeam\(b\.across, b\.color\);/, f);
   }
-  assert.match(read('client/viewmodel.mjs'), /let lit = cel\(/, 'the gun in your hands in the same tones');
+  assert.match(read('client/arena-render.mjs'), /var c = h\.alb \* light\(/, 'the gun in your hands in the same tones');
 });
 
 test('the hour is a uniform: day, dusk and night, every name the look reads coming from it', async () => {

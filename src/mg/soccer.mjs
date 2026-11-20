@@ -9,7 +9,7 @@
 // more only that football comes back to its spot. First to the target, or
 // the most at the clock; a draw stands.
 
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 // The pitch: SO_A0 m² plus SO_AK for each ball up to SO_NK and SO_AK2 for each
 // past, SO_ASP times as long as wide.

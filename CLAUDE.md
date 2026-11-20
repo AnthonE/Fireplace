@@ -22,7 +22,7 @@ the protocol for writing a client, `docs/hosting.md` the room pool
 ```sh
 npm ci && sh tools/install-deno.sh   # once: wabt, binaryen, Deno 2.9.7 in .tools/
 npm run build                        # every sim; prints each wasm's sha256
-npm test                             # node --test test/*.test.mjs, about 25 min; prints its own count
+npm test                             # node --test test/*.test.mjs, about 33 min; prints its own count
 node --test test/party.test.mjs      # one file
 node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.wasm   # Node, Deno, Chrome x JIT tiers x 1/2/4 threads
 node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
@@ -92,8 +92,9 @@ shell whose own command line contains the name: it kills that shell.
 - Party (`src/party.wat`) is the ball (`src/bumper.wat`: its power-ups,
   bumps, blasts and rockets) and the round around it. Each minigame is `src/mg/<key>.wat` (nine hooks under
   its prefix, called through `(!mg)`), its constants in `src/mg/<key>.mjs`
-  (literal numbers, no imports; the WAT sees them through layout.mjs's
-  `MG_CONSTS`, JS imports the file itself), its client module
+  (literal numbers, no imports; the WAT sees them through
+  `src/mg/consts.mjs`'s `MG_CONSTS`, which layout.mjs must not import: every
+  page loads it; JS imports the file itself), its client module
   `client/mg/<key>.mjs`, its tests `test/mg-<key>.test.mjs`. State only in
   `PG_H` (header, in the prediction's copy), `PG_S`, `PG_BIG` and the record's
   party fields. `begin` (a ball's own start), `ground` and `push` run on the
@@ -175,7 +176,8 @@ shell whose own command line contains the name: it kills that shell.
   map's `race` gates (`MAP_RACE`), its progress `MODE_REC` points. Ships
   meeting (`$f_collide`) touch two records, so they are confirmed-only.
 - Fireplace (`src/fireplace.wat`): each game is its own build under a prefix
-  (`tools/asm.mjs` `prefixed()`), listed in `FP_SETS` (`src/layout.mjs`: its
+  (`tools/asm.mjs` `prefixed()`; a function two games hold alike is kept
+  once, `mergeTwins`), listed in `FP_SETS` (`src/layout.mjs`: its
   flags, world, join, input word, matches, score, seed), from which the `fp`
   macros write the playlist's game-by-game code; a new game is an entry there
   and a row in `client/fireplace.mjs`'s `PAGES`. Numbers are append-only: a
@@ -211,6 +213,13 @@ shell whose own command line contains the name: it kills that shell.
   Fireplace mounts each in turn. Golf's own page, `client/main.mjs`, is
   separate (the CI gates drive its `window.__qg` hooks); `golf-game.mjs` is
   the lean frontend for Fireplace.
+- A page fetches a minigame's or a kit mode's client module as its round or
+  match comes up (`client/mg/load.mjs`, `client/am/load.mjs`, on
+  `client/lazy.mjs`): frontends and bots read those registries, never the
+  lists (`index.mjs`), import a bot only for `?bot=1`, and draw or play
+  without a module for the frames before it arrives. Outside a page the
+  registries are whole from the start, so a bot's words stay a function of
+  its seed and the world.
 - On a phone (a coarse pointer, `?touch=1`) a frontend's input is
   `client/touch.mjs`: a stick into its own held keys, a drag into its own
   mouse look, buttons named for what they do and shown while they do it
@@ -254,6 +263,12 @@ shell whose own command line contains the name: it kills that shell.
   `test/studio.test.mjs` holds the page's build to `npm run build`'s bytes.
 - Renderers take `{ device }` to share the page's GPU device, and draw into
   `target` (a texture) when given one: that is how the TV shows a game.
+  A renderer's pipelines are made by `client/pipelines.mjs` `compile()`
+  (`createRenderPipelineAsync`, each drawn with once), never
+  `createRenderPipeline` in line, and a frontend exports `warm(host, opts)`
+  beside `mount`: it makes the renderer on the host (`host.renderer()`), so
+  Fireplace readies the game after this one while this one plays. The TV
+  sends a game no frame while three are still to be drawn.
   Golf's, the arena's and Dogfight's share a cartoon's look (docs/look.md):
   `client/lowpoly.mjs` is the paint (three tones through `cel`/`light`, the
   hills' shadows, the sky, what glows), `client/figure.mjs` the person

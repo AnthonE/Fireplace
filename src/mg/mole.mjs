@@ -6,7 +6,7 @@
 // touching one flings you off it, coming down on one costs 2. The last 15 s
 // are a frenzy: more moles, double points. Bumps on; most points at the time
 // wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const WM_LEN = 10000; // 80 s
 export const WM_FRENZY = 8125; // ticks into play the frenzy starts: the last 15 s

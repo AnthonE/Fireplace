@@ -41,11 +41,10 @@
 import * as L from '../src/layout.mjs';
 import { partyWord, SIDES } from '../src/party-view.mjs';
 import { createRenderer, Scene, COLS, SPRITE, DECAL, project } from './party-render.mjs';
-import { MG } from './mg/index.mjs';
+import { MG, need } from './mg/load.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Partier } from './party-bot.mjs';
 import { epoch, predict, corrector, follower, capturePng, listeners } from './host.mjs';
 import { ballSprite } from './looks.mjs';
 import { rider, emoteOf, withEmote, EMOTE_KEYS } from './rider.mjs';
@@ -66,15 +65,21 @@ export const gain = (place, m) => 1 + Math.floor((9 * (m - Math.min(place, m))) 
 const SIDE_C = [C.RED, C.CYAN];
 const smooth = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
 const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
+const BARE = {}; // a minigame whose module hasn't arrived yet: every hook a module has is optional
+
+// the HUD's 3x5 font in pixels this many screen pixels a side
+const hudScale = (canvas, hud) => hud || Math.max(1, Math.round(canvas.height / 240));
+// The renderer, made once a page and the host's (client/host.mjs renderer()):
+// by the first mount, or ahead of it, as Fireplace does for the game after the
+// one on, so its pipelines are compiled before the room gets there.
+export const warm = (h, { canvas, hud, present = true }) => h.renderer('party', () => createRenderer(canvas, { present, hudScale: hudScale(canvas, hud), device: h.device }));
 
 export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, skill = 0.8, sens: SENS = 3, hud, present = true, showGraph: graphOn = false, external = false } = {}) {
   const { u8, i32, f32, f64, view, pview, set, get, press, sound, memory, hashes, keys } = h;
   const WATCH = h.watch;
   const W = canvas.width, H = canvas.height;
-  // the HUD's 3x5 font in pixels this many screen pixels a side
-  const HS = hud || Math.max(1, Math.round(H / 240));
-  const renderer = h.renderers.get('party') || await createRenderer(canvas, { present, hudScale: HS, device: h.device });
-  h.renderers.set('party', renderer);
+  const HS = hudScale(canvas, hud);
+  const renderer = await warm(h, { canvas, hud, present });
   const { on, off } = listeners();
   set(L.CL_PITCH, 512);
   set(L.CL_WEAPON, 0);
@@ -112,7 +117,7 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     if (e.code === 'KeyM' && !e.repeat) banner = { text: sound.toggleMusic() ? 'MUSIC ON' : 'MUSIC OFF', until: performance.now() + 1500, color: C.GREY };
   };
   if (WATCH || BOT) {
-    if (BOT && !external) bot = new Partier(0, (Math.random() * 1e9) | 0, skill);
+    if (BOT && !external) bot = new (await import('./party-bot.mjs')).Partier(0, (Math.random() * 1e9) | 0, skill); // the AI ball's brain, loaded only for ?bot=1
     on(canvas, 'click', () => { sound.wake(); watched = nextIn(watched, 1); });
     on(document, 'keydown', (e) => {
       if (e.code === 'ArrowRight') watched = nextIn(watched, 1);
@@ -285,7 +290,8 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     const st = get(L.CL_STATE);
     const slot = get(L.CL_SLOT);
     const g = view.party();
-    const mod = MG[g.game] || MG[0];
+    // the round's minigame, or while its module is on the way (client/mg/load.mjs) one with nothing of its own
+    const mod = MG[g.game] || (need(g.game), BARE);
     const room = get(L.CL_ROOM);
     const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - g.tick)) * TICK;
     me = slot >= 0 ? view.partier(slot) : null;

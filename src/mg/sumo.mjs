@@ -4,7 +4,7 @@
 // the ring, swinging one way and then back, and knock away any ball they
 // meet; from 20 s the ring shrinks. Bump the others off: the last ball on
 // wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS
 // (and the Rust through rust/mg/sumo/gen/consts.rs, which tools/rust.mjs
 // writes from this file); the client imports this file itself.
 export const SU_R0 = 8; // the ring: SU_R0 m plus SU_RK times the root of the balls in, at most SU_RMAX

@@ -5,6 +5,7 @@
 import { newMemory, instantiate, Sim, encodeLog } from '../harness/core.mjs';
 import { View } from '../src/party-view.mjs';
 import { Partier } from '../client/party-bot.mjs';
+import { need, needAll } from '../client/mg/load.mjs';
 import * as L from '../src/layout.mjs';
 
 // A room seed that forces minigame mg (null: the rotation's) and keeps the low bits of seed.
@@ -20,6 +21,8 @@ export const partySeed = (seed, mg = null) => (mg === null || mg === undefined ?
 // (in order), the ticks played, the bots' think time (thinkMs in all, playMs
 // a tick while a round plays).
 export async function playParty({ bytes, seed = 7, mg = null, bots = 16, ticks = 20000, delay = 6, leaveAt = 0, untilRoundOver = false, onTick } = {}) {
+  // in a page (the studio) the balls' sense of each stage is fetched first: the room runs faster than a fetch
+  await (mg === null || mg === undefined ? needAll() : need(mg));
   const memory = newMemory();
   const sim = new Sim(await instantiate(await WebAssembly.compile(bytes), memory), memory);
   const roomSeed = partySeed(seed, mg);

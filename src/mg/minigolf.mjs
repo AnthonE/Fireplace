@@ -11,7 +11,7 @@
 // for PT_CAP + 1. Placed by fewest strokes, a hole not finished counting
 // PT_CAP + 1, ties to whoever holed out first; once half the balls are home
 // the rest have PT_LATE.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const PT_NHMIN = 3; // holes a round, from the seed
 export const PT_NHMAX = 6;

@@ -10,6 +10,7 @@
 // pass, so text stays sharp. A renderer draws its world into `scene` and
 // `depth` (linear: metres ahead over far, 1 the sky) and then calls
 // finish(). Drawing only: nothing here is hashed.
+import { compile } from './pipelines.mjs';
 
 export const SCENE_FORMAT = 'rgba16float';
 export const DEPTH_FORMAT = 'depth32float';
@@ -105,8 +106,9 @@ fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.299, 0.587, 0.114)); }
 `;
 
 // device, the frame's size, the format of what finish() draws into (the
-// canvas's), and far: the metres a depth of 1 stands for.
-export function createPost(device, { W, H, format, far, inkReach = 170, inkStrength = 0.85, bloom = 0.75 }) {
+// canvas's), and far: the metres a depth of 1 stands for. Resolves once its
+// pipelines are compiled (client/pipelines.mjs).
+export async function createPost(device, { W, H, format, far, inkReach = 170, inkStrength = 0.85, bloom = 0.75 }) {
   const module = device.createShaderModule({ code: WGSL });
   const tex = (w, h, f, usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING) => device.createTexture({ size: [w, h], format: f, usage });
   const scene = tex(W, H, SCENE_FORMAT);
@@ -131,15 +133,17 @@ export function createPost(device, { W, H, format, far, inkReach = 170, inkStren
   const comp = device.createBindGroup({ layout: compLayout, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: mips[0].createView() }, { binding: 2, resource: depth.createView() }] });
   const one = device.createPipelineLayout({ bindGroupLayouts: [srcLayout] });
   const two = device.createPipelineLayout({ bindGroupLayouts: [srcLayout, compLayout] });
-  const pipe = (layout, fs, f, blend) => device.createRenderPipeline({
+  const pipe = (layout, fs, f, blend) => ({
     layout, vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: fs, targets: [{ format: f, blend }] }, primitive: { topology: 'triangle-list' },
   });
   const add = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } };
-  const bright = pipe(one, 'fs_bright', SCENE_FORMAT);
-  const down = pipe(one, 'fs_down', SCENE_FORMAT);
-  const up = pipe(one, 'fs_up', SCENE_FORMAT, add);
-  const compPipe = pipe(two, 'fs_comp', 'rgba8unorm');
-  const fxaa = pipe(one, 'fs_fxaa', format);
+  const { bright, down, up, compPipe, fxaa } = await compile(device, {
+    bright: pipe(one, 'fs_bright', SCENE_FORMAT),
+    down: pipe(one, 'fs_down', SCENE_FORMAT),
+    up: pipe(one, 'fs_up', SCENE_FORMAT, add),
+    compPipe: pipe(two, 'fs_comp', 'rgba8unorm'),
+    fxaa: pipe(one, 'fs_fxaa', format),
+  }, (pass, d) => { pass.setBindGroup(0, sceneSrc); if (d.layout === two) pass.setBindGroup(1, comp); });
   const sceneView = scene.createView(), depthView = depth.createView(), ldrView = ldr.createView(), mipViews = mips.map((t) => t.createView());
 
   const full = (enc, view, pipeline, src, loadOp = 'clear', extra = null) => {

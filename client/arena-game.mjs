@@ -19,16 +19,15 @@ import * as AC from '../src/am/consts.mjs';
 import { arenaWord, unpackArena, boxRay, sees } from '../src/arena-view.mjs';
 import { createRenderer, COLS, MAX_RECT, PALETTE, project } from './arena-render.mjs';
 import { ENVS, envOf } from './lowpoly.mjs';
-import { AMC, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/index.mjs';
+import { AMC, need, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/load.mjs';
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { Fighter } from './arena-bot.mjs';
 import { predict, corrector, lagCheck, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
 import { dressesOf } from './dress.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
-import { gunBoxes, carryBoxes } from './viewmodel.mjs';
+import { gunModel, carryModel } from './viewmodel.mjs';
 import { chase, aimPoint, steepAim, zoomStep, startView, mapView, viewOf, viewText, CHASE_NEAR } from './chase.mjs';
 import { drawnTick } from './movers.mjs';
 import { bubbleAt } from './chat.mjs';
@@ -84,13 +83,17 @@ export function clearOf(placed, x, y, half, top, bottom) {
   return best;
 }
 
+// The renderer, made once a page and the host's (client/host.mjs renderer()):
+// by the first mount, or ahead of it, as Fireplace does for the game after the
+// one on, so its pipelines are compiled before the room gets there.
+export const warm = (host, { canvas, present = true }) => host.renderer('arena', () => createRenderer(canvas, { present, device: host.device }));
+
 export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = false, skill = 0.7, sens: SENS = 3, fixed: FIXED = null, present = true, showGraph: graphOn = false, external = false } = {}) {
   // (the host is `host` here: `h` is the match's state, as in the frame below)
   const { u8, i32, u32, f32, f64, view, pview, set, get, press, sound, memory, hashes, keys } = host;
   const WATCH = host.watch || !!FIXED;
   const W = canvas.width, H = canvas.height;
-  const renderer = host.renderers.get('arena') || await createRenderer(canvas, { present, device: host.device });
-  host.renderers.set('arena', renderer);
+  const renderer = await warm(host, { canvas, present });
   // the HUD's frame (client/lowpoly.mjs hudFrame): its 320 x 200 units to screen px, and a rect in them
   const HS = renderer.hudScale, ux = (x) => renderer.hudX + x * HS, uy = (y) => renderer.hudY + y * HS;
   const urect = (x0, y0, x1, y1, r, g, b, a = 1) => [ux(x0), uy(y0), ux(x1), uy(y1), r, g, b, a];
@@ -142,7 +145,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else if (BOT) {
-    if (!external) bot = new Fighter(0, (Math.random() * 1e9) | 0, skill);
+    if (!external) bot = new (await import('./arena-bot.mjs')).Fighter(0, (Math.random() * 1e9) | 0, skill); // loaded only for ?bot=1
     on(document, 'keydown', (e) => {
       if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); }
       if (e.code === 'KeyN' && !e.repeat) showGraph = !showGraph;
@@ -625,7 +628,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
 
     // the team mode's objective: its sprites, glows and beams ahead of everything else's, its waypoints and zone
     const md = view.mode();
-    const kit = AMC[md.mode];
+    const kit = AMC[md.mode] || (need(md.mode), undefined); // a kit mode's module, once it has arrived (client/am/load.mjs)
     if (touchFor && st >= 1 && !!kit?.unarmed !== touchBare) { touchBare = !touchBare; touchFor(touchBare); }
     const out = { solid: [], glow: [], beams: [], markers: [], zone: null, storm: null };
     const playT = h.state === L.H_PLAY ? (h.tick - h.start) * 0.008 + dt : 0;
@@ -687,8 +690,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       const moving = Math.hypot(f.vel[0], f.vel[2]) > 1 && f.ground;
       // a carrier's hands hold what its kit module carries (a flag in the colour of the side it was taken from)
       if (!WATCH && !f.dead && !f.down && !chasing) {
-        inHand = f.carry ? carryBoxes(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], handMotion(now, moving))
-          : gunBoxes(f.weapon, handMotion(now, moving, f.weapon), now - lastShotAt < 50 && f.weapon !== L.W_SWORD);
+        inHand = f.carry ? carryModel(kit?.carry, SIDE_RGB[f.team === 0 ? 1 : 0], handMotion(now, moving))
+          : gunModel(f.weapon, handMotion(now, moving, f.weapon), now - lastShotAt < 50 && f.weapon !== L.W_SWORD);
       }
       // (a mode with nothing to shoot or be shot by, kit.unarmed, has no bars and no tracker: an obby's HUD is its own)
       if (!f.dead && !kit?.unarmed) { const hr = hudRects(f, now); rects.push(...hr.rects); blips = hr.blips; tracker = hr.tracker; }

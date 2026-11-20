@@ -9,7 +9,7 @@
 // carries a ball in the air on or holds it back. LJ_BACK after a landing or a
 // splash the ball is back on its runway's start deck to go again. The best
 // jump wins, in centimetres (PG_SCORE).
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const LJ_LEN = 11250; // 90 s
 // The runways: one for every LJ_PER balls in, LJ_NLMIN to LJ_NLMAX of them,

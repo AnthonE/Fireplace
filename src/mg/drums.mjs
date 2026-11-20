@@ -5,7 +5,7 @@
 // toward a gap unless it rolls against the spin. Slots (cells of the drums'
 // slats) open as the round goes and go round with their drum: one coming
 // under a ball drops it in. The last ball on a drum wins.
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const DR_LEN = 11250; // 90 s
 // The drums: shells DR_R m in radius, a ball's centre DR_RC from the axis

@@ -9,7 +9,8 @@
 //             its constants <PREFIX>_*
 //     NAME    what the title card says: capitals, digits, spaces (the 3x5 font), 20 at most
 // Writes src/mg/<key>.wat and .mjs, client/mg/<key>.mjs, test/mg-<key>.test.mjs;
-// edits src/layout.mjs, src/party.wat, client/mg/index.mjs, test/party.test.mjs.
+// edits src/layout.mjs, src/mg/consts.mjs, src/party.wat, client/mg/index.mjs,
+// test/party.test.mjs.
 // --rust writes the rules in Rust instead (rust/mg/<key>/, docs/rust.md), the
 // same sumo ring, and src/mg/<key>.wat from it with tools/rust.mjs (cargo).
 // Appending keeps every other minigame's id, so their logs and seeds still mean
@@ -18,12 +19,13 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMain } from './main.mjs';
+import { MG_CONSTS } from '../src/mg/consts.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // The edits to the files that list every minigame, each found by its anchor;
 // one that moved stops the tool before it writes anything.
-export function plan(key, prefix, name, { root = ROOT, layout, rust = false } = {}) {
+export function plan(key, prefix, name, { root = ROOT, layout, mgConsts = MG_CONSTS, rust = false } = {}) {
   const P = prefix.toUpperCase();
   const K = key.toUpperCase();
   const read = (f) => readFileSync(join(root, f), 'utf8');
@@ -35,7 +37,7 @@ export function plan(key, prefix, name, { root = ROOT, layout, rust = false } = 
   if (L.MINIGAMES.some((m) => m.prefix === prefix)) throw new Error(`${L.MINIGAMES.find((m) => m.prefix === prefix).key} has the prefix ${prefix}`);
   if (L.MINIGAMES.some((m) => m.name === name)) throw new Error(`a minigame is already called ${name}`);
   // the assembler spreads the arena's and flight's constants over the minigames', so a name of theirs wins silently
-  if ([L, L.MG_CONSTS, L.AM_CONSTS || {}, L.FLIGHT_CONSTS || {}].some((o) => Object.keys(o).some((k) => k.startsWith(`${P}_`)))) throw new Error(`names starting ${P}_ are taken: pick another prefix`);
+  if ([L, mgConsts, L.AM_CONSTS || {}, L.FLIGHT_CONSTS || {}].some((o) => Object.keys(o).some((k) => k.startsWith(`${P}_`)))) throw new Error(`names starting ${P}_ are taken: pick another prefix`);
   if (`MG_${K}` in L) throw new Error(`MG_${K} is taken`);
   for (const f of [`src/mg/${key}.wat`, `src/mg/${key}.mjs`, `client/mg/${key}.mjs`, `test/mg-${key}.test.mjs`, `rust/mg/${key}`]) if (existsSync(join(root, f))) throw new Error(`${f} is there already`);
   const id = L.NMG;
@@ -54,13 +56,14 @@ export function plan(key, prefix, name, { root = ROOT, layout, rust = false } = 
     if (!all) throw new Error(`${file}: no line like ${re}; add the minigame by hand (CONTRIBUTING.md)`);
     return all.at(-1);
   };
-  // src/layout.mjs: the list, the id, the count, the constants
+  // src/layout.mjs: the list, the id, the count
   edit('src/layout.mjs', `]; // index = MG_*`, `  { key: '${key}', prefix: '${prefix}', name: '${name}' },\n]; // index = MG_*`);
   edit('src/layout.mjs', `export const NMG = ${id};`, `export const MG_${K} = ${id};\nexport const NMG = ${id + 1};`);
-  const imp = lastLine('src/layout.mjs', /^import \* as mg_\w+ from '\.\/mg\/\w+\.mjs';$/gm);
-  edit('src/layout.mjs', `${imp}\n`, `${imp}\nimport * as mg_${key} from './mg/${key}.mjs';\n`);
-  const consts = lastLine('src/layout.mjs', /^export const MG_CONSTS = Object\.freeze\(Object\.assign\(\{\}, [^\n]*\)\);$/gm);
-  edit('src/layout.mjs', consts, consts.replace(/\)\);$/, `, mg_${key}));`));
+  // src/mg/consts.mjs: the constants, for the assembler
+  const imp = lastLine('src/mg/consts.mjs', /^import \* as mg_\w+ from '\.\/\w+\.mjs';$/gm);
+  edit('src/mg/consts.mjs', `${imp}\n`, `${imp}\nimport * as mg_${key} from './${key}.mjs';\n`);
+  const consts = lastLine('src/mg/consts.mjs', /^export const MG_CONSTS = Object\.freeze\(Object\.assign\(\{\}, [^\n]*\)\);$/gm);
+  edit('src/mg/consts.mjs', consts, consts.replace(/\)\);$/, `, mg_${key}));`));
   // src/party.wat: its hooks
   const inc = lastLine('src/party.wat', /^#include "mg\/\w+\.wat"$/gm);
   edit('src/party.wat', `${inc}\n`, `${inc}\n#include "mg/${key}.wat"\n`);
@@ -86,7 +89,7 @@ export function plan(key, prefix, name, { root = ROOT, layout, rust = false } = 
 const constantsFile = (key, P, name, id, FX_MG) => `// ${name} (MG_${key.toUpperCase()}, prefix ${P.toLowerCase()}): a round platform over the sea,
 // sized for the crowd; bump the others off, and the last ball on it wins.
 // (node tools/new-mg.mjs wrote this as a start: say here what your minigame is.)
-// Literal numbers only: the sim reads them through layout.mjs's MG_CONSTS,
+// Literal numbers only: the sim reads them through consts.mjs's MG_CONSTS,
 // the client imports this file itself.
 export const ${P}_R0 = 12; // the platform: ${P}_R0 m plus ${P}_RK times the root of the balls in, at most ${P}_RMAX
 export const ${P}_RK = 4.5;

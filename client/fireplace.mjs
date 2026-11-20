@@ -5,7 +5,9 @@
 // then it closes in again. One host (client/host.mjs) on Fireplace's sim,
 // every game's frontend mounted in turn on its own canvas (golf, the arena,
 // party, Dogfight); while the room is in view, the game draws into a
-// texture the TV shows. B, H and P, while the room is in view, change your
+// texture the TV shows. The game after the one on is made ready while this
+// one plays (warmNext: its renderer, its pipelines compiled), so a switch
+// finds it there. B, H and P, while the room is in view, change your
 // ball, hat and body (client/looks.mjs), which everyone in the room sees; L
 // lists your achievements (client/achievements.mjs). Both are kept in this
 // browser. The wardrobe (client/wardrobe.mjs) is the same keys as a panel to
@@ -26,8 +28,6 @@ import { createHost, epoch, netStats } from './host.mjs';
 import { phonePage } from './mobile.mjs';
 import { createRoom, SCREEN, COUCH, cardText, cardFire } from './room-render.mjs';
 import { loadTheme, themeList, savedTheme, saveTheme, FALLBACK, DEFAULT } from './themes.mjs';
-import { Guest } from './fireplace-bot.mjs';
-import { GOLFER } from './brain.mjs';
 import { readClock } from './clock.mjs';
 import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, lookName, lookId } from './looks.mjs';
 import { drawLook } from './figure.mjs';
@@ -97,6 +97,8 @@ async function main() {
   const theme = await loadTheme(q.get('theme') || savedTheme() || DEFAULT).catch((e) => { console.warn(e.message); return FALLBACK; });
   const room = await createRoom(roomCanvas, host.device, { present: q.get('present') !== '0', theme });
   let tvTex = canvases.map((c) => c && room.tvTexture(c.width, c.height));
+  // the guest's brains, every game's bot and through Party's every minigame's sense of its stage, load only for ?bot=1
+  const [{ Guest }, { GOLFER }] = BOT ? await Promise.all([import('./fireplace-bot.mjs'), import('./brain.mjs')]) : [{}, {}];
   const guest = BOT ? new Guest(0, (Math.random() * 1e9) | 0, Number(q.get('skill') || 0.8), GOLFER) : null;
 
   // ---- your look, your achievements and your purse, kept in this browser; a guest at the controls or a spectator keeps none
@@ -201,17 +203,40 @@ async function main() {
   }
 
   // the game the room is on, mounted on its own canvas; the last one put away
+  const mountOpts = (g) => ({ canvas: canvases[g], lockTarget: stage, bot: BOT, external: BOT, sens: SENS, present: q.get('present') !== '0' });
+  // what each mount cost, for the gates (__qa.state().mounts): ms on the page's clock when the page saw the
+  // game change, ms until its frontend was mounted, and ms until the GPU had drawn its first frame for the TV
+  const mounts = [];
+  let unseen = null; // the mount whose first frame is still to be drawn
   async function mountGame(g) {
     if (mounting) return;
     mounting = (async () => {
+      const m = { game: g, at: Math.round(performance.now()), mountMs: null, firstFrameMs: null };
       frontend?.unmount();
       frontend = null;
       const { mount } = await import(FRONTENDS[g]);
-      frontend = await mount(host, { canvas: canvases[g], lockTarget: stage, bot: BOT, external: BOT, sens: SENS, present: q.get('present') !== '0' });
+      frontend = await mount(host, mountOpts(g));
       game = g;
       gamesSeen++;
+      m.mountMs = Math.round(performance.now() - m.at);
+      mounts.push(unseen = m);
     })();
     try { await mounting; } finally { mounting = null; }
+  }
+  // The game after this one, made ready before the room gets there (the
+  // playlist goes by position, so it is known from this one's first tick):
+  // its frontend's modules fetched and its renderer made (the frontend's
+  // warm(), on the host: client/host.mjs renderer()), its pipelines compiled
+  // on the GPU process's worker threads (client/pipelines.mjs) while this
+  // game plays. mountGame then finds the renderer there, or waits for the
+  // same one. Once a game. One that fails is left to its mount, which tries
+  // again and says why.
+  let warmed = -1;
+  function warmNext() {
+    const next = nextGame();
+    if (next === warmed) return;
+    warmed = next;
+    import(FRONTENDS[next]).then(({ warm }) => warm(host, mountOpts(next))).catch((e) => console.warn(`${L.GAMES[next]} was not made ready: ${e?.message || e}`));
   }
 
   // a phone's window at another size: the room and the TV's pictures at it, the game put away to be mounted
@@ -227,8 +252,10 @@ async function main() {
     frontend?.unmount();
     frontend = null;
     game = -1;
-    for (const r of host.renderers.values()) r.destroy?.();
+    // each kept as the promise of it (client/host.mjs renderer()); the next game is made ready again at the new size
+    for (const r of host.renderers.values()) Promise.resolve(r).then((x) => x?.destroy?.(), () => {});
     host.renderers.clear();
+    warmed = -1;
   });
 
   // ---- the guest at the controls (?bot=1): its word into the slots, as keys and a mouse would
@@ -422,10 +449,30 @@ async function main() {
   // ---- the frame
   let crackleAt = 0;
   let flick = 1;
+  // The game on the TV is a frame of the game's own, drawn into its texture
+  // each time the room is. Nothing paced those but the page's frames (with
+  // ?present=0 nothing is shown, so nothing waits to be), and a GPU that
+  // draws one slower than they come was sent them all the same: SwiftShader
+  // takes 0.27 s over one of golf's at 320 x 200, a 6 s hold sent it 360,
+  // and party's first frame was drawn 87 s after the room got there. So the
+  // TV waits for the GPU: no new frame while TV_AHEAD are still to be drawn.
+  // A film asks for each frame and waits for it, so it skips none.
+  const TV_AHEAD = 3;
+  let tvAhead = 0;
+  function tvFrame(now) {
+    if (tvAhead >= TV_AHEAD && !FILM) return;
+    frontend.frame(now, tvTex[game]);
+    tvAhead++;
+    const first = unseen;
+    unseen = null;
+    const drawn = () => { tvAhead--; if (first) first.firstFrameMs = Math.round(performance.now() - first.at); };
+    host.device.queue.onSubmittedWorkDone().then(drawn, drawn);
+  }
   function frame(now) {
     if (!FILM) requestAnimationFrame(frame);
     phone.frame(now);
     const st = get(L.CL_STATE);
+    const seq = get(L.CL_SEQ);
     const g = view.dv.getUint32(L.FP_GAME, true);
     const held = view.dv.getUint32(L.FP_STAGE, true) === 1;
     if (held) tallyUp();
@@ -438,7 +485,12 @@ async function main() {
       if (!q.has('look') && KEEP && w !== look) wear(w);
       if (!q.has('dress') && KEEP && d !== dress) wearDress(d);
     }
-    if (st >= 1 && g !== game && !mounting) mountGame(g);
+    // The game on is read once the room's world is in (its first keyframe: until then the sim holds the seed's
+    // opening game, which the room may be long past) and not while the sim worker is changing it (CL_SEQ odd, or
+    // moved on: a world laid out again from its seed has its header wiped first, and a frame that landed there
+    // read game 0 and mounted golf, renderer and all, ahead of the game the room was in)
+    const steady = get(L.CL_KEYS) > 0 && !(seq & 1) && get(L.CL_SEQ) === seq;
+    if (st >= 1 && steady && g !== game && !mounting) mountGame(g);
     drive();
     showLine(!(scene === 'in' && zoom >= 0.999));
     wardrobe?.frame(!(scene === 'in' && zoom >= 0.999) && !document.pointerLockElement, scene === 'couch', now);
@@ -459,11 +511,13 @@ async function main() {
     if (inside && frontend) {
       show(canvases[game]);
       frontend.frame(now);
+      // through the glass and playing: the game after this one is made ready meanwhile
+      if (steady && st === 2 && game === g) warmNext();
       last = null;
       return;
     }
     // the room, the game (or a card) on the TV
-    if (frontend && game === g) frontend.frame(now, tvTex[game]);
+    if (frontend && game === g) tvFrame(now);
     const kind = now - listAt < LIST_MS ? 'list' : now - lookAt < LOOK_MS ? 'look' : scene === 'couch' ? 'title' : scene === 'tuning' ? 'tuning' : 'standings';
     if (cardMix > 0.01 || scene === 'couch' || scene === 'tuning') { drawCard(kind, now); room.updateCard(); card = kind; }
     show(roomCanvas);
@@ -484,7 +538,7 @@ async function main() {
     state: () => {
       const g = view.dv.getUint32(L.FP_GAME, true);
       const slot = get(L.CL_SLOT);
-      return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), mg: g === L.G_PARTY ? L.MINIGAMES[view.dv.getUint32(L.PG_GAME, true)]?.name ?? null : null, state: view.hole().state, scene, zoom, games: gamesSeen,
+      return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), mg: g === L.G_PARTY ? L.MINIGAMES[view.dv.getUint32(L.PG_GAME, true)]?.name ?? null : null, state: view.hole().state, scene, zoom, games: gamesSeen, mounts,
         mallows: slot >= 0 ? view.dv.getUint16(L.FP_MALLOWS + 2 * slot, true) : 0, card, me: frontend?.state?.().me ?? null,
         look, achievements: Object.keys(tally.got), opened, purse: { balance: balance(tally, purse), owned: Object.keys(purse.owned) },
         pool: { ...pool, local: !!host.local }, transport: host.transport, net: netStats(host),

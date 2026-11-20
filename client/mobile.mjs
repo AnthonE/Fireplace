@@ -153,7 +153,8 @@ export async function fitted(h, phone, { canvas, key, mount }) {
       game.unmount();
       const r = h.renderers.get(key);
       h.renderers.delete(key);
-      r?.destroy?.();
+      // (kept as the promise of it: client/host.mjs renderer())
+      Promise.resolve(r).then((x) => x?.destroy?.(), () => {});
       [canvas.width, canvas.height] = [w, hh];
       game = await mount();
     } finally { busy = false; }
