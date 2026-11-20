@@ -14,7 +14,8 @@ once a fifth, is party's SWISS ROLL now; `BUMPER` is never set without
 `docs/<game>.md` (golf, arena, flight, party, fireplace) and
 `docs/netcode.md`: read the one for whatever you touch. `docs/wire.md` is
 the protocol for writing a client, `docs/hosting.md` the room pool
-(`net/rooms.mjs`), and `docs/roadmap.md` the plan for what comes next.
+(`net/rooms.mjs`), `docs/roadmap.md` the plan for what comes next, and
+`docs/coin.md` the game's coin, ready to create on pump.fun and not created.
 
 ## Commands
 
@@ -26,9 +27,11 @@ node --test test/party.test.mjs      # one file
 node harness/matrix.mjs --ticks 20000 --log logs/x.qgl --wasm build/<sim>/game.wasm   # Node, Deno, Chrome x JIT tiers x 1/2/4 threads
 node net/play.mjs [--arena [--mode k] | --flight [--mode k] | --party [--mg k] | --fireplace] [--bots N]   # relay + page + bots; open the URL it prints
 node net/run-arena.mjs / run-flight.mjs / run-party.mjs / run-fireplace.mjs / run-chat.mjs / run-n1.mjs ...   # online gates: relay, bot host, headless Chrome, every hash checked
+node net/run-arena.mjs --impair wifi --bot-impair wifi   # the same over net/impair.js's home Wi-Fi (fades, stalls); the report has each page's late words, freezes, corrections
 node net/rooms.mjs net/rooms.example.json   # the room pool: one relay per room, opened and closed as players need
 node tools/film.mjs record | plan | shoot   # the trailer, filmed from a replay (film/*.json are the cut lists)
 node net/run-pages.mjs                      # the GitHub Pages site (tools/site.mjs) with no isolation headers: coi.js, a local room
+node net/run-touch.mjs [--device "iPhone 14 landscape"]   # every page played with fingers (CDP touch) as a phone has it; the page put away and back
 node net/kit-rooms.mjs net/kit-rooms.example.json   # rooms on demand for the kit's copies, each on its own wasm; node net/run-kit-rooms.mjs is its gate
 node tools/kit.mjs init "<Game Name>"       # a copy made from this template takes its game's name (refuses this repo)
 node tools/serve.mjs                        # then /client/map-editor.html: draw a map into maps/<name>/
@@ -41,6 +44,8 @@ node tools/serve.mjs                        # then /client/games.html: the shelf
 node tools/shelf.mjs [--only id,id] [--lines]   # the shelf's pictures (client/shelf/<id>.webp, each tile's own page shot with no GPU) and index.json; packs maps/ into build/maps/
 node tools/board.mjs look                   # the reference board (board/board.json): every view shot with no GPU beside its refs and the operator's marks, on one sheet (docs/look.md)
 node tools/arena-shot.mjs [--views track,ships] [--scenes figures,faces [--env night]]   # the arena's and Dogfight's views of it alone (a local room on a fixed seed), or the arena renderer's demo page with no sim, into traces/
+node tools/coin.mjs [--check] [--pick a|b|c]   # the coin's sheet (coin/fireplace.json) held to pump.fun's create form, and its pictures drawn into coin/art/ (docs/coin.md)
+node tools/shop.mjs [--payer W | --coin MINT --cap N] [--write]   # the shop's prices, and opening it or moving it to the coin (coin/shop.json, elo.json); node tools/shop-shots.mjs draws its pictures into coin/art/items/
 ```
 
 Logs for the matrix come from `tools/genlog.mjs`, `gengame.mjs`,
@@ -191,7 +196,11 @@ shell whose own command line contains the name: it kills that shell.
   area is cleared first, so two maps never mix.
 - Inputs are one u32 word per player per tick (golf's layout in
   `src/view.mjs`; the arena's in `arena-view.mjs`; party reuses golf's).
-  Keep fields that rarely change still: wire v4 codes deltas.
+  Keep fields that rarely change still: wire v4 codes deltas. A word that
+  comes too late is closed as the slot's last one repeated, and the relay
+  marks the ticks a slot's words turn into repeats and back (`EV_LATE`,
+  `EV_ONTIME`): a field spread over several ticks (the arena's frame) must
+  drop what a repeat fell in (`AL_STALE`) and be sent again (`FrameLog`).
 
 ## Clients
 
@@ -211,6 +220,18 @@ shell whose own command line contains the name: it kills that shell.
   without a module for the frames before it arrives. Outside a page the
   registries are whole from the start, so a bot's words stay a function of
   its seed and the world.
+- On a phone (a coarse pointer, `?touch=1`) a frontend's input is
+  `client/touch.mjs`: a stick into its own held keys, a drag into its own
+  mouse look, buttons named for what they do and shown while they do it
+  (`show`, `label` and `lit` read the world a few times a second, as the HUD
+  does, and change nothing in it), so a frontend's TOUCH path writes the same
+  input slots its keys do. A HUD
+  line that names a key or the mouse says it a phone's way there
+  (`touchWords`). `client/mobile.mjs` is the page's half: held still, the
+  whole screen and the wake lock on the first touch, the upright card, and
+  `fitted`/`refit`, which mount a frontend again on a fresh renderer when the
+  window settles at another size (renderers take their size once, at
+  creation; `destroy()` frees it). `net/run-touch.mjs` is its gate.
 - The room is a relay's (`client/net.mjs`; `client/transport.mjs` opens its
   WebTransport, or where the browser has none, or with `?ws=1`, the relay's
   WebSocket door, `--ws-port`, found by `client/kit.mjs` `wsDoor`): one named, or on a copy's
@@ -251,8 +272,9 @@ shell whose own command line contains the name: it kills that shell.
   Golf's, the arena's and Dogfight's share a cartoon's look (docs/look.md):
   `client/lowpoly.mjs` is the paint (three tones through `cel`/`light`, the
   hills' shadows, the sky, what glows), `client/figure.mjs` the person
-  (the arena's fighter, golf's golfer: a distance field, dressed by each
-  renderer's `kitOf`), `client/post.mjs` the finish (ink from depth,
+  (the arena's fighter, golf's golfer, and party's rider too, in party's own
+  light: a distance field, dressed by each renderer's `kitOf`, party's from
+  JS), `client/post.mjs` the finish (ink from depth,
   bloom, FXAA). The hour (day, dusk, night) is a uniform, `env`: a
   renderer's WGSL names the light as `SUN`, `TONE_LIT`, `HAZE`... and goes
   through `withEnv()`; a match's hour is its seed's (`envOf`), drawing only. Their world's pipelines draw into the post's float texture,
@@ -266,12 +288,20 @@ shell whose own command line contains the name: it kills that shell.
   Grandma's writes out every default. A new colour goes in `COLORS`, the
   shader and CONTRIBUTING.md's table (`test/themes.test.mjs` checks all
   three); `elo.json`'s mods are written from the themes (`node tools/elo.mjs`).
-- A player's look (`client/looks.mjs`: a ball, a hat and a body) is drawing
-  only: the relay carries each slot's word beside the ticks (hello flag 4,
-  `T_LOOK`), never in a tick, record or hash. The lists are append-only (a look's number
-  goes on the wire); look 0 draws exactly as the riders always have, and a new
-  pattern or hat style goes in party's shader (`test/looks.test.mjs`
-  checks). Achievements (`client/achievements.mjs`)
+- A player's look (`client/looks.mjs`: a ball, a hat and a body) and dress
+  (`client/dress.mjs`: a worn face, a shirt's print, a back item) are drawing
+  only: the relay carries each slot's words beside the ticks (hello flag 4,
+  `T_LOOK`, the dress in its spare bytes and `T_DRESS`), never in a tick,
+  record or hash. Every game draws a player as one cartoon figure
+  (`client/figure.mjs`): party's rider on its ball (`client/rider.mjs`, sprite
+  kind 13, its record in `figs`), the arena's fighter, golf's golfer, the
+  cards' (`drawLook`, 2D). It wears them through `WEAR_WGSL` and `kitOf`, so a
+  new piece is drawn in `figureRay` and on the cards. The lists are
+  append-only (a look's number goes on the wire); the house ball draws exactly
+  as the balls always have, and a new pattern goes in party's shader
+  (`lookBall`; `test/looks.test.mjs` and `test/figure.test.mjs` check). The
+  riding (`act`, `air`, `jolt`, `lean` in the `Kit`) is 0 in the arena and
+  golf, which then draw as they always have. Achievements (`client/achievements.mjs`)
   test results read from the confirmed world while a game's end is held, and
   are kept in the browser, like the look.
 - A look may have a `price` in marshmallows in place of an `unlock`: the
@@ -292,6 +322,23 @@ shell whose own command line contains the name: it kills that shell.
   (`test/chat.test.mjs` checks).
 - `elo.json` is Fireplace's manifest for its Elo Pros store row (jobs, mods);
   CONTRIBUTING.md is the outside contributor's guide, pay included.
+- The coin (`docs/coin.md`) is outside every sim, like a look: no tick,
+  record or hash knows it. `coin/fireplace.json` is what pump.fun's create
+  form is typed from, in the shape of Elo Pros' launch kit, and its name,
+  ticker, description, picture and links are welded at the create, so they
+  change there first or never; `tools/coin.mjs` checks it and draws
+  `coin/art/` (`test/coin.test.mjs` holds the doc to the sheet). What a daily
+  pot pays on is the challenges' pool, `CHALLENGES` in
+  `client/achievements.mjs`, written into `elo.json` with the stats and
+  append-only like the achievements. The amounts are the house's: no text
+  here, a description or a challenge, names one. Tickers are bare, no `$`.
+  The priced looks and dress pieces are also the shop's items (`client/shop.mjs`,
+  `docs/coin.md#skins`): a look's key is its item's key, its place in
+  `BADGE_ITEMS` (`net/wire.mjs`, append-only) its bit in a badge word, and
+  `elo.json`'s `economy` is written from that table by `tools/elo.mjs` for
+  Fireplace's own manifest only, and only once `coin/shop.json` names the
+  wallet that is paid (`tools/shop.mjs`); give a piece a `price` and it needs a
+  tier there (`test/shop.test.mjs`).
 
 ## Style
 

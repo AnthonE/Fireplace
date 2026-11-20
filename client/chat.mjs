@@ -27,7 +27,7 @@
 import { CHAT } from '../net/wire.mjs';
 import { cleanLine, bubbleLines, chatBucket, CHAT_MAX, CHAT_PER_S, CHAT_BURST } from '../net/chat.mjs';
 import { slotColor } from './looks.mjs';
-import { touchWanted, touchButton } from './touch.mjs';
+import { touchWanted, touchButton, CHAT_SPOT } from './touch.mjs';
 
 export const CHAT_KEY = 'Slash';
 const LINES = 6; // lines the log holds
@@ -144,7 +144,7 @@ export function createChat({ q = new URLSearchParams(), send = () => {}, label =
   };
 
   const TOUCH = touchWanted(q);
-  const chatBtn = TOUCH ? touchButton('CHAT', () => { if (typing) close(); else open(); }, { left: '12px', top: '64px', width: '48px', height: '48px', fontSize: '11px' }) : null;
+  const chatBtn = TOUCH ? touchButton('CHAT', () => { if (typing) close(); else open(); }, CHAT_SPOT) : null;
   if (chatBtn) chatBtn.hidden = true;
 
   // the relay's messages, as the net worker hands them on: { kind, slot, text }

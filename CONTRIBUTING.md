@@ -209,8 +209,9 @@ never in it, so a look can't desync a room either. Each is one entry in
 - a hat: a `key`, a `name`, one of the styles (`CAP`, `BEANIE`, `BAND`,
   `HELMET`, `NONE`, `PUMPKIN`, `CROWN`, `TOPHAT`, `CONE`, `HALO`, `ANTLERS`,
   `PHONES`, `PROP`) and its `color`;
-- a body: a `key`, a `name`, `blocky: true`, its `skin` (the arms and head)
-  and its `face` (1 a smile, 4 a robot's; `client/rider.mjs` `PART`).
+- a body: a `key`, a `name`, its `skin` (the arms and head) and its `face`
+  (1 a person's, 4 a robot's: a box for a head, a visor).
+  Every game draws it on the one cartoon figure (`client/figure.mjs`).
 
 Add it at the end of its list: a look's number is its place in the list, and
 that number is what goes over the network. `unlock: '<achievement id>'` makes
@@ -222,19 +223,17 @@ three of a game win 3, 2 and 1, so 10 is a couple of good games and 100 is
 thirty-odd wins.
 
 ```sh
-node tools/serve.mjs     # then /client/party-render-demo.html?scene=wardrobe: every ball and hat, rolling; ?scene=shop: the priced ones, close; ?scene=blocky, ?scene=outfits: the bodies
+node tools/serve.mjs     # then /client/party-render-demo.html?scene=wardrobe: every ball and hat, rolling; ?scene=shop: the priced ones, close; ?scene=bodies, ?scene=outfits: the bodies
 node tools/party-shot.mjs --scenes wardrobe,shop,outfits   # the same as PNGs in traces/, with no GPU
 node --test test/looks.test.mjs test/rider.test.mjs test/purse.test.mjs
 ```
 
-A new pattern or hat style is code: a case in the ball's or the head's
-shader, in `client/party-render.mjs` (`lookBall`, `lookHat`), and the test
-checks it has it. On a blocky body
-a hat is boxes, in `rider()` in `client/rider.mjs`; a hat that stands off the
-head (a top hat, antlers) is boxes on the round rider too (`standing`, there),
-with only its foot painted in `lookHat`. The TV's cards and the wardrobe's
-tiles draw a look flat, in `drawLook` in `client/looks.mjs`: give the new
-pattern or style a few rectangles there.
+A new pattern or hat style is code: a pattern is a case in the ball's
+shader, `lookBall` in `client/party-render.mjs`; a hat style is a case in the
+figure's `fgHat` and its colours in `figureRay` (`client/figure.mjs`), which
+every game's renderer marches, and the tests check both. The TV's cards and
+the wardrobe's tiles draw a look flat, in `drawLook` in `client/figure.mjs`:
+give the new pattern or style a few shapes there (`drawBall`, `drawHat`).
 
 ## A map
 

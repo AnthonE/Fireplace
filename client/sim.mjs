@@ -34,7 +34,7 @@ async function run({ module, memory, netPort, threads = 1 }) {
   let welcome = null;
   let started = false; // the join's keyframe is in
   let newest = -1;
-  let keys = 0;
+  let keys = Atomics.load(i32, L.CL_KEYS >> 2); // on from a session before this one's (client/host.mjs rejoin), so the frontends see a new one
   let syncAt = -1e9; // the last keyframe asked for
   let filling = false; // a keyframe is in and its fill isn't yet
   const digests = new Map(); // interval (sim tick) -> its 128 slice digests, the newest few
@@ -95,6 +95,10 @@ async function run({ module, memory, netPort, threads = 1 }) {
   }
 
   const hashes = []; // interval hashes closed since the last post, for the runs
+  // Freezes: the world further behind the playout clock than a frontend
+  // extrapolates it, with the next tick missing (a hole waiting on its repair,
+  // or nothing here yet), counted once it has first caught up after the join.
+  let caught = false, frozen = false, frozenMs = 0, lastLoop = epoch();
   function loop() {
     const now = epoch();
     const play = readClock(i32, f64, L.CL_PLAY, now);
@@ -131,6 +135,13 @@ async function run({ module, memory, netPort, threads = 1 }) {
         self.postMessage({ sync: why, next, newest, after, behind: target - k });
       }
     }
+    const behind = play - next;
+    if (behind <= L.FREEZE_TICKS) caught = true;
+    const stuck = caught && behind > L.FREEZE_TICKS && !store.has(next);
+    if (stuck && !frozen) Atomics.add(i32, L.CL_FREEZES >> 2, 1);
+    if (stuck) { frozenMs += now - lastLoop; set(L.CL_FROZEN, Math.round(frozenMs)); }
+    frozen = stuck;
+    lastLoop = now;
     set(L.CL_QUEUED, store.size);
     set(L.CL_STATE, target - k > 16 ? 1 : 2);
     setTimeout(loop, k < target && store.has(welcome.roomStart + k) ? 0 : 1);

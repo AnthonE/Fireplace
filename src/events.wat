@@ -14,7 +14,12 @@
     (if (i32.eq (local.get $kind) (i32.const @EV_EXPLODE_BALL)) (then (call $ev_explode_ball (local.get $r))))
     (if (i32.eq (local.get $kind) (i32.const @EV_INPUT)) (then (call $ev_input (local.get $r))))
     (if (i32.eq (local.get $kind) (i32.const @EV_JOIN)) (then (call $ev_join (local.get $r))))
-    (if (i32.eq (local.get $kind) (i32.const @EV_LEAVE)) (then (call $ev_leave (local.get $r)))))
+    (if (i32.eq (local.get $kind) (i32.const @EV_LEAVE)) (then (call $ev_leave (local.get $r))))
+#if ARENA
+    (if (i32.eq (local.get $kind) (i32.const @EV_LATE)) (then (call $a_late (local.get $r) (i32.const 1))))
+    (if (i32.eq (local.get $kind) (i32.const @EV_ONTIME)) (then (call $a_late (local.get $r) (i32.const 0))))
+#endif
+    )
   (i32.store (i32.const @INBOX) (i32.const 0)))
 
 ;; A live player's input word for this tick; it stays until the next one.

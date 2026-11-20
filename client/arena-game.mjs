@@ -23,8 +23,9 @@ import { AMC, need, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/load.mjs
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { predict, corrector, capturePng, listeners } from './host.mjs';
+import { predict, corrector, lagCheck, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
+import { dressesOf } from './dress.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 import { gunModel, carryModel } from './viewmodel.mjs';
 import { chase, aimPoint, steepAim, zoomStep, startView, mapView, viewOf, viewText, CHASE_NEAR } from './chase.mjs';
@@ -110,6 +111,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const aim = () => { set(L.CL_YAW, Math.round(yaw) & 0x3fff); set(L.CL_PITCH, Math.round(pitch)); };
   const swap = (s) => { if (s !== slotOut) { sound.weapon(); zoomed = false; } slotOut = s; set(L.CL_WEAPON, s); };
   let locked = document.pointerLockElement === lockTarget;
+  // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+  const TOUCH = !WATCH && !BOT && touchWanted(host.q);
   let touch = null; // the touch controls, on a phone
   let touchFor = null, touchBare = false; // how they are made, and whether the ones up are an unarmed mode's
   // the view: how far behind your fighter the camera is asked to sit (0 first person) and the last third-person
@@ -149,8 +152,6 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
-    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
-    const TOUCH = touchWanted(host.q);
     if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
@@ -202,19 +203,29 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); trigger = false; set(L.CL_AUTO, 0); });
-    // (unarmed, kit.unarmed: the thumb's button is the jump, and there is nothing else to press)
+    // The buttons, each there while it does something for my fighter as predicted: the frag while I have one, the
+    // swap with a second gun, PICK UP on a pad with a gun I don't carry (E's, the arena's one use). The board and the
+    // view are small ones down the left edge, the board a switch. (unarmed, kit.unarmed: the thumb's button is the
+    // jump, and there is nothing else to press.)
+    const mine = () => { const f = pme || me; return f && f.live && !f.dead ? f : null; };
+    const armed = () => !!mine() && !mine().carry;
+    const other = (f) => (f.gun[f.hand ^ 1] !== f.weapon ? ARMS[f.gun[f.hand ^ 1]] : null);
+    const board = { label: 'BOARD', small: true, aim: false, lit: () => held.has('Tab'), tap: () => { if (held.has('Tab')) held.delete('Tab'); else held.add('Tab'); } };
+    const view3 = { label: 'VIEW', small: true, aim: false, tap: flipView };
     if (TOUCH) touchFor = (unarmed) => { touch?.remove(); touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
       look: (dx, dy) => look({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
-      buttons: unarmed ? [{ label: 'JUMP', code: 'Space' }, { label: 'VIEW', tap: flipView }] : [
-        { label: 'FIRE', hold: (on) => { if (on) press(L.CL_PRESSES); trigger = on; if (!on) set(L.CL_AUTO, 0); } },
+      buttons: unarmed ? [{ label: 'JUMP', code: 'Space' }, view3, board] : [
+        { label: () => (mine()?.carry ? 'SWING' : 'FIRE'), hold: (on) => { if (on) press(L.CL_PRESSES); trigger = on; if (!on) set(L.CL_AUTO, 0); } },
         { label: 'JUMP', code: 'Space' },
-        { label: 'GREN', tap: () => { press(L.CL_GREN); zoomed = false; } },
-        { label: 'MELEE', tap: () => { press(L.CL_MELEE); zoomed = false; } },
-        { label: 'RELOAD', tap: () => { press(L.CL_RELOAD); zoomed = false; } },
-        { label: 'SWAP', tap: () => swap(slotOut ^ 1) },
-        { label: 'USE', tap: () => press(L.CL_USE) },
-        { label: 'SCOPE', tap: () => { if (zoomOf() > 1) { zoomed = !zoomed; sound.weapon(); } } },
-        { label: 'VIEW', tap: flipView },
+        { label: 'RELOAD', show: () => armed() && !!ARMS[mine().weapon]?.reload, tap: () => { press(L.CL_RELOAD); zoomed = false; },
+          lit: () => { const f = mine(); return !!f && f.mag[f.hand] === 0 && f.res[f.hand] > 0 && !f.reload; } },
+        { label: 'MELEE', show: armed, tap: () => { press(L.CL_MELEE); zoomed = false; } },
+        { label: 'FRAG', show: () => armed() && mine().grens > 0 && !mine().zombie && !mine().jugg && AMC[view.mode().mode]?.frags !== false,
+          tap: () => { press(L.CL_GREN); zoomed = false; } },
+        { label: 'SWAP', show: () => armed() && !!other(mine()), tap: () => swap(slotOut ^ 1) },
+        { label: 'PICK UP', show: () => !!padGun(mine()), tap: () => press(L.CL_USE) },
+        { label: 'SCOPE', small: true, aim: false, show: () => zoomOf() > 1, lit: () => zoomed, tap: () => { if (zoomOf() > 1) { zoomed = !zoomed; sound.weapon(); } } },
+        view3, board,
       ] }); };
     touchFor?.(false);
   }
@@ -229,6 +240,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       slot: get(L.CL_WEAPON), serial: (get(L.CL_FRAME) >> ((next - room) & 7)) & 1 });
   };
   const corr = corrector(host);
+  const lagChk = lagCheck(host);
 
   // ---- what happened: FX into flashes, tracers, the feed and sounds
   const text = new Uint32Array(COLS * renderer.rows);
@@ -369,6 +381,12 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   // third person: whether this frame is, the distance back eased toward the one asked for, and my own record as it is drawn
   let chasing = false, viewD = 0, steep = false;
   const ownRec = new Uint8Array(L.PSIZE), ownDv = new DataView(ownRec.buffer);
+  // the gun on the pad a fighter stands on that it doesn't carry (E, or PICK UP on a phone, takes it)
+  function padGun(f) {
+    if (!f || f.dead || f.carry) return null;
+    const pad = view.pads().find((p) => !p.wait && Math.hypot(p.pos[0] - f.pos[0], p.pos[2] - f.pos[2]) < 1.5);
+    return pad && !f.gun.includes(pad.weapon) ? ARMS[pad.weapon] ?? null : null;
+  }
   function zoomOf() {
     const f = pme || me;
     if (!f || f.carry) return 1;
@@ -470,8 +488,9 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       viewAt = mapView(viewAt, view.map());
     }
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
     me = slot >= 0 ? view.fighter(slot) : null;
+    if (st === 2) lagChk.update(me, now);
     pme = null;
     let tgt = null;
     if (WATCH && st >= 1) {
@@ -700,7 +719,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       solid, glow, beams, rects, tracker, text, graph, marker, hurt, scope: zoom >= 4, viewmodel: zoom >= 4 ? null : inHand, sides: md.teamed ? 2 : ((1 << md.mode) & L.TEAM_MODES & ~L.KIT) !== 0 || kit?.sides === 1 ? 1 : 0, zone: out.zone, storm: out.storm,
       crosshair: FIXED || (kit?.unarmed && st >= 1) ? 7 : (f?.carry ? 5 : CROSS[f?.weapon] ?? 0) + (playing && !f.dead && onTarget(f, eye) ? 8 : 0), gap: spread / 30 + kick * 3,
       own: chasing ? ownRec : null, aim: aimAt, size: body.top / Number(L.BODY[1]),
-      tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
+      tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host), dresses: dressesOf(host),
     };
     renderer.frame(u8, last, target);
   }
@@ -835,7 +854,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       else if (f.carry) {
         // a carrier has no guns or frags, only a swing that kills (a spectator's click turns to the next fighter)
         centre(rows - 3, `CARRYING THE ${(kit?.carry ?? 'flag').toUpperCase()}`, C.YELLOW);
-        if (!WATCH) centre(rows - 2, 'NO GUNS  CLICK OR Q SWINGS', C.WHITE);
+        if (!WATCH) centre(rows - 2, TOUCH ? 'NO GUNS  SWING TO HIT' : 'NO GUNS  CLICK OR Q SWINGS', C.WHITE);
       } else {
         const arm = ARMS[f.weapon];
         if (arm) {
@@ -847,10 +866,10 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
           right(rows - 4, other ? `${f.hand ? 1 : 2} ${other.name}` : '', C.GREY);
         }
         if (!f.zombie && !f.jugg && kit?.frags !== false) right(rows - 5, `FRAGS ${f.grens}`, C.ORANGE);
-        // a gun on the pad underfoot
-        const pad = view.pads().find((p) => !p.wait && Math.hypot(p.pos[0] - f.pos[0], p.pos[2] - f.pos[2]) < 1.5);
-        if (pad && !WATCH && !f.gun.includes(pad.weapon) && ARMS[pad.weapon]) centre(Math.floor(rows / 2) + 5, `E: PICK UP ${ARMS[pad.weapon].name}`, C.WHITE);
-        if (f.mag[f.hand] === 0 && f.res[f.hand] > 0 && !f.reload) centre(Math.floor(rows / 2) + 3, 'R: RELOAD', C.RED);
+        // a gun on the pad underfoot (on a phone the button says what to press)
+        const pad = WATCH ? null : padGun(f);
+        if (pad) centre(Math.floor(rows / 2) + 5, `${TOUCH ? '' : 'E: '}PICK UP ${pad.name}`, C.WHITE);
+        if (f.mag[f.hand] === 0 && f.res[f.hand] > 0 && !f.reload) centre(Math.floor(rows / 2) + 3, TOUCH ? 'RELOAD' : 'R: RELOAD', C.RED);
       }
       // the feed, over the tracker, the newest at the bottom: a line that would run into text already on its row (a message in the middle) goes, and the older ones above it
       for (let k = feed.length - 1, y = rows - 12; k >= 0; k--, y--) {
@@ -938,7 +957,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     capture: (scale = 2) => (last ? capturePng(renderer, u8, last, scale) : null),
     // for the gates: in a team mode, mode carries the scores, me its team and carry, and kit what the kit module shows them
     state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((f) => f.text),
-      team: me?.team ?? -1, kit: AMC[view.mode().mode]?.state?.(view) ?? null, said }),
+      team: me?.team ?? -1, kit: AMC[view.mode().mode]?.state?.(view) ?? null, said, lagCheck: lagChk.stats() }),
     get locked() { return locked; },
   };
 }

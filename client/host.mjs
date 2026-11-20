@@ -23,17 +23,20 @@ import { parseImpair } from '../net/impair.js';
 import { relayFor, wsForced, room, mapUrl } from './kit.mjs';
 import { forcedSeed } from '../src/arena-view.mjs';
 import { savedLook, wearable, guestLook } from './looks.mjs';
+import { savedDress, wearableDress } from './dress.mjs';
 import { guestAvatar } from './avatar.mjs';
 import { loadTally } from './achievements.mjs';
 import { loadPurse, openSet } from './purse.mjs';
 import { createChat } from './chat.mjs';
+import { touchWanted } from './touch.mjs';
 
 export const epoch = () => performance.timeOrigin + performance.now();
 
-// A canvas's size: the window's own resolution (up to `max`), or ?res=WxH.
-export function fitSize(q, max = [1600, 1000]) {
+// A canvas's size: the window's own resolution (up to `max`), at scale of it (client/mobile.mjs's, for a slow
+// phone), or ?res=WxH.
+export function fitSize(q, max = [1600, 1000], scale = 1) {
   if (q.has('res')) return q.get('res').split('x').map(Number);
-  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const dpr = Math.min(devicePixelRatio || 1, 2) * scale;
   const w = innerWidth * dpr, h = innerHeight * dpr;
   const k = Math.min(1, max[0] / w, max[1] / h);
   return [Math.max(320, Math.round(w * k)), Math.max(200, Math.round(h * k))];
@@ -76,6 +79,9 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
   h.set(L.CL_PITCH, 512);
   // this player's look, as this browser keeps it (Fireplace's TV picks it; ?look=<word> for this visit), worn on every page; what it has neither earned nor bought comes off
   h.set(L.CL_LOOK, watch ? 0 : q.has('look') ? Number(q.get('look')) >>> 0 : wearable(savedLook(), openSet(loadTally(), loadPurse())));
+  // the dress word (client/dress.mjs: a worn face, a shirt's print, a back item), kept and worn like the look; ?dress=<word> for this visit
+  h.set(L.CL_DRESS, watch ? 0 : q.has('dress') ? Number(q.get('dress')) >>> 0 : wearableDress(savedDress(), openSet(loadTally(), loadPurse())));
+  h.dress = (p) => (p < 0 || p >= L.NPLAYER ? 0 : p === h.get(L.CL_SLOT) ? h.get(L.CL_DRESS) : h.u32[(L.CL_DRESSES >> 2) + p]) >>> 0;
   // a slot's look word (client/looks.mjs): this player's own as picked, the rest as the relay sent them
   h.look = (p) => (p === h.get(L.CL_SLOT) ? h.get(L.CL_LOOK) : h.u32[(L.CL_LOOKS >> 2) + p]) >>> 0;
   // what a label calls a slot: the name its wallet goes by on Elo Pros, as the relay sent it, or P<n>
@@ -127,8 +133,10 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
         const m = e.data;
         if (m.error && relay?.pool && !h.welcome) { local(m.error.split('\n')[0]); return; }
         if (m.error) h.error = m.error.split('\n')[0];
-        // a new session (a failover's included) is signed in to nothing yet
-        if (m.welcome) { h.welcome = m.welcome; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); h.chat.reset(); }
+        if (m.reject) h.refused = true;
+        if (m.error || m.closed) { ended = true; rejoin(); }
+        // a new session (a failover's and a rejoin's included) is signed in to nothing yet
+        if (m.welcome) { h.welcome = m.welcome; ended = false; tries = 0; Object.assign(h.signin, { nonce: '', status: 0, address: '' }); h.chat.reset(); }
         if (m.chat) h.chat.heard(m.chat);
         if (m.transport) h.transport = m.transport;
         if (m.replay) h.replay = m.replay;
@@ -157,8 +165,33 @@ export async function createHost({ wasm, q = new URLSearchParams(location.search
       h.set(L.CL_STATE, 0);
       open(null);
     };
+    // A session the relay let in can end under the page: a phone's page out of view goes quiet and the relay lets
+    // its slot go 2 s on (net/relay.ts SILENT_MS), and so does a network that drops. Once the page is in view it
+    // joins again, a new player on the same relay: both workers made afresh, the world from the join's keyframe,
+    // tried again less often each time it fails. A refusal (the room full, another build) stays as it is.
+    // (ended: the net worker said its session is over; CL_STATE can't say, the sim worker writes it as it steps)
+    let tries = 0, waiting = 0, gone = false, ended = false;
+    function rejoin() {
+      if (!relay || replay || h.local || h.refused || gone || waiting || document.hidden || !h.welcome || !ended) return;
+      waiting = setTimeout(() => {
+        waiting = 0;
+        if (gone || document.hidden || !ended) return;
+        tries++;
+        h.net.terminate();
+        h.sim.terminate();
+        h.error = '';
+        h.set(L.CL_STATE, 0);
+        open(relay);
+      }, Math.min(8000, 400 * 2 ** Math.min(tries, 4)));
+    }
+    document.addEventListener('visibilitychange', () => {
+      rejoin();
+      // a local room on a phone is held still while its page is out of view (client/local.mjs pause)
+      if (h.local && touchWanted(q)) h.net.postMessage({ pause: document.hidden });
+    });
     open(relay);
-    addEventListener('pagehide', () => h.net.postMessage({ leave: true }));
+    addEventListener('pagehide', () => { gone = true; h.net.postMessage({ leave: true }); });
+    addEventListener('pageshow', (e) => { if (e.persisted) { gone = false; rejoin(); } });
   };
   // Sign in with the player's wallet through the Elo Pros web SDK (window.Elo),
   // on the nonce the relay handed out; the relay checks it and answers.
@@ -206,13 +239,47 @@ export function predict(h, slot, live) {
   return -1;
 }
 
+// What the netcode did to this page, for the gates: its words the relay
+// closed without, the confirmed world's freezes and the ms they lasted, and
+// the prediction's corrections (client/host.mjs corrector) past 10 cm.
+export function netStats(h) {
+  const c = h.corrections || { n: 0, big: 0, max: 0 };
+  return { late: h.get(L.CL_LATE) >>> 0, freezes: h.get(L.CL_FREEZES) >>> 0, frozenMs: h.get(L.CL_FROZEN) >>> 0, corrections: c.n, bigCorrections: c.big, maxCorrection: Number(c.max.toFixed(3)) };
+}
+
+// For the gates, in the arena and Dogfight: whether the view lag the confirmed
+// world holds for this page's fighter is one its frames sent in the last 3 s
+// (CL_LAGSENT). A frame some of whose words the relay closed without, the
+// last word repeated in their place, could decode to a lag never sent.
+export function lagCheck(h) {
+  const sent = []; // [ms, lag]: each value CL_LAGSENT took, the one in effect 3 s ago the oldest kept
+  const c = { frames: 0, wrong: 0, episodes: 0, worst: 0 };
+  let matched = false, was = false;
+  c.update = (me, now) => {
+    const v = h.get(L.CL_LAGSENT);
+    if (!sent.length || sent.at(-1)[1] !== v) sent.push([now, v]);
+    while (sent.length > 1 && sent[1][0] < now - 3000) sent.shift();
+    if (!me?.live) { was = false; return; }
+    const ok = sent.some(([, l]) => l === me.lag);
+    matched ||= ok;
+    if (!matched) return;
+    c.frames++;
+    if (!ok) { c.wrong++; if (!was) c.episodes++; c.worst = Math.max(c.worst, Math.abs(me.lag - v)); }
+    was = !ok;
+  };
+  c.stats = () => ({ frames: c.frames, wrong: c.wrong, episodes: c.episodes, worst: c.worst });
+  return c;
+}
+
 // Corrections ease in: where this rebuild puts the newest tick the last one
 // also predicted, against where that one put it, goes into a render-only
-// offset that decays over 100 ms. A jump past 4 m (a respawn) snaps.
+// offset that decays over 100 ms. A jump past 4 m (a respawn) snaps. Each
+// one past 10 cm is counted on the host (netStats), and past 50 cm as big.
 export function corrector(h) {
   const { u32, f32 } = h;
   let track = new Map();
   const c = { off: [0, 0, 0] };
+  const seen = h.corrections ||= { n: 0, big: 0, max: 0 };
   c.update = (n, ms) => {
     const now = new Map();
     for (let i = 0; i < n; i++) { const o = (L.PTRACK >> 2) + 4 * i; now.set(u32[o + 3], [f32[o], f32[o + 1], f32[o + 2]]); }
@@ -221,8 +288,12 @@ export function corrector(h) {
     if (t >= 0) {
       const a = track.get(t), b = now.get(t);
       const d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-      if (Math.hypot(...d) > 4) c.off = [0, 0, 0];
-      else c.off = c.off.map((v, k) => v + d[k]);
+      const m = Math.hypot(...d);
+      if (m > 4) c.off = [0, 0, 0];
+      else {
+        c.off = c.off.map((v, k) => v + d[k]);
+        if (m > 0.1) { seen.n++; if (m > 0.5) seen.big++; seen.max = Math.max(seen.max, m); }
+      }
     }
     if (n) track = now;
     const f = Math.exp(-ms / 100);

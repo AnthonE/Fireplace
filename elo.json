@@ -13,7 +13,7 @@
     {
       "id": "fireplace-look",
       "title": "a ball, a hat or a body for Fireplace",
-      "what": "A new look players can pick on the couch, which everyone in the room sees: one entry at the end of BALLS, HATS or BODIES in client/looks.mjs (a pattern and two colours, a hat's style and colour, or a blocky body's skin and face). client/party-render-demo.html?scene=wardrobe shows every ball and hat, ?scene=blocky every body. A new pattern or hat style is a few lines in the bumper and party shaders.",
+      "what": "A new look players can pick on the couch, which everyone in the room sees: one entry at the end of BALLS, HATS or BODIES in client/looks.mjs (a pattern and two colours, a hat's style and colour, or a body's skin and face, worn by the cartoon figure every game draws). client/party-render-demo.html?scene=wardrobe shows every ball and hat, ?scene=bodies every body. A new pattern is a few lines in party's ball shader, a new hat style a few in the figure's (client/figure.mjs).",
       "deliverable": "PR: accepted into AnthonE/Fireplace",
       "read_first": "CONTRIBUTING.md",
       "check": "review"
@@ -380,12 +380,164 @@
         "sort": "desc",
         "keep": "best"
       }
+    ],
+    "challenges": [
+      {
+        "id": "games_5",
+        "name": "Stay a while",
+        "desc": "Play 5 games today",
+        "stat": "games",
+        "goal": 5,
+        "every": "day"
+      },
+      {
+        "id": "games_10",
+        "name": "Make an evening of it",
+        "desc": "Play 10 games today",
+        "stat": "games",
+        "goal": 10,
+        "every": "day"
+      },
+      {
+        "id": "mallows_3",
+        "name": "Something toasted",
+        "desc": "Win 3 marshmallows today",
+        "stat": "mallows",
+        "goal": 3,
+        "every": "day"
+      },
+      {
+        "id": "mallows_6",
+        "name": "A handful",
+        "desc": "Win 6 marshmallows today",
+        "stat": "mallows",
+        "goal": 6,
+        "every": "day"
+      },
+      {
+        "id": "win_1",
+        "name": "Golden today",
+        "desc": "Win a game today",
+        "stat": "wins",
+        "goal": 1,
+        "every": "day"
+      },
+      {
+        "id": "party_3",
+        "name": "Three rounds of rounds",
+        "desc": "Play 3 games of Party today",
+        "stat": "played.party",
+        "goal": 3,
+        "every": "day"
+      },
+      {
+        "id": "arena_2",
+        "name": "Twice round the arena",
+        "desc": "Play 2 arena matches today",
+        "stat": "played.arena",
+        "goal": 2,
+        "every": "day"
+      },
+      {
+        "id": "dogfight_2",
+        "name": "Wheels up",
+        "desc": "Fly 2 Dogfights today",
+        "stat": "played.dogfight",
+        "goal": 2,
+        "every": "day"
+      },
+      {
+        "id": "golf_2",
+        "name": "Two holes",
+        "desc": "Play 2 holes of golf today",
+        "stat": "played.golf",
+        "goal": 2,
+        "every": "day"
+      },
+      {
+        "id": "crowd_4",
+        "name": "Company",
+        "desc": "Play a game with 4 or more in it today",
+        "stat": "crowd",
+        "goal": 4,
+        "every": "day"
+      },
+      {
+        "id": "week_games_40",
+        "name": "Part of the furniture",
+        "desc": "Play 40 games this week",
+        "stat": "games",
+        "goal": 40,
+        "every": "week"
+      },
+      {
+        "id": "week_mallows_30",
+        "name": "A week of them",
+        "desc": "Win 30 marshmallows this week",
+        "stat": "mallows",
+        "goal": 30,
+        "every": "week"
+      },
+      {
+        "id": "week_wins_5",
+        "name": "Five golden",
+        "desc": "Win 5 games this week",
+        "stat": "wins",
+        "goal": 5,
+        "every": "week"
+      },
+      {
+        "id": "week_party_wins_2",
+        "name": "Life of the party",
+        "desc": "Win 2 games of Party this week",
+        "stat": "won.party",
+        "goal": 2,
+        "every": "week"
+      },
+      {
+        "id": "week_arena_wins_2",
+        "name": "Arena regular",
+        "desc": "Win 2 arena matches this week",
+        "stat": "won.arena",
+        "goal": 2,
+        "every": "week"
+      },
+      {
+        "id": "week_dogfight_win",
+        "name": "Top of the sky",
+        "desc": "Win a Dogfight this week",
+        "stat": "won.dogfight",
+        "goal": 1,
+        "every": "week"
+      },
+      {
+        "id": "week_golf_win",
+        "name": "Low score",
+        "desc": "Win a hole of golf this week",
+        "stat": "won.golf",
+        "goal": 1,
+        "every": "week"
+      },
+      {
+        "id": "week_crowd_8",
+        "name": "A full room",
+        "desc": "Play a game with 8 or more in it this week",
+        "stat": "crowd",
+        "goal": 8,
+        "every": "week"
+      }
     ]
   },
   "web": {
-    "url": "https://github.com/AnthonE/Fireplace/releases/download/web-eec67fb099e2/site.zip",
-    "sha256": "60dabdea42f775ef7478093b809aedb662b23364d432de6aedf9a9d803cd0699",
+    "url": "https://github.com/AnthonE/Fireplace/releases/download/web-f829558caf71/site.zip",
+    "sha256": "1152907de7e00fd20f73ff663d0ec82f51a642b0897cc6baacb231cb25e4b356",
     "entry": "index.html",
     "frame": false
-  }
+  },
+  "server_keys": [
+    {
+      "id": "relay",
+      "pub": "P73u4MFPGkw7xKsr58FvRD6o4Y4S8iGxaTuaue6/DpM="
+    }
+  ]
 }

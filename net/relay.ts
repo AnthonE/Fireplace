@@ -171,6 +171,7 @@ type Slot = {
   avatars?: boolean; // and for its avatars (W.HELLO_AVATARS)
   names?: boolean; // and for the names of the players signed in (W.HELLO_NAMES)
   badges?: boolean; // and for their badges (W.HELLO_BADGES)
+  dress?: boolean; // and, with its looks, for their dress words (W.HELLO2_DRESS)
   chat?: boolean; // and for the room's chat (W.HELLO_CHAT), in a room that has it
   bucket?: ReturnType<typeof chatBucket>; // its own lines' rate limit
   nonce?: string; // the sign-in nonce it was handed, once its hello asked (W.HELLO_SIGNIN)
@@ -210,6 +211,13 @@ const LOOKS_MS = 250;
 const lookTable = () => [...looks.keys()].filter((p) => looks[p]).map((p) => [p, looks[p]] as [number, number]);
 const sendLooks = (s: Slot, pairs: [number, number][]) => { if (s.looks && pairs.length) s.ctl.write(W.encodeLooks(pairs)).catch(() => {}); };
 const setLook = (p: number, look: number) => { if (looks[p] !== look >>> 0) { looks[p] = look >>> 0; lookDirty.add(p); } };
+// Each slot's dress word (client/dress.mjs: a worn face, a shirt's print, a back item), beside its
+// look and the same way: drawing only, sent to the sessions that asked for looks and for dress.
+const dresses = new Uint32Array(W.NP);
+const dressDirty = new Set<number>();
+const dressTable = () => [...dresses.keys()].filter((p) => dresses[p]).map((p) => [p, dresses[p]] as [number, number]);
+const sendDresses = (s: Slot, pairs: [number, number][]) => { if (s.looks && s.dress && pairs.length) s.ctl.write(W.encodeLooks(pairs, W.T_DRESS)).catch(() => {}); };
+const setDress = (p: number, w: number) => { if (dresses[p] !== w >>> 0) { dresses[p] = w >>> 0; dressDirty.add(p); } };
 // Each signed-in slot's avatar, read off its Elo Pros face (/api/face/{wallet}
 // `avatar`, client/avatar.mjs) when it signs in: drawing only, as a look is,
 // sent to the sessions that asked (W.HELLO_AVATARS) the same way.
@@ -315,7 +323,7 @@ const SAMPLES = 1 << 22, HASHES = 1 << 17, PLAYER_HASHES = 1 << 10;
 const sample = <T>(a: T[], n: number, v: T, cap = SAMPLES) => { if (a.length < cap) a.push(v); else a[n % cap] = v; };
 const stats = {
   ticks: 0, closeLate: [] as number[], stallEvents: [] as number[][], sent: 0, sentBytes: 0, maxBundle: 0, bundles: 0, bundleBytes: 0, tickBytes: 0, maxTick: 0, lateArrivals: 0,
-  recv: 0, recvBytes: 0, onTime: 0, substituted: 0, sessions: 0, rejected: 0, slack: [] as number[], activeTicks: 0, activeSlotTicks: 0, silent: 0, warmup: 0,
+  recv: 0, recvBytes: 0, onTime: 0, substituted: 0, marks: 0, sessions: 0, rejected: 0, slack: [] as number[], activeTicks: 0, activeSlotTicks: 0, silent: 0, warmup: 0,
   leaves: {} as Record<string, number>, leaveAt: [] as number[],
   serverMaxDatagram: [] as number[], clientMaxDatagram: [] as number[], cc, fills: 0, fillTicks: 0,
   repairs: 0, repairTicks: 0, pongs: 0, keys: [] as Record<string, number>[], compared: 0, agreed: 0,
@@ -668,16 +676,31 @@ function onInput(s: Slot, buf: Uint8Array, now: number) {
   while (s.wordTick[(s.contig + 1) & (W.RING - 1)] === s.contig + 1) s.contig++;
 }
 
+// Whether each slot's words are the relay's repeats, as the last mark (W.EV_LATE,
+// W.EV_ONTIME) told the room: a mark goes in the tick they change, so the sim
+// knows a repeated word from the player's own. Kept by slot, not session, so
+// a resume that claims a ghost's slot goes on from the ghost's mark; a leave
+// clears it (the sim's join clears the record), and so does a takeover,
+// whose ghosts are all marked late at its first tick.
+const repeating = new Uint8Array(W.NP);
+
 function closeTick(T: number, now: number) {
   stats.ticks++;
   sample(stats.closeLate, stats.ticks, now - deadline(T));
   const row = new Uint32Array(W.NP);
   const dl = deadline(T);
+  const marks: { slot: number; kind: number }[] = [];
+  const mark = (p: number, late: boolean) => {
+    if (!!repeating[p] === late) return;
+    repeating[p] = late ? 1 : 0;
+    marks.push({ slot: p, kind: late ? W.EV_LATE : W.EV_ONTIME });
+    stats.marks++;
+  };
   let active = 0;
   for (let p = 0; p < W.NP; p++) {
     const s = slots[p];
     if (!s || T < s.joinTick) continue;
-    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; setLook(p, 0); setAvatar(p, 0); setBadge(p, 0); setName(p, ''); continue; }
+    if (T >= s.leaveTick) { stats.silent += s.pendingLate; slots[p] = null; repeating[p] = 0; setLook(p, 0); setDress(p, 0); setAvatar(p, 0); setBadge(p, 0); setName(p, ''); continue; }
     if (s.leaveTick === Infinity && now - Math.max(s.lastRecv, stallEnd) > SILENT_MS) {
       stats.leaves.silent = (stats.leaves.silent || 0) + 1;
       stats.leaveAt.push(Number(((now - E) / 1000).toFixed(2)));
@@ -690,6 +713,7 @@ function closeTick(T: number, now: number) {
       row[p] = s.words[i];
       s.last = row[p];
       s.missing = 0;
+      mark(p, false);
       s.lastSlack = dl - s.arrival[i];
       s.periodSlack = Math.min(s.periodSlack, s.lastSlack);
       if (T >= s.joinTick + WARMUP) { sample(stats.slack, stats.onTime, s.lastSlack); stats.onTime++; }
@@ -703,12 +727,13 @@ function closeTick(T: number, now: number) {
       if (T < s.joinTick + WARMUP) stats.warmup++;
       else s.pendingLate++;
       row[p] = s.missing > HOLD_TICKS ? (s.last & ~(HOLD_MASK | TAP_MASK)) >>> 0 : (s.last & ~TAP_MASK) >>> 0;
+      mark(p, true);
       // read after its deadline but before this (delayed) close: late too
       if (s.wordTick[i] === T) { s.periodSlack = Math.min(s.periodSlack, dl - s.arrival[i]); stats.lateArrivals++; }
     }
   }
   if (active) { stats.activeTicks++; stats.activeSlotTicks += active; }
-  const parts = W.encodeTick(events.filter((e) => e.tick === T).map(({ slot, kind }) => ({ slot, kind })), prevWords, row);
+  const parts = W.encodeTick([...events.filter((e) => e.tick === T).map(({ slot, kind }) => ({ slot, kind })), ...marks], prevWords, row);
   prevWords = row;
   if (roomStart >= 0 && T >= roomStart) {
     const bytes = parts.reduce((a: number, p: Uint8Array) => a + p.length, 0);
@@ -721,6 +746,7 @@ function closeTick(T: number, now: number) {
     if (!slots.some((x) => x)) {
       saveReplay();
       roomStart = recordStart = recordKept = -1; record = []; toReferee = []; roomSeed = newSeed();
+      repeating.fill(0);
       for (const w of [...watchers]) w.leave?.('room-ended');
     }
   }
@@ -734,7 +760,7 @@ function broadcast(T: number) {
   for (const t of eventsAt.keys()) if (t <= T - W.NB) eventsAt.delete(t);
   if (recordStart < 0) return;
   const ticks = [];
-  for (let t = Math.max(recordStart, T - W.NB + 1); t <= T; t++) ticks.push({ tick: t, parts: record[t - recordStart] });
+  for (let t = Math.max(recordStart, T - W.NB_DEEP + 1); t <= T; t++) ticks.push({ tick: t, parts: record[t - recordStart] });
   const now = performance.now();
   stats.watchSeconds += watchers.size * W.SEND_EVERY * W.TICK_MS / 1000;
   // the datagrams are the same for everyone with the same size limit: encode
@@ -746,7 +772,7 @@ function broadcast(T: number) {
     if (s.watch && now - Math.max(s.lastRecv, stallEnd) > SILENT_MS) { s.leave?.('silent'); continue; }
     const max = Math.min(W.MAX_DATAGRAM, s.maxDatagram);
     let dgs = byMax.get(max);
-    if (!dgs) byMax.set(max, dgs = W.encodeTicks(W.T_BUNDLE, ticks, max));
+    if (!dgs) byMax.set(max, dgs = W.encodeTicks(W.T_BUNDLE, W.bundleTicks(ticks, max), max));
     // the worst slack since the last bundle, late arrivals included, so the
     // client's lead controller reacts to lateness it would otherwise never see
     const slack = s.watch ? 0 : Number.isFinite(s.periodSlack) ? s.periodSlack : s.lastSlack;
@@ -810,7 +836,7 @@ async function admit(d: Door) {
   stats.clientMaxDatagram.push(hello!.maxDatagram);
   const joinTick = watch || claim ? closed + 1 : scheduleEvent(p, W.EV_JOIN, closed + 1 + 4);
   if (roomStart < 0) startRoom(joinTick);
-  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, door: d.door, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges, chat: hello!.chat && chatOn && !edge });
+  const s = newSlot(p, joinTick, { writer: d.datagrams as WritableStreamDefaultWriter<Uint8Array>, ctl: d.sw, maxDatagram, close: d.close, token: d.token, door: d.door, watch, looks: hello!.looks, avatars: hello!.avatars, names: hello!.names, badges: hello!.badges, dress: hello!.dress, chat: hello!.chat && chatOn && !edge });
   // the ghost's word goes on until this player's first one lands
   if (claim) { s.last = claim.last; s.missing = claim.missing; stats.resumed++; }
   if (watch) {
@@ -826,6 +852,7 @@ async function admit(d: Door) {
   await d.sw.write(W.encodeWelcome({ slot: p, maxDatagram, joinTick, seed: roomSeed, serverTick: Math.floor(serverNow()) + 1, roomStart, token: d.token, watch }));
   log(`${watch ? 'a spectator' : `slot ${p}`} joins at ${joinTick}, room ${roomStart}${d.token ? ' (native)' : ''}`);
   sendLooks(s, lookTable());
+  sendDresses(s, dressTable());
   sendAvatars(s, avatarTable());
   sendBadges(s, badgeTable());
   sendNames(s, nameTable());
@@ -875,7 +902,7 @@ async function admit(d: Door) {
       }
       if (m?.type === W.T_PING) { stats.pongs++; s.ctl.write(W.encodePong(m.nonce, serverNow())).catch(() => {}); }
       if (m?.type === W.T_SYNC && performance.now() - s.lastSync > 1000) sendKey(s, m.reason);
-      if (m?.type === W.T_LOOK && !watch && !gone(s)) setLook(p, m.look ?? 0);
+      if (m?.type === W.T_LOOK && !watch && !gone(s)) { setLook(p, m.look ?? 0); setDress(p, m.dress ?? 0); }
     }
   })().then(() => leave('stream-end'), () => leave('stream-error'));
   s.leave = leave;
@@ -1005,7 +1032,7 @@ function summary() {
     stalls: cl.filter((v) => v > W.TICK_MS).length,
     stallEvents: stats.stallEvents,
     inputSlackMs: { p5: pct(sl, 0.05), p50: pct(sl, 0.5) },
-    onTime: stats.onTime, substituted: stats.substituted, warmupSubstituted: stats.warmup, silentTicks: stats.silent,
+    onTime: stats.onTime, substituted: stats.substituted, marks: stats.marks, warmupSubstituted: stats.warmup, silentTicks: stats.silent,
     substitutedPct: stats.onTime + stats.substituted ? Number((100 * stats.substituted / (stats.onTime + stats.substituted)).toFixed(3)) : 0,
     bundlesSent: stats.bundles, bundleDatagrams: stats.sent, maxDatagramSent: stats.maxBundle, lateArrivals: stats.lateArrivals,
     bytesPerBundle: stats.bundles ? Math.round(stats.bundleBytes / stats.bundles) : 0,
@@ -1190,6 +1217,7 @@ function takeOver() {
   prevWords = recBase.w.slice();
   events = [];
   eventsAt.clear();
+  repeating.fill(0);
   for (const p of recLive) slots[p] = newSlot(p, closed + 1, { ghost: true, last: prevWords[p], lastRecv: now + GRACE_MS - SILENT_MS });
   stats.takeover = { tick: closed + 1, simTick: closed + 1 - roomStart, behindTicks: Math.round(serverNow() - closed - 1), ghosts: recLive.size, at: Number(((now - E) / 1000).toFixed(2)) };
   console.error(`relay: taking the room over from sim tick ${closed + 1 - roomStart}, ${recLive.size} slots held for their players`);
@@ -1233,6 +1261,11 @@ setInterval(() => {
     const pairs = [...lookDirty].map((p) => [p, looks[p]] as [number, number]);
     lookDirty.clear();
     for (const s of everyone()) sendLooks(s, pairs);
+  }
+  if (dressDirty.size) {
+    const pairs = [...dressDirty].map((p) => [p, dresses[p]] as [number, number]);
+    dressDirty.clear();
+    for (const s of everyone()) sendDresses(s, pairs);
   }
   if (avatarDirty.size) {
     const pairs = [...avatarDirty].map((p) => [p, avatars[p]] as [number, number]);

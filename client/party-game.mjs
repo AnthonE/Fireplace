@@ -46,10 +46,10 @@ import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
 import { epoch, predict, corrector, follower, capturePng, listeners } from './host.mjs';
-import { riderSprites } from './looks.mjs';
+import { ballSprite } from './looks.mjs';
 import { rider, emoteOf, withEmote, EMOTE_KEYS } from './rider.mjs';
 import { createJuice } from './juice.mjs';
-import { touchWanted, touchControls, touchScale } from './touch.mjs';
+import { touchWanted, touchControls, touchScale, touchWords } from './touch.mjs';
 import { bubbleAt } from './chat.mjs';
 
 const TURN = 16384;
@@ -92,8 +92,14 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
   const writeKeys = () => { let m = 0; for (const k of held) m |= MOVES[k] || 0; set(L.CL_MOVE, m); };
   const aim = () => set(L.CL_YAW, Math.round(yaw) & (TURN - 1));
   let locked = document.pointerLockElement === lockTarget;
+  // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+  const TOUCH = !WATCH && !BOT && touchWanted(h.q);
+  const say = TOUCH ? touchWords : (s) => s; // the HUD's words about keys and the mouse, a phone's on one
   let touch = null; // the touch controls, on a phone
   let watched = -1;
+  // out and watching the rest (the HUD's CLICK FOR ANOTHER): a click, or a tap, turns to the next ball; and the
+  // minigame on, whose hint names what a click does there. Both as the last frame had them.
+  let outWatch = false, shownMod = null;
   let showGraph = graphOn;
   let bot = null;
   // a ball worth watching: in, and not already falling out of the world
@@ -120,8 +126,6 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
-    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
-    const TOUCH = touchWanted(h.q);
     if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
@@ -139,7 +143,9 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       aim();
     };
     on(document, 'onpointerrawupdate' in window ? 'pointerrawupdate' : 'pointermove', mouse);
-    on(document, 'mousedown', (e) => { if (locked && (e.button === 0 || e.button === 2)) press(L.CL_PRESSES); });
+    // a press, or with your ball out, the next ball to watch
+    const use = () => { if (outWatch) watched = nextIn(watched, 1); else press(L.CL_PRESSES); };
+    on(document, 'mousedown', (e) => { if (locked && (e.button === 0 || e.button === 2)) use(); });
     on(document, 'contextmenu', (e) => e.preventDefault());
     on(document, 'keydown', (e) => {
       if ((e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'KeyQ') && !e.repeat) press(L.CL_PRESSES);
@@ -156,13 +162,18 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); });
     let emoteK = 0;
-    if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
+    // the use button: there while what you hold, a click in this minigame (its hint says CLICK) or the next ball
+    // to watch is something to press, named for it: the power-up held, the hint's CLICK TO <what>, NEXT
+    const item = () => { const b = pme || me; return b && !b.out ? b.item : 0; };
+    const useLabel = () => (outWatch ? 'NEXT' : item() ? L.PU_NAMES[item()] : /\bCLICK TO (\w+)/.exec(shownMod?.hint || '')?.[1] ?? 'USE');
+    const useShown = () => outWatch || !!item() || /\bCLICK\b/.test(shownMod?.hint || '');
+    if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(), tap: () => { if (outWatch) watched = nextIn(watched, 1); },
       look: (dx, dy) => mouse({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
       buttons: [
-        { label: 'JUMP', code: 'Space' },
-        { label: 'USE', tap: () => press(L.CL_PRESSES) },
-        { label: 'EMOTE', tap: () => { emoteK = (emoteK % 4) + 1; h.set(L.CL_LOOK, withEmote(h.get(L.CL_LOOK) >>> 0, emoteK)); } },
-        { label: 'BOARD', hold: (on) => { if (on) held.add('Tab'); else held.delete('Tab'); } },
+        { label: 'HOP', code: 'Space' },
+        { label: useLabel, show: useShown, lit: () => !!item(), tap: use },
+        { label: 'EMOTE', spot: 2, tap: () => { emoteK = (emoteK % 4) + 1; h.set(L.CL_LOOK, withEmote(h.get(L.CL_LOOK) >>> 0, emoteK)); } },
+        { label: 'BOARD', small: true, aim: false, lit: () => held.has('Tab'), tap: () => { if (held.has('Tab')) held.delete('Tab'); else held.add('Tab'); } },
       ] });
   }
 
@@ -282,9 +293,11 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     // the round's minigame, or while its module is on the way (client/mg/load.mjs) one with nothing of its own
     const mod = MG[g.game] || (need(g.game), BARE);
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - g.tick)) * TICK;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - g.tick)) * TICK;
     me = slot >= 0 ? view.partier(slot) : null;
     pme = null;
+    outWatch = !!me?.live && me.out && g.state === L.H_PLAY && (g.kind !== L.PK_SCORE || !!mod.outForGood);
+    shownMod = mod;
     if (external) yaw = get(L.CL_YAW);
     // the bot drives the slots as the keys and mouse would
     if (bot && me?.live && st === 2) {
@@ -417,7 +430,12 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     const out = { scene, solid, glow, beams, decals, casters: extra, paint: null, music: true };
     const t = g.state === L.H_PLAY ? g.t * TICK + dt : 0;
     const pt = g.state === L.H_PLAY ? (ptick - g.start) * TICK : 0;
-    mod.draw?.(view, { tick: g.tick, dt, t, ptick, pt, now, ms, cam, slot, me, pme, view, pview, sound, own: mine ? tgtPos : null }, out);
+    // a ball and its rider the minigame draws itself (one out of play), in slot p's look: ball(p) its sprite's colour and seed,
+    // rider(list, p, opts) its figure as rider() takes opts (client/rider.mjs)
+    const lookFor = (p) => (mod.seatColors ? h.look(p) & ~0xff : h.look(p));
+    const drawBall = (p) => ballSprite(p, lookFor(p));
+    const drawRider = (list, p, o) => rider(list, p, lookFor(p), { avatar: h.avatar(p), dress: h.dress(p), ...o });
+    mod.draw?.(view, { tick: g.tick, dt, t, ptick, pt, now, ms, cam, slot, me, pme, view, pview, sound, own: mine ? tgtPos : null, ball: drawBall, rider: drawRider }, out);
     const tune = g.state === L.H_PLAY && out.music !== false && (mod.music?.(view, ptick) ?? true);
     sound.music(g.state === L.H_PLAY ? (view.dv.getUint32(L.HDR_SEED, true) ^ Math.imul(g.hole + 7, 0x9e3779b9)) >>> 0 : null, tune);
 
@@ -437,13 +455,13 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       const ang = (roll.get(p) || 0) + speed * ms / 1000 / r;
       roll.set(p, ang % (2 * Math.PI * 64));
       // its look (client/looks.mjs); a minigame that marks what is whose by the seat's colour keeps the balls in theirs
-      const lw = mod.seatColors ? h.look(p) & ~0xff : h.look(p);
-      const rs = riderSprites(p, lw);
+      const lw = lookFor(p);
+      const bs = ballSprite(p, lw);
       // the rider faces where the ball does (you: where you look), bobbing a little as it rolls
       const face = own ? yaw / TURN * 2 * Math.PI : src.yaw;
       const bob = Math.abs(Math.sin(ang * 2)) * Math.min(1, speed / 6) * 0.06;
-      if (!mod.drawsBalls) solid.push({ pos: [pos[0], pos[1] + r, pos[2]], size: r, color: rs.ball.color, kind: SPRITE.BALL, minpx: 1, vel: src.vel, roll: ang, seed: rs.ball.seed });
-      rider(solid, p, lw, { at: [pos[0], pos[1] + 2 * r, pos[2]], face, roll: ang, speed, vy: src.vel[1], bob, emote: juice.cheer(p, now, [pos[0], pos[1] + 2 * r + 1.5, pos[2]]) ?? emoteOf(emotes, p, lw, now), jolt: juice.jolt(p, now), avatar: h.avatar(p) });
+      if (!mod.drawsBalls) solid.push({ pos: [pos[0], pos[1] + r, pos[2]], size: r, color: bs.color, kind: SPRITE.BALL, minpx: 1, vel: src.vel, roll: ang, seed: bs.seed });
+      rider(solid, p, lw, { at: [pos[0], pos[1] + 2 * r, pos[2]], face, roll: ang, speed, vy: src.vel[1], bob, emote: juice.cheer(p, now, [pos[0], pos[1] + 2 * r + 1.5, pos[2]]) ?? emoteOf(emotes, p, lw, now), jolt: juice.jolt(p, now), avatar: h.avatar(p), dress: h.dress(p) });
       if (src.item) solid.push({ pos: [pos[0], pos[1] + 2 * r + 1.55, pos[2]], size: 0.26, color: [...PU_COLOR[src.item], 1], kind: SPRITE.ORB, minpx: 1 });
       if (own) solid.push({ pos: [pos[0], pos[1] + 2 * r + (src.item ? 2.15 : 1.65) + 0.1 * Math.sin(now / 200), pos[2]], size: 0.3, color: [1, 1, 0.4, 1], kind: SPRITE.ARROW, minpx: 2 });
       if (src.dash) glow.push({ pos: [pos[0] - src.vel[0] * 0.05, pos[1] + r, pos[2] - src.vel[2] * 0.05], size: r * 1.3, color: [0.4, 0.85, 1, 0.5], kind: SPRITE.FLASH, minpx: 1 });
@@ -539,8 +557,8 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
       else centre(y0 - 3, `STARTS IN ${n}`, C.YELLOW);
       centre(y0, `ROUND ${g.round + 1}   ${g.n0} ${g.n0 === 1 ? 'PLAYER' : 'PLAYERS'}`, C.GREY);
       bigLine(y0 + 2, mod.name || g.name, C.YELLOW, 4);
-      centre(y0 + 7, mod.hint || '', C.WHITE);
-      centre(y0 + 9, mod.rules || (score ? `MOST POINTS WINS  A FALL KEEPS YOU OUT ${Math.round(g.respawn / 125)} S` : 'FALL AND YOU ARE OUT  THE LAST ONE IN WINS'), C.CYAN);
+      centre(y0 + 7, say(mod.hint || ''), C.WHITE);
+      centre(y0 + 9, say(mod.rules || (score ? `MOST POINTS WINS  A FALL KEEPS YOU OUT ${Math.round(g.respawn / 125)} S` : 'FALL AND YOU ARE OUT  THE LAST ONE IN WINS')), C.CYAN);
       if (g.teams) {
         band(y0 + 11, y0 + 13);
         const side = me?.live ? me.side : -1;
@@ -572,17 +590,17 @@ export async function mount(h, { canvas, lockTarget = canvas, bot: BOT = false, 
     }
     if (me?.live) {
       right(0, `POINTS ${me.pts}  WINS ${me.wins}`, C.YELLOW);
-      if (me.out && g.state === L.H_PLAY && !score) centre(rows - 4, f ? `OUT  WATCHING P${f.slot + 1}  CLICK FOR ANOTHER` : 'OUT', C.GREY);
+      if (me.out && g.state === L.H_PLAY && !score) centre(rows - 4, f ? say(`OUT  WATCHING P${f.slot + 1}  CLICK FOR ANOTHER`) : 'OUT', C.GREY);
       if (me.out && me.place === 0 && g.state === L.H_PLAY && !score) centre(rows - 5, 'YOU PLAY THE NEXT ROUND', C.CYAN);
-      if (me.out && g.state === L.H_PLAY && score && mod.outForGood && f) centre(rows - 4, `WATCHING P${f.slot + 1}  CLICK FOR ANOTHER`, C.GREY);
+      if (me.out && g.state === L.H_PLAY && score && mod.outForGood && f) centre(rows - 4, say(`WATCHING P${f.slot + 1}  CLICK FOR ANOTHER`), C.GREY);
       if (me.out && g.state === L.H_PLAY && score && !mod.ownScore && !mod.quietDown) centre(rows - 4, `DOWN  BACK IN ${Math.max(0, Math.ceil((g.respawn - ((g.tick - me.outAt) | 0)) / 125))}`, C.GREY);
-      if (item && !me.out) put(tx, COLS, 47, rows - 3, `${L.PU_NAMES[item]}  CLICK`, C.WHITE);
+      if (item && !me.out) put(tx, COLS, 47, rows - 3, TOUCH ? L.PU_NAMES[item] : `${L.PU_NAMES[item]}  CLICK`, C.WHITE);
     } else if (WATCH && f) put(tx, COLS, 1, 1, `WATCHING P${f.slot + 1}  < >`, C.CYAN);
     // the minigame's own lines
     if (g.state === L.H_PLAY && !board) {
       try {
         mod.hud?.(view, {
-          put: (x, y, s2, c) => put(tx, COLS, x, y, s2, c), centre, right, rows, C, slot, me, now, t,
+          put: (x, y, s2, c) => put(tx, COLS, x, y, say(s2), c), centre: (y, s2, c) => centre(y, say(s2), c), right: (y, s2, c) => right(y, say(s2), c), rows, C, slot, me, now, t,
           rect: (x0, y0, x1, y1, r, gg, b, a = 1) => rects.push([hx(x0), hy(y0), hx(x1), hy(y1), r, gg, b, a]),
         });
       } catch (e) { console.error(e); }

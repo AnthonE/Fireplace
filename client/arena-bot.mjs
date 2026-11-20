@@ -18,7 +18,7 @@
 // ordinary event log. Walls it can't see through; one in its way it goes
 // round, sidling and jumping until it moves again.
 import * as L from '../src/layout.mjs';
-import { arenaWord, arenaFrame, frameDue, boxClear, boxRay, slab, sees } from '../src/arena-view.mjs';
+import { arenaWord, arenaFrame, frameDue, FrameLog, boxClear, boxRay, slab, sees } from '../src/arena-view.mjs';
 import { aimAt } from './bot.mjs';
 import { AMC, need } from './am/load.mjs';
 
@@ -322,6 +322,7 @@ export class Fighter {
     this.strafe = 4; this.strafeUntil = 0;
     this.frame = 0;
     this.sent = {}; // the last frame's lag and tick
+    this.frames = new FrameLog(); // the frames sent lately, so one the room dropped goes again
     this.lastFire = -1e9;
     this.wantUse = false; this.wantReload = false;
     this.lag = 0;
@@ -340,6 +341,10 @@ export class Fighter {
 
   rand() { let x = this.rng; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.rng = x >>> 0; return this.rng / 4294967296; }
 
+  // Sim ticks a..b held a word the relay repeated in place of one of this bot's
+  // (its session's trailer says so): a frame sent over them goes again.
+  lost(a, b) { this.frames.lost(a, b); }
+
   // The word for sim tick t. lag: how many ticks old the bot's view is.
   think(view, t, lag = 0) {
     const me = view.fighter(this.slot);
@@ -354,8 +359,11 @@ export class Fighter {
     }
     // the frame: latched every 8 ticks, a bit a tick, when there's news
     if ((t & 7) === 0) {
-      const ask = this.wantReload || this.wantUse;
-      this.frame = frameDue(this.sent, t, lag, ask) ? arenaFrame({ lag, reload: this.wantReload, use: this.wantUse }) : 0;
+      // a frame the room dropped (lost(), below) goes again, its requests with it
+      const redo = this.frames.take();
+      const reload = this.wantReload || !!redo?.reload, use = this.wantUse || !!redo?.use;
+      this.frame = frameDue(this.sent, t, lag, reload || use || !!redo) ? arenaFrame({ lag, reload, use }) : 0;
+      this.frames.add(t, this.frame);
       this.wantReload = this.wantUse = false;
     }
     const serial = (this.frame >> (t & 7)) & 1;

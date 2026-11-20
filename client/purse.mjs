@@ -31,8 +31,10 @@ export function buy(tally, purse, id, price, now = Date.now()) {
 
 // everything this browser holds, as one Set for looks.mjs isOpen: the
 // achievements' ids and the bought looks' (an id of the purse's has a colon,
-// an achievement's never)
-export const openSet = (tally, purse) => new Set([...Object.keys(tally.got), ...Object.keys(purse.owned)]);
+// an achievement's never), and the looks a signed-in wallet owns as items
+// (client/shop.mjs ownedLooks, from what the relay read off Elo Pros), which
+// open a priced look the way a bought one does
+export const openSet = (tally, purse, owned = []) => new Set([...Object.keys(tally.got), ...Object.keys(purse.owned), ...owned]);
 
 const KEY = 'fireplace.purse';
 // the browser's own storage, or null where reading it throws (a sandboxed frame) or there is none

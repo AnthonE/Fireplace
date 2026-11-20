@@ -25,15 +25,18 @@ Everything is little-endian.
 | | |
 | --- | --- |
 | a tick | 8 ms (`TICK_US` 8000) |
-| bundles | every 2 ticks (`SEND_EVERY`), carrying the newest 4 closed ticks (`NB`) |
+| bundles | every 2 ticks (`SEND_EVERY`), carrying the newest 4 closed ticks (`NB`), and up to 8 (`NB_DEEP`) while they fit in one datagram |
 | players | 256 slots (`NP`) |
 | a server tick | counts from the relay's start; a room's sim began at server tick `room_start`, so sim tick k is server tick `room_start + k` |
 
 Tick T closes at the relay's deadline for it. A word for T that arrives after
 that is late, and the relay repeats that player's last word instead (with the
 jump bit cleared and the shot counter unchanged, so a late word never fires).
-So send each tick's word a one-way trip ahead, plus a margin: the input lead.
-The bundle trailer's `slack` tells you how early your words land.
+It marks the tick a slot's words turn into repeats, and the tick they are its
+own again (events `EV_LATE` and `EV_ONTIME`, below), so a sim can tell a
+repeat from a word sent. So send each tick's word a one-way trip ahead, plus
+a margin: the input lead. The bundle trailer's `slack` tells you how early
+your words land, and its `late` how many have been repeated.
 
 ## Transports
 
@@ -63,8 +66,8 @@ unchanged. `ws://` unless the relay was given a certificate (`--ws-cert`,
 and reliable, so a datagram is never lost, only late: a lost packet holds up
 everything behind it, then it all lands at once. Acks, repairs and resyncs
 work as they do on datagrams and have nothing to do: an ack shows no hole, so
-no repair is sent. Each tick still comes twice (a bundle carries the newest
-four, every second tick), the second copy skipped.
+no repair is sent. Each tick still comes two to four times (a bundle carries
+the newest four to eight, every second tick), the later copies skipped.
 
 Closing the stream (the WebSocket itself, there) is how you leave. A relay
 that hears no datagram from a player for 2 s takes them as gone.
@@ -106,6 +109,7 @@ After the welcome, every stream message opens with 16 bytes:
 | avatars | `0x1b` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 avatar word) |
 | names | `0x1c` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · 16 B name, 0 after its last character) |
 | badges | `0x1d` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 badge word) |
+| dress words | `0x20` · u8 0 · u16 n · 12 B 0, then n x (u16 slot · u16 0 · u32 dress word) |
 | chat, client to relay | `0x1e` · 3 B 0 · u16 text bytes · 10 B 0, then a line, UTF-8 |
 | chat | `0x1e` · u8 kind · u16 slot · u16 text bytes · 10 B 0, then the text, UTF-8 |
 
@@ -116,6 +120,14 @@ without them needs nothing more. A look word is the ball in its low byte and
 the hat in the next (`client/looks.mjs`; 0 is the house look). It is drawing
 only: no tick, keyframe, record or hash carries it, and a slot that empties
 goes back to 0.
+
+A dress word rides beside the look (`client/dress.mjs`: a worn face in its low
+six bits, a shirt's print in the next six, a back item in the next six; 0
+wears nothing). A client sends its own in bytes 8 to 11 of its look message,
+so a relay that doesn't know it reads the same look from the same message. A
+client that sets bit 0 of the hello's byte 22 (and flag 4) gets every slot's
+dress word as `0x20` pairs, the table after its welcome and the changes
+after; a client that doesn't never sees one.
 
 Avatars ride the same way. A client that sets hello flag 16 gets every
 signed-in slot's Elo Pros avatar after its welcome, then the ones that
@@ -155,7 +167,10 @@ flag 64 gets every signed-in slot's badge word after its welcome, then the
 ones that changed; a client that doesn't never sees one. The relay reads them
 when the slot signs in, from `GET /api/items/sol/of/<wallet>` on Elo Pros
 (`badgesOf` in `net/elo.mjs`); no client can say its own. Bit 0 is the Pill, a
-free cosmetic for ten minutes of hosted play. A slot with none, or that
+free cosmetic for ten minutes of hosted play. Bits 1 to 13 are the shop's
+looks, `BADGE_ITEMS[k]` at bit 1 + k (`net/wire.mjs`): a ball, hat or body the
+wallet owns as a Fireplace Items NFT, which the page opens in its wardrobe
+([coin.md](coin.md)). A key's bit never moves; a new item is appended. A slot with none, or that
 empties, is 0. So is any answer but the item itself, a read that failed
 included: sign-in never waits for this read and never turns on it.
 
@@ -235,7 +250,7 @@ ne EG0 | ne x (slot 8, kind 2) | nc EG0 | nc x (gap EG0 | yaw? pitch? high? 3 x 
 
 | term | meaning |
 | --- | --- |
-| kind | 1 join, 2 leave |
+| kind | 1 join, 2 leave; 3 late, 0 on time (the relay's marks) |
 | gap | slots skipped since the last change (the first counts from slot 0) |
 | the yaw delta | wraps at 2^14 |
 | zz | zigzag: 0, -1, 1, -2, ... to 0, 1, 2, 3, ... |
@@ -245,6 +260,16 @@ ne EG0 | ne x (slot 8, kind 2) | nc EG0 | nc x (gap EG0 | yaw? pitch? high? 3 x 
 A tick too big for one datagram is cut by slot into parts of at most 1,000
 bytes. Each part is coded the same way, its first gap counting from slot 0
 again, and the events go in part 0.
+
+The relay's marks are events too. A slot gets `late` (3) in the first tick it
+closes with that slot's word repeated, and `on time` (0) in the first tick a
+word of its own makes it in again; a slot is either, so it never gets both in
+one tick. The arena's and Dogfight's sims act on them: each of their words
+carries a bit of an 8-tick frame (the view lag, a reload, a pickup), and a
+repeated word carries the tick before's bit, so a frame with a repeat in it
+is dropped whole. Golf's and party's ignore them. A client must feed them in
+with the rest (below), or its arena world parts from the room's at the first
+late word.
 
 Keep the 256 words the next tick is coded against, and apply ticks strictly in
 order (lockstep does anyway). After a keyframe, those words are each live
@@ -257,8 +282,9 @@ player's last input in the keyframe's region.
 The bundle trailer is: u32 in_ack · i16 slack (1/16 ms; negative means your words were late) · u8 late · u8 flags.
 
 - **Arrival:** a tick has arrived once all its parts have, from any datagrams.
-- **Bundles:** a bundle may span several datagrams, each with the same trailer.
+- **Bundles:** the newest 4 ticks, in as many datagrams as they need, each with the same trailer; or up to 8 when those fit in one, so a tick rides in four bundles in a row and a burst of loss up to 48 ms long loses none of them.
 - **in_ack:** the newest tick through which the relay has all your words.
+- **late:** how many of your words the relay has repeated in place of yours, since you joined, mod 256. It moves with the bundle that closed them: when it moves, an arena frame you sent over those ticks was dropped, so send it again (`src/arena-view.mjs` `FrameLog`).
 
 ## Into the world
 
@@ -266,7 +292,7 @@ The bundle trailer is: u32 in_ack · i16 slack (1/16 ms; negative means your wor
 grows. Call `init(seed)` with the welcome's seed. To step a closed tick:
 
 1. Write its inbox:
-   - for each join or leave, in order, a 16-byte record at `0x1010 + 16i`: byte 4 kind (5 join, 6 leave), byte 5 slot, the rest 0;
+   - for each join, leave or mark, in order, a 16-byte record at `0x1010 + 16i`: byte 4 kind (5 join, 6 leave, 7 late, 8 on time), byte 5 slot, the rest 0;
    - then an input record per changed word: kind 4, the slot, the word as u32 at byte 8;
    - the record count, as u32, at `0x1000`.
 2. Call `step()`.

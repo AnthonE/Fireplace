@@ -35,7 +35,10 @@ fighter's eyes to behind it, as far as 12 m, and in again; C switches
 between the two (third person, below). While the mouse is free (before the first
 click, or after Esc), the wardrobe (`client/wardrobe.mjs`, as on Fireplace's
 couch) picks your ball, hat and body, and PLAY takes the controls again; on a
-phone it waits folded under a YOUR LOOK button. `?bot=1` hands your slot to an
+phone it waits folded under a YOUR LOOK button, and the controls are a
+stick, a drag and buttons ([fireplace.md](fireplace.md), On a phone): FIRE
+under the thumb, a drag on it aiming as it fires, JUMP, MELEE, and RELOAD,
+FRAG, SWAP and PICK UP while each does something. `?bot=1` hands your slot to an
 AI fighter; `?watch=1` spectates. More fighters for a running room (up to 255, one
 process, one shared copy of the world):
 `node net/bot-host.mjs --arena --relay 127.0.0.1:4434 --bots 50 [--skill 0.6] [--slips]`.
@@ -83,7 +86,14 @@ pickup request. The word sits on golf's fields (yaw low, pitch, then a high
 byte of the bits that change least), which wire v4 codes tightest, and a
 frame goes only when there is news (a request, the lag 2 ticks off, or a
 second gone), so between them a still player's word doesn't change and
-costs nothing. Hitscan shots are lag-compensated inside the
+costs nothing. A word that reaches the relay too late is closed as the last
+one repeated, which carries the tick before's bit of the frame: a lag of 18
+read as 2 or 22, a reload or a pickup nobody pressed. So the relay marks the
+ticks a slot's words turn into repeats and back ([wire.md](wire.md)), the
+sim drops whole any frame a repeat fell in (`AL_STALE`, beside the lag in
+`A_LAG`), and the sender, whose bundles count its repeated words, sends that
+frame again (`FrameLog`): a dropped reload starts a round trip late, and
+nothing nobody sent ever lands. Hitscan shots are lag-compensated inside the
 lockstep: the sim keeps where every fighter stood after each of the last 32
 ticks (in the balls' place in the region, so it is hashed and in every
 keyframe), and a shot is checked against the targets where the shooter saw
@@ -98,7 +108,8 @@ needles, frags) are checked where things are now.
 renderer (`client/arena-render.mjs`: golf's ray-marched terrain and its
 splats in the cartoon's look golf, the arena and Dogfight share, the map's
 boxes as plastic with studs on top, metal in panels and rock in strata,
-the fighters as cartoon figures (`client/figure.mjs`) with their shadows on
+the fighters as cartoon figures (`client/figure.mjs`, wearing the player's
+hat, worn face, shirt print and back item as Party's rider does: [coin.md](coin.md#skins)) with their shadows on
 the ground, the match's hour its seed's (day, dusk or night:
 [look.md](look.md)), plus tracers as beams, blasts in flat bands, the
 gun in your hands as a field of rounded parts marched in the world's pass
@@ -508,8 +519,8 @@ health bars, no tracker, no crosshair. Where the bars were, the course as a
 bar, a cell a stage and the finish's last, with your run's clock under it;
 in the top right the room, six of it, by how far along each is (a
 finisher's time in green, you always among them); the board (Tab, and at
-the end) has STAGE, FALLS and TIME. On a phone the buttons are JUMP and
-VIEW.
+the end) has STAGE, FALLS and TIME. On a phone the buttons are JUMP, VIEW
+and BOARD.
 
 ```sh
 node net/play.mjs --arena --map obby

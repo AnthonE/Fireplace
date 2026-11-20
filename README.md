@@ -188,8 +188,8 @@ minute, and plays back in the page with `?replay=../replays/<file>`.
 - **Minigames in Rust.** A Party minigame's rules may be a Rust crate in
   place of hand-written WAT; Sumo Ring is the first
   ([docs/rust.md](docs/rust.md)).
-- **Elo Pros.** A player signed in with Elo Pros wears the blocky avatar from
-  their profile on the riders and fighters, and the Pill's badge on the
+- **Elo Pros.** A player signed in with Elo Pros wears the avatar's colours from
+  their profile on the riders, fighters and golfers, and the Pill's badge on the
   marshmallow board if their wallet holds one.
 
 ## How it works
@@ -238,6 +238,7 @@ protocol, for writing a client in any language, and
 | `rust/` | Party minigames in Rust (Sumo Ring) and the engine's bindings for them |
 | `test/` | `node:test`, one file per game, mode and minigame |
 | `docs/` | each game's long-form doc, the netcode, the wire, hosting, the roadmap, and maps from [Roblox](docs/roblox.md) and [MagicaVoxel](docs/vox.md), minigames in [Rust](docs/rust.md) |
+| `coin/` | Fireplace's coin before it exists: the sheet pump.fun's create form is typed from, its pictures drawn by `tools/coin.mjs`, and the shop's items' pictures (`tools/shop-shots.mjs`) ([docs/coin.md](docs/coin.md)) |
 
 ## Develop
 

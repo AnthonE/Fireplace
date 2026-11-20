@@ -2,8 +2,9 @@
 // riders that jolt when their balls meet, the camera shaking when yours does,
 // and a winner who cheers in a shower of confetti. Drawing only, from what the
 // frontends already see (the confirmed world's FX and the round's end); the
-// confetti are boxes (client/rider.mjs BLOCK), falling and turning.
-import { BLOCK, EMOTE, EMOTE_S } from './rider.mjs';
+// confetti are boxes (client/block.mjs BLOCK), falling and turning.
+import { BLOCK } from './block.mjs';
+import { EMOTE, EMOTE_S } from './rider.mjs';
 
 const CONFETTI = [[1, 0.25, 0.3], [1, 0.8, 0.15], [0.25, 0.75, 1], [0.35, 0.9, 0.35], [0.85, 0.4, 1], [1, 1, 1]];
 const JOLT_MS = 350;

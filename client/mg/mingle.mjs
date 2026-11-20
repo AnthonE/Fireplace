@@ -212,10 +212,10 @@ function trapdoors(view, ctx, out) {
     out.decals.push({ pos: [x, PLAT_Y + 0.03, z], radius: 1.35, width: 0.3, color: [0, 0, 0, 0.95 * (1 - age / 1.2)], kind: DECAL.DISC });
     if (age > 0.9) continue;
     const y = y0 - 0.5 * 24 * age * age;
-    const col = [...slotColor(p), 1];
-    out.solid.push({ pos: [x, y + BALL_R, z], size: BALL_R, color: col, kind: SPRITE.BALL, minpx: 1, vel: [0, 0, 0], roll: 0, seed: p });
-    out.solid.push({ pos: [x, y + 2 * BALL_R + 0.22, z], size: 0.34, color: col, kind: SPRITE.BODY, minpx: 1 });
-    out.solid.push({ pos: [x, y + 2 * BALL_R + 0.78, z], size: 0.3, color: col, kind: SPRITE.HEAD, minpx: 1, vel: [1, 0, 0] });
+    const bs = ctx.ball ? ctx.ball(p) : { color: [...slotColor(p), 1], seed: p };
+    out.solid.push({ pos: [x, y + BALL_R, z], size: BALL_R, color: bs.color, kind: SPRITE.BALL, minpx: 1, vel: [0, 0, 0], roll: 0, seed: bs.seed });
+    // its rider in its look (client/rider.mjs), arms going up as it drops
+    ctx.rider?.(out.solid, p, { at: [x, y + 2 * BALL_R, z], face: 0, vy: -24 * age });
   }
 }
 

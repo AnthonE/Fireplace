@@ -5,8 +5,9 @@
 //   ?watch=1 spectates; ?url=, ?hash=, ?impair=, ?sens=, ?res=, ?hud=, ?music=0 as golf's
 //   ?wasm=blob:... plays a build the studio made in this origin (client/studio.html), in a local room;
 //     ?consts=blob:... with it and ?mg=, that minigame's constants as edited there, for what draws it and for its AI balls
-import { createHost, fitSize } from './host.mjs';
+import { createHost, netStats } from './host.mjs';
 import { pageWardrobe } from './wardrobe.mjs';
+import { phonePage, fitted } from './mobile.mjs';
 import { mount } from './party-game.mjs';
 import { withConsts } from './mg/load.mjs';
 
@@ -15,7 +16,10 @@ const canvas = document.getElementById('screen');
 const note = document.getElementById('note');
 
 async function main() {
-  [canvas.width, canvas.height] = fitSize(q);
+  // a phone: the page held still, the screen sideways, the canvas fitted again as the window changes (client/mobile.mjs)
+  let h = null;
+  const phone = phonePage(q, { wake: () => h?.sound.wake() });
+  [canvas.width, canvas.height] = phone.size();
   if (canvas.width > 640) canvas.style.imageRendering = 'auto';
   // a studio build: only a blob this origin made, and only in a local room, never a relay's
   const built = q.get('wasm') || '';
@@ -25,10 +29,10 @@ async function main() {
   const consts = q.get('consts') || '';
   if (consts && !(built && q.has('mg') && consts.startsWith(`blob:${location.origin}/`))) throw new Error('?consts= goes with a studio build and its ?mg=');
   if (consts) withConsts(Number(q.get('mg')), consts);
-  const h = await createHost({ wasm: built || '../build/party/game.wasm', q, watch: q.get('watch') === '1', kind: built ? 'party' : '' });
-  const game = await mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.8), sens: Number(q.get('sens') || 3),
-    hud: Number(q.get('hud')) || 0, present: q.get('present') !== '0', showGraph: q.get('net') === '1' });
-  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), transport: h.transport }), capture: game.capture, chat: h.chat };
+  h = await createHost({ wasm: built || '../build/party/game.wasm', q, watch: q.get('watch') === '1', kind: built ? 'party' : '' });
+  const game = await fitted(h, phone, { canvas, key: 'party', mount: () => mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.8), sens: Number(q.get('sens') || 3),
+    hud: Number(q.get('hud')) || 0, present: q.get('present') !== '0', showGraph: q.get('net') === '1' }) });
+  window.__qa = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), transport: h.transport, net: netStats(h) }), capture: game.capture, chat: h.chat };
   note.remove();
   // your look, while the mouse is free (client/wardrobe.mjs); not in the studio's frame, where a build is tried
   const wardrobe = pageWardrobe(h, { canvas, q, watch: !!built });

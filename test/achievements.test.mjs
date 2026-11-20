@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
-import { ACHIEVEMENTS, byId, emptyTally, record, readResult, eloStats, tallyOfStats, statsReport, GAME_KEYS, STORE_ID } from '../client/achievements.mjs';
+import { ACHIEVEMENTS, CHALLENGES, byId, emptyTally, record, readResult, eloStats, tallyOfStats, statsReport, GAME_KEYS, STORE_ID } from '../client/achievements.mjs';
 import { LADDERS } from '../net/elo.mjs';
 
 const inFont = (s) => [...s].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) <= 95);
@@ -149,6 +149,35 @@ test("elo.json's stats block: ids and lines Elo Pros takes, a stat per thing a t
     const id = a.id.toLowerCase(), k = a.progress.stat, t = { ...emptyTally(), [k]: a.progress.max };
     assert.ok(['games', 'mallows', 'wins'].includes(k), `${id}: ${k} is a tally field`);
     assert.ok(byId.get(id).test(t) && !byId.get(id).test({ ...t, [k]: t[k] - 1 }), id);
+  }
+});
+
+test("the challenges' pool: rows Elo Pros takes, over stats a game's report adds to, three of each kind to draw", () => {
+  const defs = eloStats();
+  assert.equal(defs.challenges, CHALLENGES);
+  const agg = new Map(defs.stats.map((s) => [s.id, s.agg]));
+  // scry-forge meter/challenges.py validate(): the fields, an id, a sum or a max, a whole goal, day or week
+  for (const c of CHALLENGES) {
+    assert.deepEqual(Object.keys(c), ['id', 'name', 'desc', 'stat', 'goal', 'every'], c.id);
+    assert.match(c.id, /^[a-z0-9_]{1,48}$/, c.id);
+    assert.ok(c.name.trim().length >= 1 && c.name.length <= 48 && c.desc.length <= 200, c.id);
+    assert.ok(['sum', 'max'].includes(agg.get(c.stat)), `${c.id}: ${c.stat} is a sum or a max this game declares`);
+    assert.ok(Number.isSafeInteger(c.goal) && c.goal >= 1, c.id);
+    assert.ok(['day', 'week'].includes(c.every), c.id);
+    assert.doesNotMatch(c.name + c.desc, /[$%]|coin|pot\b/i, `${c.id}: a game's text names no pay`);
+  }
+  assert.equal(new Set(CHALLENGES.map((c) => c.id)).size, CHALLENGES.length);
+  assert.ok(CHALLENGES.length <= 64);
+  for (const every of ['day', 'week']) assert.ok(CHALLENGES.filter((c) => c.every === every).length >= 3, `three live a ${every}`);
+  // one game's report moves every goal's stat by what that game was, never by a lifetime's
+  const before = emptyTally(), r = res({ game: L.G_PARTY, place: 1, got: 3, field: 9 });
+  const x = record({ ...before, games: 500, mallows: 900, wins: 80, best: 12, crowd: 200 }, r, 1e12);
+  const rep = statsReport('0x' + 'ab'.repeat(20), before, x.tally, r, x.opened);
+  assert.deepEqual([rep.stats.games, rep.stats.mallows, rep.stats.wins, rep.stats['played.party'], rep.stats['won.party'], rep.stats.crowd], [1, 3, 1, 1, 1, 9]);
+  for (const c of CHALLENGES) {
+    assert.ok(!/bumper|streak/.test(c.stat), `${c.id}: not a retired game's stat, nor one reported as it stands`);
+    const playable = c.stat.includes('.') ? L.PLAYLIST.includes(GAME_KEYS.indexOf(c.stat.split('.')[1])) : true;
+    assert.ok(playable, `${c.id}: ${c.stat} is a game the playlist plays`);
   }
 });
 

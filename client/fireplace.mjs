@@ -24,13 +24,17 @@ import { unpackArena, modeName } from '../src/arena-view.mjs';
 import '../src/bumper-view.mjs';
 import '../src/party-view.mjs';
 import { modeName as flightMode } from '../src/flight-view.mjs';
-import { createHost, epoch, fitSize } from './host.mjs';
+import { createHost, epoch, netStats } from './host.mjs';
+import { phonePage } from './mobile.mjs';
 import { createRoom, SCREEN, COUCH, cardText, cardFire } from './room-render.mjs';
 import { loadTheme, themeList, savedTheme, saveTheme, FALLBACK, DEFAULT } from './themes.mjs';
 import { readClock } from './clock.mjs';
-import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, drawLook, lookName, lookId } from './looks.mjs';
+import { BALLS, HATS, BODIES, packLook, unpackLook, savedLook, saveLook, nextOpen, wearable, isOpen, lookName, lookId } from './looks.mjs';
+import { drawLook } from './figure.mjs';
 import { ACHIEVEMENTS, loadTally, saveTally, emptyTally, record, readResult } from './achievements.mjs';
 import { balance, buy, openSet, emptyPurse, loadPurse, freshPurse, savePurse } from './purse.mjs';
+import { ownedLooks } from './shop.mjs';
+import { FACES, SHIRTS, BACKS, dressOf, savedDress, saveDress, wearableDress } from './dress.mjs';
 import { filmClock, filmSound, scoreTrack, compose } from './film.mjs';
 import { kit, room as pool, canGoOnline, goOnline } from './kit.mjs';
 import { touchWanted } from './touch.mjs';
@@ -74,7 +78,10 @@ const ease = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
 
 async function main() {
-  const [W, H] = fitSize(q, [1600, 1000]);
+  // a phone: the page held still, the screen sideways, the canvases fitted again as the window changes (client/mobile.mjs)
+  let host = null;
+  const phone = phonePage(q, { wake: () => host?.sound.wake(), max: [1600, 1000] });
+  let [W, H] = phone.size();
   roomCanvas.width = W;
   roomCanvas.height = H;
   // ?gres=WxH: golf, the arena and Dogfight (the games that ray-trace a world per pixel) at their own
@@ -82,14 +89,14 @@ async function main() {
   const GRES = q.has('gres') ? q.get('gres').split('x').map(Number) : null;
   canvases.forEach((c, k) => { if (c) [c.width, c.height] = GRES && [L.G_GOLF, L.G_ARENA, L.G_FLIGHT].includes(k) ? GRES : [W, H]; });
   const clock = FILM ? filmClock() : null;
-  const host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
+  host = await createHost({ wasm: WASM, q, watch: WATCH, fireplace: true, connect: false });
   const track = FILM ? filmSound(FILM, { music: q.get('music') !== '0' }) : null;
   if (track) host.sound = track.sound;
   const { view, get, set, press, sound, i32, f64 } = host;
   // the room's theme: ?theme=, else this viewer's last pick, else Grandma's (client/themes.mjs)
   const theme = await loadTheme(q.get('theme') || savedTheme() || DEFAULT).catch((e) => { console.warn(e.message); return FALLBACK; });
   const room = await createRoom(roomCanvas, host.device, { present: q.get('present') !== '0', theme });
-  const tvTex = canvases.map((c) => c && room.tvTexture(c.width, c.height));
+  let tvTex = canvases.map((c) => c && room.tvTexture(c.width, c.height));
   // the guest's brains, every game's bot and through Party's every minigame's sense of its stage, load only for ?bot=1
   const [{ Guest }, { GOLFER }] = BOT ? await Promise.all([import('./fireplace-bot.mjs'), import('./brain.mjs')]) : [{}, {}];
   const guest = BOT ? new Guest(0, (Math.random() * 1e9) | 0, Number(q.get('skill') || 0.8), GOLFER) : null;
@@ -99,22 +106,29 @@ async function main() {
   let tally = KEEP ? loadTally() : emptyTally();
   // what the marshmallows bought (client/purse.mjs); got is all this browser holds, the achievements and those
   let purse = KEEP ? loadPurse() : emptyPurse();
-  let got = openSet(tally, purse);
+  // what this slot's wallet owns as items, a badge word's item bits: the page's open set takes them, once it has signed in
+  const owned = () => ownedLooks(host.badges(get(L.CL_SLOT)));
+  let got = openSet(tally, purse, owned());
+  let ownedSeen = owned().join();
   let look = q.has('look') ? Number(q.get('look')) >>> 0 : KEEP ? wearable(savedLook(), got) : 0;
   set(L.CL_LOOK, look);
   let lookAt = -1e9, listAt = -1e9, listPage = 0; // when B, H or P, and L, last put their card on the TV; the list's page
   let heldKey = '', opened = []; // the game held now, and what its end opened
   const wear = (w) => { look = w; set(L.CL_LOOK, w); saveLook(w); lookAt = performance.now(); listAt = -1e9; };
+  // the dress word (client/dress.mjs: a face, a shirt's print, a back item), kept and sent with the look; host.mjs set it at load
+  let dress = q.has('dress') ? Number(q.get('dress')) >>> 0 : KEEP ? wearableDress(savedDress(), got) : 0;
+  set(L.CL_DRESS, dress);
+  const wearDress = (d) => { dress = d >>> 0; set(L.CL_DRESS, dress); saveDress(dress); lookAt = performance.now(); listAt = -1e9; };
   // the wardrobe's BUY: a priced look out of the purse, as storage holds it now
   const spend = (x) => {
     purse = freshPurse(purse);
     const r = buy(tally, purse, lookId(x), x.price);
     if (r.ok) { purse = r.purse; savePurse(purse); }
-    got = openSet(tally, purse);
+    got = openSet(tally, purse, owned());
     return r;
   };
   // the looks an achievement opens
-  const opens = (id) => [...BALLS, ...HATS, ...BODIES].filter((x) => x.unlock === id).map(lookName);
+  const opens = (id) => [...BALLS, ...HATS, ...BODIES, ...FACES, ...SHIRTS, ...BACKS].filter((x) => x.unlock === id).map(lookName);
   // what this slot did in the game just held, counted once
   function tallyUp() {
     const slot = get(L.CL_SLOT);
@@ -125,7 +139,7 @@ async function main() {
     if (next.tally === tally) return;
     tally = next.tally;
     saveTally(tally);
-    got = openSet(tally, purse);
+    got = openSet(tally, purse, owned());
     opened = next.opened;
   }
 
@@ -175,7 +189,7 @@ async function main() {
   }
   // the couch's keys as a panel, on a phone the only way to them (client/wardrobe.mjs)
   const wardrobe = KEEP && !FILM ? createWardrobe({
-    look: () => look, wear, got: () => got, tally: () => tally, balance: () => balance(tally, purse), buy: spend,
+    look: () => look, wear, dress: () => dress, wearDress, got: () => got, tally: () => tally, balance: () => balance(tally, purse), buy: spend,
     slot: () => get(L.CL_SLOT), avatar: () => host.avatar(get(L.CL_SLOT)),
     theme: () => room.theme, turn: (dir) => nextTheme(dir), sit: sitDown, fullscreen,
   }) : null;
@@ -225,6 +239,25 @@ async function main() {
     import(FRONTENDS[next]).then(({ warm }) => warm(host, mountOpts(next))).catch((e) => console.warn(`${L.GAMES[next]} was not made ready: ${e?.message || e}`));
   }
 
+  // a phone's window at another size: the room and the TV's pictures at it, the game put away to be mounted
+  // afresh (the frame below does) on a new renderer at it, the room on the TV meanwhile (client/mobile.mjs)
+  phone.refit(() => [W, H], async ([w, hh]) => {
+    while (mounting) await mounting.catch(() => {});
+    [W, H] = [w, hh];
+    [roomCanvas.width, roomCanvas.height] = [W, H];
+    canvases.forEach((c, k) => { if (c) [c.width, c.height] = GRES && [L.G_GOLF, L.G_ARENA, L.G_FLIGHT].includes(k) ? GRES : [W, H]; });
+    room.resize(W, H);
+    for (const t of tvTex) t?.destroy();
+    tvTex = canvases.map((c) => c && room.tvTexture(c.width, c.height));
+    frontend?.unmount();
+    frontend = null;
+    game = -1;
+    // each kept as the promise of it (client/host.mjs renderer()); the next game is made ready again at the new size
+    for (const r of host.renderers.values()) Promise.resolve(r).then((x) => x?.destroy?.(), () => {});
+    host.renderers.clear();
+    warmed = -1;
+  });
+
   // ---- the guest at the controls (?bot=1): its word into the slots, as keys and a mouse would
   let lastWord = 0;
   function drive() {
@@ -258,7 +291,7 @@ async function main() {
   pill.src = new URL('pill-badge.png', import.meta.url).href;
   // the room's theme and who made it: on the title, and for a while after T changes it
   const roomLine = () => {
-    const s = `ROOM: ${room.theme.name} BY ${room.theme.by}  -  T FOR ANOTHER`;
+    const s = `ROOM: ${room.theme.name} BY ${room.theme.by}${TOUCH ? '' : '  -  T FOR ANOTHER'}`;
     text(s, 320, 372, s.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
   };
   function drawCard(kind, now) {
@@ -275,13 +308,14 @@ async function main() {
       text(TAGLINE, 320, 250, TAGLINE.length * 12 <= 620 ? 3 : 2, '#c9b89a', 'center');
       text(GAMES_LINE, 320, 275, GAMES_LINE.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
       if (KEEP) {
-        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
+        drawLook(g2, 578, 128, 22, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)), dressOf(dress));
         const { ball, hat, body } = unpackLook(look);
-        const s = `B: ${BALLS[ball].name}  H: ${HATS[hat].name}  P: ${BODIES[body].name}  L: ACHIEVEMENTS ${Object.keys(tally.got).length}/${ACHIEVEMENTS.length}`;
+        const s = TOUCH ? `${BALLS[ball].name}  ${HATS[hat].name}  ${BODIES[body].name}  ACHIEVEMENTS ${Object.keys(tally.got).length}/${ACHIEVEMENTS.length}`
+          : `B: ${BALLS[ball].name}  H: ${HATS[hat].name}  P: ${BODIES[body].name}  L: ACHIEVEMENTS ${Object.keys(tally.got).length}/${ACHIEVEMENTS.length}`;
         text(s, 320, 300, s.length * 12 <= 620 ? 3 : 2, '#8ea0b8', 'center');
       }
       if (kind === 'tuning') text(host.error ? 'NO SIGNAL' : 'TUNING IN...', 320, 330, 5, host.error ? '#ff6a5a' : '#ffffff', 'center');
-      else if (Math.floor(t * 1.5) % 2) text(BOT ? 'A GUEST SITS DOWN' : 'CLICK TO SIT DOWN', 320, 330, 5, '#ffffff', 'center');
+      else if (Math.floor(t * 1.5) % 2) text(BOT ? 'A GUEST SITS DOWN' : TOUCH ? 'TAP TO SIT DOWN' : 'CLICK TO SIT DOWN', 320, 330, 5, '#ffffff', 'center');
       return;
     }
     // the standings: everyone in the room by marshmallows, your row lit, and what's next
@@ -315,7 +349,7 @@ async function main() {
       const news = `NEW: ${opened.map((id) => ACHIEVEMENTS.find((a) => a.id === id).name).join(', ')}`;
       text(news, 320, 286, fit(news), '#7fdf7f', 'center');
       const looks = opened.flatMap(opens);
-      const s = `${looks.join(', ')} ${looks.length > 1 ? 'ARE' : 'IS'} YOURS: B OR H TO WEAR IT`;
+      const s = `${looks.join(', ')} ${looks.length > 1 ? 'ARE' : 'IS'} YOURS: ${TOUCH ? 'YOUR LOOK' : 'B OR H'} TO WEAR IT`;
       if (looks.length) text(s, 320, 308, fit(s), '#c9e8a0', 'center');
     }
     const left = Math.max(0, Math.ceil((view.dv.getUint32(L.FP_AT, true) - view.tick) / 125));
@@ -328,19 +362,19 @@ async function main() {
     text('YOUR LOOK', 320, 26, 5, '#ffcf6a', 'center');
     const left = balance(tally, purse);
     if (wardrobe && left) text(`${left} MARSHMALLOW${left === 1 ? '' : 'S'} TO SPEND IN THE WARDROBE`, 320, 56, 3, '#c9b89a', 'center');
-    drawLook(g2, 170, 246, 50, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)));
+    drawLook(g2, 170, 246, 50, Math.max(0, get(L.CL_SLOT)), look, t, host.avatar(get(L.CL_SLOT)), dressOf(dress));
     text('BALL', 330, 80, 3, '#8ea0b8');
     text(BALLS[ball].name, 330, 98, 5, '#ffffff');
-    text('B FOR ANOTHER', 330, 126, 3, '#c9b89a');
+    if (!TOUCH) text('B FOR ANOTHER', 330, 126, 3, '#c9b89a');
     text('HAT', 330, 160, 3, '#8ea0b8');
     text(HATS[hat].name, 330, 178, 5, '#ffffff');
-    text('H FOR ANOTHER', 330, 206, 3, '#c9b89a');
+    if (!TOUCH) text('H FOR ANOTHER', 330, 206, 3, '#c9b89a');
     text('BODY', 330, 240, 3, '#8ea0b8');
     text(BODIES[body].name, 330, 258, 5, '#ffffff');
-    text('P FOR ANOTHER', 330, 286, 3, '#c9b89a');
+    if (!TOUCH) text('P FOR ANOTHER', 330, 286, 3, '#c9b89a');
     text('EVERYONE IN THE ROOM SEES IT', 320, 310, 3, '#8ea0b8', 'center');
-    text('IN A GAME, 1 TO 4: WAVE, CHEER, DANCE, SPIN', 320, 331, 3, '#8ea0b8', 'center');
-    const shut = [...BALLS, ...HATS, ...BODIES].find((x) => x.unlock && !isOpen(x, got));
+    text(TOUCH ? 'IN PARTY, EMOTE: WAVE, CHEER, DANCE, SPIN' : 'IN A GAME, 1 TO 4: WAVE, CHEER, DANCE, SPIN', 320, 331, 3, '#8ea0b8', 'center');
+    const shut = [...BALLS, ...HATS, ...BODIES, ...FACES, ...SHIRTS, ...BACKS].find((x) => x.unlock && !isOpen(x, got));
     if (shut) {
       const s = `EARN ${lookName(shut)}: ${ACHIEVEMENTS.find((a) => a.id === shut.unlock).about}`;
       text(s, 320, 352, s.length * 12 <= 620 ? 3 : 2, '#7fdf7f', 'center');
@@ -436,11 +470,21 @@ async function main() {
   }
   function frame(now) {
     if (!FILM) requestAnimationFrame(frame);
+    phone.frame(now);
     const st = get(L.CL_STATE);
     const seq = get(L.CL_SEQ);
     const g = view.dv.getUint32(L.FP_GAME, true);
     const held = view.dv.getUint32(L.FP_STAGE, true) === 1;
     if (held) tallyUp();
+    // signing in can hand over looks the wallet owns: open them, and put on the one this browser last wore
+    const ownedNow = owned().join();
+    if (ownedNow !== ownedSeen) {
+      ownedSeen = ownedNow;
+      got = openSet(tally, purse, owned());
+      const w = wearable(savedLook(), got), d = wearableDress(savedDress(), got);
+      if (!q.has('look') && KEEP && w !== look) wear(w);
+      if (!q.has('dress') && KEEP && d !== dress) wearDress(d);
+    }
     // The game on is read once the room's world is in (its first keyframe: until then the sim holds the seed's
     // opening game, which the room may be long past) and not while the sim worker is changing it (CL_SEQ odd, or
     // moved on: a world laid out again from its seed has its header wiped first, and a frame that landed there
@@ -497,7 +541,7 @@ async function main() {
       return { slot, clState: get(L.CL_STATE), error: host.error, theme: room.theme.id, game: g, gameName: gameName(g, view.dv.getUint32(L.HDR_SEED, true)), mg: g === L.G_PARTY ? L.MINIGAMES[view.dv.getUint32(L.PG_GAME, true)]?.name ?? null : null, state: view.hole().state, scene, zoom, games: gamesSeen, mounts,
         mallows: slot >= 0 ? view.dv.getUint16(L.FP_MALLOWS + 2 * slot, true) : 0, card, me: frontend?.state?.().me ?? null,
         look, achievements: Object.keys(tally.got), opened, purse: { balance: balance(tally, purse), owned: Object.keys(purse.owned) },
-        pool: { ...pool, local: !!host.local }, transport: host.transport,
+        pool: { ...pool, local: !!host.local }, transport: host.transport, net: netStats(host),
         // the room's looks as the relay last sent them (this slot's own included, once it has gone round)
         relayLooks: [...Array(L.NPLAYER).keys()].filter((p) => host.u32[(L.CL_LOOKS >> 2) + p]).map((p) => [p, host.u32[(L.CL_LOOKS >> 2) + p]]) };
     },

@@ -25,6 +25,28 @@ export function frameDue(keep, t, lag, ask) {
   return true;
 }
 
+// The frames a sender has sent lately, by the sim tick each window starts at,
+// so one the room dropped goes again. The relay counts the words it closed
+// without, repeating the last one in their place (a bundle's trailer, `late`),
+// and the arena drops whole any frame a repeated word fell in (src/arena.wat
+// $a_frame, layout.mjs AL_STALE). lost(a, b): some word in sim ticks a..b was
+// a repeat; take(), at the next window: the requests to send again, or null.
+export class FrameLog {
+  constructor() { this.sent = new Map(); this.redo = null; }
+  add(t, frame) {
+    if (frame) this.sent.set(t, frame);
+    for (const k of this.sent.keys()) if (k < t - 256) this.sent.delete(k); else break;
+  }
+  lost(a, b) {
+    for (let w = Math.max(a, b - 256) & ~7; w <= b; w += 8) {
+      const f = this.sent.get(w);
+      if (!f) continue;
+      this.redo = { reload: !!this.redo?.reload || !!(f & L.AF_RELOAD), use: !!this.redo?.use || !!(f & L.AF_USE) };
+    }
+  }
+  take() { const r = this.redo; this.redo = null; return r; }
+}
+
 export function unpackArena(w) {
   return { yaw: (w & 0x7ff) << 3, pitch: (w >>> L.AW_PITCH) & 0x3ff, move: (w >>> L.AW_MOVE) & 0xf, jump: (w >>> L.AW_JUMP) & 1, shot: (w >>> L.AW_SHOT) & 3,
     melee: (w >>> L.AW_MELEE) & 1, gren: (w >>> L.AW_GREN) & 1, slot: (w >>> L.AW_SLOT) & 1, serial: w >>> L.AW_SERIAL };
@@ -43,7 +65,7 @@ View.prototype.fighter = function fighter(p) {
     ...pl, dead: !!(fl & L.PF_DEAD), hp: d.getUint8(b + L.A_HP), sh: d.getUint8(b + L.A_SH), shieldIn: d.getUint16(b + L.A_SHT, true),
     gun, mag: [d.getUint8(b + L.A_MAG), d.getUint8(b + L.A_MAG + 1)], res: [d.getUint16(b + L.A_RES, true), d.getUint16(b + L.A_RES + 2, true)],
     hand: slot, weapon: gun[slot], grens: d.getUint8(b + L.A_GRENS), act, kills: d.getUint16(b + L.A_KILLS, true), deaths: d.getUint16(b + L.A_DEATHS, true),
-    respawn: d.getUint16(b + L.A_RESPAWN, true), cool: d.getUint16(b + L.A_COOL, true), burst: d.getUint8(b + L.A_BURST), lag: d.getUint8(b + L.A_LAG),
+    respawn: d.getUint16(b + L.A_RESPAWN, true), cool: d.getUint16(b + L.A_COOL, true), burst: d.getUint8(b + L.A_BURST), lag: d.getUint8(b + L.A_LAG) & L.LAG_MAX, late: !!(d.getUint8(b + L.A_LAG) & L.AL_LATE),
     reload: d.getUint8(b + L.A_RELOAD), needles: d.getUint8(b + L.A_NEEDLES), hitBy: d.getUint8(b + L.A_HITBY),
     yaw: (pl.input & 0x7ff) / 2048 * 2 * Math.PI, pitch: (((pl.input >>> L.AW_PITCH) & 0x3ff) - 512) / 1024 * Math.PI,
     // the match's mode: a side, and the confirmed world's record (MODE_REC is not in the prediction's copy).

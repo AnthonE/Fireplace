@@ -29,7 +29,7 @@ import { AMC, need, newsOf, SIDE, SIDE_C, SIDE_RGB, sideOf } from './am/load.mjs
 import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { NetGraph } from './netgraph.mjs';
-import { predict, corrector, capturePng, listeners } from './host.mjs';
+import { predict, corrector, lagCheck, capturePng, listeners } from './host.mjs';
 import { tintsOf } from './looks.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
@@ -86,6 +86,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (left) setTimeout(writeKeys, 170);
   };
   let locked = document.pointerLockElement === lockTarget;
+  // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+  const TOUCH = !WATCH && !BOT && touchWanted(host.q);
   let touch = null; // the touch controls, on a phone
   let watched = -1;
   let showGraph = graphOn;
@@ -115,8 +117,6 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
-    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
-    const TOUCH = touchWanted(host.q);
     if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
@@ -164,15 +164,16 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); if (e.code === 'Space') charging = false; writeKeys(); });
     on(window, 'blur', () => { held.clear(); trigger = false; charging = false; writeKeys(); set(L.CL_AUTO, 0); });
+    // the stick is the throttle (up boosts, down brakes) and the sideways keys; ROLL rolls the way it leans, right
+    // when it doesn't; a drag on FIRE or CHARGE aims the nose as it fires or charges
     if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
       look: (dx, dy) => look({ movementX: dx * touchScale(SENS), movementY: dy * touchScale(SENS) }),
       buttons: [
         { label: 'FIRE', hold: (on) => { if (on) press(L.CL_PRESSES); trigger = on; if (!on) set(L.CL_AUTO, 0); } },
         { label: 'CHARGE', hold: (on) => { charging = on; writeKeys(); } },
         { label: 'BOMB', tap: () => press(L.CL_GREN) },
-        { label: 'BOOST', code: 'ShiftLeft' },
-        { label: 'ROLL L', tap: () => roll(true) },
-        { label: 'ROLL R', tap: () => roll(false) },
+        { label: 'ROLL', spot: 4, tap: () => roll(held.has('KeyA')) }, // (above the radar, not on it)
+        { label: 'BOARD', small: true, aim: false, lit: () => held.has('Tab'), tap: () => { if (held.has('Tab')) held.delete('Tab'); else held.add('Tab'); } },
       ] });
   }
 
@@ -186,6 +187,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       serial: (get(L.CL_FRAME) >> ((next - room) & 7)) & 1 });
   };
   const corr = corrector(host);
+  const lagChk = lagCheck(host);
 
   // ---- what happened: FX into bolts, blasts, the feed and sounds
   const text = new Uint32Array(COLS * renderer.rows);
@@ -455,8 +457,9 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     }
     const ceiling = view.dv.getFloat32(L.MAP_CEILING, true) || 200;
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
     me = slot >= 0 ? view.ship(slot) : null;
+    if (st === 2) lagChk.update(me, now);
     pme = null;
     let tgt = null;
     if (WATCH && st >= 1) {
@@ -680,7 +683,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     if (h.state === L.H_COUNT) {
       centre(4, `${mn.name}  STARTS IN ${Math.ceil(left / 125)}`, C.YELLOW); centre(5, mn.rules, C.WHITE);
       if (team >= 0) centre(7, WATCH ? `WATCHING P${slot + 1} ON ${SIDE[team]}  < >` : `YOU FLY FOR ${SIDE[team]}`, SIDE_C[team]);
-      if (!WATCH && !BOT) centre(9, 'MOUSE AIMS  CLICK LASERS  HOLD RIGHT TO CHARGE  W BOOST  S BRAKE  Q E ROLL  G BOMB', C.GREY);
+      if (!WATCH && !BOT) centre(9, TOUCH ? 'DRAG AIMS  FIRE LASERS  HOLD CHARGE  STICK UP BOOSTS  DOWN BRAKES' : 'MOUSE AIMS  CLICK LASERS  HOLD RIGHT TO CHARGE  W BOOST  S BRAKE  Q E ROLL  G BOMB', C.GREY);
     }
     if (h.state === L.H_PLAY) centre(0, clock(left), left < 30 * 125 ? C.RED : C.WHITE);
     const who = WATCH ? host.label(slot) : 'YOU';
@@ -779,7 +782,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     frame,
     unmount() { off(); touch?.remove(); held.clear(); set(L.CL_MOVE, 0); set(L.CL_AUTO, 0); if (document.pointerLockElement === lockTarget && lockTarget === canvas) document.exitPointerLock(); },
     capture: (scale = 2) => (last ? capturePng(renderer, u8, last, scale) : null),
-    state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, aim: [get(L.CL_YAW), get(L.CL_PITCH)], keys: get(L.CL_MOVE), rolls: get(L.CL_MELEE), error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((x) => x.text), team: me?.team ?? -1 }),
+    state: () => ({ slot: get(L.CL_SLOT), clState: get(L.CL_STATE), me, aim: [get(L.CL_YAW), get(L.CL_PITCH)], keys: get(L.CL_MOVE), rolls: get(L.CL_MELEE), error: host.error, welcome: host.welcome, match: view.hole(), mode: view.mode(), feed: feed.map((x) => x.text), team: me?.team ?? -1, lagCheck: lagChk.stats() }),
     get locked() { return locked; },
   };
 }

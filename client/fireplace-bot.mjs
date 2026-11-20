@@ -25,6 +25,9 @@ export class Guest {
   // the game on in this view
   static game(view) { return view.dv.getUint32(L.FP_GAME + view.bank, true); }
 
+  // sim ticks a..b held a word the relay repeated: the fighter's or the pilot's frame over them goes again
+  lost(a, b) { this.fighter.lost(a, b); this.pilot.lost(a, b); }
+
   // t: the tick the word is for; lag: ticks between the world it sees and t
   think(view, t = view.tick, lag = 0) {
     switch (Guest.game(view)) {

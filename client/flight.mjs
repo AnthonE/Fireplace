@@ -5,8 +5,9 @@
 //   there, for looking over the map; ?url=, ?hash=, ?impair=, ?sens=, ?res= as golf's
 //   ?map=<name> a map the site publishes (build/maps/<name>.qgmap), ?map=<url> any packed map;
 //   the line along the bottom offers to take it online (client/online.mjs)
-import { createHost, fitSize } from './host.mjs';
+import { createHost, netStats } from './host.mjs';
 import { pageWardrobe } from './wardrobe.mjs';
+import { phonePage, fitted } from './mobile.mjs';
 import { onlineLine } from './online.mjs';
 import { mount } from './flight-game.mjs';
 
@@ -15,11 +16,14 @@ const canvas = document.getElementById('screen');
 const note = document.getElementById('note');
 
 async function main() {
-  [canvas.width, canvas.height] = fitSize(q);
+  // a phone: the page held still, the screen sideways, the canvas fitted again as the window changes (client/mobile.mjs)
+  let h = null;
+  const phone = phonePage(q, { wake: () => h?.sound.wake() });
+  [canvas.width, canvas.height] = phone.size();
   const fixed = q.has('cam') ? q.get('cam').split(',').map(Number) : null;
-  const h = await createHost({ wasm: '../build/flight/game.wasm', q, watch: q.get('watch') === '1' || !!fixed, arena: true });
-  const game = await mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.7), sens: Number(q.get('sens') || 3), fixed,
-    present: q.get('present') !== '0', showGraph: q.get('net') === '1' });
+  h = await createHost({ wasm: '../build/flight/game.wasm', q, watch: q.get('watch') === '1' || !!fixed, arena: true });
+  const game = await fitted(h, phone, { canvas, key: 'flight', mount: () => mount(h, { canvas, bot: q.get('bot') === '1', skill: Number(q.get('skill') || 0.7), sens: Number(q.get('sens') || 3), fixed,
+    present: q.get('present') !== '0', showGraph: q.get('net') === '1' }) });
   const line = await onlineLine(h, q, '../build/flight/game.wasm');
   // a picture for the reference board (client/look.html, tools/board.mjs, tools/arena-shot.mjs): this page's view once
   // its room has played for `after` s. The frames are stepped from here, since a hidden page gets none of its own.
@@ -32,7 +36,7 @@ async function main() {
       await new Promise((ok) => setTimeout(ok, 50));
     }
   }
-  window.__qf = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool(), transport: h.transport }), capture: game.capture, chat: h.chat, ready: true, shot };
+  window.__qf = { hashes: h.hashes, keys: h.keys, desyncs: h.desyncs, state: () => ({ ...game.state(), pool: line.pool(), transport: h.transport, net: netStats(h) }), capture: game.capture, chat: h.chat, ready: true, shot };
   note.remove();
   const wardrobe = pageWardrobe(h, { canvas, q, watch: !!fixed }); // your look while the mouse is free (client/wardrobe.mjs), none on a fixed camera
   const loop = (now) => { requestAnimationFrame(loop); game.frame(now); wardrobe?.frame(now); };

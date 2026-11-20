@@ -7,8 +7,9 @@
 //   ?bot=1 hands the controls to the neural golfer (client/brain.mjs)
 //   ?watch=1 spectates; ?local=1, ?bots=, ?seed=, ?url=, ?hash=, ?impair=, ?sens=, ?res=, ?music=0 as party's
 import * as L from '../src/layout.mjs';
-import { createHost, epoch, fitSize } from './host.mjs';
+import { createHost, epoch } from './host.mjs';
 import { pageWardrobe } from './wardrobe.mjs';
+import { phonePage, fitted } from './mobile.mjs';
 import { readClock } from './clock.mjs';
 import { BrainBot, GOLFER } from './brain.mjs';
 import { mount } from './golf-game.mjs';
@@ -18,10 +19,13 @@ const canvas = document.getElementById('screen');
 const note = document.getElementById('note');
 
 async function main() {
-  [canvas.width, canvas.height] = fitSize(q);
+  // a phone: the page held still, the screen sideways, the canvas fitted again as the window changes (client/mobile.mjs)
+  let h = null;
+  const phone = phonePage(q, { wake: () => h?.sound.wake() });
+  [canvas.width, canvas.height] = phone.size();
   const BOT = q.get('bot') === '1';
-  const h = await createHost({ wasm: '../build/game.wasm', q, watch: q.get('watch') === '1', kind: 'golf' });
-  const game = await mount(h, { canvas, bot: BOT, external: BOT, sens: Number(q.get('sens') || 3), present: q.get('present') !== '0' });
+  h = await createHost({ wasm: '../build/game.wasm', q, watch: q.get('watch') === '1', kind: 'golf' });
+  const game = await fitted(h, phone, { canvas, key: 'golf', mount: () => mount(h, { canvas, bot: BOT, external: BOT, sens: Number(q.get('sens') || 3), present: q.get('present') !== '0' }) });
   // ?bot=1: the golfer's word into the input slots, as keys and a mouse would (client/fireplace.mjs drive)
   const golfer = BOT ? new BrainBot(0, GOLFER, { lag: 8, skill: Number(q.get('skill') || 0.8), seed: (Math.random() * 1e9) | 0 }) : null;
   let lastWord = 0;

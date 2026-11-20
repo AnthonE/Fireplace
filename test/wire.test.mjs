@@ -225,7 +225,13 @@ test('looks: a hello asks for them, a client sends its own, the relay sends pair
   const prefix = new Uint8Array(8);
   assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, looks: true })).looks, true);
   assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, watch: true, resume: 4 })).looks, false);
-  assert.deepEqual(W.decodeClient(W.encodeLook(0x0605)), { type: W.T_LOOK, look: 0x0605 });
+  assert.deepEqual(W.decodeClient(W.encodeLook(0x0605)), { type: W.T_LOOK, look: 0x0605, dress: 0 });
+  // the dress word rides the same message's spare bytes, so a relay that doesn't know it reads the same look; a hello asks for it in its second flag byte
+  assert.deepEqual(W.decodeClient(W.encodeLook(0x0605, 0x3041)), { type: W.T_LOOK, look: 0x0605, dress: 0x3041 });
+  assert.equal(W.encodeLook(0x0605, 0x3041).length, 16);
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, looks: true, dress: true })).dress, true);
+  assert.equal(W.decodeHello(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, looks: true })).dress, false);
+  assert.equal(W.encodeHello({ maxDatagram: 1200, wasmPrefix: prefix, looks: true, dress: true })[20], W.HELLO_LOOKS, 'the first flag byte is as it was');
   assert.equal(W.encodeLook(1).length, 16, 'the relay reads client messages 16 bytes at a time');
   const parts = [W.encodeLooks([[0, 0x0102], [255, 0xffffffff]]), W.encodePong(5, 6), W.encodeLooks([[7, 0]])];
   const all = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
@@ -235,6 +241,9 @@ test('looks: a hello asks for them, a client sends its own, the relay sends pair
   assert.deepEqual(await W.readControl(sr), { type: W.T_LOOK, looks: [[0, 0x0102], [255, 0xffffffff]] });
   assert.deepEqual(await W.readControl(sr), { type: W.T_PONG, nonce: 5, serverTick: 6 });
   assert.deepEqual(await W.readControl(sr), { type: W.T_LOOK, looks: [[7, 0]] });
+  const dr = W.encodeLooks([[3, 0x3041], [200, 7]], W.T_DRESS);
+  let o = 0;
+  assert.deepEqual(await W.readControl(W.bufferedReader({ read: async () => (o >= dr.length ? { done: true } : { value: dr.slice(o, (o += 9)), done: false }) })), { type: W.T_DRESS, dresses: [[3, 0x3041], [200, 7]] });
 });
 
 test('chat: a hello asks for it, a line goes up with its text, the relay sends lines with their slot and says where a session stands', async () => {
@@ -272,4 +281,26 @@ test('chat: a hello asks for it, a line goes up with its text, the relay sends l
   assert.deepEqual(await W.readControl(sr), { type: W.T_CHAT, kind: W.CHAT.LISTEN, slot: 0, text: '' });
   assert.equal(await W.readControl(sr), null);
   assert.deepEqual(W.CHAT, { LINE: 0, OPEN: 1, LISTEN: 2, OFF: 3 });
+});
+
+test('bundles: the newest NB ticks always, and up to NB_DEEP while they fit one datagram', () => {
+  const tick = (t, bytes) => ({ tick: t, parts: [new Uint8Array(bytes).fill(t & 255)] });
+  // a small room's ticks: all eight in one datagram, each tick in four bundles a row
+  const small = Array.from({ length: W.NB_DEEP }, (_, k) => tick(100 + k, 30));
+  assert.deepEqual(W.bundleTicks(small).map((t) => t.tick), small.map((t) => t.tick));
+  const one = W.encodeTicks(W.T_BUNDLE, W.bundleTicks(small), W.MAX_DATAGRAM);
+  assert.equal(one.length, 1);
+  assert.deepEqual(W.decodeTicks(one[0]).entries.map((e) => e.tick), small.map((t) => t.tick));
+  // ticks of 200 B: five fit a datagram (16 + 5 x 204 = 1,036 of 1,161)
+  const mid = Array.from({ length: W.NB_DEEP }, (_, k) => tick(100 + k, 200));
+  assert.deepEqual(W.bundleTicks(mid).map((t) => t.tick), [103, 104, 105, 106, 107]);
+  assert.equal(W.encodeTicks(W.T_BUNDLE, W.bundleTicks(mid)).length, 1);
+  // a smaller datagram limit carries fewer, never fewer than NB
+  assert.equal(W.bundleTicks(mid, 900).length, W.NB);
+  // ticks too big for one datagram even at NB: the newest NB, cut across datagrams as ever
+  const big = Array.from({ length: W.NB_DEEP }, (_, k) => tick(100 + k, 600));
+  assert.deepEqual(W.bundleTicks(big).map((t) => t.tick), [104, 105, 106, 107]);
+  assert.ok(W.encodeTicks(W.T_BUNDLE, W.bundleTicks(big)).length > 1);
+  // the room's first ticks: what there is
+  assert.deepEqual(W.bundleTicks(small.slice(0, 2)).map((t) => t.tick), [100, 101]);
 });

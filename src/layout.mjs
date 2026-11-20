@@ -159,9 +159,17 @@ export const CL_RX_REPAIR = NET + 196; // u32 bytes of repair datagrams received
 export const CL_RX_STREAM = NET + 200; // u32 bytes of keyframes and fills received
 export const CL_TX = NET + 204; // u32 bytes of input datagrams sent
 export const CL_HEARD = NET + 208; // u32 closed ticks heard, by any of them
+// and what went wrong, for the net graph and the gates:
+export const CL_LATE = NET + 220; // u32 this session's words the relay closed without (it repeated the last one), from the bundles' trailers
+export const CL_FREEZES = NET + 224; // u32 times the confirmed world stood more than FREEZE_TICKS behind the playout clock with the next tick missing (sim worker)
+export const CL_FROZEN = NET + 228; // u32 ms it stood so
+export const CL_LAGSENT = NET + 232; // u32 the view lag the newest arena frame carried (src/arena-view.mjs arenaFrame), for the gates' check of what the confirmed world took
+export const FREEZE_TICKS = 3; // what a frontend extrapolates the confirmed world by (its dt's clamp) before it shows a freeze
 // Looks (client/looks.mjs), drawing only: the relay carries them beside the ticks.
 export const CL_LOOK = NET + 212; // u32 this player's look, written by the page; the net worker sends it when it changes
 export const CL_LOOKS = NET + 2048; // u32[256] every slot's look as the relay last sent it (0: the house look)
+export const CL_DRESS = NET + 216; // u32 this player's dress word (client/dress.mjs), written by the page and sent with the look
+export const CL_DRESSES = NET + 5120; // u32[256] every slot's dress word as the relay last sent it (0: nothing worn)
 // Names, drawing only too: each signed-in slot's, as the relay last sent it (net/wire.mjs T_NAMES)
 export const NAME_BYTES = 16; // net/wire.mjs NAME_MAX: the font's characters, 0 after the last
 export const CL_NAMES = NET + 8192; // u8[256 * NAME_BYTES], every slot's name ('' for none: P1, P2, ...)
@@ -258,6 +266,12 @@ export const EV_EXPLODE_BALL = 3;
 export const EV_INPUT = 4; // a = slot, u32 word at offset 8
 export const EV_JOIN = 5; // a = slot
 export const EV_LEAVE = 6; // a = slot
+// The relay's marks (net/wire.mjs EV_LATE, EV_ONTIME): from this tick slot a's
+// words are the last one it had, repeated for words that came too late, or
+// are its own again. Only the arena's and Dogfight's builds act on them: a
+// frame (A_FRAME) with a repeated word in it is dropped whole (AL_STALE).
+export const EV_LATE = 7; // a = slot
+export const EV_ONTIME = 8; // a = slot
 export const REC = 16;
 
 // Physics, as the f32 literals the module inlines.
@@ -380,7 +394,9 @@ export const A_DEATHS = 50; // u16
 export const A_RESPAWN = 54; // u16 ticks until a dead fighter comes back
 export const A_COOL = 56; // u16 ticks until the next melee or grenade
 export const A_BURST = 58; // u8 rounds left in a burst
-export const A_LAG = 59; // u8 view lag in ticks, from the last whole frame
+export const A_LAG = 59; // u8 view lag in ticks, from the last whole frame (LAG_MAX), and AL_*
+export const AL_LATE = 128; // A_LAG: this slot's words are the relay's repeats (EV_LATE until EV_ONTIME), in the confirmed world
+export const AL_STALE = 64; // A_LAG: the frame so far took a repeated word; it is dropped when it ends
 export const A_FRAME = 60; // u8 the frame so far
 export const A_NEEDLES = 61; // u8 needles stuck in this fighter
 export const A_NEEDLER = 62; // u8 whose

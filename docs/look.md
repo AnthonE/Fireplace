@@ -113,14 +113,22 @@ What stands on it:
   reaches empty-handed; a robot body has a box for a head, a visor and an
   aerial. The colours are what the seven boxes had: a body's skin, an
   avatar's six parts, the seat's or the side's colour on the shirt; hair and
-  eyes come from the slot (10 and 6 colours). One that is down (Evade's and
+  eyes come from the slot (10 and 6 colours). It wears what the rider does
+  (`WEAR_WGSL`): the look's hat by style (low ones as a shell over the hair,
+  standing ones on top, a pumpkin as the head), a worn face, a shirt print,
+  a back item; the house hat and none draw no hat, and nothing worn is
+  marched. Party's riders are the same figure at 0.76 of its size standing on
+  their balls (`client/rider.mjs`), marched in party's own sprite pass
+  (kind 13, a record each in `figs`), its arms up in a cheer or a flight and
+  thrown back by a hit (the `Kit`'s `act`, `air`, `jolt` and `lean`, 0 in the
+  arena and golf). The arena demo's `dressed` scene and party's `bodies` show
+  them all. One that is down (Evade's and
   Escape's, `PF_DOWN`) is the same figure in the same dress on its front
   (`fgCrawl`): the frame laid over along the ground's rise the way it heads
   (the heights 0.8 m ahead and behind), the head's end 0.2 rad up, propped
   on its elbows, the head tipped back 1 rad to look where it goes; at a
   crawl's 2 m/s one arm reaches as the other pulls and the knee across from
-  it is drawn up. Its shadow is its own length the way it heads. Party's
-  riders are still the boxes (`client/rider.mjs`).
+  it is drawn up. Its shadow is its own length the way it heads.
 - **What you hold** (`client/viewmodel.mjs`), the gun in your hands or a
   carrier's flag, skull or bomb: a second field, 3 to 10 parts in the
   model's own frame, each a box with rounded edges or a tube along z,

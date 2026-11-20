@@ -208,6 +208,7 @@ class Session {
     this.parts = new W.Parts();
     this.words = new Map(); // server tick -> the word sent for it
     this.lead = 3;
+    this.lateSeen = 0; // the relay's count of this session's words it closed without (a u8), as the last bundle had it
     this.lastBundleT = -1;
     this.inAck = 0;
     this.seq = 0;
@@ -405,8 +406,13 @@ class Session {
     if (d.type !== W.T_BUNDLE || newest <= this.lastBundleT) return;
     // a bundle in several datagrams carries one trailer on each: once, with its newest tick
     this.stats.bundles++;
+    const since = this.lastBundleT;
     this.lastBundleT = newest;
     this.inAck = Math.max(this.inAck, d.trailer.inAck);
+    // some word since the last bundle was the relay's repeat: an arena frame over it goes again
+    const late = (d.trailer.late - this.lateSeen) & 255;
+    this.lateSeen = d.trailer.late;
+    if (late && world.started) this.bot.lost?.(Math.max(since + 1, this.joinTick) - world.roomStart, newest - world.roomStart);
     // net/bot.mjs: a small continuous nudge of the lead toward the target slack
     this.lead = Math.max(1, Math.min(40, this.lead + 0.02 * (TARGET_SLACK - d.trailer.slack) / W.TICK_MS));
   }
@@ -465,13 +471,26 @@ const timer = setInterval(() => {
   for (const s of sessions) s.tick(now);
 }, W.TICK_MS / 2);
 let last = 0;
+let stop = () => {};
+// A host with no end (--seconds 0: a service) whose every bot is gone has
+// nothing left to do in the room. One relay is no failover (lost()), so a bot
+// it drops (silent past its SILENT_MS on a stall here, its stream ended) stays
+// closed: exit non-zero so the supervisor starts the host again and the bots
+// join afresh, rather than run on with the process up and nobody in the room.
+let allGone = false;
 const progress = setInterval(() => {
   const live = sessions.filter((s) => s.joined && !s.closed).length;
   const sim = world.sim.tick;
   if (!argv.includes('--quiet')) process.stderr.write(`\r[bot-host] ${((performance.now() - t0) / 1000).toFixed(0)} s, ${live} sessions, world at sim tick ${sim} (+${sim - last}), ${world.store.size} queued   `);
   last = sim;
+  if (seconds === 0 && !allGone && sessions.length === nBots && sessions.every((s) => s.closed)) {
+    allGone = true;
+    const refused = sessions.filter((s) => s.reject !== null).length;
+    console.error(`[bot-host] every bot is gone (${sessions.filter((s) => s.joined).length} had joined, ${refused} refused); exiting for the supervisor to start the host again`);
+    stop();
+  }
 }, 1000);
-await new Promise((ok) => { if (seconds > 0) setTimeout(ok, seconds * 1000); process.once('SIGINT', ok); process.once('SIGTERM', ok); });
+await new Promise((ok) => { stop = ok; if (seconds > 0) setTimeout(ok, seconds * 1000); process.once('SIGINT', ok); process.once('SIGTERM', ok); });
 clearInterval(timer);
 clearInterval(progress);
 for (const s of sessions) s.leave();
@@ -518,4 +537,4 @@ const summary = {
 const text = JSON.stringify(summary);
 if (outPath) writeFileSync(outPath, text + '\n');
 else console.log(text);
-setTimeout(() => process.exit(0), 200);
+setTimeout(() => process.exit(allGone ? 1 : 0), 200);

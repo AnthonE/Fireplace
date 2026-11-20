@@ -21,6 +21,7 @@ import { sampler } from './input.mjs';
 import { writeName } from './looks.mjs';
 import { cleanLine } from '../net/chat.mjs';
 import { openWebTransport, openWebSocket } from './transport.mjs';
+import { Lead } from './lead.mjs';
 
 const epoch = () => performance.timeOrigin + performance.now();
 
@@ -50,7 +51,7 @@ async function connect(args) {
       // a relay that's down, or not holding the room yet, mid-failover: the next
       if (!back || epoch() - lostAt > FAILOVER_MS) {
         Atomics.store(new Int32Array(args.memory.buffer), L.CL_STATE >> 2, 3);
-        self.postMessage({ error: String(err?.stack || err) });
+        self.postMessage({ error: String(err?.stack || err), reject: !!err?.reject });
         return;
       }
     }
@@ -70,6 +71,10 @@ const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.mi
 // of a session that went away, to resume. Returns this session's, once it ends.
 // failover: a relay silent for SILENT_MS is gone (a dead one's QUIC session would idle for far longer)
 const SILENT_MS = 1500;
+// One relay silent for GONE_MS has let this session go: it drops a player it hasn't heard from in 2 s
+// (net/relay.ts SILENT_MS), a phone's page out of view the usual one, and the close it sends may not end
+// the datagrams here before QUIC's idle timeout. The session ends, and the page joins again (client/host.mjs).
+const GONE_MS = 3000;
 // arena: the arena's input words (src/layout.mjs), with its frames; fireplace:
 // the arena's while it or Dogfight is the game on (FP_GAME in the confirmed world), else golf's
 // looks: ask the relay for the room's looks (W.HELLO_LOOKS) and send this player's (CL_LOOK), and for its avatars (W.HELLO_AVATARS: CL_AVATARS)
@@ -93,9 +98,9 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   const { sw, sr } = t;
   const tHello = epoch();
   const resume = back && !watch ? back.slot : -1;
-  await sw.write(W.encodeHello({ maxDatagram: t.maxDatagram, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names, chat }));
+  await sw.write(W.encodeHello({ maxDatagram: t.maxDatagram, wasmPrefix: prefix, nonce: (Math.random() * 2 ** 32) >>> 0, watch, room: back?.room ?? 0, resume, looks, signin: wantSignin && !watch, avatars: looks, names, badges: names, chat, dress: looks }));
   const head = await sr.read(4);
-  if (head[0] === W.T_REJECT) throw new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected');
+  if (head[0] === W.T_REJECT) throw Object.assign(new Error(['', 'game.wasm differs from the server\'s: reload', 'the room is full', 'protocol mismatch', 'this relay only has a room to watch', 'nothing to watch yet'][head[1]] || 'rejected'), { reject: true });
   const wb = new Uint8Array(32);
   wb.set(head, 0);
   wb.set(await sr.read(28), 4);
@@ -118,15 +123,17 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   self.postMessage({ welcome });
   // a new session's room: no looks until the relay sends its table; ours goes now and on each change
   u32.fill(0, L.CL_LOOKS >> 2, (L.CL_LOOKS >> 2) + L.NPLAYER);
+  u32.fill(0, L.CL_DRESSES >> 2, (L.CL_DRESSES >> 2) + L.NPLAYER);
   u8.fill(0, L.CL_NAMES, L.CL_NAMES + L.NPLAYER * L.NAME_BYTES);
   u32.fill(0, L.CL_AVATARS >> 2, (L.CL_AVATARS >> 2) + L.NPLAYER);
   u32.fill(0, L.CL_BADGES >> 2, (L.CL_BADGES >> 2) + L.NPLAYER);
-  let lookSent = -1;
+  let lookSent = -1, dressSent = -1;
   const sendLook = () => {
-    const w = rd(L.CL_LOOK) >>> 0;
-    if (!looks || welcome.watch || w === lookSent) return;
+    const w = rd(L.CL_LOOK) >>> 0, d = rd(L.CL_DRESS) >>> 0;
+    if (!looks || welcome.watch || (w === lookSent && d === dressSent)) return;
     lookSent = w;
-    sw.write(W.encodeLook(w)).catch(() => {});
+    dressSent = d;
+    sw.write(W.encodeLook(w, d)).catch(() => {});
   };
   sendLook();
   signin = ({ message, signature }) => { sw.write(W.encodeSignin(message, signature)).catch(() => {}); };
@@ -153,11 +160,12 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
     sBase = m.serverTick + rtt / 2 / W.TICK_MS;
     sEpoch = now;
     lead = rtt / 2 / W.TICK_MS + W.SEND_EVERY + 1;
+    leadCtl = null; // the controller starts again from this, at the next bundle
     publishPred(now);
   };
 
   // what this worker has seen, for the runs
-  const seen = { transport: t.kind, pongs: 0, keys: 0, fills: 0, bundles: 0, repairs: 0, rtt: bestRtt, ctlError: '', holes: [], gaps: [] };
+  const seen = { transport: t.kind, pongs: 0, keys: 0, fills: 0, bundles: 0, repairs: 0, late: 0, rtt: bestRtt, ctlError: '', holes: [], gaps: [] };
   const repairedAt = new Map(); // tick -> repair datagrams that carried it, the last 512 ticks
   const seenTimer = setInterval(() => self.postMessage({ seen: { ...seen, rtt: bestRtt, lead } }), 1000);
   // The control stream: keyframes (unpacked here), the fills after them, pongs.
@@ -179,6 +187,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
       if (!m) break;
       if (m.type === W.T_PONG) { seen.pongs++; onPong(m); }
       if (m.type === W.T_LOOK) for (const [p, w] of m.looks) if (p < L.NPLAYER) u32[(L.CL_LOOKS >> 2) + p] = w;
+      if (m.type === W.T_DRESS) for (const [p, w] of m.dresses) if (p < L.NPLAYER) u32[(L.CL_DRESSES >> 2) + p] = w;
       if (m.type === W.T_NAMES) for (const [p, n] of m.names) if (p < L.NPLAYER) writeName(u8, p, n);
       if (m.type === W.T_AVATAR) for (const [p, w] of m.avatars) if (p < L.NPLAYER) u32[(L.CL_AVATARS >> 2) + p] = w;
       if (m.type === W.T_BADGE) for (const [p, w] of m.badges) if (p < L.NPLAYER) u32[(L.CL_BADGES >> 2) + p] = w;
@@ -208,6 +217,8 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   // the input slots sampled into one word a tick (client/input.mjs)
   const sample = sampler({ memory, roomStart: welcome.roomStart, arena, fireplace });
   let inAck = 0, lastBundleT = -1, seq = 0;
+  // the relay's count of this session's words it closed without (a u8 that wraps), as the last bundle had it
+  let lateSeen = 0;
   const dw = t.dw;
   const send = () => {
     const first = Math.max(inAck, lastBundleT, welcome.joinTick - 1) + 1;
@@ -237,7 +248,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
     // how late this 4 ms timer runs: a starved worker samples, sends and acks late
     if (now - lastTimer > 50) seen.gaps.push(Math.round(now - lastTimer));
     lastTimer = now;
-    if (failover && now - heardAt > SILENT_MS) { try { t.close(); } catch { /* gone */ } }
+    if (now - heardAt > (failover ? SILENT_MS : GONE_MS)) { try { t.close(); } catch { /* gone */ } }
     sendLook();
     if (welcome.watch) {
       const t = Math.floor(serverTick(now));
@@ -260,7 +271,7 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
   const offsets = new Float64Array(256);
   let nOff = 0;
   let play = { base: welcome.serverTick - 8, epoch: t0, rate: 1 };
-  const slacks = [];
+  let leadCtl = null; // the lead's controller, from the first bundle on
   const arrived = (t, now) => { offsets[nOff++ & 255] = serverTick(now) - (t + 1); };
   const steer = (now) => {
     const n = Math.min(nOff, 256);
@@ -315,14 +326,20 @@ async function run({ url, ws = '', forceWs = false, certHash, memory, prefix, si
     // a bundle that needed several datagrams stamps the same trailer on each: take it once, with its newest tick
     if (newestHere <= lastBundleT) return;
     const b = d.trailer;
+    const since = lastBundleT;
     lastBundleT = newestHere;
     inAck = Math.max(inAck, b.inAck);
+    const late = (b.late - lateSeen) & 255;
+    lateSeen = b.late;
+    // some word since the last bundle was the relay's repeat: an arena frame over it was dropped, and goes again
+    if (late) { seen.late += late; Atomics.add(i32, L.CL_LATE >> 2, late); sample.lost(Math.max(since + 1, welcome.joinTick), newestHere); }
     // The lead: the relay's slack (how early our words land) toward its own
-    // jitter plus a send interval, at most 0.02 ticks a tick (2% fast or slow).
-    slacks.push(b.slack);
-    if (slacks.length > 128) slacks.shift();
-    const target = pct(slacks, 0.5) - pct(slacks, 0.05) + W.SEND_EVERY * W.TICK_MS + 4;
-    lead = Math.max(1, Math.min(60, lead + Math.max(-0.04, Math.min(0.04, 0.0025 * (target - b.slack)))));
+    // jitter plus a send interval, down 2% slow at most, up fast when words
+    // land late (client/lead.mjs). The pings' lead seeds it on the first bundle.
+    leadCtl ||= new Lead(lead);
+    lead = leadCtl.update(b.slack, newestHere, serverTick(now));
+    seen.raises = leadCtl.raises;
+    seen.givenBack = leadCtl.givenBack;
     publishPred(now);
     f32[L.CL_PING >> 2] = b.slack;
   }

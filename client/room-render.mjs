@@ -493,11 +493,13 @@ export async function createRoom(canvas, device, { present = true, theme = FALLB
     return binds.get(tex);
   };
   const uf = new Float32Array(24);
-  const W = canvas.width, H = canvas.height;
+  let W = canvas.width, H = canvas.height;
 
   return {
     format, card: cardCanvas, width: W, height: H, theme,
     setTheme(t) { this.theme = t; device.queue.writeBuffer(tbuf, 0, pack(t)); },
+    // the canvas at another size (client/mobile.mjs): nothing here is that size but the frame's numbers
+    resize(w, h) { W = this.width = w; H = this.height = h; binds.clear(); },
     // a texture a game draws the TV's picture into: its own size, the canvas format
     tvTexture: (w, h) => device.createTexture({ size: [w, h], format, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC }),
     // after drawing on .card's context: its pixels up to the TV's card

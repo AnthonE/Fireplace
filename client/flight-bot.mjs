@@ -14,7 +14,7 @@
 // is an ordinary event log.
 import * as L from '../src/layout.mjs';
 import * as F from '../src/flight.mjs';
-import { flightWord, arenaFrame, frameDue } from '../src/flight-view.mjs';
+import { flightWord, arenaFrame, frameDue, FrameLog } from '../src/flight-view.mjs';
 import { boxRay } from '../src/arena-view.mjs';
 
 const TAU = 2 * Math.PI;
@@ -39,6 +39,7 @@ export class Pilot {
     this.shot = 0; this.roll = 0; this.bomb = 0;
     this.frame = 0;
     this.sent = {}; // the last frame's lag and tick
+    this.frames = new FrameLog(); // the frames sent lately, so one the room dropped goes again
     this.target = -1; this.err = [0, 0];
     this.wp = null; this.wpUntil = 0;
     this.charging = 0; this.nextCharge = 0;
@@ -48,9 +49,16 @@ export class Pilot {
 
   rand() { let x = this.rng; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.rng = x >>> 0; return this.rng / 4294967296; }
 
+  // Sim ticks a..b held a word the relay repeated in place of one of this bot's: a frame sent over them goes again.
+  lost(a, b) { this.frames.lost(a, b); }
+
   // The word for sim tick t. lag: how many ticks old the bot's view is.
   think(view, t, lag = 0) {
-    if ((t & 7) === 0) this.frame = frameDue(this.sent, t, lag, false) ? arenaFrame({ lag }) : 0;
+    if ((t & 7) === 0) {
+      const redo = !!this.frames.take();
+      this.frame = frameDue(this.sent, t, lag, redo) ? arenaFrame({ lag }) : 0;
+      this.frames.add(t, this.frame);
+    }
     const serial = (this.frame >> (t & 7)) & 1;
     const h = view.hole();
     if (h.hole !== this.match) { this.match = h.hole; this.target = -1; this.wp = null; }

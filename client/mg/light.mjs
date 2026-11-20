@@ -380,16 +380,16 @@ export default {
       const x = view.dv.getFloat32(a0 + L.P_PX, true), y = view.dv.getFloat32(a0 + L.P_PY, true), z = view.dv.getFloat32(a0 + L.P_PZ, true);
       if (fate.kind === 'fin') {
         const bob = Math.abs(Math.sin(now / 260 + p * 1.7)) * 0.8;
-        const col = slotColor(p);
-        out.solid.push({ pos: [x, y + 1 + bob, z], size: 1, color: [...col, 1], kind: SPRITE.BALL, minpx: 1, roll: now / 400 + p, seed: p });
-        out.solid.push({ pos: [x, y + 2.22 + bob, z], size: 0.34, color: [...col, 1], kind: SPRITE.BODY, minpx: 1 });
-        out.solid.push({ pos: [x, y + 2.78 + bob, z], size: 0.3, color: [...col, 1], kind: SPRITE.HEAD, minpx: 1, vel: [0, 0, 1] });
+        const bs = ctx.ball ? ctx.ball(p) : { color: [...slotColor(p), 1], seed: p };
+        out.solid.push({ pos: [x, y + 1 + bob, z], size: 1, color: bs.color, kind: SPRITE.BALL, minpx: 1, roll: now / 400 + p, seed: bs.seed });
+        // its rider in its look (client/rider.mjs), cheering over and over
+        ctx.rider?.(out.solid, p, { at: [x, y + 2 + bob, z], face: Math.PI / 2, emote: { id: 2, t: (now / 1000 + p * 0.37) % 2 } });
         out.casters.push([x, y + 1 + bob, z, -1]);
         if (fate.n <= 3) out.decals.push({ pos: [x, PLAT_Y + 0.02, z], radius: 1.4, width: 0.3, color: [...[[1, 0.85, 0.2], [0.85, 0.88, 0.95], [0.85, 0.55, 0.3]][fate.n - 1], 0.9], kind: DECAL.RING });
       } else {
         out.solid.push({ pos: [x, y + 1, z], size: 1, color: [0.42, 0.42, 0.46, 1], kind: SPRITE.BALL, minpx: 1, seed: p });
-        out.solid.push({ pos: [x + 0.25, y + 2.1, z], size: 0.32, color: [0.5, 0.5, 0.54, 1], kind: SPRITE.BODY, minpx: 1 });
-        out.solid.push({ pos: [x + 0.55, y + 2.35, z], size: 0.28, color: [0.5, 0.5, 0.54, 1], kind: SPRITE.HEAD, minpx: 1, vel: [1, 0, 0] });
+        // its rider turned to stone, thrown back where it was caught
+        ctx.rider?.(out.solid, p, { at: [x, y + 2, z], face: 0, jolt: 0.8, grey: true });
         out.casters.push([x, y + 1, z, -1]);
         out.decals.push({ pos: [x, PLAT_Y + 0.02, z], radius: 1.5, width: 0.3, color: [0.9, 0.15, 0.1, 0.55], kind: DECAL.RING });
       }

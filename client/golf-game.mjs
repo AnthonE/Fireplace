@@ -11,6 +11,7 @@ import { put, C } from './font.mjs';
 import { readClock } from './clock.mjs';
 import { epoch, predict, corrector, capturePng, listeners } from './host.mjs';
 import { tintsOf, looksOf, avatarsOf } from './looks.mjs';
+import { dressesOf } from './dress.mjs';
 import { touchWanted, touchControls, touchScale } from './touch.mjs';
 
 // The renderer, made once a page and the host's (client/host.mjs renderer()):
@@ -34,6 +35,8 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
   const aim = () => { set(L.CL_YAW, Math.round(yaw) & 0x3fff); set(L.CL_PITCH, Math.round(pitch)); };
   const setWeapon = (w) => { if (w !== weapon) sound.weapon(); weapon = w; set(L.CL_WEAPON, w); };
   let locked = document.pointerLockElement === lockTarget;
+  // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
+  const TOUCH = !WATCH && !BOT && touchWanted(host.q);
   let touch = null; // the touch controls, on a phone
   let watched = -1;
   let specYaw = 0; // a spectator's camera, easing round to the way the one it watches faces
@@ -49,8 +52,6 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     on(document, 'keydown', (e) => { if (e.code === 'Tab') { e.preventDefault(); held.add('Tab'); } });
     on(document, 'keyup', (e) => held.delete(e.code));
   } else {
-    // a phone has no pointer lock: the stick and the drag stand in for it (client/touch.mjs)
-    const TOUCH = touchWanted(host.q);
     if (TOUCH) locked = true;
     on(canvas, 'click', () => {
       sound.wake();
@@ -80,12 +81,14 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     });
     on(document, 'keyup', (e) => { held.delete(e.code); writeKeys(); });
     on(window, 'blur', () => { held.clear(); writeKeys(); });
+    // FIRE fires as it's let go, so a drag on it lines the shot up first
     if (TOUCH) touch = touchControls({ held, writeKeys, wake: () => sound.wake(),
       look: (dx, dy) => { yaw += dx * touchScale(SENS) * SENS; pitch = Math.max(16, Math.min(1008, pitch - dy * touchScale(SENS) * SENS / 8)); aim(); },
       buttons: [
-        { label: 'FIRE', tap: () => set(L.CL_PRESSES, get(L.CL_PRESSES) + 1) },
+        { label: 'FIRE', up: () => set(L.CL_PRESSES, get(L.CL_PRESSES) + 1) },
         { label: 'JUMP', code: 'Space' },
-        { label: 'SWAP', tap: () => setWeapon(weapon ^ 1) },
+        { label: () => (weapon ? 'ROCKET' : 'GRENADE'), tap: () => setWeapon(weapon ^ 1) },
+        { label: 'BOARD', small: true, aim: false, lit: () => held.has('Tab'), tap: () => { if (held.has('Tab')) held.delete('Tab'); else held.add('Tab'); } },
       ] });
   }
 
@@ -125,7 +128,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
       renderer.setTerrain(u8);
     }
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
     me = slot >= 0 ? view.player(slot) : null;
     pme = null;
     let tgt = null;
@@ -217,7 +220,7 @@ export async function mount(host, { canvas, lockTarget = canvas, bot: BOT = fals
     hudText(text, { h, me: tgt || pme || me, slot: tgt ? watched : slot, st, cam, now });
     last = {
       cam, yaw: camYaw, pitch: camPitch, time: now / 1000, dt, dtPred, proj: pme ? L.PROJ + L.PRED_D : L.PROJ, cup: h.cup, dir: h.dir,
-      slot: tgt ? watched : slot < 0 ? 999 : slot, myBall: me?.live ? me.ball : tgt ? tgt.ball : -1, nballs: view.nballs, flashes, text, graph: null, tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host),
+      slot: tgt ? watched : slot < 0 ? 999 : slot, myBall: me?.live ? me.ball : tgt ? tgt.ball : -1, nballs: view.nballs, flashes, text, graph: null, tints: tintsOf(host), looks: looksOf(host), avatars: avatarsOf(host), dresses: dressesOf(host),
     };
     renderer.frame(u8, last, target);
   }

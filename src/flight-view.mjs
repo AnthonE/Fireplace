@@ -5,7 +5,7 @@ import * as F from './flight.mjs';
 import { View, arenaWord } from './arena-view.mjs';
 
 export { View };
-export { arenaFrame, frameDue, forcedSeed } from './arena-view.mjs';
+export { arenaFrame, frameDue, FrameLog, forcedSeed } from './arena-view.mjs';
 
 // What flight calls the arena's modes it flies (layout.mjs FLIGHT_MODES).
 export const MODE_NAMES = {

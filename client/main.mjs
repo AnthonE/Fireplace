@@ -6,6 +6,8 @@
 // from there; everything else from the confirmed world. The net worker and
 // the sim worker do the rest; ?bot=1 hands the input slots to a golf bot.
 // ?replay=<url> plays a replay file instead (client/replay.mjs), as a spectator.
+// A phone's player is sent to golf.html (client/golf.mjs, the same relay by the
+// same query), which has the touch controls (client/touch.mjs); this page has none.
 import * as L from '../src/layout.mjs';
 import { View } from '../src/view.mjs';
 import { wasmPrefix, packInput } from '../net/wire.mjs';
@@ -18,8 +20,11 @@ import { NetGraph } from './netgraph.mjs';
 import { fitSize } from './host.mjs';
 import { createChat } from './chat.mjs';
 import { wsDoor, wsForced } from './kit.mjs';
+import { touchWanted } from './touch.mjs';
 
 const q = new URLSearchParams(location.search);
+const PHONE = touchWanted(q) && !q.has('replay') && q.get('bot') !== '1' && q.get('watch') !== '1';
+if (PHONE) location.replace(`golf.html${location.search}${location.hash}`);
 const canvas = document.getElementById('screen');
 const note = document.getElementById('note');
 const [W, H] = fitSize(q);
@@ -288,7 +293,7 @@ async function main() {
     }
     // the playout clock says how far past the newest stepped tick to draw the confirmed world
     const room = get(L.CL_ROOM);
-    const dt = Math.max(0, Math.min(3, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
+    const dt = Math.max(0, Math.min(L.FREEZE_TICKS, readClock(i32, f64, L.CL_PLAY, nowE) - room - h.tick)) * 0.008;
     me = slot >= 0 ? view.player(slot) : null;
     pme = null;
     // a spectator rides with a live player, through their eyes
@@ -482,7 +487,7 @@ async function main() {
   requestAnimationFrame(frame);
 }
 
-main().catch((e) => {
+if (!PHONE) main().catch((e) => {
   note.textContent = String(e?.message || e);
   window.__qg = { error: String(e?.stack || e) };
 });

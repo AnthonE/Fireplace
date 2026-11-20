@@ -123,6 +123,10 @@ jobs:
         run: |
           node tools/genarena.mjs --bots 8 --ticks 20000 --out logs/arena.qgl
           node harness/matrix.mjs --ticks 20000 --log logs/arena.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
+      - name: The arena with late words (the relay's repeats and marks, frames dropped and sent again), eight AI fighters
+        run: |
+          node tools/genarena.mjs --bots 8 --ticks 20000 --late 0.004 --out logs/arena-late.qgl
+          node harness/matrix.mjs --ticks 20000 --log logs/arena-late.qgl --wasm build/arena/game.wasm --runtimes node,deno,chromium
       - name: The arena's Infection (every match forced by the seed), eight AI fighters
         run: |
           node tools/genarena.mjs --bots 8 --ticks 20000 --mode 1 --out logs/arena-infection.qgl
@@ -413,6 +417,39 @@ jobs:
           name: themes
           path: traces/themes/
 
+  touch:
+    # every page played with fingers as a phone has it (net/run-touch.mjs), on an Android phone's screen and an iPhone's
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-24.04
+    container: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: unzip, for setup-deno; openssl, for the relay
+        run: apt-get update && apt-get install -y --no-install-recommends unzip openssl
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.7
+      - run: npm ci
+      - run: npm i --no-save playwright-core@1.56.1
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - name: Touch on a phone (the stick, the drag and the buttons on every page, turned upright and back; the page put away and back, a local room held still and a relay's joined again)
+        run: |
+          node net/run-touch.mjs --no-build
+          node net/run-touch.mjs --no-build --device "iPhone 14 landscape" --only party,arena,fireplace
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: touch
+          path: |
+            traces/touch*.png
+            traces/touch*.json
+
   online:
     # the online gates: a relay, a referee, hundreds of bots through its native door, every hash checked.
     # Here the room itself (256 players, the relay tree, failover, the room pool) and Dogfight
@@ -478,6 +515,8 @@ jobs:
       - run: npm run build
       - name: The arena online, full (a relay on the arena's sim, 256 AI fighters through its native door, every hash checked)
         run: node net/run-arena.mjs --chrome 0 --bots 256 --seconds 40
+      - name: The arena online over Wi-Fi (64 AI fighters on net/impair.js's wifi preset, their late words marked, every hash checked)
+        run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 40 --bot-impair wifi
       - name: The arena's Infection online (64 AI fighters, every hash checked)
         run: node net/run-arena.mjs --chrome 0 --bots 64 --seconds 60 --mode 1
       - name: The arena's team modes online (64 AI fighters each, red against blue, every hash checked)

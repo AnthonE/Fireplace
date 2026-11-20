@@ -1,12 +1,13 @@
-// A player's Elo Pros avatar: the blocky figure they picked on their profile,
+// A player's Elo Pros avatar: the figure they picked on their profile,
 // one 32-bit word (scry-forge's meter/faces.py `avatar`, docs/client/GAMEDEV.md
 // there): six parts at 5 bits each, an index into PALETTE (head bits 0-4,
 // torso 5-9, left arm 10-14, right arm 15-19, left leg 20-24, right leg
 // 25-29), bit 30 a robot's face, bit 31 set on every avatar, so 0 is none.
 // The relay reads it off the player's face when they sign in and sends it
-// beside the looks (net/wire.mjs T_AVATAR, CL_AVATARS). Drawing only: a blocky
-// rider or fighter wears its colours in place of the look's skin, shirt and
-// legs; the hat and the ball stay the look's.
+// beside the looks (net/wire.mjs T_AVATAR, CL_AVATARS). Drawing only: the
+// cartoon figure (client/figure.mjs), a rider, fighter or golfer, wears its
+// colours in place of the body's skin and the look's shirt and legs; the hat
+// and the ball stay the look's.
 
 // sRGB, by index: the profile editor's palette, in the same order
 export const PALETTE_HEX = [

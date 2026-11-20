@@ -13,8 +13,8 @@ import { fontData, roundWanted, HUD_FONT_WGSL } from './hudfont.mjs';
 import { LOWPOLY_WGSL, ENV_WGSL, ENV_FLOATS, envPack, withEnv, hudFrame, focalFor } from './lowpoly.mjs';
 import { createPost, SCENE_FORMAT, DEPTH_FORMAT } from './post.mjs';
 import { compile } from './pipelines.mjs';
-import { BLOCK_RAY_WGSL } from './rider.mjs';
-import { FIGURE_WGSL, HAIRS, EYES } from './figure.mjs';
+import { BLOCK_RAY_WGSL } from './block.mjs';
+import { FIGURE_WGSL, WEAR_WGSL, HAIRS, EYES } from './figure.mjs';
 import { BODIES } from './looks.mjs';
 import { PALETTE as AV_PALETTE } from './avatar.mjs';
 
@@ -23,7 +23,7 @@ const FAR = 900;
 const MAX_FLASH = 64;
 const MAX_TREE = 4096;
 const NO_TINTS = new Uint32Array(L.NPLAYER); // a page with no looks: every seat its own colour
-const NO_LOOKS = new Uint32Array(L.NPLAYER).fill(0x10000); // nor bodies: everyone blocky
+const NO_LOOKS = new Uint32Array(L.NPLAYER).fill(0x10000); // nor bodies: everyone body 1, as a browser that never picked
 const NO_AVATARS = new Uint32Array(L.NPLAYER); // nor avatars
 // a body's skin and face (client/looks.mjs BODIES) for the golfers' figures
 const SKINS = BODIES.map((b) => b.skin || [1.0, 0.8, 0.66]);
@@ -158,11 +158,13 @@ struct SOut {
   @location(2) @interpolate(flat) kind: u32,
   @location(3) @interpolate(flat) feet: vec3f, // a golfer's or a tree's: where it stands
   @location(4) @interpolate(flat) pose: vec4f, // a golfer's heading, aim (rad, up), stride's phase and length (0..1); a tree's turn, size, style
-  @location(5) @interpolate(flat) skin: vec4f, // a golfer's skin, and its face (client/rider.mjs PART)
+  @location(5) @interpolate(flat) skin: vec4f, // a golfer's skin, and its face (client/looks.mjs BODIES: 1 a person's, 4 a robot's)
   @location(6) @interpolate(flat) av: u32,     // its Elo Pros avatar word (client/avatar.mjs), 0 for none
+  @location(7) @interpolate(flat) wear: vec2u, // a golfer's look's hat and its dress word (client/figure.mjs WEAR_WGSL)
 };
 ${BLOCK_RAY_WGSL}
 ${FIGURE_WGSL}
+${WEAR_WGSL}
 const HAIRS = array<vec3f, ${HAIRS.length}>(${HAIRS.map(vec3).join(', ')});
 const EYES = array<vec3f, ${EYES.length}>(${EYES.map(vec3).join(', ')});
 const SKINS = array<vec3f, ${SKINS.length}>(${SKINS.map(vec3).join(', ')});
@@ -190,7 +192,7 @@ fn kitOf(s: SOut) -> Kit {
   k.rarm = select(k.skin, avc(av, 3u), av != 0u);
   k.lleg = select(c * 0.5, avc(av, 4u), av != 0u);
   k.rleg = select(c * 0.5, avc(av, 5u), av != 0u);
-  return k;
+  return wornKit(k, s.wear, false);
 }
 
 // A tree in the rough, of boxes: a trunk under a round top of two (style 0,
@@ -294,6 +296,8 @@ var<private> CORNERS: array<vec2f, 6> = array<vec2f, 6>(vec2f(-1, -1), vec2f(1, 
     let body = min((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + p] >> 16u) & 255u, ${BODIES.length - 1}u);
     o.skin = vec4f(SKINS[body], f32(FACES[body]));
     o.av = players[${L.NPLAYER * L.PSIZE / 4 + 2 * L.NPLAYER}u + p];
+    o.wear = vec2u((players[${L.NPLAYER * L.PSIZE / 4 + L.NPLAYER}u + p] >> 8u) & 255u, players[${L.NPLAYER * L.PSIZE / 4 + 3 * L.NPLAYER}u + p]);
+    if (wearTall(o.wear)) { center = center + vec3f(0.0, 0.2, 0.0); half = vec2f(1.15, 1.2); }
     // its alpha carries its slot, for its hair and eyes (client/figure.mjs)
     color = vec4f(tintOf(p, slotColor(p)), f32(p));
     kind = 1u;
@@ -495,7 +499,10 @@ fn graphPx(p: vec2i) -> vec4f {
     if (f < v.x + v.y) { return vec4f(PALETTE[6], 0.9); }
     if (f < v.x + v.y + v.z) { return vec4f(PALETTE[7], 0.9); }
   } else if (k == 1) {
+    // repairs from the base, late words from the top, a freeze tinting its column
     if (f < v.x) { return vec4f(PALETTE[6], 0.9); }
+    if (f > 1.0 - v.y) { return vec4f(PALETTE[2], 1.0); }
+    if (v.z > 0.0) { return vec4f(PALETTE[7], 0.3 + 0.6 * v.z); }
   } else if (k == 2) {
     if (abs(f - v.x) < near) { return vec4f(PALETTE[1], 1.0); }
     if (abs(f - v.y) < near) { return vec4f(PALETTE[5], 1.0); }
@@ -600,7 +607,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
   const ubuf = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const storage = (size) => device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const ballBuf = storage(BALL_WORDS * 4);
-  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 12); // the records, then each slot's tint, look and avatar
+  const playerBuf = storage(L.NPLAYER * L.PSIZE + L.NPLAYER * 16); // the records, then each slot's tint, look, avatar and dress word
   const projBuf = storage(L.NPROJ * L.JSIZE);
   const flashBuf = storage(MAX_FLASH * 32);
   const hudBuf = storage(COLS * rows * 4);
@@ -664,6 +671,8 @@ export async function createRenderer(canvas, { present = true, device: shared = 
 
   return {
     rows, width: W, height: H, hudScale: hs, hudX, hudY,
+    // the frame's textures given back, for one made again at another size (client/mobile.mjs)
+    destroy() { post.destroy(); },
     // The terrain, once per room: heights (1/256 m) and surfaces out of shared memory, and the trees from them.
     setTerrain(u8) {
       const h16 = new Uint16Array(u8.buffer, L.TERRAIN_H, 512 * 512);
@@ -703,6 +712,7 @@ export async function createRenderer(canvas, { present = true, device: shared = 
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE, s.tints ?? NO_TINTS);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 4, s.looks ?? NO_LOOKS);
       device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 8, s.avatars ?? NO_AVATARS);
+      device.queue.writeBuffer(playerBuf, L.NPLAYER * L.PSIZE + L.NPLAYER * 12, s.dresses ?? NO_AVATARS);
       device.queue.writeBuffer(projBuf, 0, u8, s.proj ?? L.PROJ, L.NPROJ * L.JSIZE);
       s.flashes.slice(0, MAX_FLASH).forEach((f, k) => flashData.set([f.pos[0], f.pos[1], f.pos[2], 0, f.age, f.size, f.kind, 0], k * 8));
       device.queue.writeBuffer(flashBuf, 0, flashData);
